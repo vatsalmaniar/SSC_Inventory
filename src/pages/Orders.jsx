@@ -56,7 +56,7 @@ export default function Orders() {
   async function loadOrders() {
     setLoading(true)
     const { data } = await sb.from('orders').select('*, order_items(*)')
-      .gte('created_at', '2026-03-31')
+      .gte('created_at', '2026-03-31').eq('is_test', false)
       .order('created_at', { ascending: false })
     setOrders(data || [])
     setLoading(false)
@@ -65,8 +65,8 @@ export default function Orders() {
   // ── Stats ──
   const today = new Date().toISOString().slice(0, 10)
   const dispatchedValue = orders
-    .filter(o => o.status === 'dispatched_fc')
-    .reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0) + (o.freight || 0), 0)
+    .filter(o => o.status === 'dispatched_fc' || (o.order_items || []).some(i => (i.dispatched_qty || 0) > 0))
+    .reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0), 0), 0)
   const tempOrders    = orders.filter(o => o.status === 'pending').length
   const pendingOrders = orders.filter(o => !['dispatched_fc', 'cancelled'].includes(o.status)).length
   const todayDispatched = orders.filter(o =>

@@ -42,7 +42,7 @@ export default function TodayDispatch() {
     setLoading(true)
     const { data } = await sb.from('orders')
       .select('*, order_items(*)')
-      .gte('created_at', '2026-03-31')
+      .gte('created_at', '2026-03-31').eq('is_test', false)
       .order('created_at', { ascending: false })
     // Filter: orders that have at least one item with dispatch_date = today
     const filtered = (data || []).filter(o =>

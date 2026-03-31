@@ -59,10 +59,8 @@ export default function OpsOrders() {
 
   async function loadOrders() {
     setLoading(true)
-    const { data } = await sb
-      .from('orders')
-      .select('*, order_items(*)')
-      .gte('created_at', '2026-03-31')
+    const { data } = await sb.from('orders').select('*, order_items(*)')
+      .gte('created_at', '2026-03-31').eq('is_test', false)
       .order('created_at', { ascending: false })
     setOrders(data || [])
     setLoading(false)
@@ -99,12 +97,14 @@ export default function OpsOrders() {
     <Layout pageTitle="Manage Orders" pageKey="orders">
       <div className="orders-content" style={{ marginTop: 0, paddingTop: 20 }}>
         {/* Filter chips */}
-        <div className="filter-bar">
+        <div className="filter-bar" style={{ justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {STATUSES.map(s => (
             <button key={s} className={'filter-chip' + (filter === s ? ' active' : '') + (s === 'partial' ? ' filter-chip-warn' : '')} onClick={() => setFilter(s)}>
               {s === 'partial' ? 'Partially Shipped' : statusLabel(s)} {counts[s] > 0 ? `(${counts[s]})` : ''}
             </button>
           ))}
+          </div>
         </div>
 
         {loading ? (
@@ -129,7 +129,7 @@ export default function OpsOrders() {
                   <tr>
                     <th>Order #</th>
                     <th>Customer</th>
-                    <th>Engineer</th>
+                    <th>Account Owner</th>
                     <th>Date</th>
                     <th>Items</th>
                     <th style={{ textAlign: 'right' }}>Total</th>
@@ -225,7 +225,7 @@ export default function OpsOrders() {
               <div className="detail-section">
                 <div className="detail-section-title">Order Info</div>
                 <div className="detail-grid">
-                  <div className="detail-field"><label>Engineer</label><div className="val">{detail.engineer_name || '—'}</div></div>
+                  <div className="detail-field"><label>Account Owner</label><div className="val">{detail.engineer_name || '—'}</div></div>
                   <div className="detail-field"><label>PO Number</label><div className="val">{detail.po_number || '—'}</div></div>
                   <div className="detail-field"><label>Order Date</label><div className="val">{fmt(detail.order_date)}</div></div>
                   <div className="detail-field"><label>Received Via</label><div className="val">{detail.received_via || '—'}</div></div>

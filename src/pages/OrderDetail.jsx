@@ -63,6 +63,12 @@ export default function OrderDetail() {
   const [fcVehicleType, setFcVehicleType] = useState('')
   const [fcVehicleNum, setFcVehicleNum]   = useState('')
   const [fcDriverName, setFcDriverName]   = useState('')
+  const [fcCenter, setFcCenter]           = useState('Kaveri')
+  const [dispatchType, setDispatchType]   = useState('full') // 'full' | 'partial'
+  const [pendingPartialSelected, setPendingPartialSelected] = useState([])
+
+  // Edit confirmation
+  const [showEditConfirm, setShowEditConfirm] = useState(false)
 
   useEffect(() => { init() }, [id])
 
@@ -113,9 +119,10 @@ export default function OrderDetail() {
   const showDispatchCols = hasAnyDispatched
 
   const actionBtnLabel = isPending ? 'Accept Order'
-    : order?.status === 'inv_check'   ? 'Confirm Inventory'
-    : order?.status === 'dispatch'    ? 'Ship Order'
-    : order?.status === 'gen_invoice' ? (hasAnyPending ? 'Ship Next Batch' : 'Dispatched')
+    : order?.status === 'inv_check'        ? 'Confirm Inventory'
+    : order?.status === 'dispatch'         ? 'Ship Order'
+    : order?.status === 'gen_invoice'      ? 'Confirm Invoice'
+    : order?.status === 'partial_dispatch' ? 'Dispatch Next Batch'
     : 'Mark Complete'
 
   // ── Edit mode ──
@@ -259,58 +266,62 @@ export default function OrderDetail() {
       await sb.from('orders').update({ status: 'dispatch', updated_at: new Date().toISOString() }).eq('id', id)
       await logActivity('Inventory check confirmed — moved to Shipping')
       await loadOrder(); setSaving(false)
-    } else if (order.status === 'dispatch' || order.status === 'partial_dispatch') {
+    } else if (order.status === 'dispatch') {
+      setSaving(false)
+      setShowDispatchModal(true)
+    } else if (order.status === 'partial_dispatch') {
+      // Dispatch next batch
       setSaving(false)
       setShowDispatchModal(true)
     } else if (order.status === 'gen_invoice') {
-      setSaving(false)
-      const pendingItemsExist = (order.order_items || []).some(i => i.qty > (i.dispatched_qty || 0))
-      if (pendingItemsExist) {
-        // Still items to dispatch — open dispatch modal for next batch
-        setShowDispatchModal(true)
+      const items = order.order_items || []
+      const anyTracked = items.some(i => (i.dispatched_qty || 0) > 0)
+      if (!anyTracked) {
+        // Legacy order — dispatched_qty was never saved, fix and complete
+        for (const item of items) {
+          await sb.from('order_items').update({ dispatched_qty: item.qty }).eq('id', item.id)
+        }
+        await sb.from('orders').update({ status: 'dispatched_fc', updated_at: new Date().toISOString() }).eq('id', id)
+        await logActivity('Invoice confirmed — Order fully dispatched.')
       } else {
-        // All items dispatched — proceed to FC dispatch
-        setFcMode('porter'); setFcVehicleType(''); setFcVehicleNum(''); setFcDriverName('')
-        setShowFCModal(true)
+        const pendingItemsExist = items.some(i => i.qty > (i.dispatched_qty || 0))
+        if (pendingItemsExist) {
+          // Partial batch done — go back to ship for remaining items
+          await sb.from('orders').update({ status: 'partial_dispatch', updated_at: new Date().toISOString() }).eq('id', id)
+          await logActivity('Invoice confirmed — Partial dispatch complete. Pending items await next batch.')
+        } else {
+          // All items dispatched — complete the order
+          await sb.from('orders').update({ status: 'dispatched_fc', updated_at: new Date().toISOString() }).eq('id', id)
+          await logActivity('Invoice confirmed — Order fully dispatched.')
+        }
       }
+      await loadOrder(); setSaving(false)
     }
   }
 
-  // ── Full dispatch ──
-  async function fullyDispatch() {
-    setSaving(true); setShowDispatchModal(false)
-    for (const item of (order.order_items || [])) {
-      const { error } = await sb.from('order_items').update({ dispatched_qty: item.qty }).eq('id', item.id)
-      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
-    }
-    const { error } = await sb.from('orders').update({ status: 'gen_invoice', updated_at: new Date().toISOString() }).eq('id', id)
-    if (error) { alert('Failed to update order status: ' + error.message); setSaving(false); return }
-    await logActivity('Full Ship — all items shipped, moved to Generate Invoice')
-    await loadOrder(); setSaving(false)
+  // ── Full dispatch — open FC modal ──
+  function fullyDispatch() {
+    setDispatchType('full')
+    setShowDispatchModal(false)
+    setFcMode('porter'); setFcVehicleType(''); setFcVehicleNum(''); setFcDriverName('')
+    setShowFCModal(true)
   }
 
-  // ── Partial dispatch ──
+  // ── Partial dispatch — collect items first ──
   function openPartialDispatch() {
+    setDispatchType('partial')
     setShowDispatchModal(false)
     setPartialItems((order.order_items || []).map(item => {
       const remaining = item.qty - (item.dispatched_qty || 0)
-      return {
-        id:             item.id,
-        item_code:      item.item_code,
-        qty:            item.qty,
-        dispatched_qty: item.dispatched_qty || 0,
-        dispatchQty:    '0',           // default 0 — user must enter qty
-        checked:        remaining > 0, // pre-check only items with pending qty; fully done = unchecked
-        remaining,
-      }
+      return { id: item.id, item_code: item.item_code, qty: item.qty, dispatched_qty: item.dispatched_qty || 0, dispatchQty: '0', checked: remaining > 0, remaining }
     }))
     setShowPartialModal(true)
   }
 
-  async function submitPartialDispatch() {
+  // ── Partial: validate items → open FC modal ──
+  function confirmPartialItems() {
     const selected = partialItems.filter(i => i.checked && parseFloat(i.dispatchQty) > 0)
     if (!selected.length) { alert('Select at least one item with a dispatch quantity.'); return }
-    // Validate: dispatch qty must not exceed remaining qty per item
     for (const item of selected) {
       const remaining = item.qty - (item.dispatched_qty || 0)
       if (parseFloat(item.dispatchQty) > remaining) {
@@ -318,43 +329,55 @@ export default function OrderDetail() {
         return
       }
     }
-    setSaving(true); setShowPartialModal(false)
-    // Only update the selected items — unselected items are untouched
-    for (const item of selected) {
-      const newDispatched = (item.dispatched_qty || 0) + parseFloat(item.dispatchQty)
-      const { error } = await sb.from('order_items').update({ dispatched_qty: newDispatched }).eq('id', item.id)
-      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
-    }
-    // Move to gen_invoice so this batch can be invoiced
-    const { error: orderErr } = await sb.from('orders').update({ status: 'gen_invoice', updated_at: new Date().toISOString() }).eq('id', id)
-    if (orderErr) { alert('Failed to update order status: ' + orderErr.message); setSaving(false); return }
-    const summary = selected.map(i => `${i.item_code}: ${i.dispatchQty} units`).join(', ')
-    await logActivity(`Partial Dispatch — ${summary}`)
-    await loadOrder(); setSaving(false)
+    setPendingPartialSelected(selected)
+    setShowPartialModal(false)
+    setFcMode('porter'); setFcVehicleType(''); setFcVehicleNum(''); setFcDriverName('')
+    setShowFCModal(true)
   }
 
-  // ── FC dispatch ──
+  // ── FC modal confirm — handles both full and partial ──
   async function submitFCDispatch() {
     if (!fcDriverName.trim()) { alert('Driver / Person Name is required.'); return }
     if (fcMode === 'vehicle' && !fcVehicleType) { alert('Please select a vehicle type.'); return }
     setSaving(true); setShowFCModal(false)
-    // Check if any pending items remain — fetch fresh from DB
-    const { data: freshItems } = await sb.from('order_items').select('qty, dispatched_qty').eq('order_id', id)
-    const stillPending = (freshItems || []).some(i => i.qty > (i.dispatched_qty || 0))
-    const nextStatus   = stillPending ? 'dispatch' : 'dispatched_fc'
-    const { error: fcErr } = await sb.from('orders').update({
-      status:         nextStatus,
-      dispatch_mode:  fcMode,
-      vehicle_type:   fcMode === 'vehicle' ? fcVehicleType : null,
-      vehicle_number: fcMode === 'vehicle' ? fcVehicleNum.trim() : null,
-      driver_name:    fcDriverName.trim(),
-      updated_at:     new Date().toISOString(),
-    }).eq('id', id)
-    if (fcErr) { alert('Failed to record FC dispatch: ' + fcErr.message); setSaving(false); return }
-    const details = fcMode === 'vehicle'
+
+    const logistics = fcMode === 'vehicle'
       ? `${fcVehicleType}${fcVehicleNum ? ' · ' + fcVehicleNum : ''} — ${fcDriverName}`
       : fcMode === 'porter' ? `Porter — ${fcDriverName}` : `Self Pickup — ${fcDriverName}`
-    await logActivity(`Dispatched — ${details}${stillPending ? ' (pending items remain — returned to Shipping)' : ' (all items dispatched)'}`)
+
+    if (dispatchType === 'full') {
+      // Mark all items fully dispatched
+      for (const item of (order.order_items || [])) {
+        const { error } = await sb.from('order_items').update({ dispatched_qty: item.qty }).eq('id', item.id)
+        if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
+      }
+      const { error } = await sb.from('orders').update({
+        status: 'gen_invoice', fulfilment_center: fcCenter,
+        dispatch_mode: fcMode, vehicle_type: fcMode === 'vehicle' ? fcVehicleType : null,
+        vehicle_number: fcMode === 'vehicle' ? fcVehicleNum.trim() : null, driver_name: fcDriverName.trim(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', id)
+      if (error) { alert('Failed to update order: ' + error.message); setSaving(false); return }
+      await logActivity(`Full Dispatch via ${fcCenter} · ${logistics} — all items dispatched, moved to Generate Invoice`)
+
+    } else {
+      // Partial — update only selected items
+      for (const item of pendingPartialSelected) {
+        const newDispatched = (item.dispatched_qty || 0) + parseFloat(item.dispatchQty)
+        const { error } = await sb.from('order_items').update({ dispatched_qty: newDispatched }).eq('id', item.id)
+        if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
+      }
+      const summary = pendingPartialSelected.map(i => `${i.item_code}: ${i.dispatchQty} units`).join(', ')
+      const { error } = await sb.from('orders').update({
+        status: 'gen_invoice', fulfilment_center: fcCenter,
+        dispatch_mode: fcMode, vehicle_type: fcMode === 'vehicle' ? fcVehicleType : null,
+        vehicle_number: fcMode === 'vehicle' ? fcVehicleNum.trim() : null, driver_name: fcDriverName.trim(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', id)
+      if (error) { alert('Failed to update order: ' + error.message); setSaving(false); return }
+      await logActivity(`Partial Dispatch via ${fcCenter} · ${logistics} — ${summary}`)
+    }
+
     await loadOrder(); setSaving(false)
   }
 
@@ -456,8 +479,8 @@ export default function OrderDetail() {
             <div className="od-header-actions">
               {isOps && !isCancelled && (
                 <>
-                  {(isPending || order.status === 'inv_check') && !editMode && (
-                    <button className="od-btn od-btn-edit" onClick={enterEditMode}>
+                  {isPending && !editMode && (
+                    <button className="od-btn od-btn-edit" onClick={() => setShowEditConfirm(true)}>
                       <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       Edit Order
                     </button>
@@ -531,11 +554,21 @@ export default function OrderDetail() {
               </div>
             )}
 
+            {order.status === 'partial_dispatch' && (
+              <div className="od-pending-banner" style={{background:'#fffbeb',border:'1px solid #fde68a',color:'#92400e'}}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                <div>
+                  <div className="od-pending-banner-label">Dispatched (Partial)</div>
+                  <div>Some items dispatched{order.fulfilment_center ? ` via ${order.fulfilment_center}` : ''}. Pending items await next batch dispatch.</div>
+                </div>
+              </div>
+            )}
+
             {order.status === 'dispatched_fc' && order.dispatch_mode && (
               <div className="od-pending-banner" style={{background:'#f0fdf4',border:'1px solid #bbf7d0',color:'#166534'}}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 <div>
-                  <div className="od-pending-banner-label">Dispatched</div>
+                  <div className="od-pending-banner-label">Dispatched{order.fulfilment_center ? ` · ${order.fulfilment_center}` : ''}</div>
                   <div>
                     Mode: {order.dispatch_mode.charAt(0).toUpperCase() + order.dispatch_mode.slice(1)}
                     {order.dispatch_mode === 'vehicle' && order.vehicle_type && ` · ${order.vehicle_type}`}
@@ -656,7 +689,7 @@ export default function OrderDetail() {
                           <th className="col-sr">#</th><th className="col-code">Item Code</th><th className="col-qty">Qty</th>
                           <th className="col-lp">LP Price</th><th className="col-disc">Disc %</th>
                           <th className="col-unit">Unit Price</th><th className="col-total">Total</th>
-                          <th className="col-date">Dispatch</th><th className="col-ref">Cust. Ref No</th><th className="col-del"></th>
+                          <th className="col-date">Delivery Date</th><th className="col-ref">Cust. Ref No</th><th className="col-del"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -794,9 +827,30 @@ export default function OrderDetail() {
                     </div>
                   )}
 
+                  {/* Dispatch batch history */}
+                  {(() => {
+                    const dispatchLogs = comments.filter(c => c.is_activity && (c.message.includes('Dispatch') || c.message.includes('dispatch')))
+                    if (!dispatchLogs.length) return null
+                    return (
+                      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10 }}>Dispatch History</div>
+                        {dispatchLogs.map((c, i) => (
+                          <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+                            <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#d1fae5', color: '#065f46', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
+                            <div>
+                              <div style={{ fontSize: 12, color: 'var(--gray-900)', fontWeight: 500, lineHeight: 1.4 }}>{c.message}</div>
+                              <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>{fmtTs(c.created_at)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+
                   <div className="od-totals">
                     <div className="od-totals-inner">
                       <div className="od-totals-row"><span>Order Subtotal</span><span>₹{subtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+                      <div className="od-totals-row"><span>Dispatched Value</span><span style={{ color: '#166534', fontWeight: 700 }}>₹{(order.order_items || []).reduce((s, i) => s + (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                       <div className="od-totals-row"><span>Freight</span><span>₹{(order.freight||0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                       <div className="od-totals-row grand"><span>Grand Total</span><span>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                     </div>
@@ -812,7 +866,7 @@ export default function OrderDetail() {
                         <th>Item Code</th>
                         <th>Qty</th>
                         <th>LP Price</th><th>Disc %</th><th>Unit Price</th>
-                        <th>Dispatch Date</th>
+                        <th>Delivery Date</th>
                         <th>Cust. Ref No</th>
                         <th className="right" style={{ paddingRight: 20 }}>Total</th>
                       </tr>
@@ -974,6 +1028,13 @@ export default function OrderDetail() {
               </div>
             )}
 
+            {order.fulfilment_center && (
+              <div className="od-side-card">
+                <div className="od-side-card-title">Fulfilment Center</div>
+                <div className="od-side-val-big">{order.fulfilment_center}</div>
+              </div>
+            )}
+
             <div className="od-side-card">
               <div className="od-side-card-title">Reference Number</div>
               <div className="od-ref-num" style={{ color: isPending ? 'var(--gray-500)' : 'var(--blue-700)' }}>{order.order_number}</div>
@@ -985,11 +1046,25 @@ export default function OrderDetail() {
       </div>
 
       {/* ── Cancel Modal ── */}
+      {/* ── Edit Confirmation Modal ── */}
+      {showEditConfirm && (
+        <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowEditConfirm(false) }}>
+          <div className="od-cancel-modal" style={{ maxWidth: 420 }}>
+            <div className="od-cancel-title">Edit Order?</div>
+            <div className="od-cancel-sub">Are you sure you want to edit this order? Changes will update the order details.</div>
+            <div className="od-cancel-actions" style={{ marginTop: 20 }}>
+              <button className="od-btn" onClick={() => setShowEditConfirm(false)}>No, Go Back</button>
+              <button className="od-btn od-btn-edit" onClick={() => { setShowEditConfirm(false); enterEditMode() }}>Yes, Edit Order</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCancel && (
         <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCancel(false) }}>
           <div className="od-cancel-modal">
-            <div className="od-cancel-title">Cancel Order</div>
-            <div className="od-cancel-sub">Reason is required and will be shown to the sales team.</div>
+            <div className="od-cancel-title">Are you sure?</div>
+            <div className="od-cancel-sub">This will cancel the order. Please provide a reason.</div>
             <textarea className="od-cancel-textarea" value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="e.g. Customer requested cancellation..." autoFocus />
             <div className="od-cancel-actions">
               <button className="od-btn" onClick={() => { setShowCancel(false); setCancelReason('') }}>Dismiss</button>
@@ -1006,7 +1081,18 @@ export default function OrderDetail() {
         <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowDispatchModal(false) }}>
           <div className="od-cancel-modal" style={{ maxWidth: 460 }}>
             <div className="od-cancel-title">Ship Order</div>
-            <div className="od-cancel-sub">How would you like to ship this order?</div>
+            <div className="od-cancel-sub">Select fulfilment center and dispatch type</div>
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', marginBottom: 8 }}>Fulfilment Center</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {['Kaveri', 'Godawari'].map(c => (
+                  <button key={c} onClick={() => setFcCenter(c)}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid ' + (fcCenter === c ? '#0d2461' : 'var(--gray-200)'), background: fcCenter === c ? '#0d2461' : 'white', color: fcCenter === c ? 'white' : 'var(--gray-700)', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
               <button className="od-dispatch-choice-btn" onClick={fullyDispatch}>
                 <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#166534',marginBottom:8}}>
@@ -1078,8 +1164,8 @@ export default function OrderDetail() {
             </div>
             <div className="od-cancel-actions" style={{ marginTop: 20 }}>
               <button className="od-btn" onClick={() => setShowPartialModal(false)}>Cancel</button>
-              <button className="od-btn od-btn-approve" onClick={submitPartialDispatch} disabled={saving}>
-                {saving ? 'Dispatching...' : 'Confirm Partial Dispatch'}
+              <button className="od-btn od-btn-approve" onClick={confirmPartialItems} disabled={saving}>
+                Next: Logistics →
               </button>
             </div>
           </div>

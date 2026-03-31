@@ -73,6 +73,11 @@ export default function NewOrder() {
   function handlePoFile(e) {
     const f = e.target.files?.[0]
     if (!f) return
+    if (f.size > 150 * 1024) {
+      alert('File is too large. Maximum file size allowed: 150 KB')
+      e.target.value = ''
+      return
+    }
     setPoFile(f)
     setPoFileName(f.name)
   }
@@ -148,6 +153,7 @@ export default function NewOrder() {
       po_document_url:   poDocUrl,
       submitted_by_name: user.name,
       created_by:        session.user.id,
+      is_test:           false,
     }).select().single()
 
     if (error) { alert('Error: ' + error.message); setSubmitting(false); return }
@@ -306,6 +312,7 @@ export default function NewOrder() {
                   )}
                 </div>
               </label>
+              <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>Maximum file size allowed: 150 KB</div>
             </div>
           </div>
         </div>
@@ -332,7 +339,7 @@ export default function NewOrder() {
                   <th className="col-disc">Disc %</th>
                   <th className="col-unit">Unit Price (₹)</th>
                   <th className="col-total">Total (₹)</th>
-                  <th className="col-date">Dispatch Date <span className="req">*</span></th>
+                  <th className="col-date">Delivery Date <span className="req">*</span></th>
                   <th className="col-ref">Cust. Ref No</th>
                   <th className="col-del"></th>
                 </tr>
@@ -425,6 +432,7 @@ export default function NewOrder() {
 
         {/* ── Actions ── */}
         <div className="no-actions">
+          <div style={{ flex: 1 }} />
           <button className="no-cancel-btn" onClick={() => navigate('/orders')}>Cancel</button>
           <button className="no-submit-btn" onClick={submitOrder} disabled={submitting}>
             {submitting ? (

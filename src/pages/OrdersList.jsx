@@ -44,9 +44,14 @@ function pendingValue(o) {
   }, 0) + (o.freight || 0)
 }
 
-// In All Orders: show full total. In other filters: show pending value for partial orders
+function dispatchedValue(o) {
+  return (o.order_items || []).reduce((s, i) => s + (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0), 0)
+}
+
+// In All Orders: show full total. Dispatched filter: show dispatched value. Other filters: show pending value for partial orders
 function displayValue(o, currentFilter) {
-  if (currentFilter !== 'all' && isPartiallyDispatched(o)) return pendingValue(o)
+  if (currentFilter === 'dispatched' && isPartiallyDispatched(o)) return dispatchedValue(o)
+  if (currentFilter !== 'all' && currentFilter !== 'dispatched' && isPartiallyDispatched(o)) return pendingValue(o)
   return totalValue(o)
 }
 
@@ -126,7 +131,7 @@ export default function OrdersList() {
   async function loadOrders() {
     setLoading(true)
     const { data } = await sb.from('orders').select('*, order_items(*)')
-      .gte('created_at', '2026-03-31')
+      .gte('created_at', '2026-03-31').eq('is_test', false)
       .order('created_at', { ascending: false })
     setOrders(data || [])
     setLoading(false)
@@ -136,7 +141,7 @@ export default function OrdersList() {
     if (f === 'all')         return true
     if (f === 'undelivered') return isPendingDelivery(o)
     if (f === 'partial')     return isPartiallyDispatched(o)
-    if (f === 'dispatched')  return o.status === 'dispatched_fc'
+    if (f === 'dispatched')  return o.status === 'dispatched_fc' || (o.order_items || []).some(i => (i.dispatched_qty || 0) > 0)
     if (f === 'approval')    return o.status === 'pending'
     if (f === 'cancelled')   return o.status === 'cancelled'
     return false
@@ -170,7 +175,7 @@ export default function OrdersList() {
         'Order #':      o.order_number,
         'Customer':     o.customer_name,
         'Order Date':   fmt(o.order_date),
-        'Engineer':     o.engineer_name || '',
+        'Account Owner':     o.engineer_name || '',
         'PO Number':    o.po_number || '',
         'Items':        (o.order_items || []).length,
         'Value (₹)':    val,
@@ -191,7 +196,7 @@ export default function OrdersList() {
       if (items.length === 0) {
         rows.push({
           'Order #': o.order_number, 'Customer': o.customer_name,
-          'Order Date': fmt(o.order_date), 'Engineer': o.engineer_name || '',
+          'Order Date': fmt(o.order_date), 'Account Owner': o.engineer_name || '',
           'PO Number': o.po_number || '', 'Status': statusLabel(pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status),
           'Sr No': '', 'Item Code': '', 'Total Qty': '', 'Dispatched Qty': '',
           'Pending Qty': '', 'LP Price': '', 'Disc %': '', 'Unit Price': '',
@@ -205,7 +210,7 @@ export default function OrdersList() {
             'Order #':        idx === 0 ? o.order_number : '',
             'Customer':       idx === 0 ? o.customer_name : '',
             'Order Date':     idx === 0 ? fmt(o.order_date) : '',
-            'Engineer':       idx === 0 ? (o.engineer_name || '') : '',
+            'Account Owner':       idx === 0 ? (o.engineer_name || '') : '',
             'PO Number':      idx === 0 ? (o.po_number || '') : '',
             'Status':         idx === 0 ? statusLabel(pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status) : '',
             'Sr No':          item.sr_no,
@@ -372,7 +377,7 @@ export default function OrdersList() {
                       <th>Order #</th>
                       <th>Customer</th>
                       <th>Date</th>
-                      <th>Engineer</th>
+                      <th>Account Owner</th>
                       <th>Items</th>
                       <th style={{ textAlign: 'right' }}>Value (₹)</th>
                       <th style={{ textAlign: 'right' }}>Status</th>
@@ -392,11 +397,11 @@ export default function OrdersList() {
                           <td>{o.engineer_name || '—'}</td>
                           <td>
                             {(o.order_items || []).length}
-                            {partial && <span style={{ marginLeft: 6, fontSize: 11, color: '#92400e', fontWeight: 600 }}>{pendingQty} pending</span>}
+                            {partial && filter !== 'dispatched' && <span style={{ marginLeft: 6, fontSize: 11, color: '#92400e', fontWeight: 600 }}>{pendingQty} pending</span>}
                           </td>
                           <td className="amount-cell">
                             {val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                            {partial && filter !== 'all' && <span style={{ display: 'block', fontSize: 10, color: '#92400e', fontWeight: 600 }}>pending value</span>}
+                            {partial && filter !== 'all' && filter !== 'dispatched' && <span style={{ display: 'block', fontSize: 10, color: '#92400e', fontWeight: 600 }}>pending value</span>}
                           </td>
                           <td className="status-cell">
                             <span className={'pill pill-' + ps}>{statusLabel(ps === 'partial' ? 'partial_dispatch' : o.status)}</span>
@@ -427,11 +432,11 @@ export default function OrdersList() {
                       <div className="order-card-bottom">
                         <span className="order-items-count">
                           {(o.order_items || []).length} item{(o.order_items || []).length !== 1 ? 's' : ''}
-                          {partial && <span style={{ marginLeft: 6, color: '#92400e', fontWeight: 600 }}>{pendingQty} pending</span>}
+                          {partial && filter !== 'dispatched' && <span style={{ marginLeft: 6, color: '#92400e', fontWeight: 600 }}>{pendingQty} pending</span>}
                         </span>
                         <span className="order-total">
                           ₹{val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                          {partial && <span style={{ fontSize: 10, color: '#92400e', fontWeight: 600, marginLeft: 4 }}>pending</span>}
+                          {partial && filter !== 'dispatched' && <span style={{ fontSize: 10, color: '#92400e', fontWeight: 600, marginLeft: 4 }}>pending</span>}
                         </span>
                       </div>
                     </div>

@@ -6,7 +6,7 @@
 .back-btn svg { width: 16px; height: 16px; }
 
 /* ── Body ── */
-.no-body { max-width: 900px; margin: 0 auto; padding: 28px 20px 60px; }
+.no-body { max-width: 1200px; margin: 0 auto; padding: 28px 20px 60px; }
 .no-page-title { font-size: 22px; font-weight: 700; color: var(--gray-900); letter-spacing: -0.5px; }
 .no-page-sub { font-size: 13px; color: var(--gray-500); margin-top: 4px; margin-bottom: 24px; }
 
@@ -36,7 +36,7 @@
 
 .no-items-table-wrap { overflow-x: auto; border-top: 1px solid var(--gray-100); border-bottom: 1px solid var(--gray-100); }
 
-.no-items-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 780px; }
+.no-items-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 960px; }
 .no-items-table thead th { background: var(--gray-50); color: var(--gray-500); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.7px; padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--gray-200); white-space: nowrap; }
 .no-items-table tbody tr { border-bottom: 1px solid var(--gray-100); transition: background 0.1s; }
 .no-items-table tbody tr:last-child { border-bottom: none; }
@@ -47,7 +47,7 @@
 /* Column widths */
 .col-sr   { width: 36px; text-align: center; color: var(--gray-400); font-size: 12px; padding-left: 14px !important; }
 .col-code { min-width: 180px; }
-.col-qty  { width: 76px; }
+.col-qty  { width: 100px; }
 .col-lp   { width: 100px; }
 .col-disc { width: 76px; }
 .col-unit { width: 100px; }
@@ -56,7 +56,7 @@
 .col-ref  { width: 120px; }
 .col-del  { width: 40px; text-align: center; }
 
-.no-items-table input { border: 1px solid var(--gray-200); border-radius: 7px; padding: 7px 9px; font-family: var(--mono); font-size: 12px; width: 100%; outline: none; box-sizing: border-box; background: white; transition: border-color 0.15s; }
+.no-items-table input { border: 1px solid var(--gray-200); border-radius: 7px; padding: 7px 9px; font-family: var(--mono); font-size: 13px; width: 100%; outline: none; box-sizing: border-box; background: white; transition: border-color 0.15s; }
 .no-items-table input:focus { border-color: var(--blue-600); }
 .no-items-table input.calc-field { background: var(--gray-50); color: var(--gray-600); cursor: default; }
 .no-items-table input.total-field { font-weight: 700; color: var(--gray-900); }
