@@ -1,0 +1,70 @@
+/* ── RESET ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── VARIABLES ── */
+:root {
+  --blue-900: #0d2461;
+  --blue-800: #1a3a8b;
+  --blue-700: #1f46a8;
+  --blue-600: #2550c0;
+  --blue-200: #b5d0f5;
+  --blue-50:  #e8f0fc;
+  --green-text: #14653a;
+  --green-bg:   #d4f5e2;
+  --amber-text: #7a4b00;
+  --amber-bg:   #fef3c7;
+  --red-text:   #9b1c1c;
+  --red-bg:     #fee2e2;
+  --red-500:    #ef4444;
+  --red-50:     #fef2f2;
+  --red-200:    #fecaca;
+  --gray-50:  #f8f9fb;
+  --gray-100: #f0f2f5;
+  --gray-200: #e2e6ed;
+  --gray-300: #d1d5db;
+  --gray-400: #9ba3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --font:  'DM Sans', sans-serif;
+  --mono:  'DM Mono', monospace;
+  --radius:    14px;
+  --radius-sm:  8px;
+  --radius-xs:  6px;
+}
+
+html, body { min-height: 100%; font-family: var(--font); color: var(--gray-900); }
+
+/* ── TOPBAR (shared: accounts + sales) ── */
+.topbar {
+  background: var(--blue-800);
+  padding: 0 20px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.topbar-left  { display: flex; align-items: center; gap: 12px; }
+.topbar-logo  { width: 36px; height: 36px; background: rgba(255,255,255,0.12); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.topbar-logo svg { width: 22px; height: 22px; }
+.topbar-logo-img { height: 36px; width: auto; max-width: 160px; object-fit: contain; object-position: left center; flex-shrink: 0; filter: brightness(0) invert(1); }
+.topbar-title { color: white; font-size: 15px; font-weight: 600; }
+.topbar-title span { color: var(--blue-200); font-weight: 400; font-size: 13px; display: block; margin-top: -2px; }
+
+.user-chip   { display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.1); border-radius: 20px; padding: 5px 12px 5px 6px; }
+.user-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--blue-200); color: var(--blue-900); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.user-name   { color: white; font-size: 12px; font-weight: 500; }
+
+.signout-btn { background: rgba(255,255,255,0.12); color: white; border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-family: var(--font); cursor: pointer; }
+.signout-btn:hover { background: rgba(255,255,255,0.22); }
+
+/* ── KEYFRAMES ── */
+@keyframes spin    { to { transform: rotate(360deg); } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn   { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }

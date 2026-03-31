@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/vatsalmaniar/.nvm/versions/**)",
+      "Bash(brew list:*)"
+    ]
+  }
+}
