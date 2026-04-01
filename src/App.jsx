@@ -12,6 +12,10 @@ import TodayDispatch from './pages/TodayDispatch'
 import CRM from './pages/CRM'
 import NewLead from './pages/NewLead'
 import LeadDetail from './pages/LeadDetail'
+import FCModule from './pages/FCModule'
+import FCOrderDetail from './pages/FCOrderDetail'
+import SalesModule from './pages/SalesModule'
+import BillingOrderDetail from './pages/BillingOrderDetail'
 
 export default function App() {
   return (
@@ -31,6 +35,10 @@ export default function App() {
         <Route path="/crm" element={<CRM />} />
         <Route path="/crm/new" element={<NewLead />} />
         <Route path="/crm/:id" element={<LeadDetail />} />
+        <Route path="/fc" element={<FCModule />} />
+        <Route path="/fc/:id" element={<FCOrderDetail />} />
+        <Route path="/billing" element={<SalesModule />} />
+        <Route path="/billing/:id" element={<BillingOrderDetail />} />
       </Routes>
     </BrowserRouter>
   )

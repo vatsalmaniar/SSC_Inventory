@@ -8,7 +8,7 @@ const NAV_ITEMS = [
     key: 'home',
     label: 'Home',
     path: '/dashboard',
-    roles: ['all'],
+    roles: ['sales', 'ops', 'admin', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   },
   {
@@ -22,22 +22,36 @@ const NAV_ITEMS = [
     key: 'orders',
     label: 'Orders',
     path: '/orders',
-    roles: ['all'],
+    roles: ['sales', 'ops', 'admin', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>,
   },
   {
     key: 'people',
     label: 'People',
     path: null,
-    roles: ['all'],
+    roles: ['sales', 'ops', 'admin', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
   },
   {
     key: 'crm',
     label: 'CRM',
     path: null,
-    roles: ['all'],
+    roles: ['sales', 'ops', 'admin', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
+  },
+  {
+    key: 'fc',
+    label: 'Fulfilment Center',
+    path: '/fc',
+    roles: ['fc_kaveri', 'fc_godawari', 'ops', 'admin'],
+    icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>,
+  },
+  {
+    key: 'billing',
+    label: 'Billing',
+    path: '/billing',
+    roles: ['accounts', 'ops', 'admin'],
+    icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   },
   {
     key: 'upload',
@@ -129,7 +143,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
         <div className="ly-nav-section">
           <div className="ly-nav-label">Menu</div>
-          {visibleNav.slice(0, 5).map(item => (
+          {visibleNav.map(item => (
             <button
               key={item.key}
               className={'ly-nav-item' + (activeKey === item.key || (item.path && location.pathname.startsWith(item.path) && item.path !== '/dashboard') ? ' active' : '') + (!item.path ? ' soon' : '')}
@@ -141,17 +155,6 @@ export default function Layout({ children, pageTitle, pageKey }) {
               {!item.path && <span className="ly-soon-pill">Soon</span>}
             </button>
           ))}
-          {visibleNav.find(n => n.key === 'upload') && (
-            <button
-              className={'ly-nav-item' + (activeKey === 'upload' || location.pathname === '/accounts' ? ' active' : '')}
-              onClick={() => navigate('/accounts')}
-            >
-              <span className="ly-nav-icon">
-                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              </span>
-              Upload
-            </button>
-          )}
         </div>
 
         <div className="ly-nav-section ly-nav-bottom">

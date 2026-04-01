@@ -13,9 +13,14 @@ function fmt(d) {
 
 function statusLabel(s) {
   return {
-    pending: 'Pending Approval', inv_check: 'Inv. Check', dispatch: 'Shipped',
-    partial_dispatch: 'Partially Shipped', gen_invoice: 'Gen. Invoice',
-    dispatched_fc: 'Dispatched', cancelled: 'Cancelled',
+    pending:'Pending', inv_check:'Inv. Check', inventory_check:'Inventory Check',
+    dispatch:'Ready to Ship', partial_dispatch:'Partially Shipped',
+    gen_invoice:'Delivery Created', delivery_created:'Delivery Created', picking:'Picking', packing:'Packing',
+    goods_issued:'Goods Issued', pending_billing:'Pending Billing',
+    credit_check:'Credit Check', goods_issue_posted:'GI Posted',
+    invoice_generated:'Invoice Generated', delivery_ready:'Delivery Ready',
+    eway_pending:'E-Way Pending', eway_generated:'E-Way Generated',
+    dispatched_fc:'Delivered', cancelled:'Cancelled',
   }[s] || s
 }
 

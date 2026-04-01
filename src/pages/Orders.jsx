@@ -17,7 +17,17 @@ function fmt(d) {
   return dt.getDate() + ' ' + mo[dt.getMonth()] + ' ' + dt.getFullYear()
 }
 function statusLabel(s) {
-  return { pending:'Pending', processing:'Processing', dispatched:'Dispatched', dispatched_fc:'Dispatched', dispatch:'Shipped', partial_dispatch:'Partially Shipped', completed:'Completed', cancelled:'Cancelled' }[s] || s
+  return {
+    pending:'Pending', processing:'Processing', dispatched:'Dispatched',
+    dispatch:'Ready to Ship', partial_dispatch:'Partially Shipped',
+    inv_check:'Inv. Check', inventory_check:'Inventory Check',
+    gen_invoice:'Delivery Created', delivery_created:'Delivery Created', picking:'Picking', packing:'Packing',
+    goods_issued:'Goods Issued', pending_billing:'Pending Billing',
+    credit_check:'Credit Check', goods_issue_posted:'GI Posted',
+    invoice_generated:'Invoice Generated', delivery_ready:'Delivery Ready',
+    eway_pending:'E-Way Pending', eway_generated:'E-Way Generated',
+    dispatched_fc:'Delivered', completed:'Completed', cancelled:'Cancelled',
+  }[s] || s
 }
 
 export default function Orders() {

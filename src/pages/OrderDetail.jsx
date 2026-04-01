@@ -19,14 +19,17 @@ function fmtTs(d) {
   return dt.getDate() + ' ' + mo[dt.getMonth()] + ', ' + dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0')
 }
 
-const PIPELINE_STAGES = [
-  { key: 'pending',       label: 'Pending Review'   },
-  { key: 'inv_check',     label: 'Inventory Check'  },
-  { key: 'dispatch',      label: 'Shipped'          },
-  { key: 'gen_invoice',   label: 'Generate Invoice' },
-  { key: 'dispatched_fc', label: 'Dispatched'       },
+const ORDER_MODULE_STAGES = [
+  { key: 'pending',          label: 'Order Created'   },
+  { key: 'inv_check',        label: 'Order Approved'  },
+  { key: 'inventory_check',  label: 'Inventory Check' },
+  { key: 'dispatch',         label: 'Ready to Ship'   },
+  { key: 'delivery_created', label: 'Delivery Created'},
 ]
-const PIPELINE_KEYS = PIPELINE_STAGES.map(s => s.key)
+const ORDER_PIPELINE_KEYS = ORDER_MODULE_STAGES.map(s => s.key)
+
+// Statuses that mean "handed to FC/Sales" — order is in progress beyond ops
+const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','goods_issued','pending_billing','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_pending','eway_generated','dispatched_fc']
 
 function emptyItem() {
   return { _new: true, item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '' }
@@ -58,14 +61,11 @@ export default function OrderDetail() {
   const [showDispatchModal, setShowDispatchModal] = useState(false)
   const [showPartialModal, setShowPartialModal]   = useState(false)
   const [partialItems, setPartialItems]           = useState([])
-  const [showFCModal, setShowFCModal]             = useState(false)
-  const [fcMode, setFcMode]               = useState('porter')
-  const [fcVehicleType, setFcVehicleType] = useState('')
-  const [fcVehicleNum, setFcVehicleNum]   = useState('')
-  const [fcDriverName, setFcDriverName]   = useState('')
-  const [fcCenter, setFcCenter]           = useState('Kaveri')
-  const [dispatchType, setDispatchType]   = useState('full') // 'full' | 'partial'
+  const [fcCenter, setFcCenter]                   = useState('Kaveri')
+  const [dispatchType, setDispatchType]           = useState('full') // 'full' | 'partial'
   const [pendingPartialSelected, setPendingPartialSelected] = useState([])
+  const [isNextBatch, setIsNextBatch]             = useState(false)
+  const [batches, setBatches]                     = useState([])
 
   // Edit confirmation
   const [showEditConfirm, setShowEditConfirm] = useState(false)
@@ -92,6 +92,8 @@ export default function OrderDetail() {
     setLoading(true)
     const { data } = await sb.from('orders').select('*, order_items(*)').eq('id', id).single()
     setOrder(data)
+    const { data: batches } = await sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true })
+    setBatches(batches || [])
     setLoading(false)
     loadComments()
   }
@@ -108,21 +110,25 @@ export default function OrderDetail() {
   }
 
   // Derived state
-  const effectiveStatus  = order?.status === 'partial_dispatch' ? 'dispatch' : order?.status
+  const effectiveStatus  = order?.status === 'partial_dispatch' ? 'delivery_created'
+    : order?.status === 'gen_invoice' ? 'delivery_created'  // legacy orders
+    : order?.status
   const isOps            = ['ops', 'admin'].includes(user.role)
   const isPending        = order?.status === 'pending'
   const isCancelled      = order?.status === 'cancelled'
-  const pipelineIdx      = PIPELINE_KEYS.indexOf(effectiveStatus)
-  const canAdvance       = isOps && !isCancelled && pipelineIdx >= 0 && pipelineIdx < PIPELINE_KEYS.length - 1
+  const isInFCFlow       = FC_ACTIVE_STATUSES.includes(order?.status)
+  const pipelineIdx      = ORDER_PIPELINE_KEYS.indexOf(effectiveStatus)
+  const canAdvance       = isOps && !isCancelled && !isInFCFlow && pipelineIdx >= 0 && pipelineIdx < ORDER_PIPELINE_KEYS.length - 1
   const hasAnyDispatched = (order?.order_items || []).some(i => (i.dispatched_qty || 0) > 0)
   const hasAnyPending    = (order?.order_items || []).some(i => i.qty > (i.dispatched_qty || 0))
   const showDispatchCols = hasAnyDispatched
+  // Next Batch button: ops can dispatch remaining items when order is in FC flow but items still pending
+  const canNextBatch     = isOps && !isCancelled && isInFCFlow && hasAnyPending
 
   const actionBtnLabel = isPending ? 'Accept Order'
-    : order?.status === 'inv_check'        ? 'Confirm Inventory'
-    : order?.status === 'dispatch'         ? 'Ship Order'
-    : order?.status === 'gen_invoice'      ? 'Confirm Invoice'
-    : order?.status === 'partial_dispatch' ? 'Dispatch Next Batch'
+    : order?.status === 'inv_check'       ? 'Confirm Approval'
+    : order?.status === 'inventory_check' ? 'Confirm Inventory'
+    : order?.status === 'dispatch'        ? 'Delivery Created'
     : 'Mark Complete'
 
   // ── Edit mode ──
@@ -260,56 +266,51 @@ export default function OrderDetail() {
       const { error } = await sb.rpc('approve_order', { order_id: id, approver_name: user.name, order_type: order.order_type })
       if (error) { alert('Error: ' + error.message); setSaving(false); return }
       await sb.from('orders').update({ status: 'inv_check', updated_at: new Date().toISOString() }).eq('id', id)
-      await logActivity('Order accepted — moved to Inventory Check')
+      await logActivity('Order accepted — moved to Order Approved')
       await loadOrder(); setSaving(false)
     } else if (order.status === 'inv_check') {
+      await sb.from('orders').update({ status: 'inventory_check', updated_at: new Date().toISOString() }).eq('id', id)
+      await logActivity('Approval confirmed — moved to Inventory Check')
+      await loadOrder(); setSaving(false)
+    } else if (order.status === 'inventory_check') {
       await sb.from('orders').update({ status: 'dispatch', updated_at: new Date().toISOString() }).eq('id', id)
-      await logActivity('Inventory check confirmed — moved to Shipping')
+      await logActivity('Inventory confirmed — Ready to Ship')
       await loadOrder(); setSaving(false)
     } else if (order.status === 'dispatch') {
       setSaving(false)
       setShowDispatchModal(true)
-    } else if (order.status === 'partial_dispatch') {
-      // Dispatch next batch
-      setSaving(false)
-      setShowDispatchModal(true)
-    } else if (order.status === 'gen_invoice') {
-      const items = order.order_items || []
-      const anyTracked = items.some(i => (i.dispatched_qty || 0) > 0)
-      if (!anyTracked) {
-        // Legacy order — dispatched_qty was never saved, fix and complete
-        for (const item of items) {
-          await sb.from('order_items').update({ dispatched_qty: item.qty }).eq('id', item.id)
-        }
-        await sb.from('orders').update({ status: 'dispatched_fc', updated_at: new Date().toISOString() }).eq('id', id)
-        await logActivity('Invoice confirmed — Order fully dispatched.')
-      } else {
-        const pendingItemsExist = items.some(i => i.qty > (i.dispatched_qty || 0))
-        if (pendingItemsExist) {
-          // Partial batch done — go back to ship for remaining items
-          await sb.from('orders').update({ status: 'partial_dispatch', updated_at: new Date().toISOString() }).eq('id', id)
-          await logActivity('Invoice confirmed — Partial dispatch complete. Pending items await next batch.')
-        } else {
-          // All items dispatched — complete the order
-          await sb.from('orders').update({ status: 'dispatched_fc', updated_at: new Date().toISOString() }).eq('id', id)
-          await logActivity('Invoice confirmed — Order fully dispatched.')
-        }
-      }
-      await loadOrder(); setSaving(false)
     }
   }
 
-  // ── Full dispatch — open FC modal ──
-  function fullyDispatch() {
-    setDispatchType('full')
+  // ── Full dispatch — set delivery_created directly ──
+  async function fullyDispatch() {
     setShowDispatchModal(false)
-    setFcMode('porter'); setFcVehicleType(''); setFcVehicleNum(''); setFcDriverName('')
-    setShowFCModal(true)
+    setDispatchType('full')
+    setSaving(true)
+    for (const item of (order.order_items || [])) {
+      const { error } = await sb.from('order_items').update({ dispatched_qty: item.qty }).eq('id', item.id)
+      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
+    }
+    const { error } = await sb.from('orders').update({
+      status: 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
+    }).eq('id', id)
+    if (error) { alert('Failed: ' + error.message); setSaving(false); return }
+    const itemsJson = (order.order_items || []).map(i => ({
+      order_item_id: i.id, item_code: i.item_code, qty: i.qty,
+      unit_price: i.unit_price_after_disc, total_price: i.total_price,
+    }))
+    const { data: batchData } = await sb.rpc('create_order_dispatch', {
+      p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,
+    })
+    const dcNum = batchData?.dc_number || '—'
+    await logActivity(`Full Dispatch — all items sent via ${fcCenter}. Delivery Created. DC: ${dcNum}`)
+    await loadOrder(); setSaving(false)
   }
 
-  // ── Partial dispatch — collect items first ──
+  // ── Partial dispatch — collect items ──
   function openPartialDispatch() {
     setDispatchType('partial')
+    setIsNextBatch(false)
     setShowDispatchModal(false)
     setPartialItems((order.order_items || []).map(item => {
       const remaining = item.qty - (item.dispatched_qty || 0)
@@ -318,8 +319,8 @@ export default function OrderDetail() {
     setShowPartialModal(true)
   }
 
-  // ── Partial: validate items → open FC modal ──
-  function confirmPartialItems() {
+  // ── Partial: validate and save ──
+  async function confirmPartialItems() {
     const selected = partialItems.filter(i => i.checked && parseFloat(i.dispatchQty) > 0)
     if (!selected.length) { alert('Select at least one item with a dispatch quantity.'); return }
     for (const item of selected) {
@@ -329,56 +330,40 @@ export default function OrderDetail() {
         return
       }
     }
-    setPendingPartialSelected(selected)
     setShowPartialModal(false)
-    setFcMode('porter'); setFcVehicleType(''); setFcVehicleNum(''); setFcDriverName('')
-    setShowFCModal(true)
+    setSaving(true)
+    for (const item of selected) {
+      const newDispatched = (item.dispatched_qty || 0) + parseFloat(item.dispatchQty)
+      const { error } = await sb.from('order_items').update({ dispatched_qty: newDispatched }).eq('id', item.id)
+      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
+    }
+    const summary = selected.map(i => `${i.item_code}: ${i.dispatchQty} units`).join(', ')
+    const { error } = await sb.from('orders').update({
+      status: 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
+    }).eq('id', id)
+    if (error) { alert('Failed: ' + error.message); setSaving(false); return }
+    const itemsJson = selected.map(i => {
+      const full = (order.order_items || []).find(o => o.id === i.id) || {}
+      return { order_item_id: i.id, item_code: i.item_code, qty: parseFloat(i.dispatchQty), unit_price: full.unit_price_after_disc, total_price: (full.unit_price_after_disc || 0) * parseFloat(i.dispatchQty) }
+    })
+    const { data: batchData } = await sb.rpc('create_order_dispatch', {
+      p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,
+    })
+    const dcNum = batchData?.dc_number || '—'
+    await logActivity(`Partial Dispatch via ${fcCenter} — ${summary}. Delivery Created. DC: ${dcNum}`)
+    await loadOrder(); setSaving(false)
   }
 
-  // ── FC modal confirm — handles both full and partial ──
-  async function submitFCDispatch() {
-    if (!fcDriverName.trim()) { alert('Driver / Person Name is required.'); return }
-    if (fcMode === 'vehicle' && !fcVehicleType) { alert('Please select a vehicle type.'); return }
-    setSaving(true); setShowFCModal(false)
-
-    const logistics = fcMode === 'vehicle'
-      ? `${fcVehicleType}${fcVehicleNum ? ' · ' + fcVehicleNum : ''} — ${fcDriverName}`
-      : fcMode === 'porter' ? `Porter — ${fcDriverName}` : `Self Pickup — ${fcDriverName}`
-
-    if (dispatchType === 'full') {
-      // Mark all items fully dispatched
-      for (const item of (order.order_items || [])) {
-        const { error } = await sb.from('order_items').update({ dispatched_qty: item.qty }).eq('id', item.id)
-        if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
-      }
-      const { error } = await sb.from('orders').update({
-        status: 'gen_invoice', fulfilment_center: fcCenter,
-        dispatch_mode: fcMode, vehicle_type: fcMode === 'vehicle' ? fcVehicleType : null,
-        vehicle_number: fcMode === 'vehicle' ? fcVehicleNum.trim() : null, driver_name: fcDriverName.trim(),
-        updated_at: new Date().toISOString(),
-      }).eq('id', id)
-      if (error) { alert('Failed to update order: ' + error.message); setSaving(false); return }
-      await logActivity(`Full Dispatch via ${fcCenter} · ${logistics} — all items dispatched, moved to Generate Invoice`)
-
-    } else {
-      // Partial — update only selected items
-      for (const item of pendingPartialSelected) {
-        const newDispatched = (item.dispatched_qty || 0) + parseFloat(item.dispatchQty)
-        const { error } = await sb.from('order_items').update({ dispatched_qty: newDispatched }).eq('id', item.id)
-        if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
-      }
-      const summary = pendingPartialSelected.map(i => `${i.item_code}: ${i.dispatchQty} units`).join(', ')
-      const { error } = await sb.from('orders').update({
-        status: 'gen_invoice', fulfilment_center: fcCenter,
-        dispatch_mode: fcMode, vehicle_type: fcMode === 'vehicle' ? fcVehicleType : null,
-        vehicle_number: fcMode === 'vehicle' ? fcVehicleNum.trim() : null, driver_name: fcDriverName.trim(),
-        updated_at: new Date().toISOString(),
-      }).eq('id', id)
-      if (error) { alert('Failed to update order: ' + error.message); setSaving(false); return }
-      await logActivity(`Partial Dispatch via ${fcCenter} · ${logistics} — ${summary}`)
-    }
-
-    await loadOrder(); setSaving(false)
+  // ── Next Batch (ops can dispatch remaining items while order is in FC flow) ──
+  function openNextBatch() {
+    setDispatchType('partial')
+    setIsNextBatch(true)
+    setFcCenter(order.fulfilment_center || 'Kaveri')  // pre-fill with current, allow change
+    setPartialItems((order.order_items || []).map(item => {
+      const remaining = item.qty - (item.dispatched_qty || 0)
+      return { id: item.id, item_code: item.item_code, qty: item.qty, dispatched_qty: item.dispatched_qty || 0, dispatchQty: remaining > 0 ? String(remaining) : '0', checked: remaining > 0, remaining }
+    }))
+    setShowPartialModal(true)
   }
 
   // ── Comment / @mention ──
@@ -468,8 +453,8 @@ export default function OrderDetail() {
               <div>
                 <div className="od-header-eyebrow">
                   {order.order_type === 'SO' ? 'Standard Order' : 'Customised Order'}
-                  <span className={'od-status-badge ' + (isPending ? 'pending' : isCancelled ? 'cancelled' : 'active')}>
-                    {isPending ? 'Pending Approval' : isCancelled ? 'Cancelled' : (hasAnyDispatched && hasAnyPending) ? 'Partially Dispatched' : 'Active'}
+                  <span className={'od-status-badge ' + (isPending ? 'pending' : isCancelled ? 'cancelled' : isInFCFlow && order?.status === 'dispatched_fc' ? 'delivered' : isInFCFlow ? 'delivery' : 'active')}>
+                    {isPending ? 'Pending Approval' : isCancelled ? 'Cancelled' : order?.status === 'dispatched_fc' ? 'Delivered' : isInFCFlow ? 'Delivery In Progress' : (hasAnyDispatched && hasAnyPending) ? 'Partially Dispatched' : 'Active'}
                   </span>
                 </div>
                 <div className="od-header-title">{editMode ? editData.customer_name || order.customer_name : order.customer_name}</div>
@@ -477,6 +462,10 @@ export default function OrderDetail() {
               </div>
             </div>
             <div className="od-header-actions">
+              <button className="od-btn" onClick={() => navigate('/orders/list')} style={{gap:6}}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                Back
+              </button>
               {isOps && !isCancelled && (
                 <>
                   {isPending && !editMode && (
@@ -508,15 +497,16 @@ export default function OrderDetail() {
         </div>
 
         {/* ── Pipeline Bar ── */}
-        <div className={'od-pipeline-bar' + (isCancelled ? ' od-pipeline-cancelled' : '') + (hasAnyDispatched && hasAnyPending ? ' od-pipeline-partial' : '')}>
+        <div className={'od-pipeline-bar' + (isCancelled ? ' od-pipeline-cancelled' : '') + (isInFCFlow ? ' od-pipeline-delivery' : '')}>
           <div className="od-pipeline-stages">
-            {PIPELINE_STAGES.map((stage, i) => {
-              const isDone    = !isCancelled && pipelineIdx > i
-              const isActive  = !isCancelled && effectiveStatus === stage.key
+            {ORDER_MODULE_STAGES.map((stage, i) => {
+              const isDone   = !isCancelled && (isInFCFlow || pipelineIdx > i)
+              const isActive = !isCancelled && !isInFCFlow && effectiveStatus === stage.key
+              const isFinal  = !isCancelled && isInFCFlow && stage.key === 'delivery_created'
               return (
-                <div key={stage.key} className={'od-pipe-stage' + (isDone ? ' done' : '') + (isActive ? ' active' : '')}>
+                <div key={stage.key} className={'od-pipe-stage' + (isDone ? ' done' : '') + (isActive || isFinal ? ' active' : '')}>
                   {stage.label}
-                  {isActive && hasAnyDispatched && hasAnyPending && (
+                  {isFinal && hasAnyPending && (
                     <span style={{fontSize:9,background:'rgba(255,255,255,0.2)',borderRadius:4,padding:'1px 5px',marginLeft:4,fontWeight:700}}>PARTIAL</span>
                   )}
                 </div>
@@ -527,6 +517,13 @@ export default function OrderDetail() {
             <button className="od-mark-complete-btn" onClick={advanceToNext} disabled={saving}>
               <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
               {saving ? 'Updating...' : actionBtnLabel}
+            </button>
+          )}
+          {canNextBatch && !editMode && (
+            <button className="od-mark-complete-btn" onClick={openNextBatch} disabled={saving}
+              style={{ background: '#92400e', marginLeft: 8 }}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+              {saving ? 'Updating...' : 'Next Batch'}
             </button>
           )}
         </div>
@@ -554,27 +551,35 @@ export default function OrderDetail() {
               </div>
             )}
 
-            {order.status === 'partial_dispatch' && (
-              <div className="od-pending-banner" style={{background:'#fffbeb',border:'1px solid #fde68a',color:'#92400e'}}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            {order.credit_override && (
+              <div className="od-pending-banner" style={{background:'#fef2f2',border:'1px solid #fca5a5',color:'#991b1b'}}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
                 <div>
-                  <div className="od-pending-banner-label">Dispatched (Partial)</div>
-                  <div>Some items dispatched{order.fulfilment_center ? ` via ${order.fulfilment_center}` : ''}. Pending items await next batch dispatch.</div>
+                  <div className="od-pending-banner-label">⚠️ Credit Override — Take Approval Required</div>
+                  <div>Payment was pending when credit check was done. Approval needed.</div>
                 </div>
               </div>
             )}
 
-            {order.status === 'dispatched_fc' && order.dispatch_mode && (
+            {isInFCFlow && order.status !== 'dispatched_fc' && (
+              <div className="od-delivery-banner">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>
+                <div>
+                  <div className="od-pending-banner-label">Delivery In Progress{order.fulfilment_center ? ` — ${order.fulfilment_center}` : ''}</div>
+                  <div>
+                    {hasAnyPending ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.dispatched_qty || 0)), 0)} units pending next batch. ` : ''}
+                    Currently: {{'delivery_created':'Delivery Created','goods_issued':'Goods Issued','pending_billing':'Pending Billing','credit_check':'Credit Check','goods_issue_posted':'Goods Issue Posted','invoice_generated':'Invoice Generated','delivery_ready':'Delivery Ready','eway_pending':'Ready for E-Way Bill','eway_generated':'E-Way Bill Generated'}[order.status] || order.status}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {order.status === 'dispatched_fc' && (
               <div className="od-pending-banner" style={{background:'#f0fdf4',border:'1px solid #bbf7d0',color:'#166534'}}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 <div>
-                  <div className="od-pending-banner-label">Dispatched{order.fulfilment_center ? ` · ${order.fulfilment_center}` : ''}</div>
-                  <div>
-                    Mode: {order.dispatch_mode.charAt(0).toUpperCase() + order.dispatch_mode.slice(1)}
-                    {order.dispatch_mode === 'vehicle' && order.vehicle_type && ` · ${order.vehicle_type}`}
-                    {order.dispatch_mode === 'vehicle' && order.vehicle_number && ` · ${order.vehicle_number}`}
-                    {order.driver_name && ` · ${order.driver_name}`}
-                  </div>
+                  <div className="od-pending-banner-label">Delivered{order.fulfilment_center ? ` · ${order.fulfilment_center}` : ''}</div>
+                  <div>Order fully delivered and complete.</div>
                 </div>
               </div>
             )}
@@ -655,15 +660,27 @@ export default function OrderDetail() {
                     </div>
                   </div>
                 ) : (
+                  <>
                   <div className="od-detail-grid">
+                    <div className="od-detail-field"><label>Customer Name</label><div className="val">{order.customer_name}</div></div>
+                    <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
+                    <div className="od-detail-field"><label>Account Owner</label><div className="val">{order.engineer_name || '—'}</div></div>
+                    <div className="od-detail-field"><label>Credit Terms</label><div className="val">{order.credit_terms || '—'}</div></div>
                     <div className="od-detail-field"><label>PO / Reference</label><div className="val">{order.po_number || '—'}</div></div>
                     <div className="od-detail-field"><label>Order Type</label><div className="val">{order.order_type === 'SO' ? 'Standard Order' : 'Customised Order'}</div></div>
                     <div className="od-detail-field"><label>Order Date</label><div className="val">{fmt(order.order_date)}</div></div>
                     <div className="od-detail-field"><label>Received Via</label><div className="val">{order.received_via || '—'}</div></div>
+                    <div className="od-detail-field"><label>Fulfilment Centre</label><div className="val">{order.fulfilment_center || '—'}</div></div>
                     <div className="od-detail-field"><label>Freight</label><div className="val">₹{(order.freight || 0).toLocaleString('en-IN')}</div></div>
-                    <div className="od-detail-field"><label>GST Number</label><div className="val">{order.customer_gst || '—'}</div></div>
                     {order.notes && <div className="od-detail-field" style={{ gridColumn: '1/-1' }}><label>Notes</label><div className="val od-notes-val">{order.notes}</div></div>}
                   </div>
+                  {order.dispatch_address && (
+                    <div className="od-detail-field" style={{marginTop:12}}>
+                      <label>Delivery / Dispatch Address</label>
+                      <div className="val">{order.dispatch_address}</div>
+                    </div>
+                  )}
+                  </>
                 )}
               </div>
             </div>
@@ -752,6 +769,7 @@ export default function OrderDetail() {
                           <tr>
                             <th style={{ paddingLeft: 16 }}>#</th>
                             <th>Item Code</th>
+                            <th>Dispatch Date</th>
                             <th style={{ textAlign: 'center' }}>Total Qty</th>
                             <th style={{ textAlign: 'center' }}>Dispatched</th>
                             <th style={{ textAlign: 'center', color: '#92400e' }}>Pending</th>
@@ -767,6 +785,7 @@ export default function OrderDetail() {
                               <tr key={item.id}>
                                 <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
                                 <td className="mono">{item.item_code}</td>
+                                <td style={{ fontSize: 12 }}>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
                                 <td style={{ textAlign: 'center' }}>{item.qty}</td>
                                 <td style={{ textAlign: 'center', color: dispQty > 0 ? '#166534' : 'var(--gray-400)', fontWeight: 600 }}>{dispQty || '—'}</td>
                                 <td style={{ textAlign: 'center', fontWeight: 700, color: '#c2410c' }}>{pendingQty}</td>
@@ -797,6 +816,7 @@ export default function OrderDetail() {
                           <tr>
                             <th style={{ paddingLeft: 16 }}>#</th>
                             <th>Item Code</th>
+                            <th>Dispatch Date</th>
                             <th style={{ textAlign: 'center' }}>Total Qty</th>
                             <th style={{ textAlign: 'center', color: '#166534' }}>Dispatched</th>
                             <th style={{ textAlign: 'center' }}>Pending</th>
@@ -812,6 +832,7 @@ export default function OrderDetail() {
                               <tr key={item.id} style={{ background: pendingQty === 0 ? '#f0fdf4' : undefined }}>
                                 <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
                                 <td className="mono">{item.item_code}</td>
+                                <td style={{ fontSize: 12 }}>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
                                 <td style={{ textAlign: 'center' }}>{item.qty}</td>
                                 <td style={{ textAlign: 'center', fontWeight: 700, color: '#166534' }}>{dispQty}</td>
                                 <td style={{ textAlign: 'center', color: pendingQty > 0 ? '#c2410c' : '#166534', fontWeight: 600 }}>
@@ -902,6 +923,40 @@ export default function OrderDetail() {
 
           {/* ── RIGHT ── */}
           <div className="od-sidebar">
+
+            {/* Dispatch Batches */}
+            {batches.length > 0 && (
+              <div className="od-side-card">
+                <div className="od-side-card-title">Dispatch Batches</div>
+                <div style={{padding:'0 16px 14px',display:'flex',flexDirection:'column',gap:10}}>
+                  {batches.map(b => {
+                    const bDone = b.status === 'dispatched_fc'
+                    const bDC   = b.dc_number || '—'
+                    const bINV  = b.invoice_number || null
+                    const batchLabel = { delivery_created:'Picking', picking:'Packing', packing:'Goods Issue', goods_issued:'With Billing', credit_check:'With Billing', goods_issue_posted:'With Billing', invoice_generated:'Delivery Ready', delivery_ready:'E-Way Pending', eway_generated:'E-Way Done', dispatched_fc:'Delivered ✓' }[b.status] || b.status
+                    return (
+                      <div key={b.id} style={{borderRadius:8,border:'1px solid var(--gray-100)',padding:'10px 12px',background: bDone ? '#f0fdf4' : 'white'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                          <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'0.5px'}}>Batch {b.batch_no}</span>
+                          <span style={{fontSize:11,fontWeight:600,color: bDone ? '#166534' : 'var(--gray-500)'}}>{batchLabel}</span>
+                        </div>
+                        <div
+                          style={{fontFamily:'var(--mono)',fontSize:13,fontWeight:700,color: bDC.startsWith('Temp/') ? '#92400e' : '#166534', cursor: bDC !== '—' && !bDC.startsWith('Temp/') ? 'pointer' : 'default', textDecoration: bDC !== '—' && !bDC.startsWith('Temp/') ? 'underline' : 'none'}}
+                          onClick={() => { if (bDC !== '—' && !bDC.startsWith('Temp/')) navigate('/fc/' + order.id, { state: { dispatch_id: b.id } }) }}
+                        >{bDC}</div>
+                        {bINV && (
+                          <div
+                            style={{fontFamily:'var(--mono)',fontSize:12,color: bINV.startsWith('Temp/') ? '#92400e' : '#166534',marginTop:2, cursor: !bINV.startsWith('Temp/') ? 'pointer' : 'default', textDecoration: !bINV.startsWith('Temp/') ? 'underline' : 'none'}}
+                            onClick={() => { if (!bINV.startsWith('Temp/')) navigate('/billing/' + order.id, { state: { dispatch_id: b.id } }) }}
+                          >{bINV}</div>
+                        )}
+                        {b.fulfilment_center && <div style={{fontSize:11,color:'var(--gray-400)',marginTop:3}}>{b.fulfilment_center}</div>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Activity + Comments */}
             <div className="od-side-card od-activity-card">
@@ -1002,45 +1057,6 @@ export default function OrderDetail() {
               </div>
             </div>
 
-            <div className="od-side-card">
-              <div className="od-side-card-title">Customer</div>
-              <div className="od-side-val-big">{order.customer_name}</div>
-              {order.customer_gst && <div className="od-side-sub">GST: {order.customer_gst}</div>}
-            </div>
-
-            <div className="od-side-card">
-              <div className="od-side-card-title">Account Owner</div>
-              <div className="od-account-owner">
-                <div className="od-owner-avatar">{(order.engineer_name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}</div>
-                <div className="od-side-val-big" style={{ margin: 0 }}>{order.engineer_name || '—'}</div>
-              </div>
-            </div>
-
-            <div className="od-side-card">
-              <div className="od-side-card-title">Credit Terms</div>
-              {order.credit_terms ? <div className="od-credit-badge">{order.credit_terms}</div> : <div className="od-side-sub" style={{ fontStyle: 'italic' }}>Not specified</div>}
-            </div>
-
-            {order.dispatch_address && (
-              <div className="od-side-card">
-                <div className="od-side-card-title">Dispatch Address</div>
-                <div className="od-side-sub" style={{ lineHeight: 1.6 }}>{order.dispatch_address}</div>
-              </div>
-            )}
-
-            {order.fulfilment_center && (
-              <div className="od-side-card">
-                <div className="od-side-card-title">Fulfilment Center</div>
-                <div className="od-side-val-big">{order.fulfilment_center}</div>
-              </div>
-            )}
-
-            <div className="od-side-card">
-              <div className="od-side-card-title">Reference Number</div>
-              <div className="od-ref-num" style={{ color: isPending ? 'var(--gray-500)' : 'var(--blue-700)' }}>{order.order_number}</div>
-              {isPending && <div className="od-side-sub">SSC number assigned after approval</div>}
-            </div>
-
           </div>
         </div>
       </div>
@@ -1076,11 +1092,11 @@ export default function OrderDetail() {
         </div>
       )}
 
-      {/* ── Dispatch Choice Modal ── */}
+      {/* ── Dispatch Modal: FC Center + Full/Partial ── */}
       {showDispatchModal && (
         <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowDispatchModal(false) }}>
           <div className="od-cancel-modal" style={{ maxWidth: 460 }}>
-            <div className="od-cancel-title">Ship Order</div>
+            <div className="od-cancel-title">Create Delivery</div>
             <div className="od-cancel-sub">Select fulfilment center and dispatch type</div>
             <div style={{ marginTop: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', marginBottom: 8 }}>Fulfilment Center</div>
@@ -1094,19 +1110,19 @@ export default function OrderDetail() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-              <button className="od-dispatch-choice-btn" onClick={fullyDispatch}>
+              <button className="od-dispatch-choice-btn" onClick={fullyDispatch} disabled={saving}>
                 <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#166534',marginBottom:8}}>
                   <path d="M5 13l4 4L19 7"/>
                 </svg>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--gray-900)' }}>Fully Ship</div>
-                <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 4 }}>Ship entire order quantity and move forward</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--gray-900)' }}>Full Delivery</div>
+                <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 4 }}>Send entire order to FC for delivery</div>
               </button>
-              <button className="od-dispatch-choice-btn" onClick={openPartialDispatch}>
+              <button className="od-dispatch-choice-btn" onClick={openPartialDispatch} disabled={saving}>
                 <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#92400e',marginBottom:8}}>
                   <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
                 </svg>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--gray-900)' }}>Partial Dispatch</div>
-                <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 4 }}>Select items and quantities to dispatch now</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--gray-900)' }}>Partial Delivery</div>
+                <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 4 }}>Select items and quantities to send now</div>
               </button>
             </div>
             <div style={{ marginTop: 16, textAlign: 'right' }}>
@@ -1120,8 +1136,32 @@ export default function OrderDetail() {
       {showPartialModal && (
         <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowPartialModal(false) }}>
           <div className="od-cancel-modal" style={{ maxWidth: 620, width: '100%' }}>
-            <div className="od-cancel-title">Partial Dispatch</div>
+            <div className="od-cancel-title">{isNextBatch ? 'Next Batch Dispatch' : 'Partial Dispatch'}</div>
             <div className="od-cancel-sub">Select items and enter the quantity to dispatch now. Remaining qty will stay pending.</div>
+
+            {/* FC Centre selector — always shown for next batch, required */}
+            {isNextBatch && (
+              <div style={{marginTop:16,padding:'14px 16px',background:'#f0fdf4',border:'1px solid #86efac',borderRadius:10}}>
+                <div style={{fontSize:12,fontWeight:700,color:'#166534',textTransform:'uppercase',letterSpacing:'0.6px',marginBottom:8}}>Fulfilment Centre for this Batch</div>
+                <div style={{display:'flex',gap:10}}>
+                  {['Kaveri','Godawari'].map(c => (
+                    <button key={c} onClick={() => setFcCenter(c)}
+                      style={{flex:1,padding:'10px 0',borderRadius:8,border:'2px solid',fontFamily:'var(--font)',fontSize:13,fontWeight:700,cursor:'pointer',
+                        borderColor: fcCenter === c ? '#16a34a' : 'var(--gray-200)',
+                        background:  fcCenter === c ? '#dcfce7' : 'white',
+                        color:       fcCenter === c ? '#166534' : 'var(--gray-600)'}}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                {order.fulfilment_center && fcCenter !== order.fulfilment_center && (
+                  <div style={{fontSize:11,color:'#92400e',marginTop:8,fontWeight:600}}>
+                    ⚠ Changing from {order.fulfilment_center} to {fcCenter} for this batch
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ overflowX: 'auto', marginTop: 16 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
@@ -1165,65 +1205,13 @@ export default function OrderDetail() {
             <div className="od-cancel-actions" style={{ marginTop: 20 }}>
               <button className="od-btn" onClick={() => setShowPartialModal(false)}>Cancel</button>
               <button className="od-btn od-btn-approve" onClick={confirmPartialItems} disabled={saving}>
-                Next: Logistics →
+                {saving ? 'Saving...' : 'Confirm Delivery →'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── FC Dispatch Modal ── */}
-      {showFCModal && (
-        <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowFCModal(false) }}>
-          <div className="od-cancel-modal" style={{ maxWidth: 460 }}>
-            <div className="od-cancel-title">Dispatched</div>
-            <div className="od-cancel-sub">Enter dispatch details to complete the order.</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 18 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', display: 'block', marginBottom: 5 }}>Dispatch Mode</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {['porter','vehicle','self'].map(m => (
-                    <button key={m} onClick={() => setFcMode(m)}
-                      style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: '1px solid ' + (fcMode === m ? '#0d2461' : 'var(--gray-200)'), background: fcMode === m ? '#0d2461' : 'white', color: fcMode === m ? 'white' : 'var(--gray-700)', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                      {m === 'self' ? 'Self Pickup' : m.charAt(0).toUpperCase() + m.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {fcMode === 'vehicle' && (
-                <>
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', display: 'block', marginBottom: 5 }}>Vehicle Type</label>
-                    <select value={fcVehicleType} onChange={e => setFcVehicleType(e.target.value)}
-                      style={{ width: '100%', border: '1px solid var(--gray-200)', borderRadius: 8, padding: '9px 12px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', background: 'white' }}>
-                      <option value="">— Select Vehicle Type —</option>
-                      {['Rickshaw','Bolero','Eicher','Hathi','Bike'].map(v => <option key={v}>{v}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', display: 'block', marginBottom: 5 }}>Vehicle Number</label>
-                    <input value={fcVehicleNum} onChange={e => setFcVehicleNum(e.target.value)} placeholder="e.g. GJ01AB1234"
-                      style={{ width: '100%', border: '1px solid var(--gray-200)', borderRadius: 8, padding: '9px 12px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
-                  </div>
-                </>
-              )}
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', display: 'block', marginBottom: 5 }}>
-                  Driver / Person Name <span style={{ color: '#e11d48' }}>*</span>
-                </label>
-                <input value={fcDriverName} onChange={e => setFcDriverName(e.target.value)} placeholder="Full name of driver or contact person"
-                  style={{ width: '100%', border: '1px solid var(--gray-200)', borderRadius: 8, padding: '9px 12px', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-            </div>
-            <div className="od-cancel-actions">
-              <button className="od-btn" onClick={() => setShowFCModal(false)}>Cancel</button>
-              <button className="od-btn od-btn-approve" onClick={submitFCDispatch} disabled={saving}>
-                {saving ? 'Dispatching...' : 'Confirm Dispatch'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
     </Layout>

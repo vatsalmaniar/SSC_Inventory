@@ -27,10 +27,17 @@ export default function Login() {
     const name = profile?.name || session.user.email.split('@')[0]
     const role = profile?.role || 'sales'
 
-    if (role === 'accounts') {
-      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading upload dashboard...' })
+    if (role === 'fc_kaveri' || role === 'fc_godawari') {
+      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading FC Module...' })
       setView('overlay')
-      setTimeout(() => navigate('/accounts'), 1600)
+      setTimeout(() => navigate('/fc'), 1600)
+      return
+    }
+
+    if (role === 'accounts') {
+      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading Billing Module...' })
+      setView('overlay')
+      setTimeout(() => navigate('/billing'), 1600)
       return
     }
 

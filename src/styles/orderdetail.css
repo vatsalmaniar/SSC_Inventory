@@ -103,6 +103,15 @@
 .od-pipeline-cancelled .od-pipe-stage.active::after  { border-left-color: #fee2e2; }
 .od-pipeline-cancelled .od-pipe-stage.active::before { border-left-color: #fca5a5; }
 
+/* Green "Delivery In Progress" pipeline state */
+.od-pipeline-delivery .od-pipe-stage.active { background: #15803d; color: white; font-weight: 700; }
+.od-pipeline-delivery .od-pipe-stage.active::after  { border-left-color: #15803d; }
+.od-pipeline-delivery .od-pipe-stage.active::before { border-left-color: #15803d; }
+
+/* Status badge variants */
+.od-status-badge.delivery  { background: #dcfce7; color: #166534; }
+.od-status-badge.delivered { background: #bbf7d0; color: #14532d; }
+
 .od-mark-complete-btn {
   display: flex;
   align-items: center;
@@ -128,6 +137,8 @@
 
 /* ── Banners ── */
 .od-pending-banner { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-sm); padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #1e40af; }
+.od-delivery-banner { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-sm); padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #15803d; }
+.od-delivery-banner svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
 .od-pending-banner svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
 .od-pending-banner-label { font-weight: 600; margin-bottom: 2px; }
 .od-cancelled-banner { background: #fff1f2; border: 1px solid #fecdd3; border-radius: var(--radius-sm); padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #be123c; }
@@ -161,7 +172,7 @@
 .od-items-table tbody tr { border-bottom: 1px solid var(--gray-100); }
 .od-items-table tbody tr:last-child { border-bottom: none; }
 .od-items-table td { padding: 10px 12px; color: var(--gray-700); vertical-align: middle; }
-.od-items-table td.mono { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--blue-800); }
+.od-items-table td.mono { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--blue-600); }
 .od-items-table td.right { text-align: right; font-weight: 600; }
 
 /* ── Totals ── */

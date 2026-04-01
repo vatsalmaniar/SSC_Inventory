@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
-const STATUSES = ['all', 'partial', 'pending', 'inv_check', 'dispatch', 'gen_invoice', 'dispatched_fc', 'cancelled']
+const STATUSES = ['all', 'partial', 'pending', 'inv_check', 'inventory_check', 'dispatch', 'delivery_created', 'picking', 'packing', 'inflow', 'dispatched_fc', 'cancelled']
 
 function isPartiallyDispatched(o) {
   const items = o.order_items || []
@@ -18,12 +18,32 @@ function fmt(d) {
   return dt.getDate() + ' ' + mo[dt.getMonth()] + ' ' + dt.getFullYear()
 }
 
+const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','goods_issued','pending_billing','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_pending','eway_generated']
+
 function statusLabel(s) {
   return {
-    pending: 'Pending Review', inv_check: 'Inv. Check', dispatch: 'Shipped',
-    partial_dispatch: 'Partially Shipped', gen_invoice: 'Generate Invoice',
-    dispatched_fc: 'Dispatched', cancelled: 'Cancelled',
-  }[s] || (s === 'all' ? 'All' : s)
+    pending:            'Pending Review',
+    inv_check:          'Inv. Check',
+    inventory_check:    'Inventory Check',
+    dispatch:           'Ready to Ship',
+    partial_dispatch:   'Partially Shipped',
+    gen_invoice:        'Delivery Created',
+    delivery_created:   'Delivery Created',
+    picking:            'Picking',
+    packing:            'Packing',
+    goods_issued:       'Goods Issued',
+    pending_billing:    'Pending Billing',
+    credit_check:       'Credit Check',
+    goods_issue_posted: 'GI Posted',
+    invoice_generated:  'Invoice Generated',
+    delivery_ready:     'Delivery Ready',
+    eway_pending:       'E-Way Pending',
+    eway_generated:     'E-Way Generated',
+    dispatched_fc:      'Delivered',
+    cancelled:          'Cancelled',
+    inflow:             'In FC/Sales Flow',
+    all:                'All',
+  }[s] || s
 }
 
 export default function OpsOrders() {
@@ -84,11 +104,13 @@ export default function OpsOrders() {
 
   const filtered = filter === 'all' ? orders
     : filter === 'partial' ? orders.filter(isPartiallyDispatched)
+    : filter === 'inflow'  ? orders.filter(o => FC_ACTIVE_STATUSES.includes(o.status))
     : orders.filter(o => o.status === filter)
 
   const counts = STATUSES.reduce((acc, s) => {
-    acc[s] = s === 'all' ? orders.length
+    acc[s] = s === 'all'    ? orders.length
            : s === 'partial' ? orders.filter(isPartiallyDispatched).length
+           : s === 'inflow'  ? orders.filter(o => FC_ACTIVE_STATUSES.includes(o.status)).length
            : orders.filter(o => o.status === s).length
     return acc
   }, {})
