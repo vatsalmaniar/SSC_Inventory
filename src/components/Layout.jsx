@@ -43,7 +43,7 @@ const NAV_ITEMS = [
     key: 'fc',
     label: 'Fulfilment Center',
     path: '/fc',
-    roles: ['fc_kaveri', 'fc_godawari', 'ops', 'admin'],
+    roles: ['fc_kaveri', 'fc_godawari', 'ops', 'admin', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>,
   },
   {
@@ -179,7 +179,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
         {/* Topbar */}
         <header className="ly-topbar">
           <div className="ly-topbar-left">
-            <span className="ly-topbar-app">SSC Control</span>
+            <span className="ly-topbar-app">SSC ERP</span>
             <span className="ly-topbar-sep">/</span>
             <span className="ly-topbar-page">{pageTitle || 'Home'}</span>
           </div>

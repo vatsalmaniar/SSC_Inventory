@@ -857,6 +857,13 @@ export default function FCOrderDetail() {
                     <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:700,color:(activeBatch?.invoice_number || order.invoice_number)?.startsWith('Temp/') ? '#92400e' : '#166534'}}>
                       {activeBatch?.invoice_number || order.invoice_number}
                     </div>
+                    {(activeBatch?.invoice_pdf_url || order.invoice_pdf_url) && (
+                      <a href={activeBatch?.invoice_pdf_url || order.invoice_pdf_url} target="_blank" rel="noreferrer"
+                        style={{fontSize:11,color:'#1e40af',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        View Invoice PDF
+                      </a>
+                    )}
                   </div>
                 )}
                 {(activeBatch?.eway_bill_number || order.eway_bill_number) && (

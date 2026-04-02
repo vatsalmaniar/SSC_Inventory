@@ -71,19 +71,22 @@ function dispatchedValue(o) {
   return (o.order_items || []).reduce((s, i) => s + (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0), 0)
 }
 
-// Sum of all invoiced batch values (batches with a confirmed INV)
+// Sum of all dispatched batch values — prefer confirmed INV batches, fall back to any batch with dispatched_items
 function confirmedDispatchedValue(o) {
-  const batches = (o.order_dispatches || []).filter(b => b.invoice_number && !b.invoice_number.startsWith('Temp/'))
-  if (batches.length === 0) return dispatchedValue(o)
-  return batches.reduce((sum, b) =>
+  const allBatches = (o.order_dispatches || [])
+  const confirmedBatches = allBatches.filter(b => b.invoice_number && !b.invoice_number.startsWith('Temp/'))
+  const batchesToUse = confirmedBatches.length > 0 ? confirmedBatches : allBatches
+  const batchTotal = batchesToUse.reduce((sum, b) =>
     sum + (b.dispatched_items || []).reduce((s, i) => s + (i.total_price || (i.unit_price * i.qty) || 0), 0), 0)
+  if (batchTotal > 0) return batchTotal
+  return dispatchedValue(o)
 }
 
 // Delivered filter: show confirmed dispatched value; all other filters: show pending for partial orders
 function displayValue(o, currentFilter) {
   const hasDelivery = (o.order_dispatches || []).some(b => b.invoice_number && !b.invoice_number.startsWith('Temp/'))
-  if (currentFilter === 'dispatched') {
-    return o.status === 'dispatched_fc' ? totalValue(o) : confirmedDispatchedValue(o)
+  if (currentFilter === 'dispatched' || o.status === 'dispatched_fc') {
+    return confirmedDispatchedValue(o) || totalValue(o)
   }
   if (isPartiallyDispatched(o) || hasDelivery) return pendingValue(o)
   return totalValue(o)

@@ -666,7 +666,19 @@ export default function OrderDetail() {
                     <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                     <div className="od-detail-field"><label>Account Owner</label><div className="val">{order.engineer_name || '—'}</div></div>
                     <div className="od-detail-field"><label>Credit Terms</label><div className="val">{order.credit_terms || '—'}</div></div>
-                    <div className="od-detail-field"><label>PO / Reference</label><div className="val">{order.po_number || '—'}</div></div>
+                    <div className="od-detail-field">
+                      <label>PO / Reference</label>
+                      <div className="val">
+                        {order.po_number || '—'}
+                        {order.po_document_url && (
+                          <a href={order.po_document_url} target="_blank" rel="noreferrer"
+                            style={{marginLeft:10,fontSize:11,color:'#1e40af',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            View PO
+                          </a>
+                        )}
+                      </div>
+                    </div>
                     <div className="od-detail-field"><label>Order Type</label><div className="val">{order.order_type === 'SO' ? 'Standard Order' : 'Customised Order'}</div></div>
                     <div className="od-detail-field"><label>Order Date</label><div className="val">{fmt(order.order_date)}</div></div>
                     <div className="od-detail-field"><label>Received Via</label><div className="val">{order.received_via || '—'}</div></div>
@@ -949,6 +961,13 @@ export default function OrderDetail() {
                             style={{fontFamily:'var(--mono)',fontSize:12,color: bINV.startsWith('Temp/') ? '#92400e' : '#166534',marginTop:2, cursor: !bINV.startsWith('Temp/') ? 'pointer' : 'default', textDecoration: !bINV.startsWith('Temp/') ? 'underline' : 'none'}}
                             onClick={() => { if (!bINV.startsWith('Temp/')) navigate('/billing/' + order.id, { state: { dispatch_id: b.id } }) }}
                           >{bINV}</div>
+                        )}
+                        {b.invoice_pdf_url && (
+                          <a href={b.invoice_pdf_url} target="_blank" rel="noreferrer"
+                            style={{fontSize:11,color:'#1e40af',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            View Invoice PDF
+                          </a>
                         )}
                         {b.fulfilment_center && <div style={{fontSize:11,color:'var(--gray-400)',marginTop:3}}>{b.fulfilment_center}</div>}
                       </div>

@@ -458,7 +458,7 @@ export default function BillingOrderDetail() {
             </div>
 
             {/* ── Action Card ── */}
-            {!isWaitingFC && (
+            {!isWaitingFC && ['accounts','admin'].includes(user.role) && (
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">
