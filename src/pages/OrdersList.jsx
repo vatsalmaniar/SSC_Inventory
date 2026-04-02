@@ -104,6 +104,7 @@ const FILTERS = [
   { key: 'partial',    label: 'Partially Shipped' },
   { key: 'inflow',     label: 'In Progress (FC/Sales)' },
   { key: 'dispatched', label: 'Delivered' },
+  { key: 'sample',     label: 'Samples' },
   { key: 'approval',   label: 'Pending Approval' },
   { key: 'cancelled',  label: 'Cancelled' },
 ]
@@ -158,6 +159,7 @@ export default function OrdersList() {
   const [dateMode, setDateMode]     = useState('order') // 'order' | 'delivery'
   const [search, setSearch]     = useState('')
   const [page, setPage]         = useState(1)
+  const [showTest, setShowTest] = useState(false)
 
   const PAGE_SIZE = 50
 
@@ -178,10 +180,10 @@ export default function OrdersList() {
     await loadOrders()
   }
 
-  async function loadOrders() {
+  async function loadOrders(testMode = false) {
     setLoading(true)
     const { data } = await sb.from('orders').select('*, order_items(*), order_dispatches(*)')
-      .gte('created_at', '2026-03-31').eq('is_test', false)
+      .gte('created_at', '2026-03-31').eq('is_test', testMode)
       .order('created_at', { ascending: false })
     setOrders(data || [])
     setLoading(false)
@@ -198,6 +200,7 @@ export default function OrdersList() {
     if (f === 'partial')     return isPartiallyDispatched(o)
     if (f === 'inflow')      return isInFCFlow(o)
     if (f === 'dispatched')  return o.status === 'dispatched_fc' || hasConfirmedDelivery(o)
+    if (f === 'sample')      return o.order_type === 'SAMPLE'
     if (f === 'approval')    return o.status === 'pending'
     if (f === 'cancelled')   return o.status === 'cancelled'
     return false
@@ -307,6 +310,12 @@ export default function OrdersList() {
             <div className="od-list-title">Orders</div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {user.role === 'admin' && (
+              <label style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:12,color:showTest ? '#b45309' : 'var(--gray-500)',fontWeight:showTest ? 600 : 400,background:showTest ? '#fef3c7' : 'transparent',border:showTest ? '1px solid #fde68a' : '1px solid var(--gray-200)',borderRadius:8,padding:'6px 12px',transition:'all 0.15s'}}>
+                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); loadOrders(e.target.checked) }} style={{accentColor:'#b45309',width:13,height:13}} />
+                Test Mode
+              </label>
+            )}
             <div className="od-download-group">
               <button className="od-download-btn" onClick={downloadSummary} title="Download summary Excel">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width: 14, height: 14 }}>
@@ -464,7 +473,10 @@ export default function OrdersList() {
                       const multiDate    = dates.length > 1 && dates[dates.length - 1] !== dates[0]
                       return (
                         <tr key={o.id} className={isInFCFlow(o) ? 'row-delivery' : ''} onClick={() => navigate('/orders/' + o.id)}>
-                          <td className="order-num-cell">{o.order_number}</td>
+                          <td className="order-num-cell">
+                            {o.order_number}
+                            {o.order_type === 'SAMPLE' && <span style={{marginLeft:6,fontSize:9,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:3,padding:'1px 5px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
+                          </td>
                           <td className="customer-cell">{o.customer_name}</td>
                           <td>{fmt(o.order_date)}</td>
                           <td>
@@ -496,7 +508,10 @@ export default function OrdersList() {
                     <div key={o.id} className="order-card" style={{ animationDelay: i * 0.03 + 's' }} onClick={() => navigate('/orders/' + o.id)}>
                       <div className="order-card-top">
                         <div>
-                          <div className="order-num">{o.order_number}</div>
+                          <div className="order-num">
+                            {o.order_number}
+                            {o.order_type === 'SAMPLE' && <span style={{marginLeft:6,fontSize:9,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:3,padding:'1px 5px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
+                          </div>
                           <div className="order-customer">{o.customer_name}</div>
                           <div className="order-date">{fmt(o.order_date)} · {o.engineer_name || '—'}</div>
                           {mDelivery && <div className="order-date" style={{ color:'var(--gray-500)' }}>Delivery: {mDelivery}</div>}

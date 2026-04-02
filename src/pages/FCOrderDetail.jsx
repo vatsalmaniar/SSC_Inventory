@@ -91,7 +91,7 @@ function fmtDC(d) {
   return dt.getDate().toString().padStart(2,'0') + '.' + (dt.getMonth()+1).toString().padStart(2,'0') + '.' + dt.getFullYear()
 }
 
-function printDCChallan(order, activeBatch, activeDC) {
+function printDCChallan(order, activeBatch, activeDC, isSample = false) {
   const items = activeBatch?.dispatched_items
     ? activeBatch.dispatched_items
     : (order.order_items || []).map(i => ({ item_code: i.item_code, qty: i.qty, unit_price: i.unit_price_after_disc || i.unit_price, total_price: i.total_price }))
@@ -118,7 +118,7 @@ function printDCChallan(order, activeBatch, activeDC) {
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/>
-<title>Delivery Challan — ${activeDC}</title>
+<title>${isSample ? 'Sample Challan' : 'Delivery Challan'} — ${activeDC}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background:#fff;padding:28px 32px;max-width:820px;margin:0 auto}
@@ -190,7 +190,7 @@ function printDCChallan(order, activeBatch, activeDC) {
     <div class="cust-meta" style="margin-top:8px">Registered</div>
   </div>
   <div class="challan-block">
-    <div class="challan-title">Delivery Challan</div>
+    <div class="challan-title">${isSample ? 'Sample Challan' : 'Delivery Challan'}</div>
     <div class="challan-rows">
       <table>
         <tr><td>Challan no./date</td><td>${activeDC} / ${dcDate}</td></tr>
@@ -368,15 +368,19 @@ export default function FCOrderDetail() {
   async function confirmGoodsIssued() {
     setSaving(true)
     let dcNum = null
+    const nextStatus = order.order_type === 'SAMPLE' ? 'invoice_generated' : 'goods_issued'
     if (activeBatch) {
       // Upgrade Temp/DC → SSC/DC on the batch
       const { data } = await sb.rpc('confirm_dispatch_dc', { p_dispatch_id: activeBatch.id })
       dcNum = data
-      await sb.from('order_dispatches').update({ status: 'goods_issued', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+      await sb.from('order_dispatches').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
-    const { error } = await sb.from('orders').update({ status: 'goods_issued', updated_at: new Date().toISOString() }).eq('id', id)
+    const { error } = await sb.from('orders').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', id)
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
-    await logActivity(`Goods Issued — DC confirmed: ${dcNum || order.dc_number || '—'}. Handed to Accounts for billing.`)
+    const actMsg = order.order_type === 'SAMPLE'
+      ? `Goods Issued — DC confirmed: ${dcNum || order.dc_number || '—'}. Sample ready for challan.`
+      : `Goods Issued — DC confirmed: ${dcNum || order.dc_number || '—'}. Handed to Accounts for billing.`
+    await logActivity(actMsg)
     setConfirm(null)
     setSaving(false)
     await loadOrder()
@@ -414,16 +418,29 @@ export default function FCOrderDetail() {
       detail = `Courier — ${courierCompany.trim()}${trackingNum.trim() ? ' · Tracking: ' + trackingNum.trim() : ''}`
     }
     setSaving(true)
+    let nextOrderStatus = 'delivery_ready'
+    let actSuffix = 'Handed to Accounts for E-Way Bill.'
+    if (order.order_type === 'SAMPLE') {
+      const batchTotal = activeBatch?.dispatched_items
+        ? activeBatch.dispatched_items.reduce((s, i) => s + (i.total_price || 0), 0)
+        : (order.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+      if (batchTotal <= 50000) {
+        nextOrderStatus = 'eway_generated'
+        actSuffix = 'E-Way Bill not required (value ≤ ₹50,000). Ready to deliver.'
+      } else {
+        actSuffix = 'E-Way Bill required (value > ₹50,000). Handed to Accounts.'
+      }
+    }
     if (activeBatch) {
       await sb.from('order_dispatches').update({
-        status: 'delivery_ready', ...updateFields, updated_at: new Date().toISOString(),
+        status: nextOrderStatus, ...updateFields, updated_at: new Date().toISOString(),
       }).eq('id', activeBatch.id)
     }
     const { error } = await sb.from('orders').update({
-      status: 'delivery_ready', ...updateFields, updated_at: new Date().toISOString(),
+      status: nextOrderStatus, ...updateFields, updated_at: new Date().toISOString(),
     }).eq('id', id)
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
-    await logActivity(`Delivery Ready — ${detail}. Handed to Accounts for E-Way Bill.`)
+    await logActivity(`Delivery Ready — ${detail}. ${actSuffix}`)
     setShowDeliveryForm(false)
     setSaving(false)
     await loadOrder()
@@ -453,8 +470,9 @@ export default function FCOrderDetail() {
   )
   if (!order) return null
 
+  const isSample     = order.order_type === 'SAMPLE'
   const pipelineIdx  = fcPipelineIdx(order.status)
-  const withAccounts = WITH_ACCOUNTS.includes(order.status)
+  const withAccounts = !isSample && WITH_ACCOUNTS.includes(order.status)
   const isDelivered  = order.status === 'dispatched_fc'
   const subtotal     = (order.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
   const grandTotal   = subtotal + (order.freight || 0)
@@ -472,7 +490,8 @@ export default function FCOrderDetail() {
             <div className="od-header-left">
               <div>
                 <div className="od-header-eyebrow">
-                  {order.order_type === 'SO' ? 'Standard Order' : 'Customised Order'} · {order.fulfilment_center || '—'}
+                  {order.order_type === 'SO' ? 'Standard Order' : order.order_type === 'CO' ? 'Customised Order' : 'Sample Request'} · {order.fulfilment_center || '—'}
+                  {isSample && <span style={{marginLeft:8,fontSize:10,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:4,padding:'1px 7px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
                   <span className={'od-status-badge ' + (isDelivered ? 'delivered' : withAccounts ? 'pending' : 'delivery')}>
                     {isDelivered ? 'Delivered' : withAccounts ? 'With Accounts' : stageLabel(order.status)}
                   </span>
@@ -705,8 +724,8 @@ export default function FCOrderDetail() {
                     </div>
                   )}
 
-                  {/* Delivery Ready */}
-                  {order.status === 'invoice_generated' && !showDeliveryForm && !confirm && (
+                  {/* Delivery Ready (regular SO/CO) */}
+                  {!isSample && order.status === 'invoice_generated' && !showDeliveryForm && !confirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Invoice has been generated. Enter vehicle / delivery details.</p>
                       <button className="od-mark-complete-btn" style={{background:'#15803d',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
@@ -717,7 +736,26 @@ export default function FCOrderDetail() {
                     </div>
                   )}
 
-                  {/* Delivery Ready form */}
+                  {/* Sample — Challan + Delivery Ready */}
+                  {isSample && order.status === 'invoice_generated' && !showDeliveryForm && !confirm && (
+                    <div>
+                      <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Goods issued. Generate the Sample Challan, then enter delivery details.</p>
+                      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                        <button style={{background:'#1d4ed8',padding:'10px 16px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
+                          onClick={() => printDCChallan(order, activeBatch, activeDC, true)}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:16,height:16}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                          Generate Sample Challan
+                        </button>
+                        <button className="od-mark-complete-btn" style={{background:'#15803d',padding:'10px 16px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
+                          onClick={() => setShowDeliveryForm(true)}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:16,height:16}}><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>
+                          Set Delivery Ready
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Delivery Ready form (both SO/CO and SAMPLE) */}
                   {order.status === 'invoice_generated' && showDeliveryForm && (
                     <div style={{display:'flex',flexDirection:'column',gap:12,maxWidth:440}}>
                       <div className="od-edit-field">
@@ -843,12 +881,12 @@ export default function FCOrderDetail() {
                 </div>
                 {isTempDC && <div style={{fontSize:11,color:'#92400e',fontWeight:600}}>Temp — will be confirmed at Goods Issue</div>}
                 {!isTempDC && activeDC && <div style={{fontSize:11,color:'#166534',fontWeight:600}}>Confirmed DC</div>}
-                {!isTempDC && activeDC && ['delivery_ready','eway_generated','dispatched_fc'].includes(order.status) && (
+                {!isTempDC && activeDC && (['delivery_ready','eway_generated','dispatched_fc'].includes(order.status) || (isSample && order.status === 'invoice_generated')) && (
                   <button
-                    onClick={() => printDCChallan(order, activeBatch, activeDC)}
+                    onClick={() => printDCChallan(order, activeBatch, activeDC, isSample)}
                     style={{marginTop:10,display:'inline-flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:8,border:'1px solid #2563eb',background:'#eff6ff',color:'#1d4ed8',fontFamily:'var(--font)',fontSize:12,fontWeight:600,cursor:'pointer'}}>
                     <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                    Download DC Challan
+                    {isSample ? 'Download Sample Challan' : 'Download DC Challan'}
                   </button>
                 )}
                 {(activeBatch?.invoice_number || order.invoice_number) && (

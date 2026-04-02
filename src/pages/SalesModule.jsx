@@ -32,6 +32,7 @@ export default function SalesModule() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter]   = useState('all')
   const [search, setSearch]   = useState('')
+  const [showTest, setShowTest] = useState(false)
 
   useEffect(() => { init() }, [])
 
@@ -51,12 +52,13 @@ export default function SalesModule() {
     await loadOrders()
   }
 
-  async function loadOrders() {
+  async function loadOrders(testMode = false) {
     setLoading(true)
     const { data } = await sb.from('orders').select('*, order_items(*), order_dispatches(*)')
       .in('status', BILLING_MODULE_STATUSES)
       .gte('created_at', '2026-03-31')
-      .eq('is_test', false)
+      .eq('is_test', testMode)
+      .neq('order_type', 'SAMPLE')
       .order('created_at', { ascending: false })
     setOrders(data || [])
     setLoading(false)
@@ -110,6 +112,12 @@ export default function SalesModule() {
           {/* Header */}
           <div className="od-list-header">
             <div className="od-list-title">Billing</div>
+            {user.role === 'admin' && (
+              <label style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:12,color:showTest ? '#b45309' : 'var(--gray-500)',fontWeight:showTest ? 600 : 400,background:showTest ? '#fef3c7' : 'transparent',border:showTest ? '1px solid #fde68a' : '1px solid var(--gray-200)',borderRadius:8,padding:'6px 12px',transition:'all 0.15s'}}>
+                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); loadOrders(e.target.checked) }} style={{accentColor:'#b45309',width:13,height:13}} />
+                Test Mode
+              </label>
+            )}
           </div>
 
           {/* Summary */}

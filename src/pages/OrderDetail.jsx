@@ -452,7 +452,8 @@ export default function OrderDetail() {
             <div className="od-header-left">
               <div>
                 <div className="od-header-eyebrow">
-                  {order.order_type === 'SO' ? 'Standard Order' : 'Customised Order'}
+                  {order.order_type === 'SO' ? 'Standard Order' : order.order_type === 'CO' ? 'Customised Order' : 'Sample Request'}
+                  {order.order_type === 'SAMPLE' && <span style={{marginLeft:8,fontSize:10,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:4,padding:'1px 7px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
                   <span className={'od-status-badge ' + (isPending ? 'pending' : isCancelled ? 'cancelled' : isInFCFlow && order?.status === 'dispatched_fc' ? 'delivered' : isInFCFlow ? 'delivery' : 'active')}>
                     {isPending ? 'Pending Approval' : isCancelled ? 'Cancelled' : order?.status === 'dispatched_fc' ? 'Delivered' : isInFCFlow ? 'Delivery In Progress' : (hasAnyDispatched && hasAnyPending) ? 'Partially Dispatched' : 'Active'}
                   </span>
@@ -478,10 +479,12 @@ export default function OrderDetail() {
                     <>
                       <button className="od-btn" onClick={() => setEditMode(false)} disabled={saving}>Discard</button>
                       <button className="od-btn od-btn-edit" onClick={saveEdits} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
-                      <button className="od-btn od-btn-approve" onClick={saveAndApprove} disabled={saving}>
-                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                        {saving ? 'Approving...' : 'Save & Approve'}
-                      </button>
+                      {(order.order_type !== 'SAMPLE' || user.role === 'admin') && (
+                        <button className="od-btn od-btn-approve" onClick={saveAndApprove} disabled={saving}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                          {saving ? 'Approving...' : 'Save & Approve'}
+                        </button>
+                      )}
                     </>
                   )}
                   {!editMode && (
@@ -513,11 +516,16 @@ export default function OrderDetail() {
               )
             })}
           </div>
-          {isOps && !isCancelled && canAdvance && !editMode && (
+          {isOps && !isCancelled && canAdvance && !editMode && !(order.order_type === 'SAMPLE' && isPending && user.role !== 'admin') && (
             <button className="od-mark-complete-btn" onClick={advanceToNext} disabled={saving}>
               <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
               {saving ? 'Updating...' : actionBtnLabel}
             </button>
+          )}
+          {order.order_type === 'SAMPLE' && isPending && user.role !== 'admin' && (
+            <div style={{fontSize:12,color:'#92400e',background:'#fef3c7',border:'1px solid #fde68a',borderRadius:8,padding:'6px 14px',fontWeight:600}}>
+              Awaiting admin approval
+            </div>
           )}
           {canNextBatch && !editMode && (
             <button className="od-mark-complete-btn" onClick={openNextBatch} disabled={saving}
@@ -613,6 +621,7 @@ export default function OrderDetail() {
                         <select value={editData.order_type} onChange={e => setEditData(p => ({ ...p, order_type: e.target.value }))}>
                           <option value="SO">Standard Order (SO)</option>
                           <option value="CO">Customised Order (CO)</option>
+                          <option value="SAMPLE">Sample Request (SR)</option>
                         </select>
                       </div>
                       <div className="od-edit-field">
@@ -624,7 +633,7 @@ export default function OrderDetail() {
                     </div>
                     <div className="od-edit-row">
                       <div className="od-edit-field">
-                        <label>PO / Reference Number</label>
+                        <label>PO / Reference Number {editData.order_type === 'SAMPLE' && <span style={{color:'var(--gray-400)',fontWeight:400,fontSize:11}}>(optional)</span>}</label>
                         <input value={editData.po_number} onChange={e => setEditData(p => ({ ...p, po_number: e.target.value }))} />
                       </div>
                       <div className="od-edit-field">
@@ -667,7 +676,7 @@ export default function OrderDetail() {
                     <div className="od-detail-field"><label>Account Owner</label><div className="val">{order.engineer_name || '—'}</div></div>
                     <div className="od-detail-field"><label>Credit Terms</label><div className="val">{order.credit_terms || '—'}</div></div>
                     <div className="od-detail-field">
-                      <label>PO / Reference</label>
+                      <label>PO / Reference {order.order_type === 'SAMPLE' && <span style={{color:'var(--gray-400)',fontWeight:400,fontSize:11}}>(optional)</span>}</label>
                       <div className="val">
                         {order.po_number || '—'}
                         {order.po_document_url && (
@@ -679,7 +688,7 @@ export default function OrderDetail() {
                         )}
                       </div>
                     </div>
-                    <div className="od-detail-field"><label>Order Type</label><div className="val">{order.order_type === 'SO' ? 'Standard Order' : 'Customised Order'}</div></div>
+                    <div className="od-detail-field"><label>Order Type</label><div className="val">{order.order_type === 'SO' ? 'Standard Order' : order.order_type === 'CO' ? 'Customised Order' : 'Sample Request'}</div></div>
                     <div className="od-detail-field"><label>Order Date</label><div className="val">{fmt(order.order_date)}</div></div>
                     <div className="od-detail-field"><label>Received Via</label><div className="val">{order.received_via || '—'}</div></div>
                     <div className="od-detail-field"><label>Fulfilment Centre</label><div className="val">{order.fulfilment_center || '—'}</div></div>

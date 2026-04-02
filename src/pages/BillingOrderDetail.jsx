@@ -91,6 +91,7 @@ export default function BillingOrderDetail() {
   async function loadOrder() {
     setLoading(true)
     const { data } = await sb.from('orders').select('*, order_items(*)').eq('id', id).single()
+    if (data?.order_type === 'SAMPLE') { navigate('/billing'); return }
     setCreditChoice(null)
     setInvoicePdfFile(null); setInvoicePdfError('')
     setEwayPdfFile(null);   setEwayPdfError('')

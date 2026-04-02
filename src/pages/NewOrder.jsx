@@ -28,6 +28,9 @@ export default function NewOrder() {
   const [freight, setFreight]         = useState('0')
   const [notes, setNotes]             = useState('')
 
+  // Test mode (admin only)
+  const [isTest, setIsTest]           = useState(false)
+
   // PO Document
   const [poFile, setPoFile]           = useState(null)
   const [poFileName, setPoFileName]   = useState('')
@@ -115,7 +118,7 @@ export default function NewOrder() {
     const validItems = items.filter(i => i.item_code.trim())
     if (!customerInput.trim())  { alert('Customer name is required'); return }
     if (!dispatchAddr.trim())   { alert('Dispatch address is required'); return }
-    if (!poNumber.trim())       { alert('PO / Reference Number is required'); return }
+    if (orderType !== 'SAMPLE' && !poNumber.trim()) { alert('PO / Reference Number is required'); return }
     if (!validItems.length)     { alert('Add at least one item'); return }
     for (const item of validItems) {
       if (!item.qty)             { alert(`Qty is required for item: ${item.item_code}`); return }
@@ -153,7 +156,7 @@ export default function NewOrder() {
       po_document_url:   poDocUrl,
       submitted_by_name: user.name,
       created_by:        session.user.id,
-      is_test:           false,
+      is_test:           isTest,
     }).select().single()
 
     if (error) { alert('Error: ' + error.message); setSubmitting(false); return }
@@ -265,7 +268,13 @@ export default function NewOrder() {
               <select value={orderType} onChange={e => setOrderType(e.target.value)}>
                 <option value="SO">Standard Order (SO)</option>
                 <option value="CO">Customised Order (CO)</option>
+                <option value="SAMPLE">Sample Request (SR)</option>
               </select>
+              {orderType === 'SAMPLE' && (
+                <div style={{marginTop:6,padding:'8px 12px',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,fontSize:12,color:'#166534'}}>
+                  No PO required. Accounts billing will be skipped. A Sample Challan will be generated after goods issue.
+                </div>
+              )}
             </div>
             <div className="no-field">
               <label>Received Via <span className="req">*</span></label>
@@ -281,7 +290,7 @@ export default function NewOrder() {
 
           <div className="no-row">
             <div className="no-field">
-              <label>PO / Reference Number <span className="req">*</span></label>
+              <label>PO / Reference Number {orderType === 'SAMPLE' ? <span style={{color:'var(--gray-400)',fontWeight:400}}>(optional)</span> : <span className="req">*</span>}</label>
               <input value={poNumber} onChange={e => setPoNumber(e.target.value)} placeholder="e.g. PO-1234, Whatsapp Order" />
             </div>
             <div className="no-field">
@@ -432,6 +441,12 @@ export default function NewOrder() {
 
         {/* ── Actions ── */}
         <div className="no-actions">
+          {user.role === 'admin' && (
+            <label style={{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:isTest ? '#b45309' : 'var(--gray-500)',fontWeight:isTest ? 600 : 400,background:isTest ? '#fef3c7' : 'transparent',border:isTest ? '1px solid #fde68a' : '1px solid transparent',borderRadius:8,padding:'6px 12px',transition:'all 0.15s'}}>
+              <input type="checkbox" checked={isTest} onChange={e => setIsTest(e.target.checked)} style={{accentColor:'#b45309',width:14,height:14}} />
+              Test Mode
+            </label>
+          )}
           <div style={{ flex: 1 }} />
           <button className="no-cancel-btn" onClick={() => navigate('/orders')}>Cancel</button>
           <button className="no-submit-btn" onClick={submitOrder} disabled={submitting}>

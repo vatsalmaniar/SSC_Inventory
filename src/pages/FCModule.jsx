@@ -41,6 +41,7 @@ export default function FCModule() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter]   = useState('action')
   const [search, setSearch]   = useState('')
+  const [showTest, setShowTest] = useState(false)
 
   useEffect(() => { init() }, [])
 
@@ -61,12 +62,12 @@ export default function FCModule() {
     await loadOrders(center)
   }
 
-  async function loadOrders(center) {
+  async function loadOrders(center, testMode = false) {
     setLoading(true)
     let q = sb.from('orders').select('*, order_items(*), order_dispatches(*)')
       .in('status', FC_MODULE_STATUSES)
       .gte('created_at', '2026-03-31')
-      .eq('is_test', false)
+      .eq('is_test', testMode)
       .order('created_at', { ascending: false })
     if (center) q = q.eq('fulfilment_center', center)
     const { data } = await q
@@ -122,6 +123,12 @@ export default function FCModule() {
           {/* Header */}
           <div className="od-list-header">
             <div className="od-list-title">Fulfilment Center{centerLabel}</div>
+            {user.role === 'admin' && (
+              <label style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:12,color:showTest ? '#b45309' : 'var(--gray-500)',fontWeight:showTest ? 600 : 400,background:showTest ? '#fef3c7' : 'transparent',border:showTest ? '1px solid #fde68a' : '1px solid var(--gray-200)',borderRadius:8,padding:'6px 12px',transition:'all 0.15s'}}>
+                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); loadOrders(user.center, e.target.checked) }} style={{accentColor:'#b45309',width:13,height:13}} />
+                Test Mode
+              </label>
+            )}
           </div>
 
           {/* Summary */}
@@ -277,6 +284,7 @@ export default function FCModule() {
                           <tr key={o.id} onClick={() => navigate('/fc/' + o.id, { state: { dispatch_id: activeBatch?.id } })}>
                             <td className="order-num-cell">
                               {o.order_number}
+                              {o.order_type === 'SAMPLE' && <span style={{marginLeft:6,fontSize:9,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:3,padding:'1px 5px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
                               {dcNum && <div style={{ fontSize:11, color: dcNum.startsWith('Temp/') ? '#92400e' : 'var(--gray-500)', fontFamily:'var(--mono)', marginTop:2 }}>{dcNum}</div>}
                             </td>
                             <td className="customer-cell">{o.customer_name}</td>
@@ -304,7 +312,10 @@ export default function FCModule() {
                       <div key={o.id} className="order-card" style={{ animationDelay: i * 0.03 + 's' }} onClick={() => navigate('/fc/' + o.id, { state: { dispatch_id: activeBatch?.id } })}>
                         <div className="order-card-top">
                           <div>
-                            <div className="order-num">{o.order_number}</div>
+                            <div className="order-num">
+                              {o.order_number}
+                              {o.order_type === 'SAMPLE' && <span style={{marginLeft:6,fontSize:9,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:3,padding:'1px 5px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
+                            </div>
                             {dcNum && <div style={{ fontSize:11, color: dcNum.startsWith('Temp/') ? '#92400e' : 'var(--gray-500)', fontFamily:'var(--mono)' }}>{dcNum}</div>}
                             <div className="order-customer">{o.customer_name}</div>
                             <div className="order-date">{o.fulfilment_center || '—'} · {fmt(o.order_date)}</div>
