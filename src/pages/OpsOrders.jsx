@@ -11,6 +11,10 @@ function isPartiallyDispatched(o) {
   return items.some(i => (i.dispatched_qty || 0) > 0) && items.some(i => i.qty > (i.dispatched_qty || 0))
 }
 
+const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
+function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
+function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
+
 function fmt(d) {
   if (!d) return '—'
   const dt = new Date(d)
@@ -165,7 +169,7 @@ export default function OpsOrders() {
                       <tr key={o.id} onClick={() => openDetail(o)}>
                         <td className="order-num-cell">{o.order_number}</td>
                         <td className="customer-cell">{o.customer_name}</td>
-                        <td>{o.engineer_name || '—'}</td>
+                        <td><OwnerChip name={o.account_owner || o.engineer_name} /></td>
                         <td>{fmt(o.order_date)}</td>
                         <td>
                           {(o.order_items || []).length}
@@ -224,7 +228,7 @@ export default function OpsOrders() {
               <div className="detail-meta">
                 <span className="detail-meta-item">
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                  {detail.engineer_name || '—'}
+                  <OwnerChip name={detail.account_owner || detail.engineer_name} />
                 </span>
                 <span className="detail-meta-item">{fmt(detail.order_date)}</span>
                 <span className={'pill pill-' + detail.status} style={{marginLeft:4}}>{statusLabel(detail.status)}</span>
@@ -247,7 +251,7 @@ export default function OpsOrders() {
               <div className="detail-section">
                 <div className="detail-section-title">Order Info</div>
                 <div className="detail-grid">
-                  <div className="detail-field"><label>Account Owner</label><div className="val">{detail.engineer_name || '—'}</div></div>
+                  <div className="detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={detail.account_owner || detail.engineer_name} /></div></div>
                   <div className="detail-field"><label>PO Number</label><div className="val">{detail.po_number || '—'}</div></div>
                   <div className="detail-field"><label>Order Date</label><div className="val">{fmt(detail.order_date)}</div></div>
                   <div className="detail-field"><label>Received Via</label><div className="val">{detail.received_via || '—'}</div></div>

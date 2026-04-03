@@ -15,10 +15,11 @@ export default function NewOrder() {
   const [submitting, setSubmitting] = useState(false)
 
   // Customer
-  const [customerInput, setCustomerInput] = useState('')
-  const [customerGst, setCustomerGst]     = useState('')
-  const [dispatchAddr, setDispatchAddr]   = useState('')
-  const [creditTerms, setCreditTerms]     = useState('')
+  const [customerInput, setCustomerInput]   = useState('')
+  const [customerGst, setCustomerGst]       = useState('')
+  const [dispatchAddr, setDispatchAddr]     = useState('')
+  const [creditTerms, setCreditTerms]       = useState('')
+  const [accountOwner, setAccountOwner]     = useState('')
 
   // Order header
   const [poNumber, setPoNumber]       = useState('')
@@ -55,7 +56,7 @@ export default function NewOrder() {
   }
 
   async function fetchCustomers(q) {
-    const { data } = await sb.from('customers').select('id,customer_name,gst,billing_address,credit_terms')
+    const { data } = await sb.from('customers').select('id,customer_name,gst,billing_address,credit_terms,account_owner')
       .ilike('customer_name', '%' + q + '%').limit(10)
     return data || []
   }
@@ -71,6 +72,7 @@ export default function NewOrder() {
     setCustomerGst(c.gst || '')
     setDispatchAddr(c.billing_address || '')
     if (c.credit_terms) setCreditTerms(c.credit_terms)
+    setAccountOwner(c.account_owner || '')
   }
 
   function handlePoFile(e) {
@@ -152,6 +154,7 @@ export default function NewOrder() {
       received_via:      receivedVia,
       freight:           parseFloat(freight) || 0,
       credit_terms:      creditTerms.trim(),
+      account_owner:     accountOwner.trim(),
       notes:             notes.trim(),
       po_document_url:   poDocUrl,
       submitted_by_name: user.name,
@@ -218,23 +221,28 @@ export default function NewOrder() {
             </div>
           </div>
 
-          <div className="no-row">
+          <div className="no-row three">
             <div className="no-field">
               <label>GST Number</label>
               <input value={customerGst} onChange={e => setCustomerGst(e.target.value)} placeholder="Auto-filled on customer select" />
             </div>
             <div className="no-field">
               <label>Credit Terms</label>
-              <select value={creditTerms} onChange={e => setCreditTerms(e.target.value)}>
-                <option value="">— Select —</option>
-                <option value="COD">COD (Cash on Delivery)</option>
-                <option value="15 days">15 Days</option>
-                <option value="30 days">30 Days</option>
-                <option value="45 days">45 Days</option>
-                <option value="60 days">60 Days</option>
-                <option value="90 days">90 Days</option>
-                <option value="Advance">Advance Payment</option>
-              </select>
+              <input
+                value={creditTerms}
+                readOnly
+                placeholder="Auto-filled on customer select"
+                style={{ background: 'var(--gray-50)', color: creditTerms ? 'var(--gray-800)' : 'var(--gray-400)', cursor: 'default' }}
+              />
+            </div>
+            <div className="no-field">
+              <label>Account Owner</label>
+              <input
+                value={accountOwner}
+                readOnly
+                placeholder="Auto-filled on customer select"
+                style={{ background: 'var(--gray-50)', color: accountOwner ? 'var(--gray-800)' : 'var(--gray-400)', cursor: 'default' }}
+              />
             </div>
           </div>
 

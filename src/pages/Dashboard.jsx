@@ -23,38 +23,51 @@ const FUN_FACTS = [
 
 const APPS = [
   {
-    key: 'crm', label: 'CRM', path: null,
+    key: 'crm', label: 'CRM', path: '/crm',
     roles: ['all'],
+    color: { bg: '#eef2ff', icon: '#4338ca' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
+  },
+  {
+    key: 'customer360', label: 'Customer 360', path: '/customers',
+    roles: ['sales', 'ops', 'admin'],
+    color: { bg: '#f0fdfa', icon: '#0f766e' },
+    icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><circle cx="19" cy="8" r="2.5"/><path d="M21.5 14c-.8-.9-2-1.5-3.5-1.5"/><circle cx="5" cy="8" r="2.5"/><path d="M2.5 14c.8-.9 2-1.5 3.5-1.5"/></svg>,
   },
   {
     key: 'inventory', label: 'Inventory', path: '/sales',
     roles: ['sales', 'admin', 'ops'],
+    color: { bg: '#f0fdf4', icon: '#15803d' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg>,
   },
   {
     key: 'orders', label: 'Orders', path: '/orders',
     roles: ['all'],
+    color: { bg: '#fffbeb', icon: '#b45309' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>,
   },
   {
     key: 'people', label: 'People', path: null,
     roles: ['all'],
+    color: { bg: '#f1f5f9', icon: '#475569' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
   },
   {
     key: 'fc', label: 'Fulfilment Center', path: '/fc',
     roles: ['fc_kaveri', 'fc_godawari', 'ops', 'admin'],
+    color: { bg: '#fff7ed', icon: '#c2410c' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>,
   },
   {
     key: 'billing', label: 'Billing', path: '/billing',
     roles: ['accounts', 'ops', 'admin'],
+    color: { bg: '#faf5ff', icon: '#7e22ce' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   },
   {
     key: 'upload', label: 'Upload', path: '/accounts',
     roles: ['admin', 'accounts'],
+    color: { bg: '#eff6ff', icon: '#1d4ed8' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
   },
 ]
@@ -140,7 +153,7 @@ export default function Dashboard() {
 
         <div className="hd-nav-section">
           <div className="hd-nav-label">Account</div>
-          <button className="hd-nav-item" onClick={signOut}>
+          <button className="hd-nav-item" onClick={signOut} style={{ color:'#dc2626' }}>
             <span className="hd-nav-item-icon">
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </span>
@@ -201,7 +214,7 @@ export default function Dashboard() {
                 className={'hd-app-card' + (!app.path ? ' hd-app-soon' : '')}
                 onClick={() => openApp(app)}
               >
-                <div className="hd-app-icon-box">
+                <div className="hd-app-icon-box" style={app.color ? { background: app.color.bg, borderColor: 'transparent', color: app.color.icon } : {}}>
                   {app.icon}
                 </div>
                 <div className="hd-app-name">{app.label}</div>

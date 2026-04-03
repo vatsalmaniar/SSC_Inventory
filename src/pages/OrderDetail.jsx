@@ -31,6 +31,10 @@ const ORDER_PIPELINE_KEYS = ORDER_MODULE_STAGES.map(s => s.key)
 // Statuses that mean "handed to FC/Sales" — order is in progress beyond ops
 const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','goods_issued','pending_billing','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_pending','eway_generated','dispatched_fc']
 
+const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
+function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
+function OwnerChip({name}) { if(!name) return '—'; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:26,height:26,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:13,fontWeight:500}}>{name}</span></div> }
+
 function emptyItem() {
   return { _new: true, item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '' }
 }
@@ -673,7 +677,7 @@ export default function OrderDetail() {
                   <div className="od-detail-grid">
                     <div className="od-detail-field"><label>Customer Name</label><div className="val">{order.customer_name}</div></div>
                     <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
-                    <div className="od-detail-field"><label>Account Owner</label><div className="val">{order.engineer_name || '—'}</div></div>
+                    <div className="od-detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={order.account_owner || order.engineer_name} /></div></div>
                     <div className="od-detail-field"><label>Credit Terms</label><div className="val">{order.credit_terms || '—'}</div></div>
                     <div className="od-detail-field">
                       <label>PO / Reference {order.order_type === 'SAMPLE' && <span style={{color:'var(--gray-400)',fontWeight:400,fontSize:11}}>(optional)</span>}</label>

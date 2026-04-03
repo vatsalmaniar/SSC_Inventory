@@ -6,6 +6,10 @@ import * as XLSX from 'xlsx'
 import '../styles/orders.css'
 
 
+const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
+function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
+function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
+
 function fmt(d) {
   if (!d) return '—'
   const dt = new Date(d)
@@ -483,7 +487,7 @@ export default function OrdersList() {
                             {deliveryDate ? fmt(deliveryDate) : '—'}
                             {multiDate && <span style={{ display:'block', fontSize:10, color:'var(--gray-400)' }}>to {fmt(dates[dates.length - 1])}</span>}
                           </td>
-                          <td>{o.engineer_name || '—'}</td>
+                          <td><OwnerChip name={o.account_owner || o.engineer_name} /></td>
                           <td>{(o.order_items || []).length}</td>
                           <td className="amount-cell">{val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
                           <td className="status-cell">
@@ -513,7 +517,7 @@ export default function OrdersList() {
                             {o.order_type === 'SAMPLE' && <span style={{marginLeft:6,fontSize:9,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:3,padding:'1px 5px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
                           </div>
                           <div className="order-customer">{o.customer_name}</div>
-                          <div className="order-date">{fmt(o.order_date)} · {o.engineer_name || '—'}</div>
+                          <div className="order-date" style={{display:'flex',alignItems:'center',gap:6,marginTop:2}}>{fmt(o.order_date)} · <OwnerChip name={o.account_owner || o.engineer_name} /></div>
                           {mDelivery && <div className="order-date" style={{ color:'var(--gray-500)' }}>Delivery: {mDelivery}</div>}
                         </div>
                         <span className={'pill pill-' + ps}>{statusLabel(ps === 'partial' ? 'partial_dispatch' : o.status)}</span>

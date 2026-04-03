@@ -9,9 +9,20 @@ import NewOrder from './pages/NewOrder'
 import OrderDetail from './pages/OrderDetail'
 import OpsOrders from './pages/OpsOrders'
 import TodayDispatch from './pages/TodayDispatch'
-import CRM from './pages/CRM'
-import NewLead from './pages/NewLead'
-import LeadDetail from './pages/LeadDetail'
+import CustomerMaster from './pages/CustomerMaster'
+import CustomerDetail from './pages/CustomerDetail'
+import CRMDashboard from './pages/CRMDashboard'
+import CRMCompanies from './pages/CRMCompanies'
+import CRMCompanyDetail from './pages/CRMCompanyDetail'
+import CRMLeads from './pages/CRMLeads'
+import CRMLeadDetail from './pages/CRMLeadDetail'
+import CRMNewLead from './pages/CRMNewLead'
+import CRMOpportunities from './pages/CRMOpportunities'
+import CRMOpportunityDetail from './pages/CRMOpportunityDetail'
+import CRMNewOpportunity from './pages/CRMNewOpportunity'
+import CRMFieldVisits from './pages/CRMFieldVisits'
+import CRMSampleRequests from './pages/CRMSampleRequests'
+import CRMTargets from './pages/CRMTargets'
 import FCModule from './pages/FCModule'
 import FCOrderDetail from './pages/FCOrderDetail'
 import SalesModule from './pages/SalesModule'
@@ -32,9 +43,20 @@ export default function App() {
         <Route path="/orders/:id" element={<OrderDetail />} />
         <Route path="/ops" element={<OpsOrders />} />
         <Route path="/dispatch/today" element={<TodayDispatch />} />
-        <Route path="/crm" element={<CRM />} />
-        <Route path="/crm/new" element={<NewLead />} />
-        <Route path="/crm/:id" element={<LeadDetail />} />
+        <Route path="/customers" element={<CustomerMaster />} />
+        <Route path="/customers/:id" element={<CustomerDetail />} />
+        <Route path="/crm" element={<CRMDashboard />} />
+        <Route path="/crm/companies" element={<CRMCompanies />} />
+        <Route path="/crm/companies/:id" element={<CRMCompanyDetail />} />
+        <Route path="/crm/leads" element={<CRMLeads />} />
+        <Route path="/crm/leads/new" element={<CRMNewLead />} />
+        <Route path="/crm/leads/:id" element={<CRMLeadDetail />} />
+        <Route path="/crm/opportunities" element={<CRMOpportunities />} />
+        <Route path="/crm/opportunities/new" element={<CRMNewOpportunity />} />
+        <Route path="/crm/opportunities/:id" element={<CRMOpportunityDetail />} />
+        <Route path="/crm/visits" element={<CRMFieldVisits />} />
+        <Route path="/crm/samples" element={<CRMSampleRequests />} />
+        <Route path="/crm/targets" element={<CRMTargets />} />
         <Route path="/fc" element={<FCModule />} />
         <Route path="/fc/:id" element={<FCOrderDetail />} />
         <Route path="/billing" element={<SalesModule />} />
