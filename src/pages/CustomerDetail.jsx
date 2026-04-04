@@ -203,7 +203,18 @@ export default function CustomerDetail() {
                       <div className="od-edit-row">
                         <div className="od-edit-field">
                           <label>Credit Terms</label>
-                          <input value={editData.credit_terms || ''} onChange={e => setEditData(p => ({ ...p, credit_terms: e.target.value }))} placeholder="e.g. Net 30, Advance" />
+                          <select value={editData.credit_terms || ''} onChange={e => setEditData(p => ({ ...p, credit_terms: e.target.value }))} style={{ padding:'7px 10px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:13, fontFamily:'var(--font)', background:'white' }}>
+                            <option value="">— Select —</option>
+                            <option>Against PI</option>
+                            <option>7 Days</option>
+                            <option>15 Days</option>
+                            <option>30 Days</option>
+                            <option>45 Days</option>
+                            <option>60 Days</option>
+                            <option>75 Days</option>
+                            <option>90 Days</option>
+                            <option>Against Delivery</option>
+                          </select>
                         </div>
                         <div className="od-edit-field">
                           <label>Location / Branch</label>
