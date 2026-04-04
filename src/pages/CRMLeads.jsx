@@ -132,8 +132,8 @@ export default function CRMLeads() {
                         <td style={{whiteSpace:'nowrap'}}>{fmt(l.created_at)}</td>
                         <td>
                           <span style={{fontSize:11,fontWeight:700,borderRadius:4,padding:'2px 7px',
-                            background: l.status==='New'?'#eff6ff': l.status==='Contacted'?'#fff7ed': l.status==='Converted'?'#f0fdf4':'#fef2f2',
-                            color: l.status==='New'?'#1d4ed8': l.status==='Contacted'?'#c2410c': l.status==='Converted'?'#15803d':'#dc2626'
+                            background: l.status==='New'?'#e8f2fc': l.status==='Contacted'?'#fff7ed': l.status==='Converted'?'#f0fdf4':'#fef2f2',
+                            color: l.status==='New'?'#1a4dab': l.status==='Contacted'?'#c2410c': l.status==='Converted'?'#15803d':'#dc2626'
                           }}>{l.status}</span>
                         </td>
                       </tr>
@@ -151,8 +151,8 @@ export default function CRMLeads() {
                         <div className="crm-list-card-sub">{l.contact_name_freetext || ''}{l.crm_principals?.name ? ' · ' + l.crm_principals.name : ''}</div>
                       </div>
                       <span style={{fontSize:11,fontWeight:700,borderRadius:4,padding:'2px 7px',whiteSpace:'nowrap',
-                        background: l.status==='New'?'#eff6ff': l.status==='Contacted'?'#fff7ed': l.status==='Converted'?'#f0fdf4':'#fef2f2',
-                        color: l.status==='New'?'#1d4ed8': l.status==='Contacted'?'#c2410c': l.status==='Converted'?'#15803d':'#dc2626'
+                        background: l.status==='New'?'#e8f2fc': l.status==='Contacted'?'#fff7ed': l.status==='Converted'?'#f0fdf4':'#fef2f2',
+                        color: l.status==='New'?'#1a4dab': l.status==='Contacted'?'#c2410c': l.status==='Converted'?'#15803d':'#dc2626'
                       }}>{l.status}</span>
                     </div>
                     <div className="crm-list-card-bottom">

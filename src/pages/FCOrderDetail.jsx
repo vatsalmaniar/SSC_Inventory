@@ -507,11 +507,11 @@ export default function FCOrderDetail() {
                     {isDelivered ? 'Delivered' : withAccounts ? 'With Accounts' : stageLabel(order.status)}
                   </span>
                 </div>
-                <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #2563eb',color:'inherit'}}>{order.customer_name}</span></div>
+                <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a4dab',color:'inherit'}}>{order.customer_name}</span></div>
                 <div className="od-header-num">
                   <button
                     onClick={() => navigate('/orders/' + id)}
-                    style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',color:'#2563eb',fontWeight:600,textDecoration:'underline'}}
+                    style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',color:'#1a4dab',fontWeight:600,textDecoration:'underline'}}
                   >
                     {order.order_number}
                   </button>
@@ -631,7 +631,7 @@ export default function FCOrderDetail() {
               <div className="od-card-header"><div className="od-card-title">Order Information</div></div>
               <div className="od-card-body">
                 <div className="od-detail-grid">
-                  <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#2563eb',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
+                  <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a4dab',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
                   <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                   <div className="od-detail-field"><label>PO / Reference No.</label><div className="val">{order.po_number || '—'}</div></div>
                   <div className="od-detail-field"><label>Order Date</label><div className="val">{fmt(order.order_date)}</div></div>
@@ -752,7 +752,7 @@ export default function FCOrderDetail() {
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Goods issued. Generate the Sample Challan, then enter delivery details.</p>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                        <button style={{background:'#1d4ed8',padding:'10px 16px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
+                        <button style={{background:'#1a4dab',padding:'10px 16px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
                           onClick={() => printDCChallan(order, activeBatch, activeDC, true)}>
                           <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:16,height:16}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                           Generate Sample Challan
@@ -895,7 +895,7 @@ export default function FCOrderDetail() {
                 {!isTempDC && activeDC && (['delivery_ready','eway_generated','dispatched_fc'].includes(order.status) || (isSample && order.status === 'invoice_generated')) && (
                   <button
                     onClick={() => printDCChallan(order, activeBatch, activeDC, isSample)}
-                    style={{marginTop:10,display:'inline-flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:8,border:'1px solid #2563eb',background:'#eff6ff',color:'#1d4ed8',fontFamily:'var(--font)',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                    style={{marginTop:10,display:'inline-flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:8,border:'1px solid #1a4dab',background:'#e8f2fc',color:'#1a4dab',fontFamily:'var(--font)',fontSize:12,fontWeight:600,cursor:'pointer'}}>
                     <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                     {isSample ? 'Download Sample Challan' : 'Download DC Challan'}
                   </button>
@@ -908,7 +908,7 @@ export default function FCOrderDetail() {
                     </div>
                     {(activeBatch?.invoice_pdf_url || order.invoice_pdf_url) && (
                       <a href={activeBatch?.invoice_pdf_url || order.invoice_pdf_url} target="_blank" rel="noreferrer"
-                        style={{fontSize:11,color:'#1e40af',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                        style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
                         <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         View Invoice PDF
                       </a>

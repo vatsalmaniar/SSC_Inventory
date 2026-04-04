@@ -174,7 +174,7 @@ export default function CRMFieldVisits() {
                       <label>SSC Team Members (select who joined)</label>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:4}}>
                         {reps.filter(r => r.id !== user.id).map(r => (
-                          <label key={r.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:13,cursor:'pointer',padding:'4px 10px',border:'1px solid var(--gray-200)',borderRadius:20,background:form.ssc_team_members.includes(r.id)?'#eff6ff':'white',color:form.ssc_team_members.includes(r.id)?'#1A3A8F':'var(--gray-600)'}}>
+                          <label key={r.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:13,cursor:'pointer',padding:'4px 10px',border:'1px solid var(--gray-200)',borderRadius:20,background:form.ssc_team_members.includes(r.id)?'#e8f2fc':'white',color:form.ssc_team_members.includes(r.id)?'#1A3A8F':'var(--gray-600)'}}>
                             <input type="checkbox" checked={form.ssc_team_members.includes(r.id)} onChange={() => toggleTeamMember(r.id)} style={{display:'none'}}/>
                             {r.name}
                           </label>
@@ -248,8 +248,8 @@ export default function CRMFieldVisits() {
                         <td><div className="crm-table-name">{v.crm_companies?.company_name || '—'}</div></td>
                         <td>
                           <span style={{fontSize:10,fontWeight:700,borderRadius:4,padding:'2px 7px',
-                            background: v.visit_type==='SOLO'?'#f1f5f9':v.visit_type==='JOINT_PRINCIPAL'?'#eff6ff':'#f5f3ff',
-                            color: v.visit_type==='SOLO'?'#475569':v.visit_type==='JOINT_PRINCIPAL'?'#1d4ed8':'#6d28d9'
+                            background: v.visit_type==='SOLO'?'#f1f5f9':v.visit_type==='JOINT_PRINCIPAL'?'#e8f2fc':'#f5f3ff',
+                            color: v.visit_type==='SOLO'?'#475569':v.visit_type==='JOINT_PRINCIPAL'?'#1a4dab':'#6d28d9'
                           }}>{VISIT_TYPE_LABELS[v.visit_type]}</span>
                           {v.visit_type==='JOINT_PRINCIPAL' && v.crm_principals?.name && <div className="crm-table-sub">{v.crm_principals.name}{v.principal_rep_name?' · '+v.principal_rep_name:''}</div>}
                         </td>

@@ -407,7 +407,7 @@ export default function LeadDetail() {
                       </>
                     ) : (
                       <>
-                        <div className={'od-comment-avatar crm-act-dot-' + a.activity_type} style={{background: a.activity_type==='call'?'#2563eb':a.activity_type==='meeting'?'#7c3aed':'#d97706', color:'white'}}>
+                        <div className={'od-comment-avatar crm-act-dot-' + a.activity_type} style={{background: a.activity_type==='call'?'#1a4dab':a.activity_type==='meeting'?'#7c3aed':'#d97706', color:'white'}}>
                           {(a.author_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}
                         </div>
                         <div className="od-comment-body">

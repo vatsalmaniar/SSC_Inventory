@@ -50,7 +50,7 @@
 .hd-logo-text {
   font-size: 15px;
   font-weight: 700;
-  color: #0d2461;
+  color: #0e2d6a;
   letter-spacing: -0.3px;
 }
 
@@ -91,7 +91,7 @@
 .hd-nav-item:hover { background: #f4f6fb; color: #1e2d5a; }
 .hd-nav-item.active {
   background: #eef2fd;
-  color: #1a3a8b;
+  color: #1a4dab;
   font-weight: 600;
 }
 .hd-nav-item.active::before {
@@ -101,7 +101,7 @@
   top: 6px;
   bottom: 6px;
   width: 3px;
-  background: #1a3a8b;
+  background: #1a4dab;
   border-radius: 0 3px 3px 0;
 }
 .hd-nav-item.soon { opacity: 0.55; cursor: default; }
@@ -171,10 +171,10 @@
 }
 .hd-topnav-item:hover { color: #1e2d5a; background: #f4f6fb; }
 .hd-topnav-item.active {
-  color: #1a3a8b;
+  color: #1a4dab;
   font-weight: 700;
   background: none;
-  border-bottom: 2px solid #1a3a8b;
+  border-bottom: 2px solid #1a4dab;
   border-radius: 0;
   padding-bottom: 5px;
 }
@@ -192,7 +192,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #0d2461;
+  background: #0e2d6a;
   color: white;
   font-size: 10px;
   font-weight: 700;
@@ -246,7 +246,7 @@
   justify-content: center;
   flex-shrink: 0;
 }
-.hd-fact-icon svg  { width: 18px; height: 18px; color: #1a3a8b; }
+.hd-fact-icon svg  { width: 18px; height: 18px; color: #1a4dab; }
 .hd-fact-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #b0b9d0; margin-bottom: 5px; }
 .hd-fact-text  { font-size: 13px; color: #3d4e70; line-height: 1.7; }
 
@@ -295,7 +295,7 @@
   justify-content: center;
   box-shadow: 0 2px 10px rgba(13,36,97,0.07);
   transition: box-shadow 0.18s, border-color 0.18s;
-  color: #1a3a8b;
+  color: #1a4dab;
 }
 .hd-app-icon-box svg { width: 28px; height: 28px; }
 .hd-app-card:hover .hd-app-icon-box {
@@ -336,7 +336,7 @@
 .hd-stat-green .hd-stat-icon { background: #f0fdf4; color: #16a34a; }
 .hd-stat-green .hd-stat-val  { color: #15803d; }
 .hd-stat-amber .hd-stat-icon { background: #fff7ed; color: #c2410c; }
-.hd-stat-blue  .hd-stat-icon { background: #eff6ff; color: #1d4ed8; }
+.hd-stat-blue  .hd-stat-icon { background: #e8f2fc; color: #1a4dab; }
 .hd-stat-purple .hd-stat-icon { background: #f5f3ff; color: #7c3aed; }
 .hd-stat-purple .hd-stat-val { color: #6d28d9; }
 

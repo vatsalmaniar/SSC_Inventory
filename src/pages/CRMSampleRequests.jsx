@@ -14,7 +14,7 @@ function fmt(d) {
 }
 function statusStyle(s) {
   if (s === 'Pending')    return { background:'#fffbeb', color:'#b45309' }
-  if (s === 'Dispatched') return { background:'#eff6ff', color:'#1d4ed8' }
+  if (s === 'Dispatched') return { background:'#e8f2fc', color:'#1a4dab' }
   if (s === 'Delivered')  return { background:'#f0fdf4', color:'#15803d' }
   return {}
 }

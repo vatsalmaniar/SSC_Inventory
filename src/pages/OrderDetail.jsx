@@ -470,7 +470,7 @@ export default function OrderDetail() {
                     {isPending ? 'Pending Approval' : isCancelled ? 'Cancelled' : order?.status === 'dispatched_fc' ? 'Delivered' : isInFCFlow ? 'Delivery In Progress' : (hasAnyDispatched && hasAnyPending) ? 'Partially Dispatched' : 'Active'}
                   </span>
                 </div>
-                <div className="od-header-title">{editMode ? editData.customer_name || order.customer_name : <span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #2563eb',color:'inherit'}}>{order.customer_name}</span>}</div>
+                <div className="od-header-title">{editMode ? editData.customer_name || order.customer_name : <span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a4dab',color:'inherit'}}>{order.customer_name}</span>}</div>
                 <div className="od-header-num">{order.order_number} · {fmt(order.order_date)}</div>
               </div>
             </div>
@@ -683,7 +683,7 @@ export default function OrderDetail() {
                 ) : (
                   <>
                   <div className="od-detail-grid">
-                    <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#2563eb',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
+                    <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a4dab',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
                     <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                     <div className="od-detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={order.account_owner || order.engineer_name} /></div></div>
                     <div className="od-detail-field"><label>Credit Terms</label><div className="val">{order.credit_terms || '—'}</div></div>
@@ -693,7 +693,7 @@ export default function OrderDetail() {
                         {order.po_number || '—'}
                         {order.po_document_url && (
                           <a href={order.po_document_url} target="_blank" rel="noreferrer"
-                            style={{marginLeft:10,fontSize:11,color:'#1e40af',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                            style={{marginLeft:10,fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
                             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View PO
                           </a>
@@ -985,7 +985,7 @@ export default function OrderDetail() {
                         )}
                         {b.invoice_pdf_url && (
                           <a href={b.invoice_pdf_url} target="_blank" rel="noreferrer"
-                            style={{fontSize:11,color:'#1e40af',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                            style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
                             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View Invoice PDF
                           </a>
@@ -1041,7 +1041,7 @@ export default function OrderDetail() {
                 {comments.map(c => {
                   const isSystem = c.is_activity === true
                   const dotColor = c.message.includes('cancelled') || c.message.includes('Cancelled') ? '#ef4444'
-                    : c.message.includes('Dispatch') || c.message.includes('dispatch') ? '#2563eb'
+                    : c.message.includes('Dispatch') || c.message.includes('dispatch') ? '#1a4dab'
                     : c.message.includes('Invoice') ? '#7c3aed'
                     : '#16a34a'
                   return isSystem ? (
@@ -1143,7 +1143,7 @@ export default function OrderDetail() {
               <div style={{ display: 'flex', gap: 8 }}>
                 {['Kaveri', 'Godawari'].map(c => (
                   <button key={c} onClick={() => setFcCenter(c)}
-                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid ' + (fcCenter === c ? '#0d2461' : 'var(--gray-200)'), background: fcCenter === c ? '#0d2461' : 'white', color: fcCenter === c ? 'white' : 'var(--gray-700)', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid ' + (fcCenter === c ? '#0e2d6a' : 'var(--gray-200)'), background: fcCenter === c ? '#0e2d6a' : 'white', color: fcCenter === c ? 'white' : 'var(--gray-700)', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                     {c}
                   </button>
                 ))}

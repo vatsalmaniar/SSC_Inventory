@@ -128,8 +128,8 @@ export default function CRMLeadDetail() {
               <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                 <div className="crm-page-title">{lead.crm_companies?.company_name || lead.freetext_company || '—'}</div>
                 <span style={{fontSize:11,fontWeight:700,borderRadius:4,padding:'2px 8px',
-                  background: lead.status==='New'?'#eff6ff': lead.status==='Contacted'?'#fff7ed': lead.status==='Converted'?'#f0fdf4':'#fef2f2',
-                  color: lead.status==='New'?'#1d4ed8': lead.status==='Contacted'?'#c2410c': lead.status==='Converted'?'#15803d':'#dc2626'
+                  background: lead.status==='New'?'#e8f2fc': lead.status==='Contacted'?'#fff7ed': lead.status==='Converted'?'#f0fdf4':'#fef2f2',
+                  color: lead.status==='New'?'#1a4dab': lead.status==='Contacted'?'#c2410c': lead.status==='Converted'?'#15803d':'#dc2626'
                 }}>{lead.status}</span>
                 {lead.scenario_type && <span className={'crm-scenario-pill crm-scenario-' + lead.scenario_type}>{scenarioLabel(lead.scenario_type)}</span>}
               </div>

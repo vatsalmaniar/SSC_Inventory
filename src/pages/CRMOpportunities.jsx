@@ -264,7 +264,7 @@ function StagePill({ stage }) {
     LOST: { background:'#fef2f2', color:'#dc2626' },
     ON_HOLD: { background:'#fffbeb', color:'#b45309' },
     FOLLOW_UP: { background:'#fff7ed', color:'#c2410c' },
-    QUOTATION_SENT: { background:'#eff6ff', color:'#1d4ed8' },
+    QUOTATION_SENT: { background:'#e8f2fc', color:'#1a4dab' },
     PO_RECEIVED: { background:'#f0fdf4', color:'#15803d' },
   }
   const s = styles[stage] || { background:'#f1f5f9', color:'#475569' }

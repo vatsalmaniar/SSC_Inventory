@@ -51,7 +51,7 @@
 .ly-logo-text {
   font-size: 15px;
   font-weight: 700;
-  color: #0d2461;
+  color: #0e2d6a;
   letter-spacing: -0.3px;
 }
 
@@ -97,7 +97,7 @@
 .ly-nav-item:hover { background: #f4f6fb; color: #1e2d5a; }
 .ly-nav-item.active {
   background: #eef2fd;
-  color: #1a3a8b;
+  color: #1a4dab;
   font-weight: 600;
 }
 .ly-nav-item.active::before {
@@ -107,7 +107,7 @@
   top: 6px;
   bottom: 6px;
   width: 3px;
-  background: #1a3a8b;
+  background: #1a4dab;
   border-radius: 0 3px 3px 0;
 }
 .ly-nav-item.soon { opacity: 0.55; cursor: default; }
@@ -143,7 +143,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #0d2461;
+  background: #0e2d6a;
   color: white;
   font-size: 10px;
   font-weight: 700;
@@ -222,7 +222,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #0d2461;
+  background: #0e2d6a;
   color: white;
   font-size: 10px;
   font-weight: 700;
@@ -278,7 +278,7 @@
   border-bottom: 1px solid #f0f2f8;
 }
 .ly-notif-markread {
-  font-size: 11px; font-weight: 600; color: #2563eb;
+  font-size: 11px; font-weight: 600; color: #1a4dab;
   background: none; border: none; cursor: pointer;
 }
 .ly-notif-markread:hover { text-decoration: underline; }

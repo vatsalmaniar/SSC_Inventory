@@ -552,7 +552,7 @@ function StagePill({ stage }) {
     LOST: { background:'#fef2f2', color:'#dc2626' },
     ON_HOLD: { background:'#fffbeb', color:'#b45309' },
     FOLLOW_UP: { background:'#fff7ed', color:'#c2410c' },
-    QUOTATION_SENT: { background:'#eff6ff', color:'#1d4ed8' },
+    QUOTATION_SENT: { background:'#e8f2fc', color:'#1a4dab' },
     PO_RECEIVED: { background:'#f0fdf4', color:'#15803d' },
   }
   const s = styles[stage] || { background:'#f1f5f9', color:'#475569' }
@@ -560,6 +560,6 @@ function StagePill({ stage }) {
 }
 
 function SRStatusPill({ status }) {
-  const s = status === 'Pending' ? { background:'#fffbeb',color:'#b45309' } : status === 'Dispatched' ? { background:'#eff6ff',color:'#1d4ed8' } : { background:'#f0fdf4',color:'#15803d' }
+  const s = status === 'Pending' ? { background:'#fffbeb',color:'#b45309' } : status === 'Dispatched' ? { background:'#e8f2fc',color:'#1a4dab' } : { background:'#f0fdf4',color:'#15803d' }
   return <span style={{...s, fontSize:11, fontWeight:700, borderRadius:4, padding:'2px 7px'}}>{status}</span>
 }

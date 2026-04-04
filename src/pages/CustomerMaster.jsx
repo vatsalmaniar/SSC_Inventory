@@ -170,7 +170,7 @@ export default function CustomerMaster() {
                       if (ellipsis) return <span key={p} style={{ padding:'0 4px', color:'var(--gray-400)', fontSize:13 }}>…</span>
                       if (!show) return null
                       return <button key={p} onClick={() => { if (!search.trim()) fetchPage(p); else setPage(p) }}
-                        style={{ padding:'5px 10px', borderRadius:6, border:'1px solid', borderColor: p === safePage ? '#2563eb' : 'var(--gray-200)', background: p === safePage ? '#2563eb' : 'white', color: p === safePage ? 'white' : 'var(--gray-700)', fontWeight: p === safePage ? 700 : 400, fontSize:13, cursor:'pointer', fontFamily:'var(--font)' }}>{p}</button>
+                        style={{ padding:'5px 10px', borderRadius:6, border:'1px solid', borderColor: p === safePage ? '#1a4dab' : 'var(--gray-200)', background: p === safePage ? '#1a4dab' : 'white', color: p === safePage ? 'white' : 'var(--gray-700)', fontWeight: p === safePage ? 700 : 400, fontSize:13, cursor:'pointer', fontFamily:'var(--font)' }}>{p}</button>
                     })}
                     <button onClick={() => { if (!search.trim()) fetchPage(safePage + 1); else setPage(p => Math.min(totalPages, p + 1)) }} disabled={safePage === totalPages}
                       style={{ padding:'5px 10px', borderRadius:6, border:'1px solid var(--gray-200)', background:'white', cursor: safePage === totalPages ? 'default' : 'pointer', color: safePage === totalPages ? 'var(--gray-300)' : 'var(--gray-700)', fontSize:13, fontFamily:'var(--font)' }}>›</button>
@@ -192,7 +192,7 @@ const CREDIT_COLORS = {
   '15 Days':          { bg:'#fffbeb', color:'#b45309' },
   '30 Days':          { bg:'#f0fdf4', color:'#15803d' },
   '45 Days':          { bg:'#f0fdfa', color:'#0f766e' },
-  '60 Days':          { bg:'#eff6ff', color:'#1d4ed8' },
+  '60 Days':          { bg:'#e8f2fc', color:'#1a4dab' },
   '75 Days':          { bg:'#eef2ff', color:'#4338ca' },
   '90 Days':          { bg:'#faf5ff', color:'#7e22ce' },
 }

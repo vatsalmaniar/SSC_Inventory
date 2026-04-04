@@ -67,7 +67,7 @@ const APPS = [
   {
     key: 'upload', label: 'Upload', path: '/accounts',
     roles: ['admin', 'accounts'],
-    color: { bg: '#eff6ff', icon: '#1d4ed8' },
+    color: { bg: '#e8f2fc', icon: '#1a4dab' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
   },
 ]

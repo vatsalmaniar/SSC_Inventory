@@ -3,12 +3,13 @@
 
 /* ── VARIABLES ── */
 :root {
-  --blue-900: #0d2461;
-  --blue-800: #1a3a8b;
-  --blue-700: #1f46a8;
-  --blue-600: #2550c0;
-  --blue-200: #b5d0f5;
-  --blue-50:  #e8f0fc;
+  --blue-900: #0e2d6a;
+  --blue-800: #1a4dab;
+  --blue-700: #1a4dab;
+  --blue-600: #1a4dab;
+  --blue-300: #93b8e8;
+  --blue-200: #c2d9f5;
+  --blue-50:  #e8f2fc;
   --green-text: #14653a;
   --green-bg:   #d4f5e2;
   --amber-text: #7a4b00;

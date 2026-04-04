@@ -239,7 +239,7 @@ export default function CRMCompanyDetail() {
                       {c.whatsapp && <div style={{fontSize:12}}>💬 {c.whatsapp}</div>}
                       {c.email && <div style={{fontSize:12}}>{c.email}</div>}
                       <div style={{display:'flex',gap:4,marginTop:4,flexWrap:'wrap'}}>
-                        {c.is_decision_maker && <span style={{fontSize:9,fontWeight:700,background:'#eff6ff',color:'#1d4ed8',borderRadius:3,padding:'1px 5px'}}>DECISION MAKER</span>}
+                        {c.is_decision_maker && <span style={{fontSize:9,fontWeight:700,background:'#e8f2fc',color:'#1a4dab',borderRadius:3,padding:'1px 5px'}}>DECISION MAKER</span>}
                         {c.is_influencer && <span style={{fontSize:9,fontWeight:700,background:'#f5f3ff',color:'#6d28d9',borderRadius:3,padding:'1px 5px'}}>INFLUENCER</span>}
                       </div>
                     </div>

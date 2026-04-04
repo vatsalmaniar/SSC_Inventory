@@ -402,13 +402,13 @@ export default function CustomerDetail() {
                         <div className="od-detail-field">
                           <label>POC Phone</label>
                           <div className="val">{customer.poc_no
-                            ? <a href={'tel:' + customer.poc_no} style={{ color: '#2563eb', textDecoration: 'none' }}>{customer.poc_no}</a>
+                            ? <a href={'tel:' + customer.poc_no} style={{ color: '#1a4dab', textDecoration: 'none' }}>{customer.poc_no}</a>
                             : '—'}</div>
                         </div>
                         <div className="od-detail-field" style={{ gridColumn: 'span 2' }}>
                           <label>POC Email</label>
                           <div className="val">{customer.poc_email
-                            ? <a href={'mailto:' + customer.poc_email} style={{ color: '#2563eb', textDecoration: 'none' }}>{customer.poc_email}</a>
+                            ? <a href={'mailto:' + customer.poc_email} style={{ color: '#1a4dab', textDecoration: 'none' }}>{customer.poc_email}</a>
                             : '—'}</div>
                         </div>
                       </div>
@@ -423,13 +423,13 @@ export default function CustomerDetail() {
                         <div className="od-detail-field">
                           <label>Director Phone</label>
                           <div className="val">{customer.director_no
-                            ? <a href={'tel:' + customer.director_no} style={{ color: '#2563eb', textDecoration: 'none' }}>{customer.director_no}</a>
+                            ? <a href={'tel:' + customer.director_no} style={{ color: '#1a4dab', textDecoration: 'none' }}>{customer.director_no}</a>
                             : '—'}</div>
                         </div>
                         <div className="od-detail-field" style={{ gridColumn: 'span 2' }}>
                           <label>Director Email</label>
                           <div className="val">{customer.director_email
-                            ? <a href={'mailto:' + customer.director_email} style={{ color: '#2563eb', textDecoration: 'none' }}>{customer.director_email}</a>
+                            ? <a href={'mailto:' + customer.director_email} style={{ color: '#1a4dab', textDecoration: 'none' }}>{customer.director_email}</a>
                             : '—'}</div>
                         </div>
                       </div>
@@ -566,7 +566,7 @@ export default function CustomerDetail() {
                       <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 2 }}>Point of Contact</div>
                       <div style={{ fontSize: 12, color: 'var(--gray-700)', fontWeight: 600 }}>{customer.poc_name}</div>
                       {customer.poc_no && <div style={{ fontSize: 11, color: 'var(--gray-500)' }}>{customer.poc_no}</div>}
-                      {customer.poc_email && <div style={{ fontSize: 11, color: '#2563eb' }}>{customer.poc_email}</div>}
+                      {customer.poc_email && <div style={{ fontSize: 11, color: '#1a4dab' }}>{customer.poc_email}</div>}
                     </div>
                   )}
                   {customer.billing_address && (
@@ -588,7 +588,7 @@ export default function CustomerDetail() {
                         <div className={'od-activity-dot ' + (['cancelled'].includes(o.status) ? 'cancelled' : ['delivered','dispatched_fc'].includes(o.status) ? 'approved' : 'submitted')} />
                         <div>
                           <div className="od-activity-label">{o.order_type === 'SO' ? 'Standard' : o.order_type === 'CO' ? 'Custom' : 'Sample'}</div>
-                          <div className="od-activity-val" style={{ color: '#1a3a8b' }}>{o.order_number}</div>
+                          <div className="od-activity-val" style={{ color: '#1a4dab' }}>{o.order_number}</div>
                           <div className="od-activity-time">{statusLabel(o.status)} · {fmt(o.created_at)}</div>
                         </div>
                       </div>
@@ -608,7 +608,7 @@ function StatRow({ label, value, accent, big }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <span style={{ fontSize: 12, color: 'var(--gray-500)' }}>{label}</span>
-      <span style={{ fontSize: big ? 14 : 13, fontWeight: 700, color: accent ? '#1a3a8b' : 'var(--gray-900)' }}>{value}</span>
+      <span style={{ fontSize: big ? 14 : 13, fontWeight: 700, color: accent ? '#1a4dab' : 'var(--gray-900)' }}>{value}</span>
     </div>
   )
 }

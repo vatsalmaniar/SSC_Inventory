@@ -280,11 +280,11 @@ export default function BillingOrderDetail() {
                     </span>
                   )}
                 </div>
-                <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #2563eb',color:'inherit'}}>{order.customer_name}</span></div>
+                <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a4dab',color:'inherit'}}>{order.customer_name}</span></div>
                 <div className="od-header-num" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'center'}}>
                   <button
                     onClick={() => navigate('/orders/' + id)}
-                    style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',color:'#2563eb',fontWeight:600,textDecoration:'underline'}}
+                    style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',color:'#1a4dab',fontWeight:600,textDecoration:'underline'}}
                   >
                     {order.order_number}
                   </button>
@@ -393,7 +393,7 @@ export default function BillingOrderDetail() {
               <div className="od-card-header"><div className="od-card-title">Order Information</div></div>
               <div className="od-card-body">
                 <div className="od-detail-grid">
-                  <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#2563eb',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
+                  <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a4dab',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
                   <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                   <div className="od-detail-field"><label>PO / Reference No.</label><div className="val">{order.po_number || '—'}</div></div>
                   <div className="od-detail-field"><label>Order Date</label><div className="val">{fmt(order.order_date)}</div></div>
@@ -504,7 +504,7 @@ export default function BillingOrderDetail() {
                       <button
                         disabled={!creditChoice || saving}
                         onClick={() => creditChoice === 'override' ? handleCreditCheckYes() : handleCreditCheckClear()}
-                        style={{padding:'10px 20px',borderRadius:10,border:'none',background:!creditChoice?'var(--gray-200)':'#1e40af',color:!creditChoice?'var(--gray-400)':'white',fontWeight:600,fontSize:13,cursor:!creditChoice?'default':'pointer',fontFamily:'var(--font)'}}>
+                        style={{padding:'10px 20px',borderRadius:10,border:'none',background:!creditChoice?'var(--gray-200)':'#1a4dab',color:!creditChoice?'var(--gray-400)':'white',fontWeight:600,fontSize:13,cursor:!creditChoice?'default':'pointer',fontFamily:'var(--font)'}}>
                         {saving ? 'Saving...' : 'Credit Check'}
                       </button>
                     </div>
@@ -514,7 +514,7 @@ export default function BillingOrderDetail() {
                   {order.status === 'credit_check' && !showGIConfirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Post the Goods Issue entry in the system.</p>
-                      <button className="od-mark-complete-btn" style={{background:'#1e40af',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
+                      <button className="od-mark-complete-btn" style={{background:'#1a4dab',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
                         onClick={() => setShowGIConfirm(true)}>
                         <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:16,height:16}}><polyline points="20 6 9 17 4 12"/></svg>
                         Post Goods Issue
@@ -522,8 +522,8 @@ export default function BillingOrderDetail() {
                     </div>
                   )}
                   {order.status === 'credit_check' && showGIConfirm && (
-                    <div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:10,padding:16}}>
-                      <p style={{fontSize:13,color:'#1e40af',fontWeight:600,marginBottom:4}}>Confirm Goods Issue Posted?</p>
+                    <div style={{background:'#e8f2fc',border:'1px solid #c2d9f5',borderRadius:10,padding:16}}>
+                      <p style={{fontSize:13,color:'#1a4dab',fontWeight:600,marginBottom:4}}>Confirm Goods Issue Posted?</p>
                       <p style={{fontSize:12,color:'var(--gray-500)',marginBottom:14}}>A temporary invoice number will be assigned (Temp/INV…).</p>
                       <div style={{display:'flex',gap:8}}>
                         <button className="od-btn od-btn-approve" disabled={saving} onClick={advanceGIPosted}>{saving?'Saving...':'Confirm'}</button>
@@ -658,7 +658,7 @@ export default function BillingOrderDetail() {
                   {!isTempInv && activeINV && <div style={{fontSize:10,color:'#166534',fontWeight:600}}>Confirmed</div>}
                   {activeInvPdfUrl && (
                     <a href={activeInvPdfUrl} target="_blank" rel="noreferrer"
-                      style={{fontSize:11,color:'#1e40af',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
+                      style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
                       <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                       View Invoice PDF
                     </a>
@@ -670,7 +670,7 @@ export default function BillingOrderDetail() {
                     <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:'#166534'}}>{activeEway}</div>
                     {activeEwayPdfUrl && (
                       <a href={activeEwayPdfUrl} target="_blank" rel="noreferrer"
-                        style={{fontSize:11,color:'#1e40af',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
+                        style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
                         <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002 2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         View E-Way PDF
                       </a>
