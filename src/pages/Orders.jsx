@@ -71,12 +71,12 @@ function buildMonthlyData(orders) {
 
 function BubbleChart({ data }) {
   const MAX_DOTS = 8       // rows
-  const R        = 5       // dot radius — small like reference
+  const R        = 5       // dot radius
   const GAP      = 4       // gap between dots vertically
   const SLOT     = R * 2 + GAP   // 14px per row
-  const COL_GAP  = 18      // gap between columns
+  const COL_GAP  = 32      // wider gap → larger viewBox → smaller apparent font size
   const CHART_H  = MAX_DOTS * SLOT
-  const LABEL_H  = 18
+  const LABEL_H  = 16
   const SVG_H    = CHART_H + LABEL_H
   const maxCount = Math.max(...data.map(d => d.count), 1)
 
@@ -106,7 +106,8 @@ function BubbleChart({ data }) {
                   style={{ filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.14))' }}
                 />
                 <text x={cx} y={topFilledY - SLOT - 4}
-                  textAnchor="middle" fontSize="9" fontWeight="800" fill="#1a4dab">
+                  textAnchor="middle" fontSize="7" fontWeight="600" fill="#1a4dab"
+                  fontFamily="Geist, sans-serif">
                   {d.count}
                 </text>
               </g>
@@ -124,9 +125,10 @@ function BubbleChart({ data }) {
             })}
 
             {/* month label */}
-            <text x={cx} y={SVG_H - 3} textAnchor="middle"
-              fontSize="9" fill={isCur ? '#1a4dab' : '#94a3b8'}
-              fontWeight={isCur ? '700' : '400'}>
+            <text x={cx} y={SVG_H - 2} textAnchor="middle"
+              fontSize="7" fill={isCur ? '#1a4dab' : '#94a3b8'}
+              fontWeight={isCur ? '600' : '400'}
+              fontFamily="Geist, sans-serif">
               {d.label}
             </text>
           </g>
@@ -184,11 +186,31 @@ export default function Orders() {
 
   const totalValue      = orders.reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)
   const dispatchedValue = orders
-    .filter(o => o.status === 'dispatched_fc' || (o.order_items || []).some(i => (i.dispatched_qty || 0) > 0))
-    .reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0), 0), 0)
+    .filter(o => o.status === 'dispatched_fc')
+    .reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)
   const pendingApproval = orders.filter(o => o.status === 'pending').length
   const activeOrders    = orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length
   const todayDispatched = orders.filter(o => (o.order_items || []).some(i => i.dispatch_date === today))
+
+  const todayDispatchValue = todayDispatched.reduce((s, o) =>
+    s + (o.order_items || []).filter(i => i.dispatch_date === today).reduce((a, i) => a + (i.total_price || 0), 0), 0)
+
+  const todayDelivered = orders.filter(o => o.status === 'dispatched_fc' && (o.order_items || []).some(i => i.dispatch_date === today))
+  const todayDeliveredValue = todayDelivered.reduce((s, o) =>
+    s + (o.order_items || []).filter(i => i.dispatch_date === today).reduce((a, i) => a + (i.total_price || 0), 0), 0)
+
+  const sampleOrders = orders.filter(o => o.order_type === 'SAMPLE')
+  const sampleValue  = sampleOrders.reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)
+
+  const topCustomers = Object.values(
+    orders.reduce((m, o) => {
+      const val = (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0)
+      if (!m[o.customer_name]) m[o.customer_name] = { name: o.customer_name, value: 0, count: 0 }
+      m[o.customer_name].value += val
+      m[o.customer_name].count++
+      return m
+    }, {})
+  ).sort((a, b) => b.value - a.value).slice(0, 6)
 
   const inOps     = orders.filter(o => ['pending','inv_check','inventory_check','dispatch'].includes(o.status)).length
   const inFC      = orders.filter(o => ['delivery_created','picking','packing'].includes(o.status)).length
@@ -253,7 +275,7 @@ export default function Orders() {
             {/* Stat tiles */}
             <div className="dash-tiles">
 
-              {/* Tile 1 — Total Order Value with sparkline */}
+              {/* Tile 1 — Total Order Value */}
               <div className="dash-tile" style={{ background: '#0e2d6a' }} onClick={() => navigate('/orders/list')}>
                 <div className="dash-tile-head">
                   <div className="dash-tile-label">Total Order Value</div>
@@ -265,8 +287,7 @@ export default function Orders() {
                   {momPct !== null && <span className="dash-tile-badge">{momPct >= 0 ? '+' : ''}{momPct}%</span>}
                 </div>
                 <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 56" preserveAspectRatio="none" style={{ height: 56 }}>
-                    {/* fill under line */}
+                  <svg viewBox="0 0 300 48" preserveAspectRatio="none" style={{ height: 48 }}>
                     <defs>
                       <linearGradient id="spfill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="rgba(255,255,255,0.25)"/>
@@ -275,8 +296,7 @@ export default function Orders() {
                     </defs>
                     {spark.pts && <path d={spark.path + ` L 300 56 L 0 56 Z`} fill="url(#spfill)" />}
                     {spark.path && <path d={spark.path} fill="none" stroke="rgba(255,255,255,0.70)" strokeWidth="2" strokeLinecap="round"/>}
-                    {/* highlight dot on last point */}
-                    {spark.pts && <circle cx={spark.pts[spark.pts.length-1][0]} cy={spark.pts[spark.pts.length-1][1]} r="4" fill="white"/>}
+                    {spark.pts && <circle cx={spark.pts[spark.pts.length-1][0]} cy={spark.pts[spark.pts.length-1][1]} r="3.5" fill="white"/>}
                   </svg>
                 </div>
               </div>
@@ -293,50 +313,70 @@ export default function Orders() {
                   <span className="dash-tile-badge">{delivered} orders</span>
                 </div>
                 <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 40" preserveAspectRatio="none" style={{ height: 40 }}>
+                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height: 36 }}>
                     {[0,1,2,3,4,5].map(i => {
                       const h = [20,28,18,34,24,36][i]
-                      return <rect key={i} x={i*50+8} y={40-h} width={34} height={h} rx={5} fill="rgba(255,255,255,0.20)"/>
+                      return <rect key={i} x={i*50+8} y={36-h} width={34} height={h} rx={5} fill="rgba(255,255,255,0.20)"/>
                     })}
                   </svg>
                 </div>
               </div>
 
-              {/* Tile 3 — Pending Approval */}
-              <div className="dash-tile" style={{ background: '#b45309' }} onClick={() => navigate('/orders/list', { state: { filter: 'approval' } })}>
+              {/* Tile 3 — Today's Delivered Value */}
+              <div className="dash-tile" style={{ background: '#0891b2' }} onClick={() => navigate('/dispatch/today')}>
                 <div className="dash-tile-head">
-                  <div className="dash-tile-label">Pending Approval</div>
+                  <div className="dash-tile-label">Today's Delivered</div>
                   <div className="dash-tile-arrow"><svg fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
                 </div>
-                <div className="dash-tile-value">{pendingApproval}</div>
+                <div className="dash-tile-value">{fmtCr(todayDeliveredValue)}</div>
                 <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">orders need review</span>
+                  <span className="dash-tile-sub">{todayDelivered.length} order{todayDelivered.length !== 1 ? 's' : ''} today</span>
                 </div>
                 <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 40" preserveAspectRatio="none" style={{ height: 40 }}>
-                    <circle cx="150" cy="20" r="60" fill="rgba(255,255,255,0.06)"/>
-                    <circle cx="150" cy="20" r="40" fill="rgba(255,255,255,0.06)"/>
-                    <circle cx="150" cy="20" r="20" fill="rgba(255,255,255,0.10)"/>
+                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height: 36 }}>
+                    <circle cx="60"  cy="18" r="48" fill="rgba(255,255,255,0.07)"/>
+                    <circle cx="240" cy="18" r="60" fill="rgba(255,255,255,0.07)"/>
+                    <circle cx="150" cy="36" r="36" fill="rgba(255,255,255,0.07)"/>
                   </svg>
                 </div>
               </div>
 
-              {/* Tile 4 — Today's Dispatch */}
-              <div className="dash-tile" style={{ background: '#6d28d9' }} onClick={() => navigate('/dispatch/today')}>
+              {/* Tile 4 — Pending Approval (white) */}
+              <div className="dash-tile dash-tile-light" onClick={() => navigate('/orders/manage')}>
                 <div className="dash-tile-head">
-                  <div className="dash-tile-label">Today's Dispatch</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
+                  <div className="dash-tile-label">Pending Approval</div>
+                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
                 </div>
-                <div className="dash-tile-value">{todayDispatched.length}</div>
+                <div className="dash-tile-value" style={{ color: pendingApproval > 0 ? '#b45309' : undefined }}>{pendingApproval}</div>
                 <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">scheduled for today</span>
-                  {todayDispatched.length > 0 && <span className="dash-tile-badge">View plan</span>}
+                  <span className="dash-tile-sub">orders need review</span>
+                  {pendingApproval > 0 && <span className="dash-tile-badge" style={{ background:'#fef3c7', color:'#92400e' }}>Action needed</span>}
                 </div>
                 <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 40" preserveAspectRatio="none" style={{ height: 40 }}>
+                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height: 36 }}>
+                    <circle cx="150" cy="18" r="56" fill="rgba(180,83,9,0.05)"/>
+                    <circle cx="150" cy="18" r="36" fill="rgba(180,83,9,0.05)"/>
+                    <circle cx="150" cy="18" r="18" fill="rgba(180,83,9,0.07)"/>
+                  </svg>
+                </div>
+              </div>
+
+              {/* Tile 5 — Today's Dispatch Value (white) */}
+              <div className="dash-tile dash-tile-light" onClick={() => navigate('/dispatch/today')}>
+                <div className="dash-tile-head">
+                  <div className="dash-tile-label">Today's Dispatch</div>
+                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
+                </div>
+                <div className="dash-tile-value">{fmtCr(todayDispatchValue)}</div>
+                <div className="dash-tile-meta">
+                  <span className="dash-tile-sub">{todayDispatched.length} order{todayDispatched.length !== 1 ? 's' : ''} today</span>
+                  {todayDispatched.length > 0 && <span className="dash-tile-badge" style={{ background:'#e8f2fc', color:'#1a4dab' }}>View plan</span>}
+                </div>
+                <div className="dash-tile-chart">
+                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height: 36 }}>
                     {[0,1,2,3,4,5,6,7].map(i => {
-                      const h = [14,24,18,30,22,28,16,32][i]
-                      return <rect key={i} x={i*38+4} y={40-h} width={28} height={h} rx={4} fill="rgba(255,255,255,0.18)"/>
+                      const h = [12,20,15,26,18,24,13,28][i]
+                      return <rect key={i} x={i*38+4} y={36-h} width={28} height={h} rx={4} fill="rgba(26,77,171,0.08)"/>
                     })}
                   </svg>
                 </div>
@@ -393,7 +433,7 @@ export default function Orders() {
 
             </div>
 
-            {/* Bottom row */}
+            {/* Bottom row — 3 cards */}
             <div className="dash-bottom">
 
               {/* Today's dispatch */}
@@ -427,33 +467,77 @@ export default function Orders() {
                 }
               </div>
 
-              {/* Recent orders */}
+              {/* Top Customers */}
               <div className="dash-card">
                 <div className="dash-card-head">
-                  <div className="dash-card-title">Recent Orders</div>
-                  <button onClick={() => navigate('/orders/list')} className="dash-icon-btn">
-                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
-                  </button>
+                  <div className="dash-card-title">Top Customers</div>
+                  <span className="dash-badge">by value</span>
                 </div>
-                {orders.slice(0, 6).map(o => {
-                  const val = (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
-                  const dot = o.status === 'dispatched_fc' ? '#059669' : o.status === 'cancelled' ? '#e11d48' : o.status === 'pending' ? '#d97706' : '#1a4dab'
-                  return (
-                    <div key={o.id} className="dash-list-row" onClick={() => navigate('/orders/' + o.id)}>
-                      <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
-                        <div style={{ width:8, height:8, borderRadius:'50%', background:dot, flexShrink:0 }} />
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#1a4dab' }}>{o.order_number}</div>
-                          <div className="dash-row-cust">{o.customer_name}</div>
+                {topCustomers.length === 0
+                  ? <div className="dash-empty">No data yet</div>
+                  : topCustomers.map((c, i) => {
+                      const maxVal = topCustomers[0].value || 1
+                      const pct    = Math.round((c.value / maxVal) * 100)
+                      return (
+                        <div key={c.name} style={{ padding:'9px 18px', borderBottom: i < topCustomers.length - 1 ? '1px solid #f8fafc' : 'none' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                            <div style={{ minWidth:0 }}>
+                              <div style={{ fontSize:12, fontWeight:600, color:'#0f172a', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:140 }}>{c.name}</div>
+                              <div style={{ fontSize:11, color:'#94a3b8' }}>{c.count} order{c.count !== 1 ? 's' : ''}</div>
+                            </div>
+                            <div style={{ fontSize:13, fontWeight:700, color:'#0f172a', flexShrink:0, marginLeft:8 }}>
+                              {fmtCr(c.value)}
+                            </div>
+                          </div>
+                          <div style={{ height:4, background:'#f1f5f9', borderRadius:4 }}>
+                            <div style={{ height:'100%', width: pct + '%', background:'#1a4dab', borderRadius:4, transition:'width 0.6s ease' }} />
+                          </div>
                         </div>
-                      </div>
-                      <div style={{ textAlign:'right', flexShrink:0 }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>₹{val.toLocaleString('en-IN', { maximumFractionDigits:0 })}</div>
-                        <div style={{ fontSize:10, color:'#94a3b8', marginTop:1 }}>{fmt(o.created_at)}</div>
-                      </div>
-                    </div>
-                  )
-                })}
+                      )
+                    })
+                }
+              </div>
+
+              {/* Sample Issues */}
+              <div className="dash-card" style={{ cursor:'pointer' }} onClick={() => navigate('/orders/list', { state: { filter: 'sample' } })}>
+                <div className="dash-card-head">
+                  <div className="dash-card-title">Sample Issues</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <span className="dash-badge" style={{ background:'#f5f3ff', color:'#7e22ce' }}>{sampleOrders.length} total</span>
+                    <button className="dash-icon-btn" onClick={e => { e.stopPropagation(); navigate('/orders/list', { state: { filter: 'sample' } }) }}>
+                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+                    </button>
+                  </div>
+                </div>
+                {/* Summary strip */}
+                <div style={{ display:'flex', gap:0, borderBottom:'1px solid #f1f5f9', padding:'12px 18px 14px' }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:24, fontWeight:300, letterSpacing:'-1px', color:'#0d1f4c', lineHeight:1 }}>{sampleOrders.length}</div>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:3 }}>total samples</div>
+                  </div>
+                  <div style={{ flex:1, borderLeft:'1px solid #f1f5f9', paddingLeft:16 }}>
+                    <div style={{ fontSize:24, fontWeight:300, letterSpacing:'-1px', color:'#0d1f4c', lineHeight:1 }}>{fmtCr(sampleValue)}</div>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:3 }}>total value</div>
+                  </div>
+                </div>
+                {sampleOrders.length === 0
+                  ? <div className="dash-empty">No sample orders yet</div>
+                  : sampleOrders.slice(0, 5).map(o => {
+                      const val = (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+                      return (
+                        <div key={o.id} className="dash-list-row" onClick={() => navigate('/orders/' + o.id)}>
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#7e22ce' }}>{o.order_number}</div>
+                            <div className="dash-row-cust">{o.customer_name}</div>
+                          </div>
+                          <div style={{ textAlign:'right', flexShrink:0 }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:'#0f172a' }}>₹{val.toLocaleString('en-IN', { maximumFractionDigits:0 })}</div>
+                            <span className={'pill pill-' + o.status} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
+                          </div>
+                        </div>
+                      )
+                    })
+                }
               </div>
 
             </div>

@@ -11,6 +11,7 @@ import OpsOrders from './pages/OpsOrders'
 import TodayDispatch from './pages/TodayDispatch'
 import CustomerMaster from './pages/CustomerMaster'
 import CustomerDetail from './pages/CustomerDetail'
+import NewCustomer from './pages/NewCustomer'
 import CRMDashboard from './pages/CRMDashboard'
 import CRMCompanies from './pages/CRMCompanies'
 import CRMCompanyDetail from './pages/CRMCompanyDetail'
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/ops" element={<OpsOrders />} />
         <Route path="/dispatch/today" element={<TodayDispatch />} />
         <Route path="/customers" element={<CustomerMaster />} />
+        <Route path="/customers/new" element={<NewCustomer />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />
         <Route path="/crm" element={<CRMDashboard />} />
         <Route path="/crm/companies" element={<CRMCompanies />} />

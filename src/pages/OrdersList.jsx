@@ -348,26 +348,49 @@ export default function OrdersList() {
           </div>
         </div>
 
-        {/* Summary tile */}
-        <div className="od-summary-tile">
-          <div className="od-summary-stat">
-            <div className="od-summary-val">{filtered.length}</div>
-            <div className="od-summary-label">{FILTERS.find(f => f.key === filter)?.label || 'Orders'}</div>
+        {/* Summary */}
+        <div className="od-stat-grid">
+          <div className="od-stat-card od-stat-blue">
+            <div className="od-stat-card-top">
+              <div className="od-stat-label">{FILTERS.find(f => f.key === filter)?.label || 'Orders'}</div>
+              <div className="od-stat-icon">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+              </div>
+            </div>
+            <div className="od-stat-val">{filtered.length}</div>
+            <div className="od-stat-sub">matching orders</div>
           </div>
-          <div className="od-summary-divider" />
-          <div className="od-summary-stat">
-            <div className="od-summary-val">₹{sumTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
-            <div className="od-summary-label">Total Value</div>
+          <div className="od-stat-card od-stat-navy">
+            <div className="od-stat-card-top">
+              <div className="od-stat-label">Total Value</div>
+              <div className="od-stat-icon">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg>
+              </div>
+            </div>
+            <div className="od-stat-val" style={{ fontSize: sumTotal >= 1e7 ? 22 : sumTotal >= 1e5 ? 26 : 32 }}>
+              {sumTotal >= 1e7 ? '₹' + (sumTotal/1e7).toFixed(2) + ' Cr' : sumTotal >= 1e5 ? '₹' + (sumTotal/1e5).toFixed(1) + 'L' : '₹' + sumTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </div>
+            <div className="od-stat-sub">across filtered orders</div>
           </div>
-          <div className="od-summary-divider" />
-          <div className="od-summary-stat">
-            <div className="od-summary-val">{counts.approval}</div>
-            <div className="od-summary-label">Pending Approval</div>
+          <div className="od-stat-card od-stat-amber" onClick={() => { setFilter('approval'); setPage(1) }} style={{ cursor:'pointer' }}>
+            <div className="od-stat-card-top">
+              <div className="od-stat-label">Pending Approval</div>
+              <div className="od-stat-icon">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </div>
+            </div>
+            <div className="od-stat-val">{counts.approval}</div>
+            <div className="od-stat-sub">awaiting approval</div>
           </div>
-          <div className="od-summary-divider" />
-          <div className="od-summary-stat">
-            <div className="od-summary-val">{counts.partial}</div>
-            <div className="od-summary-label">Partially Shipped</div>
+          <div className="od-stat-card od-stat-red" onClick={() => { setFilter('partial'); setPage(1) }} style={{ cursor:'pointer' }}>
+            <div className="od-stat-card-top">
+              <div className="od-stat-label">Partially Shipped</div>
+              <div className="od-stat-icon">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>
+              </div>
+            </div>
+            <div className="od-stat-val">{counts.partial}</div>
+            <div className="od-stat-sub">partial deliveries</div>
           </div>
         </div>
 

@@ -79,39 +79,30 @@ export default function FCModule() {
   const actionStatuses = ['delivery_created','picking','packing','invoice_generated','eway_generated']
   const waitStatuses   = ['goods_issued','credit_check','goods_issue_posted','delivery_ready']
 
-  const dcRows = orders.flatMap(o =>
-    (o.order_dispatches || [])
-      .filter(b => b.dc_number && !b.dc_number.startsWith('Temp/'))
-      .sort((a, b) => a.batch_no - b.batch_no)
-      .map(b => ({ order: o, batch: b }))
-  )
-
   function matchFilter(o) {
-    if (filter === 'all')     return actionStatuses.includes(o.status) || waitStatuses.includes(o.status)
-    if (filter === 'action')  return actionStatuses.includes(o.status)
-    if (filter === 'waiting') return waitStatuses.includes(o.status)
+    if (filter === 'all')           return true
+    if (filter === 'action')        return actionStatuses.includes(o.status)
+    if (filter === 'waiting')       return waitStatuses.includes(o.status)
+    if (filter === 'dispatched_fc') return o.status === 'dispatched_fc'
     return o.status === filter
   }
 
-  const baseFiltered = filter === 'dispatched_fc' ? [] : orders.filter(matchFilter)
   const counts = {
     all:           orders.filter(o => actionStatuses.includes(o.status) || waitStatuses.includes(o.status)).length,
     action:        orders.filter(o => actionStatuses.includes(o.status)).length,
     waiting:       orders.filter(o => waitStatuses.includes(o.status)).length,
-    dispatched_fc: dcRows.length,
+    dispatched_fc: orders.filter(o => o.status === 'dispatched_fc').length,
   }
 
   const q = search.trim().toLowerCase()
-  const filtered = filter === 'dispatched_fc'
-    ? dcRows.filter(({ order: o }) => !q || o.customer_name?.toLowerCase().includes(q) || o.order_number?.toLowerCase().includes(q))
-    : baseFiltered.filter(o => !q || o.customer_name?.toLowerCase().includes(q) || o.order_number?.toLowerCase().includes(q))
+  const filtered = orders.filter(matchFilter).filter(o => !q || o.customer_name?.toLowerCase().includes(q) || o.order_number?.toLowerCase().includes(q))
 
   const centerLabel = user.center ? ` — ${user.center}` : ''
 
   const FILTERS = [
     { key: 'action',        label: 'Action Required' },
     { key: 'waiting',       label: 'With Accounts'   },
-    { key: 'all',           label: 'All'             },
+    { key: 'all',           label: 'All Active'      },
     { key: 'dispatched_fc', label: 'Delivered'       },
   ]
 
@@ -132,25 +123,46 @@ export default function FCModule() {
           </div>
 
           {/* Summary */}
-          <div className="od-summary-tile">
-            <div className="od-summary-stat">
-              <div className="od-summary-val">{counts.action}</div>
-              <div className="od-summary-label">Action Required</div>
+          <div className="od-stat-grid">
+            <div className="od-stat-card od-stat-blue" onClick={() => setFilter('action')} style={{ cursor:'pointer' }}>
+              <div className="od-stat-card-top">
+                <div className="od-stat-label">Action Required</div>
+                <div className="od-stat-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+                </div>
+              </div>
+              <div className="od-stat-val">{counts.action}</div>
+              <div className="od-stat-sub">needs FC action</div>
             </div>
-            <div className="od-summary-divider" />
-            <div className="od-summary-stat">
-              <div className="od-summary-val">{counts.waiting}</div>
-              <div className="od-summary-label">With Accounts</div>
+            <div className="od-stat-card od-stat-amber" onClick={() => setFilter('waiting')} style={{ cursor:'pointer' }}>
+              <div className="od-stat-card-top">
+                <div className="od-stat-label">With Accounts</div>
+                <div className="od-stat-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+              </div>
+              <div className="od-stat-val">{counts.waiting}</div>
+              <div className="od-stat-sub">with billing team</div>
             </div>
-            <div className="od-summary-divider" />
-            <div className="od-summary-stat">
-              <div className="od-summary-val">{counts.all}</div>
-              <div className="od-summary-label">Total Active</div>
+            <div className="od-stat-card od-stat-teal" onClick={() => setFilter('all')} style={{ cursor:'pointer' }}>
+              <div className="od-stat-card-top">
+                <div className="od-stat-label">Total Active</div>
+                <div className="od-stat-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg>
+                </div>
+              </div>
+              <div className="od-stat-val">{counts.action + counts.waiting}</div>
+              <div className="od-stat-sub">in pipeline</div>
             </div>
-            <div className="od-summary-divider" />
-            <div className="od-summary-stat">
-              <div className="od-summary-val">{counts.dispatched_fc}</div>
-              <div className="od-summary-label">Delivered</div>
+            <div className="od-stat-card od-stat-green" onClick={() => setFilter('dispatched_fc')} style={{ cursor:'pointer' }}>
+              <div className="od-stat-card-top">
+                <div className="od-stat-label">Delivered</div>
+                <div className="od-stat-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </div>
+              <div className="od-stat-val">{counts.dispatched_fc}</div>
+              <div className="od-stat-sub">dispatched FY 26-27</div>
             </div>
           </div>
 
@@ -200,63 +212,6 @@ export default function FCModule() {
                 <div className="orders-empty-title">No orders here</div>
                 <div className="orders-empty-sub">Nothing to action right now.</div>
               </div>
-            ) : filter === 'dispatched_fc' ? (
-              <>
-                <div className="orders-table-wrap" style={{ border:'none', borderRadius:0 }}>
-                  <table className="orders-table">
-                    <thead>
-                      <tr>
-                        <th>DC # / Order #</th>
-                        <th>Customer</th>
-                        <th>Fulfilment Centre</th>
-                        <th>Order Date</th>
-                        <th style={{ textAlign:'right' }}>Batch Value</th>
-                        <th style={{ textAlign:'right' }}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map(({ order: o, batch: b }) => {
-                        const batchVal = (b.dispatched_items || []).reduce((s, i) => s + (i.total_price || (i.unit_price * i.qty) || 0), 0)
-                        return (
-                          <tr key={b.id} onClick={() => navigate('/fc/' + o.id, { state: { dispatch_id: b.id } })}>
-                            <td className="order-num-cell">
-                              <div style={{ fontFamily:'var(--mono)', fontWeight:700, color:'#166534' }}>{b.dc_number}</div>
-                              <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>{o.order_number}</div>
-                            </td>
-                            <td className="customer-cell">{o.customer_name}</td>
-                            <td>{o.fulfilment_center || '—'}</td>
-                            <td>{fmt(o.order_date)}</td>
-                            <td className="amount-cell">{batchVal > 0 ? '₹' + batchVal.toLocaleString('en-IN', { maximumFractionDigits:2 }) : '—'}</td>
-                            <td className="status-cell"><span className="pill pill-dispatched_fc">Delivered</span></td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ padding:'0 4px 4px' }}>
-                  {filtered.map(({ order: o, batch: b }, i) => {
-                    const batchVal = (b.dispatched_items || []).reduce((s, i) => s + (i.total_price || (i.unit_price * i.qty) || 0), 0)
-                    return (
-                      <div key={b.id} className="order-card" style={{ animationDelay: i * 0.03 + 's' }} onClick={() => navigate('/fc/' + o.id, { state: { dispatch_id: b.id } })}>
-                        <div className="order-card-top">
-                          <div>
-                            <div className="order-num" style={{ color:'#166534' }}>{b.dc_number}</div>
-                            <div style={{ fontSize:11, color:'var(--gray-500)', fontFamily:'var(--mono)' }}>{o.order_number}</div>
-                            <div className="order-customer">{o.customer_name}</div>
-                            <div className="order-date">{o.fulfilment_center || '—'} · {fmt(o.order_date)}</div>
-                          </div>
-                          <span className="pill pill-dispatched_fc">Delivered</span>
-                        </div>
-                        <div className="order-card-bottom">
-                          <span className="order-items-count">{(b.dispatched_items || []).length} items</span>
-                          <span className="order-total">{batchVal > 0 ? '₹' + batchVal.toLocaleString('en-IN', { maximumFractionDigits:2 }) : '—'}</span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
             ) : (
               <>
                 <div className="orders-table-wrap" style={{ border:'none', borderRadius:0 }}>
@@ -280,12 +235,13 @@ export default function FCModule() {
                           : (o.order_items || []).reduce((s, r) => s + (r.total_price || 0), 0) + (o.freight || 0)
                         const dcNum = activeBatch?.dc_number || o.dc_number
                         const isWaiting = WITH_ACCOUNTS.includes(o.status)
+                        const isDelivered = o.status === 'dispatched_fc'
                         return (
                           <tr key={o.id} onClick={() => navigate('/fc/' + o.id, { state: { dispatch_id: activeBatch?.id } })}>
                             <td className="order-num-cell">
                               {o.order_number}
                               {o.order_type === 'SAMPLE' && <span style={{marginLeft:6,fontSize:9,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:3,padding:'1px 5px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
-                              {dcNum && <div style={{ fontSize:11, color: dcNum.startsWith('Temp/') ? '#92400e' : 'var(--gray-500)', fontFamily:'var(--mono)', marginTop:2 }}>{dcNum}</div>}
+                              {dcNum && <div style={{ fontSize:11, color: dcNum.startsWith('Temp/') ? '#92400e' : isDelivered ? '#166534' : 'var(--gray-500)', fontFamily:'var(--mono)', marginTop:2, fontWeight: isDelivered ? 600 : 400 }}>{dcNum}</div>}
                             </td>
                             <td className="customer-cell">{o.customer_name}</td>
                             <td>{o.fulfilment_center || '—'}</td>
@@ -293,7 +249,7 @@ export default function FCModule() {
                             <td>{(activeBatch?.dispatched_items || o.order_items || []).length}</td>
                             <td className="amount-cell">₹{batchVal.toLocaleString('en-IN', { maximumFractionDigits:2 })}</td>
                             <td className="status-cell">
-                              <span className={'pill pill-' + (isWaiting ? 'waiting' : o.status)}>{statusLabel(o.status)}</span>
+                              <span className={'pill pill-' + (isDelivered ? 'dispatched_fc' : isWaiting ? 'waiting' : o.status)}>{statusLabel(o.status)}</span>
                             </td>
                           </tr>
                         )
@@ -308,6 +264,7 @@ export default function FCModule() {
                       ? activeBatch.dispatched_items.reduce((s, i) => s + (i.total_price || (i.unit_price * i.qty) || 0), 0)
                       : (o.order_items || []).reduce((s, r) => s + (r.total_price || 0), 0) + (o.freight || 0)
                     const dcNum = activeBatch?.dc_number || o.dc_number
+                    const isDelivered = o.status === 'dispatched_fc'
                     return (
                       <div key={o.id} className="order-card" style={{ animationDelay: i * 0.03 + 's' }} onClick={() => navigate('/fc/' + o.id, { state: { dispatch_id: activeBatch?.id } })}>
                         <div className="order-card-top">
@@ -316,11 +273,11 @@ export default function FCModule() {
                               {o.order_number}
                               {o.order_type === 'SAMPLE' && <span style={{marginLeft:6,fontSize:9,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:3,padding:'1px 5px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
                             </div>
-                            {dcNum && <div style={{ fontSize:11, color: dcNum.startsWith('Temp/') ? '#92400e' : 'var(--gray-500)', fontFamily:'var(--mono)' }}>{dcNum}</div>}
+                            {dcNum && <div style={{ fontSize:11, color: dcNum.startsWith('Temp/') ? '#92400e' : isDelivered ? '#166534' : 'var(--gray-500)', fontFamily:'var(--mono)', fontWeight: isDelivered ? 600 : 400 }}>{dcNum}</div>}
                             <div className="order-customer">{o.customer_name}</div>
                             <div className="order-date">{o.fulfilment_center || '—'} · {fmt(o.order_date)}</div>
                           </div>
-                          <span className={'pill pill-' + o.status}>{statusLabel(o.status)}</span>
+                          <span className={'pill pill-' + (isDelivered ? 'dispatched_fc' : o.status)}>{statusLabel(o.status)}</span>
                         </div>
                         <div className="order-card-bottom">
                           <span className="order-items-count">{(o.order_items || []).length} items</span>

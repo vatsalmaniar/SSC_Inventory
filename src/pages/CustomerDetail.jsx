@@ -64,9 +64,10 @@ export default function CustomerDetail() {
   const [orders, setOrders]     = useState([])
   const [userRole, setUserRole] = useState('')
   const [loading, setLoading]   = useState(true)
-  const [editMode, setEditMode] = useState(false)
-  const [editData, setEditData] = useState({})
-  const [saving, setSaving]     = useState(false)
+  const [editMode, setEditMode]   = useState(false)
+  const [editData, setEditData]   = useState({})
+  const [saving, setSaving]       = useState(false)
+  const [approving, setApproving] = useState(false)
 
   useEffect(() => { init() }, [id])
 
@@ -91,6 +92,20 @@ export default function CustomerDetail() {
     setLoading(false)
   }
 
+  async function approve() {
+    setApproving(true)
+    await sb.from('customers').update({ approval_status: 'approved' }).eq('id', id)
+    setCustomer(p => ({ ...p, approval_status: 'approved' }))
+    setApproving(false)
+  }
+
+  async function reject() {
+    if (!window.confirm('Reject and delete this customer submission?')) return
+    setApproving(true)
+    await sb.from('customers').delete().eq('id', id)
+    navigate('/customers')
+  }
+
   async function save() {
     setSaving(true)
     const { error } = await sb.from('customers').update({
@@ -112,9 +127,22 @@ export default function CustomerDetail() {
       director_name:   editData.director_name || null,
       director_no:     editData.director_no || null,
       director_email:  editData.director_email || null,
+      turnover:        editData.turnover || null,
+      premises:        editData.premises || null,
+      year_established: editData.year_established || null,
+      vi_shopfloor:    editData.vi_shopfloor || null,
+      vi_payment:      editData.vi_payment || null,
+      vi_expected_business: editData.vi_expected_business || null,
     }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
-    setCustomer(p => ({ ...p, ...editData }))
+    if (error) { alert('Error saving: ' + error.message); setSaving(false); return }
+    // Re-fetch to verify the update actually persisted (RLS can silently block writes)
+    const { data: fresh } = await sb.from('customers').select('*').eq('id', id).single()
+    if (fresh && fresh.credit_terms !== editData.credit_terms) {
+      alert('Save blocked by database policy. Ask your admin to enable UPDATE policy on the customers table in Supabase.')
+      setSaving(false); return
+    }
+    setCustomer(fresh || { ...customer, ...editData })
+    setEditData(fresh || { ...customer, ...editData })
     setEditMode(false); setSaving(false)
   }
 
@@ -143,7 +171,10 @@ export default function CustomerDetail() {
               <div className="od-header-left">
                 <div className="od-header-eyebrow">
                   <span>Customer Account</span>
-                  {customer.account_status && (
+                  {customer.approval_status === 'pending' && (
+                    <span className="od-status-badge pending">Pending Approval</span>
+                  )}
+                  {customer.account_status && customer.approval_status !== 'pending' && (
                     <span className={'od-status-badge ' + (customer.account_status === 'Active' ? 'active' : customer.account_status === 'Blacklisted' ? 'cancelled' : 'pending')}>{customer.account_status}</span>
                   )}
                   {customer.credit_terms && (
@@ -159,7 +190,13 @@ export default function CustomerDetail() {
               </div>
               <div className="od-header-actions">
                 <button className="od-btn" onClick={() => navigate('/customers')}>← Back</button>
-                {userRole === 'admin' && (
+                {userRole === 'admin' && customer.approval_status === 'pending' && (
+                  <>
+                    <button className="od-btn" onClick={reject} disabled={approving} style={{ color:'#dc2626', borderColor:'#fecaca' }}>Reject</button>
+                    <button className="od-btn od-btn-approve" onClick={approve} disabled={approving}>{approving ? '…' : 'Approve'}</button>
+                  </>
+                )}
+                {userRole === 'admin' && customer.approval_status !== 'pending' && (
                   !editMode
                     ? <button className="od-btn od-btn-outline" onClick={() => setEditMode(true)}>Edit</button>
                     : <>
@@ -170,6 +207,17 @@ export default function CustomerDetail() {
               </div>
             </div>
           </div>
+
+          {/* Pending approval banner */}
+          {customer.approval_status === 'pending' && (
+            <div style={{ display:'flex', alignItems:'center', gap:12, background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, padding:'12px 16px', margin:'16px 0 0' }}>
+              <svg fill="none" stroke="#b45309" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:'#92400e' }}>Awaiting Admin Approval</div>
+                <div style={{ fontSize:12, color:'#b45309' }}>This customer is not yet visible in the directory. An admin must approve before it goes live.</div>
+              </div>
+            </div>
+          )}
 
           {/* ── Layout ── */}
           <div className="od-layout">
@@ -248,6 +296,25 @@ export default function CustomerDetail() {
                             {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                         </div>
+                        <div className="od-edit-field">
+                          <label>Premises</label>
+                          <select value={editData.premises || ''} onChange={e => setEditData(p => ({ ...p, premises: e.target.value }))} style={{ padding:'7px 10px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:13, fontFamily:'var(--font)', background:'white' }}>
+                            <option value="">— Select —</option>
+                            <option>Owned</option>
+                            <option>Rented</option>
+                            <option>Leased</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="od-edit-row">
+                        <div className="od-edit-field">
+                          <label>Annual Turnover</label>
+                          <input value={editData.turnover || ''} onChange={e => setEditData(p => ({ ...p, turnover: e.target.value }))} placeholder="e.g. 2 Cr, 50L" />
+                        </div>
+                        <div className="od-edit-field">
+                          <label>Year of Establishment</label>
+                          <input type="number" value={editData.year_established || ''} onChange={e => setEditData(p => ({ ...p, year_established: e.target.value }))} placeholder="e.g. 2005" />
+                        </div>
                       </div>
 
                       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '12px 0 8px' }}>Tax & Compliance</div>
@@ -313,6 +380,20 @@ export default function CustomerDetail() {
                           <input value={editData.director_email || ''} onChange={e => setEditData(p => ({ ...p, director_email: e.target.value }))} placeholder="director@company.com" />
                         </div>
                       </div>
+
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '16px 0 8px' }}>Visual Inspection Notes</div>
+                      <div className="od-edit-field" style={{ marginBottom: 8 }}>
+                        <label>Shopfloor Observation</label>
+                        <textarea value={editData.vi_shopfloor || ''} onChange={e => setEditData(p => ({ ...p, vi_shopfloor: e.target.value }))} placeholder="e.g. Shop floor filled with machines, active production…" />
+                      </div>
+                      <div className="od-edit-field" style={{ marginBottom: 8 }}>
+                        <label>Payment Assessment</label>
+                        <textarea value={editData.vi_payment || ''} onChange={e => setEditData(p => ({ ...p, vi_payment: e.target.value }))} placeholder="e.g. Ideal payment cycle 60 days, payment appears safe…" />
+                      </div>
+                      <div className="od-edit-field">
+                        <label>Expected Business</label>
+                        <textarea value={editData.vi_expected_business || ''} onChange={e => setEditData(p => ({ ...p, vi_expected_business: e.target.value }))} placeholder="e.g. Annual potential ₹8–10L, primarily Mitsubishi PLCs…" />
+                      </div>
                     </div>
                   ) : (
                     <div>
@@ -360,6 +441,18 @@ export default function CustomerDetail() {
                           <label>Location / Branch</label>
                           <div className="val">{customer.location || '—'}</div>
                         </div>
+                        <div className="od-detail-field">
+                          <label>Premises</label>
+                          <div className="val">{customer.premises || '—'}</div>
+                        </div>
+                        <div className="od-detail-field">
+                          <label>Annual Turnover</label>
+                          <div className="val">{customer.turnover || '—'}</div>
+                        </div>
+                        <div className="od-detail-field">
+                          <label>Year Established</label>
+                          <div className="val">{customer.year_established || '—'}</div>
+                        </div>
                       </div>
 
                       {/* Tax & Compliance */}
@@ -377,6 +470,28 @@ export default function CustomerDetail() {
                           <label>MSME No.</label>
                           <div className="val">{customer.msme_no || '—'}</div>
                         </div>
+                        <div className="od-detail-field">
+                          <label>GST Certificate</label>
+                          <div className="val">
+                            {customer.gst_cert_url
+                              ? <a href={customer.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:13, height:13 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                  View PDF
+                                </a>
+                              : <span style={{ color:'var(--gray-300)' }}>—</span>}
+                          </div>
+                        </div>
+                        {customer.msme_cert_url && (
+                          <div className="od-detail-field">
+                            <label>MSME Certificate</label>
+                            <div className="val">
+                              <a href={customer.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:13, height:13 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                View PDF
+                              </a>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Addresses */}
@@ -433,6 +548,36 @@ export default function CustomerDetail() {
                             : '—'}</div>
                         </div>
                       </div>
+
+                      {/* Visual Inspection */}
+                      {(customer.vi_shopfloor || customer.vi_payment || customer.vi_expected_business) && (
+                        <div style={{ marginTop: 20, background:'#fffdf5', border:'1px solid #fde68a', borderRadius:10, padding:'14px 16px' }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:'#92400e', textTransform:'uppercase', letterSpacing:'0.7px', marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:13, height:13 }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            Visual Inspection Notes
+                          </div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                            {customer.vi_shopfloor && (
+                              <div>
+                                <div style={{ fontSize:10, fontWeight:600, color:'#b45309', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>Shopfloor</div>
+                                <div style={{ fontSize:13, color:'var(--gray-700)', lineHeight:1.6 }}>{customer.vi_shopfloor}</div>
+                              </div>
+                            )}
+                            {customer.vi_payment && (
+                              <div>
+                                <div style={{ fontSize:10, fontWeight:600, color:'#b45309', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>Payment</div>
+                                <div style={{ fontSize:13, color:'var(--gray-700)', lineHeight:1.6 }}>{customer.vi_payment}</div>
+                              </div>
+                            )}
+                            {customer.vi_expected_business && (
+                              <div>
+                                <div style={{ fontSize:10, fontWeight:600, color:'#b45309', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>Expected Business</div>
+                                <div style={{ fontSize:13, color:'var(--gray-700)', lineHeight:1.6 }}>{customer.vi_expected_business}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

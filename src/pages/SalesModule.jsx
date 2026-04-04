@@ -124,25 +124,46 @@ export default function SalesModule() {
           </div>
 
           {/* Summary */}
-          <div className="od-summary-tile">
-            <div className="od-summary-stat">
-              <div className="od-summary-val">{counts.all}</div>
-              <div className="od-summary-label">Active</div>
+          <div className="od-stat-grid">
+            <div className="od-stat-card od-stat-blue" onClick={() => setFilter('all')} style={{ cursor:'pointer' }}>
+              <div className="od-stat-card-top">
+                <div className="od-stat-label">All Active</div>
+                <div className="od-stat-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                </div>
+              </div>
+              <div className="od-stat-val">{counts.all}</div>
+              <div className="od-stat-sub">in billing pipeline</div>
             </div>
-            <div className="od-summary-divider" />
-            <div className="od-summary-stat">
-              <div className="od-summary-val">{counts.goods_issued}</div>
-              <div className="od-summary-label">Credit Check</div>
+            <div className="od-stat-card od-stat-amber" onClick={() => setFilter('goods_issued')} style={{ cursor:'pointer' }}>
+              <div className="od-stat-card-top">
+                <div className="od-stat-label">Credit Check</div>
+                <div className="od-stat-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+              </div>
+              <div className="od-stat-val">{counts.goods_issued}</div>
+              <div className="od-stat-sub">awaiting credit check</div>
             </div>
-            <div className="od-summary-divider" />
-            <div className="od-summary-stat">
-              <div className="od-summary-val">{counts.delivery_ready}</div>
-              <div className="od-summary-label">E-Way Pending</div>
+            <div className="od-stat-card od-stat-purple" onClick={() => setFilter('delivery_ready')} style={{ cursor:'pointer' }}>
+              <div className="od-stat-card-top">
+                <div className="od-stat-label">E-Way Pending</div>
+                <div className="od-stat-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>
+                </div>
+              </div>
+              <div className="od-stat-val">{counts.delivery_ready}</div>
+              <div className="od-stat-sub">awaiting e-way bill</div>
             </div>
-            <div className="od-summary-divider" />
-            <div className="od-summary-stat">
-              <div className="od-summary-val">{counts.eway_generated}</div>
-              <div className="od-summary-label">E-Way Done</div>
+            <div className="od-stat-card od-stat-green" onClick={() => setFilter('eway_generated')} style={{ cursor:'pointer' }}>
+              <div className="od-stat-card-top">
+                <div className="od-stat-label">E-Way Done</div>
+                <div className="od-stat-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </div>
+              <div className="od-stat-val">{counts.eway_generated}</div>
+              <div className="od-stat-sub">ready to dispatch</div>
             </div>
           </div>
 
