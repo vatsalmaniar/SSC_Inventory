@@ -45,15 +45,19 @@ export default function TodayDispatch() {
 
   async function load() {
     setLoading(true)
+    // Step 1: find which order IDs have items dispatching today
+    const { data: items } = await sb.from('order_items')
+      .select('order_id')
+      .eq('dispatch_date', today)
+    const orderIds = [...new Set((items || []).map(i => i.order_id))]
+    if (orderIds.length === 0) { setOrders([]); setLoading(false); return }
+    // Step 2: fetch only those orders
     const { data } = await sb.from('orders')
       .select('*, order_items(*)')
-      .gte('created_at', '2026-03-31').eq('is_test', false)
+      .in('id', orderIds)
+      .eq('is_test', false)
       .order('created_at', { ascending: false })
-    // Filter: orders that have at least one item with dispatch_date = today
-    const filtered = (data || []).filter(o =>
-      (o.order_items || []).some(i => i.dispatch_date === today)
-    )
-    setOrders(filtered)
+    setOrders(data || [])
     setLoading(false)
   }
 

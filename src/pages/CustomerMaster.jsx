@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
 export default function CustomerMaster() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [customers, setCustomers] = useState([])
   const [loading, setLoading]     = useState(true)
 
@@ -17,6 +18,11 @@ export default function CustomerMaster() {
   const PAGE_SIZE = 50
 
   useEffect(() => { init() }, [])
+
+  useEffect(() => {
+    const q = new URLSearchParams(location.search).get('search')
+    if (q) handleSearch(q)
+  }, [location.search])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

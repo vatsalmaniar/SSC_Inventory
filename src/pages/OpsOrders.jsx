@@ -70,20 +70,21 @@ export default function OpsOrders() {
       if (!data?.session) { navigate('/login'); return }
       session = data.session
     }
-    const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
+    const [{ data: profile }] = await Promise.all([
+      sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
+      loadOrders(),
+    ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'ops'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-
-    // Block non-ops/admin users
     if (!['ops', 'admin'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, avatar, role })
-    await loadOrders()
   }
 
   async function loadOrders() {
     setLoading(true)
-    const { data } = await sb.from('orders').select('*, order_items(*)')
+    const { data } = await sb.from('orders')
+      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,status,freight,order_items(id,qty,dispatched_qty,total_price)')
       .gte('created_at', '2026-03-31').eq('is_test', false)
       .order('created_at', { ascending: false })
     setOrders(data || [])

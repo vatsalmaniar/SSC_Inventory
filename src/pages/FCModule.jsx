@@ -64,7 +64,7 @@ export default function FCModule() {
 
   async function loadOrders(center, testMode = false) {
     setLoading(true)
-    let q = sb.from('orders').select('*, order_items(*), order_dispatches(*)')
+    let q = sb.from('orders').select('id,order_number,customer_name,status,order_type,fulfilment_center,order_items(id,qty,dispatched_qty),order_dispatches(id,batch_no,dc_number,invoice_number)')
       .in('status', FC_MODULE_STATUSES)
       .gte('created_at', '2026-03-31')
       .eq('is_test', testMode)

@@ -4,6 +4,22 @@ import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
+const SALES_REPS = [
+  'Aarth Joshi','Akash Devda','Ankit Dave','Bhavesh Patel','Darsh Chauhan',
+  'Dimple Bhatiya','Harshadba Zala','Hiral Patel','Jay Patel','Jaypal Jadeja',
+  'Jital Maniar','Kaustubh Soni','Khushbu Panchal','Mayank Maniar','Mehul Maniar',
+  'Sales Support BRD','Vatsal Maniar',
+]
+
+const INDUSTRIES = [
+  'Automotive','Pharmaceuticals','Food & Beverage','Textile','Chemical',
+  'Cement','Steel & Metal','Power & Energy','Oil & Gas','FMCG',
+  'Engineering / Manufacturing','Panel Builder','OEM','Construction',
+  'Infrastructure','Water Treatment','Mining','Other',
+]
+
+const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
+
 function fmt(d) {
   if (!d) return '—'
   const dt = new Date(d)
@@ -46,7 +62,6 @@ export default function CustomerDetail() {
   const navigate = useNavigate()
   const [customer, setCustomer] = useState(null)
   const [orders, setOrders]     = useState([])
-  const [reps, setReps]         = useState([])
   const [userRole, setUserRole] = useState('')
   const [loading, setLoading]   = useState(true)
   const [editMode, setEditMode] = useState(false)
@@ -61,18 +76,18 @@ export default function CustomerDetail() {
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     setUserRole(profile?.role || '')
 
-    const [custRes, ordersRes, repsRes] = await Promise.all([
-      sb.from('customers').select('*').eq('id', id).single(),
-      sb.from('orders').select('id,order_number,customer_name,status,order_type,grand_total,created_at,is_test,po_number').eq('is_test', false).order('created_at', { ascending: false }),
-      sb.from('profiles').select('id,name').in('role', ['sales','ops','admin']).order('name'),
-    ])
-    setReps(repsRes.data || [])
-
+    const custRes = await sb.from('customers').select('*').eq('id', id).single()
     if (!custRes.data) { navigate('/customers'); return }
+
+    const ordersRes = await sb.from('orders')
+      .select('id,order_number,customer_name,status,order_type,order_items(total_price),created_at,po_number')
+      .eq('is_test', false)
+      .ilike('customer_name', custRes.data.customer_name)
+      .order('created_at', { ascending: false })
+
     setCustomer(custRes.data)
     setEditData(custRes.data)
-    // Match by customer_name since orders don't FK to customers table
-    setOrders((ordersRes.data || []).filter(o => o.customer_name?.toLowerCase() === custRes.data.customer_name?.toLowerCase()))
+    setOrders(ordersRes.data || [])
     setLoading(false)
   }
 
@@ -89,6 +104,7 @@ export default function CustomerDetail() {
       account_status:  editData.account_status || null,
       account_owner:   editData.account_owner || null,
       industry:        editData.industry || null,
+      customer_type:   editData.customer_type || null,
       location:        editData.location || null,
       poc_name:        editData.poc_name || null,
       poc_no:          editData.poc_no || null,
@@ -113,7 +129,7 @@ export default function CustomerDetail() {
 
   const activeOrders    = orders.filter(o => !['cancelled','delivered','dispatched_fc'].includes(o.status))
   const completedOrders = orders.filter(o => ['delivered','dispatched_fc'].includes(o.status))
-  const totalRevenue    = orders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + (o.grand_total || 0), 0)
+  const totalRevenue    = orders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + (o.order_items || []).reduce((t, i) => t + (i.total_price || 0), 0), 0)
   const initials        = customer.customer_name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 
   return (
@@ -190,14 +206,17 @@ export default function CustomerDetail() {
                           <label>Account Owner</label>
                           <select value={editData.account_owner || ''} onChange={e => setEditData(p => ({ ...p, account_owner: e.target.value }))} style={{ padding:'7px 10px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:13, fontFamily:'var(--font)', background:'white' }}>
                             <option value="">— Unassigned —</option>
-                            {reps.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+                            {SALES_REPS.map(r => <option key={r} value={r}>{r}</option>)}
                             <option value="Customer Success Team">Customer Success Team</option>
                             <option value="Growth Team">Growth Team</option>
                           </select>
                         </div>
                         <div className="od-edit-field">
                           <label>Industry</label>
-                          <input value={editData.industry || ''} onChange={e => setEditData(p => ({ ...p, industry: e.target.value }))} placeholder="e.g. Automotive, Pharma" />
+                          <select value={editData.industry || ''} onChange={e => setEditData(p => ({ ...p, industry: e.target.value }))} style={{ padding:'7px 10px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:13, fontFamily:'var(--font)', background:'white' }}>
+                            <option value="">— Select —</option>
+                            {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+                          </select>
                         </div>
                       </div>
                       <div className="od-edit-row">
@@ -219,6 +238,15 @@ export default function CustomerDetail() {
                         <div className="od-edit-field">
                           <label>Location / Branch</label>
                           <input value={editData.location || ''} onChange={e => setEditData(p => ({ ...p, location: e.target.value }))} placeholder="e.g. Ahmedabad, Baroda" />
+                        </div>
+                      </div>
+                      <div className="od-edit-row">
+                        <div className="od-edit-field">
+                          <label>Customer Type</label>
+                          <select value={editData.customer_type || ''} onChange={e => setEditData(p => ({ ...p, customer_type: e.target.value }))} style={{ padding:'7px 10px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:13, fontFamily:'var(--font)', background:'white' }}>
+                            <option value="">— Select —</option>
+                            {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
                         </div>
                       </div>
 
@@ -319,6 +347,10 @@ export default function CustomerDetail() {
                         <div className="od-detail-field">
                           <label>Industry</label>
                           <div className="val">{customer.industry || '—'}</div>
+                        </div>
+                        <div className="od-detail-field">
+                          <label>Customer Type</label>
+                          <div className="val">{customer.customer_type || '—'}</div>
                         </div>
                         <div className="od-detail-field">
                           <label>Credit Terms</label>
@@ -441,7 +473,7 @@ export default function CustomerDetail() {
                               </span>
                             </td>
                             <td style={{ color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>{fmt(o.created_at)}</td>
-                            <td className="right">{fmtINR(o.grand_total)}</td>
+                            <td className="right">{fmtINR((o.order_items || []).reduce((t, i) => t + (i.total_price || 0), 0))}</td>
                           </tr>
                         ))}
                       </tbody>

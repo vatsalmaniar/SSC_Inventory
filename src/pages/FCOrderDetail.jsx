@@ -351,6 +351,13 @@ export default function FCOrderDetail() {
     setComments(c || [])
   }
 
+  async function goToCustomer() {
+    if (!order?.customer_name) return
+    const { data } = await sb.from('customers').select('id').ilike('customer_name', order.customer_name).maybeSingle()
+    if (data?.id) navigate('/customers/' + data.id)
+    else navigate('/customers?search=' + encodeURIComponent(order.customer_name))
+  }
+
   async function logActivity(message) {
     await sb.from('order_comments').insert({ order_id: id, author_name: user.name, message, tagged_users: [], is_activity: true })
     const { data: c } = await sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true })
@@ -500,7 +507,7 @@ export default function FCOrderDetail() {
                     {isDelivered ? 'Delivered' : withAccounts ? 'With Accounts' : stageLabel(order.status)}
                   </span>
                 </div>
-                <div className="od-header-title">{order.customer_name}</div>
+                <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #2563eb',color:'inherit'}}>{order.customer_name}</span></div>
                 <div className="od-header-num">
                   <button
                     onClick={() => navigate('/orders/' + id)}
@@ -624,7 +631,7 @@ export default function FCOrderDetail() {
               <div className="od-card-header"><div className="od-card-title">Order Information</div></div>
               <div className="od-card-body">
                 <div className="od-detail-grid">
-                  <div className="od-detail-field"><label>Customer Name</label><div className="val">{order.customer_name}</div></div>
+                  <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#2563eb',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
                   <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                   <div className="od-detail-field"><label>PO / Reference No.</label><div className="val">{order.po_number || '—'}</div></div>
                   <div className="od-detail-field"><label>Order Date</label><div className="val">{fmt(order.order_date)}</div></div>

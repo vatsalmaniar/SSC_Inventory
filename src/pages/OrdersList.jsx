@@ -176,17 +176,20 @@ export default function OrdersList() {
       if (!data?.session) { navigate('/login'); return }
       session = data.session
     }
-    const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
+    const [{ data: profile }] = await Promise.all([
+      sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
+      loadOrders(),
+    ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setUser({ name, avatar, role })
-    await loadOrders()
   }
 
   async function loadOrders(testMode = false) {
     setLoading(true)
-    const { data } = await sb.from('orders').select('*, order_items(*), order_dispatches(*)')
+    const { data } = await sb.from('orders')
+      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,order_type,status,freight,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items)')
       .gte('created_at', '2026-03-31').eq('is_test', testMode)
       .order('created_at', { ascending: false })
     setOrders(data || [])

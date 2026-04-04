@@ -83,23 +83,29 @@ export default function OrderDetail() {
       if (!data?.session) { navigate('/login'); return }
       session = data.session
     }
-    const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
+    const [{ data: profile }] = await Promise.all([
+      sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
+      loadOrder(),
+    ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setUser({ name, avatar, role })
-    await loadOrder()
-    loadProfiles()
   }
 
   async function loadOrder() {
     setLoading(true)
-    const { data } = await sb.from('orders').select('*, order_items(*)').eq('id', id).single()
+    const [{ data }, { data: batches }, { data: comments }, { data: profileList }] = await Promise.all([
+      sb.from('orders').select('*, order_items(*)').eq('id', id).single(),
+      sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true }),
+      sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true }),
+      sb.from('profiles').select('id,name,username').order('name'),
+    ])
     setOrder(data)
-    const { data: batches } = await sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true })
     setBatches(batches || [])
+    setComments(comments || [])
+    setProfiles(profileList || [])
     setLoading(false)
-    loadComments()
   }
 
   async function loadComments() {
@@ -108,9 +114,11 @@ export default function OrderDetail() {
     setComments(data || [])
   }
 
-  async function loadProfiles() {
-    const { data } = await sb.from('profiles').select('id,name,username').order('name')
-    setProfiles(data || [])
+  async function goToCustomer() {
+    if (!order?.customer_name) return
+    const { data } = await sb.from('customers').select('id').ilike('customer_name', order.customer_name).maybeSingle()
+    if (data?.id) navigate('/customers/' + data.id)
+    else navigate('/customers?search=' + encodeURIComponent(order.customer_name))
   }
 
   // Derived state
@@ -462,7 +470,7 @@ export default function OrderDetail() {
                     {isPending ? 'Pending Approval' : isCancelled ? 'Cancelled' : order?.status === 'dispatched_fc' ? 'Delivered' : isInFCFlow ? 'Delivery In Progress' : (hasAnyDispatched && hasAnyPending) ? 'Partially Dispatched' : 'Active'}
                   </span>
                 </div>
-                <div className="od-header-title">{editMode ? editData.customer_name || order.customer_name : order.customer_name}</div>
+                <div className="od-header-title">{editMode ? editData.customer_name || order.customer_name : <span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #2563eb',color:'inherit'}}>{order.customer_name}</span>}</div>
                 <div className="od-header-num">{order.order_number} · {fmt(order.order_date)}</div>
               </div>
             </div>
@@ -675,7 +683,7 @@ export default function OrderDetail() {
                 ) : (
                   <>
                   <div className="od-detail-grid">
-                    <div className="od-detail-field"><label>Customer Name</label><div className="val">{order.customer_name}</div></div>
+                    <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#2563eb',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
                     <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                     <div className="od-detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={order.account_owner || order.engineer_name} /></div></div>
                     <div className="od-detail-field"><label>Credit Terms</label><div className="val">{order.credit_terms || '—'}</div></div>
