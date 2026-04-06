@@ -342,7 +342,7 @@ export default function Orders() {
               </div>
 
               {/* Tile 4 — Pending Approval (white) */}
-              <div className="dash-tile dash-tile-light" onClick={() => navigate('/orders/manage')}>
+              <div className="dash-tile dash-tile-light" onClick={() => navigate('/ops')}>
                 <div className="dash-tile-head">
                   <div className="dash-tile-label">Pending Approval</div>
                   <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>

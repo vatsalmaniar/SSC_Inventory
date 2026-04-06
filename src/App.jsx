@@ -24,8 +24,10 @@ import CRMNewOpportunity from './pages/CRMNewOpportunity'
 import CRMFieldVisits from './pages/CRMFieldVisits'
 import CRMSampleRequests from './pages/CRMSampleRequests'
 import CRMTargets from './pages/CRMTargets'
+import FCDashboard from './pages/FCDashboard'
 import FCModule from './pages/FCModule'
 import FCOrderDetail from './pages/FCOrderDetail'
+import BillingDashboard from './pages/BillingDashboard'
 import SalesModule from './pages/SalesModule'
 import BillingOrderDetail from './pages/BillingOrderDetail'
 
@@ -59,9 +61,11 @@ export default function App() {
         <Route path="/crm/visits" element={<CRMFieldVisits />} />
         <Route path="/crm/samples" element={<CRMSampleRequests />} />
         <Route path="/crm/targets" element={<CRMTargets />} />
-        <Route path="/fc" element={<FCModule />} />
+        <Route path="/fc" element={<FCDashboard />} />
+        <Route path="/fc/list" element={<FCModule />} />
         <Route path="/fc/:id" element={<FCOrderDetail />} />
-        <Route path="/billing" element={<SalesModule />} />
+        <Route path="/billing" element={<BillingDashboard />} />
+        <Route path="/billing/list" element={<SalesModule />} />
         <Route path="/billing/:id" element={<BillingOrderDetail />} />
       </Routes>
     </BrowserRouter>

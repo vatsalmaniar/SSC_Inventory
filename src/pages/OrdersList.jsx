@@ -19,25 +19,28 @@ function fmt(d) {
 
 function statusLabel(s) {
   return {
-    pending:            'Pending Approval',
-    inv_check:          'Inv. Check',
-    inventory_check:    'Inventory Check',
-    dispatch:           'Ready to Ship',
-    partial_dispatch:   'Partially Shipped',
-    gen_invoice:        'Delivery Created',
-    delivery_created:   'Delivery Created',
-    picking:            'Picking',
-    packing:            'Packing',
-    goods_issued:       'Goods Issued',
-    pending_billing:    'Pending Billing',
-    credit_check:       'Credit Check',
-    goods_issue_posted: 'GI Posted',
-    invoice_generated:  'Invoice Generated',
-    delivery_ready:     'Delivery Ready',
-    eway_pending:       'E-Way Pending',
-    eway_generated:     'E-Way Generated',
-    dispatched_fc:      'Delivered',
-    cancelled:          'Cancelled',
+    pending:              'Pending Approval',
+    inv_check:            'Inv. Check',
+    inventory_check:      'Inventory Check',
+    dispatch:             'Ready to Ship',
+    partial_dispatch:     'Partially Shipped',
+    gen_invoice:          'Delivery Created',
+    delivery_created:     'Delivery Created',
+    picking:              'Picking',
+    packing:              'Packing',
+    pi_requested:         'PI Requested',
+    pi_generated:         'PI Issued',
+    pi_payment_pending:   'PI Payment Pending',
+    goods_issued:         'Goods Issued',
+    pending_billing:      'Pending Billing',
+    credit_check:         'Credit Check',
+    goods_issue_posted:   'GI Posted',
+    invoice_generated:    'Invoice Generated',
+    delivery_ready:       'Delivery Ready',
+    eway_pending:         'E-Way Pending',
+    eway_generated:       'E-Way Generated',
+    dispatched_fc:        'Delivered',
+    cancelled:            'Cancelled',
   }[s] || s
 }
 
@@ -46,7 +49,7 @@ function isPartiallyDispatched(o) {
   return items.some(i => (i.dispatched_qty || 0) > 0) && items.some(i => i.qty > (i.dispatched_qty || 0))
 }
 
-const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','goods_issued','pending_billing','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_pending','eway_generated']
+const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','pi_requested','pi_generated','pi_payment_pending','goods_issued','pending_billing','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_pending','eway_generated']
 
 function isPendingDelivery(o) {
   if (['dispatched_fc', 'cancelled'].includes(o.status)) return false

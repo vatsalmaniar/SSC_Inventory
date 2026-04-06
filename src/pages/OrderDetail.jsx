@@ -593,6 +593,20 @@ export default function OrderDetail() {
               </div>
             )}
 
+            {['pi_requested','pi_generated','pi_payment_pending'].includes(order.status) && (
+              <div className="od-pending-banner" style={{background:'#faf5ff',border:'1px solid #e9d5ff',color:'#7e22ce'}}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <div>
+                  <div className="od-pending-banner-label">With Accounts — Proforma Invoice</div>
+                  <div>
+                    {order.status === 'pi_requested' && 'Awaiting Proforma Invoice to be issued by accounts.'}
+                    {order.status === 'pi_generated' && 'PI issued — awaiting customer payment.'}
+                    {order.status === 'pi_payment_pending' && 'Payment pending confirmation by accounts.'}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {isInFCFlow && order.status !== 'dispatched_fc' && (
               <div className="od-delivery-banner">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>
@@ -978,7 +992,9 @@ export default function OrderDetail() {
                     const bDone = b.status === 'dispatched_fc'
                     const bDC   = b.dc_number || '—'
                     const bINV  = b.invoice_number || null
-                    const batchLabel = { delivery_created:'Picking', picking:'Packing', packing:'Goods Issue', goods_issued:'With Billing', credit_check:'With Billing', goods_issue_posted:'With Billing', invoice_generated:'Delivery Ready', delivery_ready:'E-Way Pending', eway_generated:'E-Way Done', dispatched_fc:'Delivered ✓' }[b.status] || b.status
+                    const batchLabel = b.pi_required && !b.status
+                      ? (b.pi_number ? 'With Accounts — PI Issued' : 'With Accounts — PI Pending')
+                      : ({ delivery_created:'Picking', picking:'Packing', packing:'Goods Issue', goods_issued:'With Billing', credit_check:'With Billing', goods_issue_posted:'With Billing', invoice_generated:'Delivery Ready', delivery_ready:'E-Way Pending', eway_generated:'E-Way Done', dispatched_fc:'Delivered ✓' }[b.status] || b.status)
                     return (
                       <div key={b.id} style={{borderRadius:8,border:'1px solid var(--gray-100)',padding:'10px 12px',background: bDone ? '#f0fdf4' : 'white'}}>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
@@ -994,6 +1010,18 @@ export default function OrderDetail() {
                             style={{fontFamily:'var(--mono)',fontSize:12,color: bINV.startsWith('Temp/') ? '#92400e' : '#166534',marginTop:2, cursor: !bINV.startsWith('Temp/') ? 'pointer' : 'default', textDecoration: !bINV.startsWith('Temp/') ? 'underline' : 'none'}}
                             onClick={() => { if (!bINV.startsWith('Temp/')) navigate('/billing/' + order.id, { state: { dispatch_id: b.id } }) }}
                           >{bINV}</div>
+                        )}
+                        {b.pi_number && (
+                          <div style={{fontFamily:'var(--mono)',fontSize:12,color:'#7e22ce',marginTop:2,fontWeight:700}}>
+                            PI: {b.pi_number}
+                          </div>
+                        )}
+                        {b.pi_pdf_url && (
+                          <a href={b.pi_pdf_url} target="_blank" rel="noreferrer"
+                            style={{fontSize:11,color:'#7e22ce',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            View PI PDF
+                          </a>
                         )}
                         {b.invoice_pdf_url && (
                           <a href={b.invoice_pdf_url} target="_blank" rel="noreferrer"

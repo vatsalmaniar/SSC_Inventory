@@ -256,18 +256,26 @@ export default function BillingOrderDetail() {
     setSaving(false); await loadOrder()
   }
 
-  // PI STEP 3: pi_payment_pending → goods_issued (confirm payment received, auto-pass credit check)
+  // PI STEP 3: pi_payment_pending → delivery_created (back to FC for picking/packing/goods issued)
   async function handleConfirmPIPayment() {
     setSaving(true)
-    if (activeBatch && paymentRef.trim()) {
-      await sb.from('order_dispatches').update({ pi_payment_ref: paymentRef.trim(), updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
-    }
-    // Auto-pass credit check: jump directly to credit_check, bypassing goods_issued
     if (activeBatch) {
-      await sb.from('order_dispatches').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+      await sb.from('order_dispatches').update({
+        ...(paymentRef.trim() ? { pi_payment_ref: paymentRef.trim() } : {}),
+        updated_at: new Date().toISOString()
+      }).eq('id', activeBatch.id)
     }
+    await sb.from('orders').update({ status: 'delivery_created', updated_at: new Date().toISOString() }).eq('id', id)
+    await logActivity(`PI Payment confirmed${paymentRef.trim() ? ' — Ref: ' + paymentRef.trim() : ''}. Order returned to Fulfilment Centre for picking & dispatch.`)
+    setSaving(false); await loadOrder()
+  }
+
+  // goods_issued + PI order → auto-pass credit check (payment already collected via PI)
+  async function handlePICreditAutoPass() {
+    setSaving(true)
+    if (activeBatch) await sb.from('order_dispatches').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     await sb.from('orders').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', id)
-    await logActivity(`Payment received — PI Order. Credit check auto-passed. ${paymentRef.trim() ? 'Ref: ' + paymentRef.trim() : ''}`)
+    await logActivity('PI Order — Credit check auto-passed. Payment was collected upfront via Proforma Invoice.')
     setSaving(false); await loadOrder()
   }
 
@@ -305,7 +313,7 @@ export default function BillingOrderDetail() {
 
   const pipelineIdx   = billingPipelineIdx(order.status)
   const piPhaseIdx    = piPipelineIdx(order.status)
-  const isPIOrder     = activeBatch?.pi_required === true || order.credit_terms === 'Against PI'
+  const isPIOrder     = activeBatch?.pi_required === true
   const activePINum   = activeBatch?.pi_number || null
   const activePIPdf   = activeBatch?.pi_pdf_url || null
   const isInPIPhase   = ['pi_requested','pi_generated','pi_payment_pending'].includes(order.status)
@@ -691,8 +699,26 @@ export default function BillingOrderDetail() {
                 </div>
                 <div className="od-card-body">
 
-                  {/* STEP 1: Credit Check */}
-                  {order.status === 'goods_issued' && (
+                  {/* STEP 1: Credit Check — PI Order (auto-pass) */}
+                  {order.status === 'goods_issued' && isPIOrder && (
+                    <div>
+                      <div style={{background:'#faf5ff',border:'1px solid #e9d5ff',borderRadius:10,padding:'12px 16px',marginBottom:14}}>
+                        <div style={{fontSize:12,fontWeight:700,color:'#7e22ce',marginBottom:4}}>PI Order — Payment Collected Upfront</div>
+                        {activePINum && <div style={{fontFamily:'var(--mono)',fontSize:13,color:'#7e22ce',marginBottom:2}}>{activePINum}</div>}
+                        <div style={{fontSize:12,color:'var(--gray-500)'}}>Payment was received before dispatch. Credit check can be auto-passed.</div>
+                      </div>
+                      <button
+                        disabled={saving}
+                        onClick={handlePICreditAutoPass}
+                        style={{padding:'10px 20px',borderRadius:10,border:'none',background:'#166534',color:'white',fontWeight:600,fontSize:13,cursor:'pointer',fontFamily:'var(--font)',display:'inline-flex',alignItems:'center',gap:8}}>
+                        <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:15,height:15}}><polyline points="20 6 9 17 4 12"/></svg>
+                        {saving ? 'Saving...' : 'Auto-pass Credit Check'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* STEP 1: Credit Check — Normal Order */}
+                  {order.status === 'goods_issued' && !isPIOrder && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:6}}>
                         Does this customer have a pending payment?
