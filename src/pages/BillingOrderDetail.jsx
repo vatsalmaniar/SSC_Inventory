@@ -82,6 +82,7 @@ export default function BillingOrderDetail() {
   const [creditChoice, setCreditChoice]       = useState(null)   // null | 'override' | 'clear'
   const [showGIConfirm, setShowGIConfirm]     = useState(false)
   const [showInvConfirm, setShowInvConfirm]   = useState(false)
+  const [tallyInvNumber, setTallyInvNumber]   = useState('')
   const [ewayNumber, setEwayNumber]           = useState('')
   const [invoicePdfFile, setInvoicePdfFile]   = useState(null)
   const [invoicePdfError, setInvoicePdfError] = useState('')
@@ -194,41 +195,31 @@ export default function BillingOrderDetail() {
     setSaving(false); await loadOrder()
   }
 
-  // STEP 2: credit_check → goods_issue_posted (assign Temp/INV)
+  // STEP 2: credit_check → goods_issue_posted (no auto invoice number — Tally number entered at upload)
   async function advanceGIPosted() {
     setSaving(true)
-    let invNum = null
     if (activeBatch) {
-      const { data } = await sb.rpc('assign_dispatch_invoice', { p_dispatch_id: activeBatch.id })
-      invNum = data
       await sb.from('order_dispatches').update({ status: 'goods_issue_posted', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
-    } else {
-      const { data } = await sb.rpc('assign_temp_invoice_number', { p_order_id: id })
-      invNum = data
     }
     await sb.from('orders').update({ status: 'goods_issue_posted', updated_at: new Date().toISOString() }).eq('id', id)
-    await logActivity(`Goods Issue Posted. Temp Invoice: ${invNum || '—'}`)
+    await logActivity('Goods Issue Posted. Invoice number will be assigned from Tally on upload.')
     setShowGIConfirm(false); setSaving(false); await loadOrder()
   }
 
-  // STEP 3: goods_issue_posted → invoice_generated (confirm INV: Temp→SSC)
+  // STEP 3: goods_issue_posted → invoice_generated (Tally invoice number + PDF upload)
   async function confirmInvoiceGenerated() {
     if (!invoicePdfFile) { alert('Please attach the invoice PDF before confirming.'); return }
+    const finalInvNum = tallyInvNumber.trim().toUpperCase()
+    if (!finalInvNum) { alert('Please enter the Tally invoice number.'); return }
     setSaving(true)
-    let invNum = null
     let pdfUrl = null
     try { pdfUrl = await uploadPdf(invoicePdfFile, `invoices/${id}`) } catch { alert('PDF upload failed. Please try again.'); setSaving(false); return }
     if (activeBatch) {
-      const { data } = await sb.rpc('confirm_dispatch_invoice', { p_dispatch_id: activeBatch.id })
-      invNum = data
-      await sb.from('order_dispatches').update({ status: 'invoice_generated', invoice_pdf_url: pdfUrl, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
-    } else {
-      const { data } = await sb.rpc('confirm_invoice_number', { p_order_id: id })
-      invNum = data
+      await sb.from('order_dispatches').update({ status: 'invoice_generated', invoice_number: finalInvNum, invoice_pdf_url: pdfUrl, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
-    await sb.from('orders').update({ status: 'invoice_generated', invoice_pdf_url: pdfUrl, updated_at: new Date().toISOString() }).eq('id', id)
-    await logActivity(`Invoice Generated — ${invNum}. Waiting for Fulfilment Centre to set delivery details.`)
-    setShowInvConfirm(false); setSaving(false); await loadOrder()
+    await sb.from('orders').update({ status: 'invoice_generated', invoice_number: finalInvNum, invoice_pdf_url: pdfUrl, updated_at: new Date().toISOString() }).eq('id', id)
+    await logActivity(`Invoice Generated — ${finalInvNum}. Waiting for Fulfilment Centre to set delivery details.`)
+    setShowInvConfirm(false); setTallyInvNumber(''); setSaving(false); await loadOrder()
   }
 
   // PI STEP 1: pi_requested → pi_generated (issue PI)
@@ -762,7 +753,7 @@ export default function BillingOrderDetail() {
                   {order.status === 'credit_check' && showGIConfirm && (
                     <div style={{background:'#e8f2fc',border:'1px solid #c2d9f5',borderRadius:10,padding:16}}>
                       <p style={{fontSize:13,color:'#1a4dab',fontWeight:600,marginBottom:4}}>Confirm Goods Issue Posted?</p>
-                      <p style={{fontSize:12,color:'var(--gray-500)',marginBottom:14}}>A temporary invoice number will be assigned (Temp/INV…).</p>
+                      <p style={{fontSize:12,color:'var(--gray-500)',marginBottom:14}}>Invoice number will be entered from Tally when uploading the PDF.</p>
                       <div style={{display:'flex',gap:8}}>
                         <button className="od-btn od-btn-approve" disabled={saving} onClick={advanceGIPosted}>{saving?'Saving...':'Confirm'}</button>
                         <button className="od-btn" onClick={() => setShowGIConfirm(false)}>Cancel</button>
@@ -790,10 +781,19 @@ export default function BillingOrderDetail() {
                   )}
                   {order.status === 'goods_issue_posted' && showInvConfirm && (
                     <div style={{background:'#f0fdf4',border:'1px solid #86efac',borderRadius:10,padding:16}}>
-                      <p style={{fontSize:13,color:'#166534',fontWeight:600,marginBottom:4}}>Confirm Invoice Generated?</p>
-                      <p style={{fontSize:12,color:'var(--gray-500)',marginBottom:14}}>
-                        Invoice will be finalised as <strong>{activeINV?.replace('Temp/','SSC/')}</strong>. Order moves to FC for delivery details.
-                      </p>
+                      <p style={{fontSize:13,color:'#166534',fontWeight:600,marginBottom:4}}>Upload Invoice</p>
+                      <p style={{fontSize:12,color:'var(--gray-500)',marginBottom:14}}>Enter the Tally invoice number and attach the PDF.</p>
+                      <div style={{marginBottom:12}}>
+                        <label style={{fontSize:12,fontWeight:600,color:'var(--gray-700)',display:'block',marginBottom:6}}>
+                          Tally Invoice Number <span style={{color:'#dc2626'}}>*</span>
+                        </label>
+                        <input
+                          style={{padding:'8px 10px',border:'1px solid var(--gray-200)',borderRadius:8,fontSize:13,fontFamily:'var(--mono)',fontWeight:600,background:'white',outline:'none',width:'100%',boxSizing:'border-box',textTransform:'uppercase',letterSpacing:'0.5px'}}
+                          value={tallyInvNumber}
+                          onChange={e => setTallyInvNumber(e.target.value.toUpperCase())}
+                          placeholder="e.g. SSC/24-25/001"
+                        />
+                      </div>
                       <div style={{marginBottom:14}}>
                         <label style={{fontSize:12,fontWeight:600,color:'var(--gray-700)',display:'block',marginBottom:6}}>
                           Invoice PDF <span style={{color:'#dc2626'}}>*</span>
@@ -815,8 +815,8 @@ export default function BillingOrderDetail() {
                         )}
                       </div>
                       <div style={{display:'flex',gap:8}}>
-                        <button className="od-btn od-btn-approve" disabled={saving || !invoicePdfFile} onClick={confirmInvoiceGenerated}>{saving?'Uploading & Saving...':'Confirm'}</button>
-                        <button className="od-btn" onClick={() => { setShowInvConfirm(false); setInvoicePdfFile(null) }}>Cancel</button>
+                        <button className="od-btn od-btn-approve" disabled={saving || !invoicePdfFile || !tallyInvNumber.trim()} onClick={confirmInvoiceGenerated}>{saving?'Uploading & Saving...':'Confirm'}</button>
+                        <button className="od-btn" onClick={() => { setShowInvConfirm(false); setInvoicePdfFile(null); setTallyInvNumber('') }}>Cancel</button>
                       </div>
                     </div>
                   )}

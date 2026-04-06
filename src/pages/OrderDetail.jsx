@@ -1007,8 +1007,8 @@ export default function OrderDetail() {
                         >{bDC}</div>
                         {bINV && (
                           <div
-                            style={{fontFamily:'var(--mono)',fontSize:12,color: bINV.startsWith('Temp/') ? '#92400e' : '#166534',marginTop:2, cursor: !bINV.startsWith('Temp/') ? 'pointer' : 'default', textDecoration: !bINV.startsWith('Temp/') ? 'underline' : 'none'}}
-                            onClick={() => { if (!bINV.startsWith('Temp/')) navigate('/billing/' + order.id, { state: { dispatch_id: b.id } }) }}
+                            style={{fontFamily:'var(--mono)',fontSize:12,color:'#166534',marginTop:2,cursor:'pointer',textDecoration:'underline'}}
+                            onClick={() => navigate('/billing/' + order.id, { state: { dispatch_id: b.id } })}
                           >{bINV}</div>
                         )}
                         {b.pi_number && (
