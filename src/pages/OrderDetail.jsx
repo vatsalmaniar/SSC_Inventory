@@ -294,12 +294,12 @@ export default function OrderDetail() {
     }
   }
 
-  // ── Full dispatch — set delivery_created (or pi_requested for Against PI orders) ──
+  // ── Full dispatch — set delivery_created (or pi_requested for Against PI / Advance orders) ──
   async function fullyDispatch() {
     setShowDispatchModal(false)
     setDispatchType('full')
     setSaving(true)
-    const isPIOrder = order.credit_terms === 'Against PI'
+    const isPIOrder = order.credit_terms === 'Against PI' || order.credit_terms === 'Advance'
     for (const item of (order.order_items || [])) {
       const { error } = await sb.from('order_items').update({ dispatched_qty: item.qty }).eq('id', item.id)
       if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
@@ -320,7 +320,7 @@ export default function OrderDetail() {
     }
     const dcNum = batchData?.dc_number || '—'
     await logActivity(isPIOrder
-      ? `Full Dispatch — Against PI. PI required before delivery. DC: ${dcNum}`
+      ? `Full Dispatch — ${order.credit_terms}. PI required before delivery. DC: ${dcNum}`
       : `Full Dispatch — all items sent via ${fcCenter}. Delivery Created. DC: ${dcNum}`)
     await loadOrder(); setSaving(false)
   }
@@ -350,7 +350,7 @@ export default function OrderDetail() {
     }
     setShowPartialModal(false)
     setSaving(true)
-    const isPIOrder = order.credit_terms === 'Against PI'
+    const isPIOrder = order.credit_terms === 'Against PI' || order.credit_terms === 'Advance'
     for (const item of selected) {
       const newDispatched = (item.dispatched_qty || 0) + parseFloat(item.dispatchQty)
       const { error } = await sb.from('order_items').update({ dispatched_qty: newDispatched }).eq('id', item.id)
@@ -373,7 +373,7 @@ export default function OrderDetail() {
     }
     const dcNum = batchData?.dc_number || '—'
     await logActivity(isPIOrder
-      ? `Partial Dispatch via ${fcCenter} — ${summary}. Against PI — PI required. DC: ${dcNum}`
+      ? `Partial Dispatch via ${fcCenter} — ${summary}. ${order.credit_terms} — PI required before delivery. DC: ${dcNum}`
       : `Partial Dispatch via ${fcCenter} — ${summary}. Delivery Created. DC: ${dcNum}`)
     await loadOrder(); setSaving(false)
   }

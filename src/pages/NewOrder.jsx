@@ -78,8 +78,8 @@ export default function NewOrder() {
   function handlePoFile(e) {
     const f = e.target.files?.[0]
     if (!f) return
-    if (f.size > 150 * 1024) {
-      alert('File is too large. Maximum file size allowed: 150 KB')
+    if (f.size > 200 * 1024) {
+      alert('File is too large. Maximum file size allowed: 200 KB')
       e.target.value = ''
       return
     }
@@ -329,7 +329,7 @@ export default function NewOrder() {
                   )}
                 </div>
               </label>
-              <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>Maximum file size allowed: 150 KB</div>
+              <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>Maximum file size allowed: 200 KB</div>
             </div>
           </div>
         </div>

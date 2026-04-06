@@ -121,14 +121,20 @@ export default function NewCustomer() {
 
     setSaving(true)
     try {
-      // Generate next customer_id (exclude NULLs, order numerically via padded format)
+      // Generate next customer_id — find max then scan forward until we find a free slot
       const { data: allIds } = await sb.from('customers')
         .select('customer_id').not('customer_id', 'is', null)
+      const existingSet = new Set((allIds || []).map(c => c.customer_id))
       const lastNum = (allIds || []).reduce((max, c) => {
         const n = parseInt((c.customer_id || '').replace(/[^0-9]/g, '')) || 0
         return n > max ? n : max
       }, 0)
-      const newCustId = 'CU' + String(lastNum + 1).padStart(4, '0')
+      let attempt = lastNum + 1
+      let newCustId = 'CU' + String(attempt).padStart(4, '0')
+      while (existingSet.has(newCustId)) {
+        attempt++
+        newCustId = 'CU' + String(attempt).padStart(4, '0')
+      }
 
       // Insert customer row
       const { data: inserted, error: insertErr } = await sb.from('customers').insert({

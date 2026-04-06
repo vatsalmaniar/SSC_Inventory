@@ -151,7 +151,7 @@ export default function BillingOrderDetail() {
 
   function validatePdf(file) {
     if (!file) return null
-    if (file.size > 100 * 1024) return 'File must be under 100 KB. Please compress the PDF and try again.'
+    if (file.size > 200 * 1024) return 'File must be under 200 KB. Please compress the PDF and try again.'
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) return 'Only PDF files are allowed.'
     return null
   }
@@ -314,6 +314,7 @@ export default function BillingOrderDetail() {
   const pipelineIdx   = billingPipelineIdx(order.status)
   const piPhaseIdx    = piPipelineIdx(order.status)
   const isPIOrder     = activeBatch?.pi_required === true
+  const isAdvanceOrder = order.credit_terms === 'Advance'
   const activePINum   = activeBatch?.pi_number || null
   const activePIPdf   = activeBatch?.pi_pdf_url || null
   const isInPIPhase   = ['pi_requested','pi_generated','pi_payment_pending'].includes(order.status)
@@ -699,12 +700,14 @@ export default function BillingOrderDetail() {
                 </div>
                 <div className="od-card-body">
 
-                  {/* STEP 1: Credit Check — PI Order (auto-pass) */}
-                  {order.status === 'goods_issued' && isPIOrder && (
+                  {/* STEP 1: Credit Check — PI Order or Advance (auto-pass) */}
+                  {order.status === 'goods_issued' && (isPIOrder || isAdvanceOrder) && (
                     <div>
-                      <div style={{background:'#faf5ff',border:'1px solid #e9d5ff',borderRadius:10,padding:'12px 16px',marginBottom:14}}>
-                        <div style={{fontSize:12,fontWeight:700,color:'#7e22ce',marginBottom:4}}>PI Order — Payment Collected Upfront</div>
-                        {activePINum && <div style={{fontFamily:'var(--mono)',fontSize:13,color:'#7e22ce',marginBottom:2}}>{activePINum}</div>}
+                      <div style={{background: isAdvanceOrder ? '#f0fdf4' : '#faf5ff', border: `1px solid ${isAdvanceOrder ? '#bbf7d0' : '#e9d5ff'}`, borderRadius:10,padding:'12px 16px',marginBottom:14}}>
+                        <div style={{fontSize:12,fontWeight:700,color: isAdvanceOrder ? '#166534' : '#7e22ce',marginBottom:4}}>
+                          {isAdvanceOrder ? 'Advance Payment — Payment Collected Upfront' : 'PI Order — Payment Collected Upfront'}
+                        </div>
+                        {isPIOrder && activePINum && <div style={{fontFamily:'var(--mono)',fontSize:13,color:'#7e22ce',marginBottom:2}}>{activePINum}</div>}
                         <div style={{fontSize:12,color:'var(--gray-500)'}}>Payment was received before dispatch. Credit check can be auto-passed.</div>
                       </div>
                       <button
@@ -718,7 +721,7 @@ export default function BillingOrderDetail() {
                   )}
 
                   {/* STEP 1: Credit Check — Normal Order */}
-                  {order.status === 'goods_issued' && !isPIOrder && (
+                  {order.status === 'goods_issued' && !isPIOrder && !isAdvanceOrder && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:6}}>
                         Does this customer have a pending payment?
