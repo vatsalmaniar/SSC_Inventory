@@ -165,7 +165,7 @@ export default function NewCustomer() {
         }
         ;({ data: inserted, error: insertErr } = await sb.from('customers').insert(payload).select('id').single())
         attempt++
-      } while (insertErr?.code === '23505' && attempt < lastNum + 100)
+      } while (insertErr && (insertErr.code === '23505' || insertErr.message?.includes('duplicate key') || insertErr.message?.includes('unique constraint')) && attempt < lastNum + 100)
 
       if (insertErr) { alert('Error creating customer: ' + insertErr.message); setSaving(false); return }
       const newId = inserted.id
