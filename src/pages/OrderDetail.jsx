@@ -294,17 +294,18 @@ export default function OrderDetail() {
     }
   }
 
-  // ── Full dispatch — set delivery_created directly ──
+  // ── Full dispatch — set delivery_created (or pi_requested for Against PI orders) ──
   async function fullyDispatch() {
     setShowDispatchModal(false)
     setDispatchType('full')
     setSaving(true)
+    const isPIOrder = order.credit_terms === 'Against PI'
     for (const item of (order.order_items || [])) {
       const { error } = await sb.from('order_items').update({ dispatched_qty: item.qty }).eq('id', item.id)
       if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
     }
     const { error } = await sb.from('orders').update({
-      status: 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
+      status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
     }).eq('id', id)
     if (error) { alert('Failed: ' + error.message); setSaving(false); return }
     const itemsJson = (order.order_items || []).map(i => ({
@@ -314,8 +315,13 @@ export default function OrderDetail() {
     const { data: batchData } = await sb.rpc('create_order_dispatch', {
       p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,
     })
+    if (isPIOrder && batchData?.id) {
+      await sb.from('order_dispatches').update({ pi_required: true }).eq('id', batchData.id)
+    }
     const dcNum = batchData?.dc_number || '—'
-    await logActivity(`Full Dispatch — all items sent via ${fcCenter}. Delivery Created. DC: ${dcNum}`)
+    await logActivity(isPIOrder
+      ? `Full Dispatch — Against PI. PI required before delivery. DC: ${dcNum}`
+      : `Full Dispatch — all items sent via ${fcCenter}. Delivery Created. DC: ${dcNum}`)
     await loadOrder(); setSaving(false)
   }
 
@@ -344,6 +350,7 @@ export default function OrderDetail() {
     }
     setShowPartialModal(false)
     setSaving(true)
+    const isPIOrder = order.credit_terms === 'Against PI'
     for (const item of selected) {
       const newDispatched = (item.dispatched_qty || 0) + parseFloat(item.dispatchQty)
       const { error } = await sb.from('order_items').update({ dispatched_qty: newDispatched }).eq('id', item.id)
@@ -351,7 +358,7 @@ export default function OrderDetail() {
     }
     const summary = selected.map(i => `${i.item_code}: ${i.dispatchQty} units`).join(', ')
     const { error } = await sb.from('orders').update({
-      status: 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
+      status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
     }).eq('id', id)
     if (error) { alert('Failed: ' + error.message); setSaving(false); return }
     const itemsJson = selected.map(i => {
@@ -361,8 +368,13 @@ export default function OrderDetail() {
     const { data: batchData } = await sb.rpc('create_order_dispatch', {
       p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,
     })
+    if (isPIOrder && batchData?.id) {
+      await sb.from('order_dispatches').update({ pi_required: true }).eq('id', batchData.id)
+    }
     const dcNum = batchData?.dc_number || '—'
-    await logActivity(`Partial Dispatch via ${fcCenter} — ${summary}. Delivery Created. DC: ${dcNum}`)
+    await logActivity(isPIOrder
+      ? `Partial Dispatch via ${fcCenter} — ${summary}. Against PI — PI required. DC: ${dcNum}`
+      : `Partial Dispatch via ${fcCenter} — ${summary}. Delivery Created. DC: ${dcNum}`)
     await loadOrder(); setSaving(false)
   }
 

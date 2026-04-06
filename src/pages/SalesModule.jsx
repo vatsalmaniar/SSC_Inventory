@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
-const BILLING_MODULE_STATUSES = ['goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
+const BILLING_MODULE_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 
 function fmt(d) {
   if (!d) return '—'
@@ -15,6 +15,9 @@ function fmt(d) {
 
 function statusLabel(s) {
   return {
+    pi_requested:       'PI Requested',
+    pi_generated:       'PI Issued',
+    pi_payment_pending: 'PI Payment Pending',
     goods_issued:       'Credit Check',
     credit_check:       'GI Posted',
     goods_issue_posted: 'Invoice Gen.',
@@ -67,7 +70,8 @@ export default function SalesModule() {
     setLoading(false)
   }
 
-  const activeStatuses = ['goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready']
+  const piStatuses     = ['pi_requested','pi_generated','pi_payment_pending']
+  const activeStatuses = [...piStatuses,'goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready']
 
   const ewayRows = orders.flatMap(o =>
     (o.order_dispatches || [])
@@ -77,12 +81,14 @@ export default function SalesModule() {
   )
 
   function matchFilter(o) {
-    if (filter === 'all') return activeStatuses.includes(o.status)
+    if (filter === 'all')    return activeStatuses.includes(o.status)
+    if (filter === 'pi')     return piStatuses.includes(o.status)
     return o.status === filter
   }
 
   const counts = {
     all:                orders.filter(o => activeStatuses.includes(o.status)).length,
+    pi:                 orders.filter(o => piStatuses.includes(o.status)).length,
     goods_issued:       orders.filter(o => o.status === 'goods_issued').length,
     credit_check:       orders.filter(o => o.status === 'credit_check').length,
     goods_issue_posted: orders.filter(o => o.status === 'goods_issue_posted').length,
@@ -99,6 +105,7 @@ export default function SalesModule() {
 
   const FILTERS = [
     { key: 'all',                label: 'All'           },
+    { key: 'pi',                 label: 'PI Orders'     },
     { key: 'goods_issued',       label: 'Credit Check'  },
     { key: 'credit_check',       label: 'GI Posted'     },
     { key: 'goods_issue_posted', label: 'Invoice Gen.'  },

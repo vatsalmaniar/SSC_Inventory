@@ -14,8 +14,15 @@ const BILLING_STAGES = [
   { key: 'delivery_ready',     label: 'E-Way Bill'     },
 ]
 
+// PI pipeline stages (shown instead of normal stages while order is in PI phase)
+const PI_STAGES = [
+  { key: 'pi_requested',      label: 'Issue PI'        },
+  { key: 'pi_generated',      label: 'Await Payment'   },
+  { key: 'pi_payment_pending', label: 'Confirm Payment' },
+]
+
 // Statuses visible to billing module
-const BILLING_MODULE_STATUSES = ['goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready']
+const BILLING_MODULE_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready']
 
 function billingPipelineIdx(status) {
   if (status === 'goods_issued')        return 0
@@ -23,6 +30,13 @@ function billingPipelineIdx(status) {
   if (status === 'goods_issue_posted')  return 2
   if (status === 'invoice_generated')   return 3
   if (status === 'delivery_ready')      return 4
+  return -1
+}
+
+function piPipelineIdx(status) {
+  if (status === 'pi_requested')       return 0
+  if (status === 'pi_generated')       return 1
+  if (status === 'pi_payment_pending') return 2
   return -1
 }
 
@@ -74,6 +88,12 @@ export default function BillingOrderDetail() {
   const [ewayPdfFile, setEwayPdfFile]         = useState(null)
   const [ewayPdfError, setEwayPdfError]       = useState('')
 
+  // PI flow states
+  const [piNumberInput, setPiNumberInput]     = useState('')
+  const [piPdfFile, setPiPdfFile]             = useState(null)
+  const [piPdfError, setPiPdfError]           = useState('')
+  const [paymentRef, setPaymentRef]           = useState('')
+
   useEffect(() => { init() }, [id])
 
   async function init() {
@@ -99,7 +119,18 @@ export default function BillingOrderDetail() {
     setCreditChoice(null)
     setInvoicePdfFile(null); setInvoicePdfError('')
     setEwayPdfFile(null);   setEwayPdfError('')
+    setPiPdfFile(null); setPiPdfError('')
     setOrder(data)
+    // Auto-suggest next PI number when order is in pi_requested stage
+    if (data?.status === 'pi_requested') {
+      const yr = new Date().getFullYear()
+      const { data: piNums } = await sb.from('order_dispatches').select('pi_number').like('pi_number', `PI-${yr}-%`)
+      const maxNum = (piNums || []).reduce((max, r) => {
+        const n = parseInt((r.pi_number || '').split('-')[2] || '0')
+        return n > max ? n : max
+      }, 0)
+      setPiNumberInput(`PI-${yr}-${String(maxNum + 1).padStart(4, '0')}`)
+    }
     if (dispatchId) {
       const { data: batch } = await sb.from('order_dispatches').select('*').eq('id', dispatchId).single()
       setActiveBatch(batch || null)
@@ -200,6 +231,46 @@ export default function BillingOrderDetail() {
     setShowInvConfirm(false); setSaving(false); await loadOrder()
   }
 
+  // PI STEP 1: pi_requested → pi_generated (issue PI)
+  async function handleIssuePI() {
+    if (!piNumberInput.trim()) { alert('Enter a PI number.'); return }
+    if (!piPdfFile) { alert('Attach the Proforma Invoice PDF before issuing.'); return }
+    setSaving(true)
+    let piPdfUrl = null
+    try { piPdfUrl = await uploadPdf(piPdfFile, `pi/${id}`) } catch { alert('PDF upload failed. Please try again.'); setSaving(false); return }
+    if (activeBatch) {
+      await sb.from('order_dispatches').update({
+        pi_number: piNumberInput.trim(), pi_pdf_url: piPdfUrl, updated_at: new Date().toISOString()
+      }).eq('id', activeBatch.id)
+    }
+    await sb.from('orders').update({ status: 'pi_generated', updated_at: new Date().toISOString() }).eq('id', id)
+    await logActivity(`Proforma Invoice issued — ${piNumberInput.trim()}. Awaiting customer payment.`)
+    setSaving(false); await loadOrder()
+  }
+
+  // PI STEP 2: pi_generated → pi_payment_pending (mark as sent / awaiting payment)
+  async function handlePIAwaitPayment() {
+    setSaving(true)
+    await sb.from('orders').update({ status: 'pi_payment_pending', updated_at: new Date().toISOString() }).eq('id', id)
+    await logActivity(`PI shared with customer — payment pending.`)
+    setSaving(false); await loadOrder()
+  }
+
+  // PI STEP 3: pi_payment_pending → goods_issued (confirm payment received, auto-pass credit check)
+  async function handleConfirmPIPayment() {
+    setSaving(true)
+    if (activeBatch && paymentRef.trim()) {
+      await sb.from('order_dispatches').update({ pi_payment_ref: paymentRef.trim(), updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+    }
+    // Auto-pass credit check: jump directly to credit_check, bypassing goods_issued
+    if (activeBatch) {
+      await sb.from('order_dispatches').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+    }
+    await sb.from('orders').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', id)
+    await logActivity(`Payment received — PI Order. Credit check auto-passed. ${paymentRef.trim() ? 'Ref: ' + paymentRef.trim() : ''}`)
+    setSaving(false); await loadOrder()
+  }
+
   // STEP 4: delivery_ready → eway_generated
   async function confirmEwayBill() {
     if (!ewayNumber.trim()) { alert('Enter E-Way Bill number.'); return }
@@ -233,6 +304,11 @@ export default function BillingOrderDetail() {
   if (!order) return null
 
   const pipelineIdx   = billingPipelineIdx(order.status)
+  const piPhaseIdx    = piPipelineIdx(order.status)
+  const isPIOrder     = activeBatch?.pi_required === true || order.credit_terms === 'Against PI'
+  const activePINum   = activeBatch?.pi_number || null
+  const activePIPdf   = activeBatch?.pi_pdf_url || null
+  const isInPIPhase   = ['pi_requested','pi_generated','pi_payment_pending'].includes(order.status)
   // Prefer batch-level DC/INV (new system); fall back to order columns (legacy)
   const activeDC      = activeBatch?.dc_number || order.dc_number
   const activeINV     = activeBatch?.invoice_number || order.invoice_number
@@ -315,19 +391,39 @@ export default function BillingOrderDetail() {
         </div>
 
         {/* ── Pipeline bar ── */}
-        <div className="od-pipeline-bar">
-          <div className="od-pipeline-stages">
-            {BILLING_STAGES.map((stage, idx) => {
-              const isDone   = pipelineIdx > idx
-              const isActive = pipelineIdx === idx
-              return (
-                <div key={stage.key} className={'od-pipe-stage' + (isDone ? ' done' : '') + (isActive ? ' active' : '')}>
-                  {stage.label}
-                </div>
-              )
-            })}
+        {isInPIPhase ? (
+          <div className="od-pipeline-bar">
+            <div className="od-pipeline-stages">
+              {PI_STAGES.map((stage, idx) => {
+                const isDone   = piPhaseIdx > idx
+                const isActive = piPhaseIdx === idx
+                return (
+                  <div key={stage.key} className={'od-pipe-stage' + (isDone ? ' done' : '') + (isActive ? ' active' : '')}>
+                    {stage.label}
+                  </div>
+                )
+              })}
+              <div className="od-pipe-stage" style={{opacity:0.35}}>Credit Check</div>
+              <div className="od-pipe-stage" style={{opacity:0.35}}>GI Posted</div>
+              <div className="od-pipe-stage" style={{opacity:0.35}}>Invoice</div>
+              <div className="od-pipe-stage" style={{opacity:0.35}}>E-Way Bill</div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="od-pipeline-bar">
+            <div className="od-pipeline-stages">
+              {BILLING_STAGES.map((stage, idx) => {
+                const isDone   = pipelineIdx > idx
+                const isActive = pipelineIdx === idx
+                return (
+                  <div key={stage.key} className={'od-pipe-stage' + (isDone ? ' done' : '') + (isActive ? ' active' : '')}>
+                    {stage.label}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Two-column layout ── */}
         <div className="od-layout">
@@ -469,8 +565,121 @@ export default function BillingOrderDetail() {
               </div>
             </div>
 
+            {/* ── PI Action Cards ── */}
+            {isInPIPhase && ['accounts','admin'].includes(user.role) && (
+              <div className="od-card">
+                <div className="od-card-header">
+                  <div className="od-card-title">
+                    {order.status === 'pi_requested'       && 'Action — Issue Proforma Invoice'}
+                    {order.status === 'pi_generated'       && 'Action — Confirm PI Sent to Customer'}
+                    {order.status === 'pi_payment_pending' && 'Action — Confirm Payment Received'}
+                  </div>
+                </div>
+                <div className="od-card-body">
+
+                  {/* PI STEP 1: Issue PI */}
+                  {order.status === 'pi_requested' && (
+                    <div>
+                      <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>
+                        Generate and upload the Proforma Invoice PDF for this order.
+                        {order.credit_terms && <><br/><span style={{color:'var(--gray-400)'}}>Credit Terms: {order.credit_terms}</span></>}
+                      </p>
+                      <div style={{display:'flex',flexDirection:'column',gap:12,maxWidth:400}}>
+                        <div className="od-edit-field">
+                          <label>PI Number</label>
+                          <input type="text" placeholder="e.g. PI-2026-0001" value={piNumberInput} onChange={e => setPiNumberInput(e.target.value)} />
+                        </div>
+                        <div>
+                          <label style={{fontSize:12,fontWeight:600,color:'var(--gray-700)',display:'block',marginBottom:6}}>
+                            Proforma Invoice PDF <span style={{color:'#dc2626'}}>*</span>
+                          </label>
+                          <input type="file" accept=".pdf" onChange={e => {
+                            const f = e.target.files[0] || null
+                            const err = validatePdf(f)
+                            setPiPdfError(err || '')
+                            setPiPdfFile(err ? null : f)
+                          }} style={{fontSize:12,color:'var(--gray-700)',width:'100%'}} />
+                          {piPdfError && <div style={{fontSize:11,color:'#dc2626',marginTop:4}}>⚠ {piPdfError}</div>}
+                          {!piPdfFile && !piPdfError && <div style={{fontSize:11,color:'#dc2626',marginTop:4}}>Required — attach the PI PDF</div>}
+                          {piPdfFile && <div style={{fontSize:11,color:'#166534',marginTop:4}}>✓ {piPdfFile.name}</div>}
+                        </div>
+                        <button
+                          disabled={saving || !piPdfFile || !piNumberInput.trim()}
+                          onClick={handleIssuePI}
+                          style={{padding:'10px 20px',borderRadius:10,border:'none',background:(!piPdfFile||!piNumberInput.trim())?'var(--gray-200)':'#7e22ce',color:(!piPdfFile||!piNumberInput.trim())?'var(--gray-400)':'white',fontWeight:600,fontSize:13,cursor:(!piPdfFile||!piNumberInput.trim())?'default':'pointer',fontFamily:'var(--font)',alignSelf:'flex-start'}}>
+                          {saving ? 'Uploading...' : 'Issue Proforma Invoice'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PI STEP 2: Confirm PI sent to customer */}
+                  {order.status === 'pi_generated' && (
+                    <div>
+                      {activePINum && (
+                        <div style={{background:'#faf5ff',border:'1px solid #e9d5ff',borderRadius:8,padding:'10px 14px',marginBottom:14}}>
+                          <div style={{fontSize:11,color:'#7e22ce',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:3}}>Proforma Invoice</div>
+                          <div style={{fontFamily:'var(--mono)',fontSize:16,fontWeight:800,color:'#7e22ce'}}>{activePINum}</div>
+                          {activePIPdf && (
+                            <a href={activePIPdf} target="_blank" rel="noreferrer"
+                              style={{fontSize:11,color:'#7e22ce',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              View PI PDF
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Share the PI with the customer and confirm once sent. Order will move to "Payment Pending" stage.</p>
+                      <button
+                        disabled={saving}
+                        onClick={handlePIAwaitPayment}
+                        style={{padding:'10px 20px',borderRadius:10,border:'none',background:'#7e22ce',color:'white',fontWeight:600,fontSize:13,cursor:'pointer',fontFamily:'var(--font)'}}>
+                        {saving ? 'Saving...' : 'PI Shared — Awaiting Customer Payment'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* PI STEP 3: Confirm payment received */}
+                  {order.status === 'pi_payment_pending' && (
+                    <div>
+                      {activePINum && (
+                        <div style={{background:'#faf5ff',border:'1px solid #e9d5ff',borderRadius:8,padding:'10px 14px',marginBottom:14}}>
+                          <div style={{fontSize:11,color:'#7e22ce',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:3}}>Proforma Invoice</div>
+                          <div style={{fontFamily:'var(--mono)',fontSize:16,fontWeight:800,color:'#7e22ce'}}>{activePINum}</div>
+                          {activePIPdf && (
+                            <a href={activePIPdf} target="_blank" rel="noreferrer"
+                              style={{fontSize:11,color:'#7e22ce',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              View PI PDF
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:12}}>
+                        Confirm that payment has been received from the customer. Credit check will be auto-passed.
+                      </p>
+                      <div style={{maxWidth:380,marginBottom:14}}>
+                        <div className="od-edit-field">
+                          <label>Payment Reference <span style={{fontWeight:400,color:'var(--gray-400)'}}>(optional)</span></label>
+                          <input type="text" placeholder="e.g. NEFT ref, cheque no., UTR…" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} />
+                        </div>
+                      </div>
+                      <button
+                        disabled={saving}
+                        onClick={handleConfirmPIPayment}
+                        style={{padding:'10px 20px',borderRadius:10,border:'none',background:'#166534',color:'white',fontWeight:600,fontSize:13,cursor:'pointer',fontFamily:'var(--font)',display:'inline-flex',alignItems:'center',gap:8}}>
+                        <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:16,height:16}}><polyline points="20 6 9 17 4 12"/></svg>
+                        {saving ? 'Saving...' : 'Confirm Payment Received'}
+                      </button>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            )}
+
             {/* ── Action Card ── */}
-            {!isWaitingFC && ['accounts','admin'].includes(user.role) && (
+            {!isWaitingFC && !isInPIPhase && ['accounts','admin'].includes(user.role) && (
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">
@@ -642,6 +851,22 @@ export default function BillingOrderDetail() {
                   <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>SO / CO Number</div>
                   <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:'var(--blue-800)'}}>{order.order_number}</div>
                 </div>
+                {isPIOrder && (
+                  <div>
+                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>Proforma Invoice</div>
+                    <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:activePINum?'#7e22ce':'var(--gray-400)'}}>
+                      {activePINum || '—'}
+                    </div>
+                    {!activePINum && <div style={{fontSize:10,color:'var(--gray-400)'}}>Pending issuance</div>}
+                    {activePIPdf && (
+                      <a href={activePIPdf} target="_blank" rel="noreferrer"
+                        style={{fontSize:11,color:'#7e22ce',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
+                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        View PI PDF
+                      </a>
+                    )}
+                  </div>
+                )}
                 <div>
                   <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>Delivery Challan</div>
                   <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:isTempDC?'#92400e':'#166534'}}>
