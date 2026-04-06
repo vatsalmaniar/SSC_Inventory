@@ -11,7 +11,7 @@ const INDUSTRIES = [
   'Infrastructure','Water Treatment','Mining','Other',
 ]
 const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
-const CREDIT_TERMS   = ['Against PI','7 Days','15 Days','30 Days','45 Days','60 Days','75 Days','90 Days','Against Delivery']
+const CREDIT_TERMS   = ['Against PI','Advance','7 Days','15 Days','30 Days','45 Days','60 Days','75 Days','90 Days','Against Delivery']
 
 const FIELD_STYLE = { padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }
 const LABEL_STYLE = { fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }
@@ -121,67 +121,84 @@ export default function NewCustomer() {
 
     setSaving(true)
     try {
-      // Generate next customer_id — find max then scan forward until we find a free slot
+      // Find max existing customer_id as starting point
       const { data: allIds } = await sb.from('customers')
         .select('customer_id').not('customer_id', 'is', null)
-      const existingSet = new Set((allIds || []).map(c => c.customer_id))
       const lastNum = (allIds || []).reduce((max, c) => {
         const n = parseInt((c.customer_id || '').replace(/[^0-9]/g, '')) || 0
         return n > max ? n : max
       }, 0)
-      let attempt = lastNum + 1
-      let newCustId = 'CU' + String(attempt).padStart(4, '0')
-      while (existingSet.has(newCustId)) {
-        attempt++
-        newCustId = 'CU' + String(attempt).padStart(4, '0')
-      }
 
-      // Insert customer row
-      const { data: inserted, error: insertErr } = await sb.from('customers').insert({
-        customer_id:    newCustId,
-        customer_name:  form.customer_name.trim(),
-        customer_type:  form.customer_type || null,
-        industry:       form.industry || null,
-        year_established: form.year_established || null,
-        premises:       form.premises || null,
-        turnover:       form.turnover || null,
-        gst:            form.gst || null,
-        pan_card_no:    form.pan_card_no || null,
-        msme_no:        form.msme_no || null,
-        billing_address:  form.billing_address || null,
-        shipping_address: form.shipping_address || null,
-        poc_name:       form.poc_name || null,
-        poc_no:         form.poc_no || null,
-        poc_email:      form.poc_email || null,
-        director_name:  form.director_name || null,
-        director_no:    form.director_no || null,
-        director_email: form.director_email || null,
-        credit_terms:   form.credit_terms || null,
-        account_status: form.account_status || 'Active',
-        account_owner:    ownerName,
-        approval_status:  userRole === 'admin' ? 'approved' : 'pending',
-        vi_shopfloor:   form.vi_shopfloor || null,
-        vi_payment:     form.vi_payment || null,
-        vi_expected_business: form.vi_expected_business || null,
-      }).select('id').single()
+      // Retry insert on duplicate key — handles RLS gaps + race conditions
+      let inserted = null
+      let insertErr = null
+      let attempt = lastNum + 1
+      let finalCustId = ''
+      do {
+        finalCustId = 'CU' + String(attempt).padStart(4, '0')
+        const payload = {
+          customer_id:      finalCustId,
+          customer_name:    form.customer_name.trim(),
+          customer_type:    form.customer_type || null,
+          industry:         form.industry || null,
+          year_established: form.year_established || null,
+          premises:         form.premises || null,
+          turnover:         form.turnover || null,
+          gst:              form.gst || null,
+          pan_card_no:      form.pan_card_no || null,
+          msme_no:          form.msme_no || null,
+          billing_address:  form.billing_address || null,
+          shipping_address: form.shipping_address || null,
+          poc_name:         form.poc_name || null,
+          poc_no:           form.poc_no || null,
+          poc_email:        form.poc_email || null,
+          director_name:    form.director_name || null,
+          director_no:      form.director_no || null,
+          director_email:   form.director_email || null,
+          credit_terms:     form.credit_terms || null,
+          account_status:   form.account_status || 'Active',
+          account_owner:    ownerName,
+          approval_status:  userRole === 'admin' ? 'approved' : 'pending',
+          vi_shopfloor:     form.vi_shopfloor || null,
+          vi_payment:       form.vi_payment || null,
+          vi_expected_business: form.vi_expected_business || null,
+        }
+        ;({ data: inserted, error: insertErr } = await sb.from('customers').insert(payload).select('id').single())
+        attempt++
+      } while (insertErr?.code === '23505' && attempt < lastNum + 100)
 
       if (insertErr) { alert('Error creating customer: ' + insertErr.message); setSaving(false); return }
       const newId = inserted.id
 
-      // Upload GST cert
-      const gstUrl = await uploadDoc(gstCertFile, `gst/${newId}/${Date.now()}.pdf`)
+      // Upload GST cert — delete inserted row on failure to avoid orphan
+      let gstUrl
+      try {
+        gstUrl = await uploadDoc(gstCertFile, `gst/${newId}/${Date.now()}.pdf`)
+      } catch (uploadErr) {
+        await sb.from('customers').delete().eq('id', newId)
+        alert('GST certificate upload failed — customer not saved. Please try again.\n' + uploadErr.message)
+        setSaving(false); return
+      }
 
       // Upload MSME cert (optional)
       let msmeUrl = null
-      if (msmeCertFile) msmeUrl = await uploadDoc(msmeCertFile, `msme/${newId}/${Date.now()}.pdf`)
+      if (msmeCertFile) {
+        try {
+          msmeUrl = await uploadDoc(msmeCertFile, `msme/${newId}/${Date.now()}.pdf`)
+        } catch (uploadErr) {
+          await sb.from('customers').delete().eq('id', newId)
+          alert('MSME certificate upload failed — customer not saved. Please try again.\n' + uploadErr.message)
+          setSaving(false); return
+        }
+      }
 
-      // Update with URLs
+      // Update with file URLs
       await sb.from('customers').update({ gst_cert_url: gstUrl, msme_cert_url: msmeUrl }).eq('id', newId)
 
       if (userRole === 'admin') {
         navigate('/customers/' + newId)
       } else {
-        navigate('/customers', { state: { submitted: true, custId: newCustId } })
+        navigate('/customers', { state: { submitted: true, custId: finalCustId } })
       }
     } catch (err) {
       alert('Error: ' + err.message)
