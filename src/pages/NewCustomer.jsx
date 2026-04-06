@@ -121,51 +121,38 @@ export default function NewCustomer() {
 
     setSaving(true)
     try {
-      // Find max existing customer_id as starting point
-      const { data: allIds } = await sb.from('customers')
-        .select('customer_id').not('customer_id', 'is', null)
-      const lastNum = (allIds || []).reduce((max, c) => {
-        const n = parseInt((c.customer_id || '').replace(/[^0-9]/g, '')) || 0
-        return n > max ? n : max
-      }, 0)
+      // Generate customer_id server-side (SECURITY DEFINER bypasses RLS)
+      const { data: generatedId, error: rpcErr } = await sb.rpc('generate_customer_id')
+      if (rpcErr) { alert('Error generating customer ID: ' + rpcErr.message); setSaving(false); return }
+      const finalCustId = generatedId
 
-      // Retry insert on duplicate key — handles RLS gaps + race conditions
-      let inserted = null
-      let insertErr = null
-      let attempt = lastNum + 1
-      let finalCustId = ''
-      do {
-        finalCustId = 'CU' + String(attempt).padStart(4, '0')
-        const payload = {
-          customer_id:      finalCustId,
-          customer_name:    form.customer_name.trim(),
-          customer_type:    form.customer_type || null,
-          industry:         form.industry || null,
-          year_established: form.year_established || null,
-          premises:         form.premises || null,
-          turnover:         form.turnover || null,
-          gst:              form.gst || null,
-          pan_card_no:      form.pan_card_no || null,
-          msme_no:          form.msme_no || null,
-          billing_address:  form.billing_address || null,
-          shipping_address: form.shipping_address || null,
-          poc_name:         form.poc_name || null,
-          poc_no:           form.poc_no || null,
-          poc_email:        form.poc_email || null,
-          director_name:    form.director_name || null,
-          director_no:      form.director_no || null,
-          director_email:   form.director_email || null,
-          credit_terms:     form.credit_terms || null,
-          account_status:   form.account_status || 'Active',
-          account_owner:    ownerName,
-          approval_status:  userRole === 'admin' ? 'approved' : 'pending',
-          vi_shopfloor:     form.vi_shopfloor || null,
-          vi_payment:       form.vi_payment || null,
-          vi_expected_business: form.vi_expected_business || null,
-        }
-        ;({ data: inserted, error: insertErr } = await sb.from('customers').insert(payload).select('id').single())
-        attempt++
-      } while (insertErr && (insertErr.code === '23505' || insertErr.message?.includes('duplicate key') || insertErr.message?.includes('unique constraint')) && attempt < lastNum + 100)
+      const { data: inserted, error: insertErr } = await sb.from('customers').insert({
+        customer_id:      finalCustId,
+        customer_name:    form.customer_name.trim(),
+        customer_type:    form.customer_type || null,
+        industry:         form.industry || null,
+        year_established: form.year_established || null,
+        premises:         form.premises || null,
+        turnover:         form.turnover || null,
+        gst:              form.gst || null,
+        pan_card_no:      form.pan_card_no || null,
+        msme_no:          form.msme_no || null,
+        billing_address:  form.billing_address || null,
+        shipping_address: form.shipping_address || null,
+        poc_name:         form.poc_name || null,
+        poc_no:           form.poc_no || null,
+        poc_email:        form.poc_email || null,
+        director_name:    form.director_name || null,
+        director_no:      form.director_no || null,
+        director_email:   form.director_email || null,
+        credit_terms:     form.credit_terms || null,
+        account_status:   form.account_status || 'Active',
+        account_owner:    ownerName,
+        approval_status:  userRole === 'admin' ? 'approved' : 'pending',
+        vi_shopfloor:     form.vi_shopfloor || null,
+        vi_payment:       form.vi_payment || null,
+        vi_expected_business: form.vi_expected_business || null,
+      }).select('id').single()
 
       if (insertErr) { alert('Error creating customer: ' + insertErr.message); setSaving(false); return }
       const newId = inserted.id
