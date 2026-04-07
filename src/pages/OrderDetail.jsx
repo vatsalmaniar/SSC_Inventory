@@ -58,6 +58,7 @@ export default function OrderDetail() {
   const [profiles, setProfiles]             = useState([])
   const [commentText, setCommentText]       = useState('')
   const [mentionQuery, setMentionQuery]     = useState(null)
+  const [mentionPos, setMentionPos]         = useState({ top: 0, left: 0, width: 0 })
   const [postingComment, setPostingComment] = useState(false)
   const commentInputRef = useRef(null)
 
@@ -99,7 +100,7 @@ export default function OrderDetail() {
       sb.from('orders').select('*, order_items(*)').eq('id', id).single(),
       sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true }),
       sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true }),
-      sb.from('profiles').select('id,name,username').order('name'),
+      sb.from('profiles').select('id,name,username,role').order('name'),
     ])
     setOrder(data)
     setBatches(batches || [])
@@ -270,6 +271,15 @@ export default function OrderDetail() {
     if (error) console.warn('logActivity failed:', error.message)
   }
 
+  async function notifyUsers(roles, message) {
+    const targets = profiles.filter(p => roles.includes(p.role))
+    if (!targets.length) return
+    await sb.from('notifications').insert(targets.map(t => ({
+      user_name: t.name, message, order_id: id,
+      order_number: order?.order_number || '', from_name: user.name,
+    })))
+  }
+
   // ── Stage advancement ──
   async function advanceToNext() {
     if (!canAdvance) return
@@ -322,6 +332,7 @@ export default function OrderDetail() {
     await logActivity(isPIOrder
       ? `Full Dispatch — ${order.credit_terms}. PI required before delivery. DC: ${dcNum}`
       : `Full Dispatch — all items sent via ${fcCenter}. Delivery Created. DC: ${dcNum}`)
+    if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Dispatched to ${fcCenter}. Ready for picking.`)
     await loadOrder(); setSaving(false)
   }
 
@@ -375,6 +386,7 @@ export default function OrderDetail() {
     await logActivity(isPIOrder
       ? `Partial Dispatch via ${fcCenter} — ${summary}. ${order.credit_terms} — PI required before delivery. DC: ${dcNum}`
       : `Partial Dispatch via ${fcCenter} — ${summary}. Delivery Created. DC: ${dcNum}`)
+    if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Partial dispatch to ${fcCenter}. Ready for picking.`)
     await loadOrder(); setSaving(false)
   }
 
@@ -396,12 +408,17 @@ export default function OrderDetail() {
     setCommentText(val)
     const cursor = e.target.selectionStart
     const match = val.slice(0, cursor).match(/@([\w.]*)$/)
+if (match) {
+      const rect = e.target.getBoundingClientRect()
+      setMentionPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+    }
     setMentionQuery(match ? match[1] : null)
   }
 
   function insertMention(name) {
     const cursor = commentInputRef.current?.selectionStart || commentText.length
-    const before = commentText.slice(0, cursor).replace(/@[\w.]*$/, '@' + name + ' ')
+    const slug = name.replace(/\s+/g, '_')
+    const before = commentText.slice(0, cursor).replace(/@[\w.]*$/, '@' + slug + ' ')
     setCommentText(before + commentText.slice(cursor))
     setMentionQuery(null)
     setTimeout(() => commentInputRef.current?.focus(), 0)
@@ -411,10 +428,9 @@ export default function OrderDetail() {
     if (!commentText.trim()) return
     setPostingComment(true)
     const text = commentText.trim()
-    // Extract tagged names (e.g. @Ankit Dave or @ankit.dave)
-    const tagged = [...text.matchAll(/@([A-Za-z][A-Za-z\s.]+?)(?=\s|$)/g)].map(m => m[1].trim())
+    // Extract tagged names — stored as @First_Last (underscores), convert back to spaces
+    const tagged = [...text.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
     await sb.from('order_comments').insert({ order_id: id, author_name: user.name, message: text, tagged_users: tagged })
-    // Insert notifications for each tagged person
     if (tagged.length > 0) {
       const notifRows = tagged.map(tname => ({
         user_name: tname,
@@ -430,8 +446,10 @@ export default function OrderDetail() {
   }
 
   function renderMessage(text) {
-    return text.split(/(@\S+)/g).map((part, i) =>
-      part.startsWith('@') ? <span key={i} className="od-mention-tag">{part}</span> : part
+    return text.split(/(@[\w.]+)/g).map((part, i) =>
+      part.startsWith('@')
+        ? <span key={i} className="od-mention-tag">@{part.slice(1).replace(/_/g, ' ')}</span>
+        : part
     )
   }
 
@@ -1118,7 +1136,7 @@ export default function OrderDetail() {
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }}
                     placeholder="Add a note… use @ to tag someone" rows={2} />
                   {mentionQuery !== null && mentionSuggestions.length > 0 && (
-                    <div className="od-mention-dropdown">
+                    <div className="od-mention-dropdown" style={{ top: mentionPos.top, left: mentionPos.left, width: mentionPos.width }}>
                       {mentionSuggestions.map(p => (
                         <div key={p.id} className="od-mention-item" onMouseDown={e => { e.preventDefault(); insertMention(p.name) }}>
                           <div className="od-mention-avatar">{p.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}</div>

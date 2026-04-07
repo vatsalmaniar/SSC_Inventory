@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
@@ -294,10 +294,16 @@ export default function FCOrderDetail() {
   const location     = useLocation()
   const dispatchId   = location.state?.dispatch_id || null
 
+  const commentInputRef = useRef(null)
   const [order, setOrder]       = useState(null)
   const [activeBatch, setActiveBatch] = useState(null)
   const [user, setUser]         = useState({ name: '', role: '', avatar: '' })
+  const [profiles, setProfiles] = useState([])
   const [comments, setComments] = useState([])
+  const [commentText, setCommentText]     = useState('')
+  const [mentionQuery, setMentionQuery]     = useState(null)
+  const [mentionPos, setMentionPos]         = useState({ top: 0, left: 0, width: 0 })
+  const [postingComment, setPostingComment] = useState(false)
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
   const [confirm, setConfirm]   = useState(null)
@@ -329,6 +335,8 @@ export default function FCOrderDetail() {
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     if (!['fc_kaveri','fc_godawari','ops','admin'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, role, avatar })
+    const { data: pList } = await sb.from('profiles').select('id,name,username,role')
+    setProfiles(pList || [])
     await loadOrder()
   }
 
@@ -364,6 +372,62 @@ export default function FCOrderDetail() {
     setComments(c || [])
   }
 
+  async function notifyUsers(roles, message) {
+    const targets = profiles.filter(p => roles.includes(p.role))
+    if (!targets.length) return
+    await sb.from('notifications').insert(targets.map(t => ({
+      user_name: t.name, message, order_id: id,
+      order_number: order?.order_number || '', from_name: user.name,
+    })))
+  }
+
+  function handleCommentInput(e) {
+    const val = e.target.value
+    setCommentText(val)
+    const cursor = e.target.selectionStart
+    const match = val.slice(0, cursor).match(/@([\w.]*)$/)
+    if (match) {
+      const rect = e.target.getBoundingClientRect()
+      setMentionPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+    }
+    setMentionQuery(match ? match[1] : null)
+  }
+
+  function insertMention(name) {
+    const cursor = commentInputRef.current?.selectionStart || commentText.length
+    const slug = name.replace(/\s+/g, '_')
+    const before = commentText.slice(0, cursor).replace(/@[\w.]*$/, '@' + slug + ' ')
+    setCommentText(before + commentText.slice(cursor))
+    setMentionQuery(null)
+    setTimeout(() => commentInputRef.current?.focus(), 0)
+  }
+
+  async function submitComment() {
+    if (!commentText.trim()) return
+    setPostingComment(true)
+    const text = commentText.trim()
+    const tagged = [...text.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
+    await sb.from('order_comments').insert({ order_id: id, author_name: user.name, message: text, tagged_users: tagged })
+    if (tagged.length > 0) {
+      await sb.from('notifications').insert(tagged.map(tname => ({
+        user_name: tname, message: `${user.name} tagged you in ${order?.order_number}`,
+        order_id: id, order_number: order?.order_number || '', from_name: user.name,
+      })))
+    }
+    setCommentText(''); setMentionQuery(null)
+    const { data: c } = await sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true })
+    setComments(c || [])
+    setPostingComment(false)
+  }
+
+  function renderMessage(text) {
+    return text.split(/(@[\w.]+)/g).map((part, i) =>
+      part.startsWith('@')
+        ? <span key={i} className="od-mention-tag">@{part.slice(1).replace(/_/g, ' ')}</span>
+        : part
+    )
+  }
+
   async function doAction(toStatus, activityMsg, extraUpdate = {}) {
     setSaving(true)
     const { error } = await sb.from('orders').update({
@@ -392,6 +456,9 @@ export default function FCOrderDetail() {
       ? `Goods Issued — DC confirmed: ${dcNum || order.dc_number || '—'}. Sample ready for challan.`
       : `Goods Issued — DC confirmed: ${dcNum || order.dc_number || '—'}. Handed to Accounts for billing.`
     await logActivity(actMsg)
+    if (order.order_type !== 'SAMPLE') {
+      await notifyUsers(['accounts', 'admin'], `${order.order_number} — Goods Issued. Ready for billing.`)
+    }
     setConfirm(null)
     setSaving(false)
     await loadOrder()
@@ -473,6 +540,15 @@ export default function FCOrderDetail() {
     setSaving(false)
     await loadOrder()
   }
+
+  const mentionSuggestions = mentionQuery !== null
+    ? profiles.filter(p =>
+        p.name !== user.name && (
+          p.name.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+          (p.username || '').toLowerCase().includes(mentionQuery.toLowerCase())
+        )
+      ).slice(0, 6)
+    : []
 
   if (loading) return (
     <Layout pageTitle="FC — Order Detail" pageKey="fc">
@@ -940,13 +1016,39 @@ export default function FCOrderDetail() {
                       ) : (
                         <>
                           <div className="od-activity-label">{c.author_name}</div>
-                          <div className="od-activity-val" style={{fontWeight:400}}>{c.message}</div>
+                          <div className="od-activity-val" style={{fontWeight:400}}>{renderMessage(c.message)}</div>
                           <div className="od-activity-time">{fmtTs(c.created_at)}</div>
                         </>
                       )}
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Comment input */}
+              <div className="od-comment-box">
+                <div className="od-comment-input-wrap">
+                  <textarea ref={commentInputRef} className="od-comment-input"
+                    value={commentText} onChange={handleCommentInput}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }}
+                    placeholder="Add a note… use @ to tag someone" rows={2} />
+                  {mentionQuery !== null && mentionSuggestions.length > 0 && (
+                    <div className="od-mention-dropdown" style={{ top: mentionPos.top, left: mentionPos.left, width: mentionPos.width }}>
+                      {mentionSuggestions.map(p => (
+                        <div key={p.id} className="od-mention-item" onMouseDown={e => { e.preventDefault(); insertMention(p.name) }}>
+                          <div className="od-mention-avatar">{p.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>
+                          <div>
+                            <div className="od-mention-name">{p.name}</div>
+                            {p.username && <div className="od-mention-uname">@{p.username}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button className="od-comment-btn" onClick={submitComment} disabled={postingComment || !commentText.trim()}>
+                  {postingComment ? '...' : 'Post'}
+                </button>
               </div>
             </div>
 
