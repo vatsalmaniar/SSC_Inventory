@@ -22,7 +22,7 @@ const PI_STAGES = [
 ]
 
 // Statuses visible to billing module
-const BILLING_MODULE_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready']
+const BILLING_MODULE_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 
 function billingPipelineIdx(status) {
   if (status === 'goods_issued')        return 0
@@ -30,6 +30,8 @@ function billingPipelineIdx(status) {
   if (status === 'goods_issue_posted')  return 2
   if (status === 'invoice_generated')   return 3
   if (status === 'delivery_ready')      return 4
+  if (status === 'eway_generated')      return 5
+  if (status === 'dispatched_fc')       return 5
   return -1
 }
 
@@ -94,6 +96,8 @@ export default function BillingOrderDetail() {
   const [invoicePdfError, setInvoicePdfError] = useState('')
   const [ewayPdfFile, setEwayPdfFile]         = useState(null)
   const [ewayPdfError, setEwayPdfError]       = useState('')
+  const [eInvoicePdfFile, setEInvoicePdfFile] = useState(null)
+  const [eInvoicePdfError, setEInvoicePdfError] = useState('')
 
   // PI flow states
   const [piNumberInput, setPiNumberInput]     = useState('')
@@ -128,6 +132,7 @@ export default function BillingOrderDetail() {
     setCreditChoice(null)
     setInvoicePdfFile(null); setInvoicePdfError('')
     setEwayPdfFile(null);   setEwayPdfError('')
+    setEInvoicePdfFile(null); setEInvoicePdfError('')
     setPiPdfFile(null); setPiPdfError('')
     setOrder(data)
     // Auto-suggest next PI number when order is in pi_requested stage
@@ -160,7 +165,7 @@ export default function BillingOrderDetail() {
 
   function validatePdf(file) {
     if (!file) return null
-    if (file.size > 200 * 1024) return 'File must be under 200 KB. Please compress the PDF and try again.'
+    if (file.size > 500 * 1024) return 'File must be under 500 KB. Please compress the PDF and try again.'
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) return 'Only PDF files are allowed.'
     return null
   }
@@ -339,19 +344,25 @@ export default function BillingOrderDetail() {
     if (!ewayNumber.trim()) { alert('Enter E-Way Bill number.'); return }
     setSaving(true)
     let ewayPdfUrl = null
+    let eInvoiceUrl = null
     if (ewayPdfFile) {
       try { ewayPdfUrl = await uploadPdf(ewayPdfFile, `eway/${id}`) } catch { alert('E-Way PDF upload failed. Please try again.'); setSaving(false); return }
+    }
+    if (eInvoicePdfFile) {
+      try { eInvoiceUrl = await uploadPdf(eInvoicePdfFile, `einvoice/${id}`) } catch { alert('e-Invoice PDF upload failed. Please try again.'); setSaving(false); return }
     }
     if (activeBatch) {
       await sb.from('order_dispatches').update({
         status: 'eway_generated', eway_bill_number: ewayNumber.trim(),
         ...(ewayPdfUrl && { eway_pdf_url: ewayPdfUrl }),
+        ...(eInvoiceUrl && { einvoice_pdf_url: eInvoiceUrl }),
         updated_at: new Date().toISOString()
       }).eq('id', activeBatch.id)
     }
     await sb.from('orders').update({
       status: 'eway_generated', eway_bill_number: ewayNumber.trim(),
       ...(ewayPdfUrl && { eway_pdf_url: ewayPdfUrl }),
+      ...(eInvoiceUrl && { einvoice_pdf_url: eInvoiceUrl }),
       updated_at: new Date().toISOString()
     }).eq('id', id)
     await logActivity(`E-Way Bill generated — #${ewayNumber.trim()}. Handed to FC for final delivery.`)
@@ -360,7 +371,7 @@ export default function BillingOrderDetail() {
     navigate('/billing')
   }
 
-  const mentionSuggestions = mentionQuery !== null
+const mentionSuggestions = mentionQuery !== null
     ? profiles.filter(p =>
         p.name !== user.name && (
           p.name.toLowerCase().includes(mentionQuery.toLowerCase()) ||
@@ -392,7 +403,8 @@ export default function BillingOrderDetail() {
   const isWaitingFC   = order.status === 'invoice_generated'
   const isCreditOverride  = (activeBatch?.credit_override ?? order.credit_override) === true
   const activeInvPdfUrl   = activeBatch?.invoice_pdf_url || order.invoice_pdf_url || null
-  const activeEwayPdfUrl  = activeBatch?.eway_pdf_url    || order.eway_pdf_url    || null
+  const activeEwayPdfUrl      = activeBatch?.eway_pdf_url      || order.eway_pdf_url      || null
+  const activeEInvoicePdfUrl  = activeBatch?.einvoice_pdf_url  || order.einvoice_pdf_url  || null
 
   // Items: normalize to {item_code, qty, unit_price, total_price} regardless of source
   const billingItems = activeBatch?.dispatched_items
@@ -928,11 +940,55 @@ export default function BillingOrderDetail() {
                             <div style={{fontSize:11,color:'#166534',marginTop:4}}>✓ {ewayPdfFile.name}</div>
                           )}
                         </div>
+                        <div>
+                          <label style={{fontSize:12,fontWeight:600,color:'var(--gray-700)',display:'block',marginBottom:6}}>
+                            e-Invoice PDF <span style={{fontSize:11,color:'var(--gray-400)',fontWeight:400}}>(optional)</span>
+                          </label>
+                          <input type="file" accept=".pdf" onChange={e => {
+                            const f = e.target.files[0] || null
+                            const err = validatePdf(f)
+                            setEInvoicePdfError(err || '')
+                            setEInvoicePdfFile(err ? null : f)
+                          }} style={{fontSize:12,color:'var(--gray-700)',width:'100%'}} />
+                          {eInvoicePdfError && (
+                            <div style={{fontSize:11,color:'#dc2626',marginTop:4}}>⚠ {eInvoicePdfError}</div>
+                          )}
+                          {eInvoicePdfFile && (
+                            <div style={{fontSize:11,color:'#166534',marginTop:4}}>✓ {eInvoicePdfFile.name}</div>
+                          )}
+                        </div>
                         <button className="od-mark-complete-btn" style={{background:'#15803d',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8,alignSelf:'flex-start'}}
                           onClick={confirmEwayBill} disabled={saving}>
                           <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:16,height:16}}><polyline points="20 6 9 17 4 12"/></svg>
                           {saving ? 'Uploading & Saving...' : 'Generate E-Way Bill'}
                         </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* COMPLETED: eway_generated / dispatched_fc */}
+                  {['eway_generated','dispatched_fc'].includes(order.status) && (
+                    <div style={{background:'#f0fdf4',border:'1px solid #86efac',borderRadius:10,padding:16}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                        <svg fill="none" stroke="#166534" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:18,height:18,flexShrink:0}}><polyline points="20 6 9 17 4 12"/></svg>
+                        <span style={{fontSize:13,fontWeight:700,color:'#166534'}}>E-Way Bill Generated</span>
+                      </div>
+                      <div style={{fontFamily:'var(--mono)',fontSize:15,fontWeight:800,color:'#166534',marginBottom:8}}>{activeEway}</div>
+                      <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+                        {activeEwayPdfUrl && (
+                          <a href={activeEwayPdfUrl} target="_blank" rel="noreferrer"
+                            style={{fontSize:12,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            View E-Way PDF
+                          </a>
+                        )}
+                        {activeEInvoicePdfUrl && (
+                          <a href={activeEInvoicePdfUrl} target="_blank" rel="noreferrer"
+                            style={{fontSize:12,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            View e-Invoice PDF
+                          </a>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1003,6 +1059,16 @@ export default function BillingOrderDetail() {
                         View E-Way PDF
                       </a>
                     )}
+                  </div>
+                )}
+                {activeEInvoicePdfUrl && (
+                  <div>
+                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>e-Invoice</div>
+                    <a href={activeEInvoicePdfUrl} target="_blank" rel="noreferrer"
+                      style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
+                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      View e-Invoice PDF
+                    </a>
                   </div>
                 )}
                 <div style={{paddingTop:12,borderTop:'1px solid var(--gray-100)'}}>

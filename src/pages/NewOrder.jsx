@@ -15,11 +15,13 @@ export default function NewOrder() {
   const [submitting, setSubmitting] = useState(false)
 
   // Customer
-  const [customerInput, setCustomerInput]   = useState('')
-  const [customerGst, setCustomerGst]       = useState('')
-  const [dispatchAddr, setDispatchAddr]     = useState('')
-  const [creditTerms, setCreditTerms]       = useState('')
-  const [accountOwner, setAccountOwner]     = useState('')
+  const [customerInput, setCustomerInput]     = useState('')
+  const [customerGst, setCustomerGst]         = useState('')
+  const [dispatchAddr, setDispatchAddr]       = useState('')
+  const [creditTerms, setCreditTerms]         = useState('')
+  const [accountOwner, setAccountOwner]       = useState('')
+  const [customerPending, setCustomerPending] = useState(false)
+  const [customerId, setCustomerId]           = useState(null)
 
   // Order header
   const [poNumber, setPoNumber]       = useState('')
@@ -56,7 +58,7 @@ export default function NewOrder() {
   }
 
   async function fetchCustomers(q) {
-    const { data } = await sb.from('customers').select('id,customer_name,gst,billing_address,credit_terms,account_owner')
+    const { data } = await sb.from('customers').select('id,customer_name,gst,billing_address,credit_terms,account_owner,approval_status')
       .ilike('customer_name', '%' + q + '%').limit(10)
     return data || []
   }
@@ -73,6 +75,8 @@ export default function NewOrder() {
     setDispatchAddr(c.billing_address || '')
     if (c.credit_terms) setCreditTerms(c.credit_terms)
     setAccountOwner(c.account_owner || '')
+    setCustomerId(c.id)
+    setCustomerPending(c.approval_status === 'pending')
   }
 
   function handlePoFile(e) {
@@ -119,6 +123,7 @@ export default function NewOrder() {
   async function submitOrder() {
     const validItems = items.filter(i => i.item_code.trim())
     if (!customerInput.trim())  { alert('Customer name is required'); return }
+    if (customerPending)        { alert('This customer is pending approval. Orders cannot be placed until the customer is approved in Customer 360.'); return }
     if (!dispatchAddr.trim())   { alert('Dispatch address is required'); return }
     if (orderType !== 'SAMPLE' && !poNumber.trim()) { alert('PO / Reference Number is required'); return }
     if (!validItems.length)     { alert('Add at least one item'); return }
@@ -207,19 +212,31 @@ export default function NewOrder() {
               <label>Customer Name <span className="req">*</span></label>
               <Typeahead
                 value={customerInput}
-                onChange={setCustomerInput}
+                onChange={v => { setCustomerInput(v); if (!v) { setCustomerPending(false); setCustomerId(null) } }}
                 onSelect={selectCustomer}
                 placeholder="Search customer name..."
                 fetchFn={fetchCustomers}
                 renderItem={c => (
                   <>
-                    <div className="typeahead-item-main">{c.customer_name}</div>
+                    <div className="typeahead-item-main" style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      {c.customer_name}
+                      {c.approval_status === 'pending' && <span style={{ fontSize:10, fontWeight:700, background:'#fef3c7', color:'#b45309', borderRadius:4, padding:'1px 5px' }}>PENDING APPROVAL</span>}
+                    </div>
                     {c.gst && <div className="typeahead-item-sub">GST: {c.gst}</div>}
                   </>
                 )}
               />
             </div>
           </div>
+
+          {customerPending && (
+            <div style={{ display:'flex', alignItems:'center', gap:10, background:'#fef3c7', border:'1px solid #fde68a', borderRadius:8, padding:'10px 14px', marginTop:4 }}>
+              <svg fill="none" stroke="#b45309" strokeWidth="2" viewBox="0 0 24 24" style={{ width:16, height:16, flexShrink:0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <div style={{ fontSize:13, color:'#92400e' }}>
+                <strong>Customer pending approval.</strong> Orders cannot be placed until this customer is approved in <span style={{ textDecoration:'underline', cursor:'pointer' }} onClick={() => window.open('/customers/' + customerId, '_blank')}>Customer 360</span>.
+              </div>
+            </div>
+          )}
 
           <div className="no-row three">
             <div className="no-field">
