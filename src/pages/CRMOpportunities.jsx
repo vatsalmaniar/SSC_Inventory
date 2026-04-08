@@ -215,14 +215,11 @@ function ListView({ opps, navigate }) {
         <table className="crm-table">
           <thead>
             <tr>
-              <th>Company / Name</th>
-              <th>Type</th>
-              <th>Principal</th>
+              <th>Opportunity</th>
+              <th>Company</th>
+              <th>Account Owner</th>
               <th>Stage</th>
               <th>Value</th>
-              <th>Rep</th>
-              <th>Close Date</th>
-              <th>Flags</th>
             </tr>
           </thead>
           <tbody>
@@ -231,21 +228,16 @@ function ListView({ opps, navigate }) {
               return (
                 <tr key={o.id} onClick={() => navigate('/crm/opportunities/' + o.id)}>
                   <td>
-                    <div className="crm-table-name">{o.opportunity_name || o.crm_companies?.company_name || '—'}</div>
-                    {o.crm_companies?.company_name && o.opportunity_name && <div className="crm-table-sub">{o.crm_companies.company_name}</div>}
+                    <div className="crm-table-name">{o.opportunity_name || '—'}</div>
+                    {isOverdue(o) && <span className="crm-overdue-badge" style={{marginTop:3,display:'inline-block'}}>Overdue</span>}
                   </td>
                   <td>
-                    <span style={{ fontSize:10, fontWeight:700, borderRadius:4, padding:'2px 7px', whiteSpace:'nowrap',
-                      background: type==='Lead' ? '#fef3c7' : '#eff6ff',
-                      color: type==='Lead' ? '#b45309' : '#1d4ed8',
-                    }}>{type}</span>
+                    <div style={{fontWeight:500,fontSize:13}}>{o.crm_companies?.company_name || o.freetext_company || '—'}</div>
+                    {o.crm_principals?.name && <div className="crm-table-sub">{o.crm_principals.name}</div>}
                   </td>
-                  <td>{o.crm_principals?.name || '—'}</td>
+                  <td style={{fontSize:13}}>{o.profiles?.name || '—'}</td>
                   <td><StagePill stage={o.stage} /></td>
                   <td style={{whiteSpace:'nowrap',fontWeight:600}}>{fmtINR(o.estimated_value_inr) || '—'}</td>
-                  <td>{o.profiles?.name || '—'}</td>
-                  <td style={{whiteSpace:'nowrap'}}>{fmt(o.expected_close_date)}</td>
-                  <td>{isOverdue(o) && <span className="crm-overdue-badge">Overdue</span>}</td>
                 </tr>
               )
             })}
