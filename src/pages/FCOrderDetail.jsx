@@ -995,6 +995,23 @@ export default function FCOrderDetail() {
                   <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
                     <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>E-Way Bill</div>
                     <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:700,color:'#166534'}}>{activeBatch?.eway_bill_number || order.eway_bill_number}</div>
+                    {(activeBatch?.eway_pdf_url || order.eway_pdf_url) && (
+                      <a href={activeBatch?.eway_pdf_url || order.eway_pdf_url} target="_blank" rel="noreferrer"
+                        style={{fontSize:11,color:'#166534',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        View E-Way Bill PDF
+                      </a>
+                    )}
+                  </div>
+                )}
+                {(activeBatch?.einvoice_pdf_url || order.einvoice_pdf_url) && (
+                  <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
+                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>E-Invoice</div>
+                    <a href={activeBatch?.einvoice_pdf_url || order.einvoice_pdf_url} target="_blank" rel="noreferrer"
+                      style={{fontSize:11,color:'#7c3aed',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      View E-Invoice PDF
+                    </a>
                   </div>
                 )}
               </div>
