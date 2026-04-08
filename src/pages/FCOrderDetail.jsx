@@ -123,161 +123,190 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false) {
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/>
 <title>${isSample ? 'Sample Challan' : 'Delivery Challan'} — ${activeDC}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background:#fff;padding:28px 32px;max-width:820px;margin:0 auto}
-  .header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
-  .company-name{font-size:14px;font-weight:700;color:#000}
-  .company-sub{font-size:10px;color:#444;margin-top:2px}
-  .gstin-bar{font-size:10px;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #000}
-  .two-col{display:flex;gap:0;border:1px solid #999;margin-bottom:12px}
-  .cust-block{flex:1;padding:12px;border-right:1px solid #999}
-  .challan-block{flex:1;padding:0}
-  .challan-title{font-size:22px;font-weight:900;border-bottom:1px solid #999;padding:10px 12px;margin-bottom:0}
-  .challan-rows table{width:100%;border-collapse:collapse}
-  .challan-rows td{padding:4px 10px;font-size:10.5px;border-bottom:1px solid #eee;vertical-align:top}
-  .challan-rows td:first-child{color:#555;width:44%}
-  .challan-rows td:last-child{font-weight:700}
-  .cust-name{font-size:12px;font-weight:700;margin-bottom:4px}
-  .cust-addr{font-size:10.5px;line-height:1.5;color:#222;margin-bottom:6px}
-  .cust-meta{font-size:10px;color:#444;margin-top:4px}
-  .section{margin-bottom:10px}
-  .delivery-date{font-size:13px;margin-bottom:8px}
-  .delivery-date strong{font-size:14px}
-  .deliver-to{font-size:10.5px;margin-bottom:10px;line-height:1.5}
-  .terms-row{display:flex;justify-content:space-between;font-size:10.5px;margin-bottom:4px}
-  table.items{width:100%;border-collapse:collapse;margin-top:10px}
-  table.items th{background:#f0f0f0;padding:7px 8px;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #ccc;text-align:left}
+  body{font-family:'DM Sans',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:860px;margin:0 auto;line-height:1.5}
+  .mono{font-family:'DM Mono',monospace}
+
+  /* Header */
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
+  .co-name{font-size:17px;font-weight:700;color:#0f172a;margin-bottom:2px}
+  .co-sub{font-size:11px;color:#64748b;margin-bottom:8px}
+  .co-addr{font-size:10.5px;color:#475569;line-height:1.6}
+  .doc-title{font-size:28px;font-weight:700;color:#0f172a;text-align:right;letter-spacing:-0.5px}
+  .doc-type-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;padding:3px 10px;border-radius:4px;margin-bottom:6px;
+    background:${isSample?'#fef3c7':'#eff6ff'};color:${isSample?'#92400e':'#1d4ed8'};text-align:right}
+
+  /* Divider */
+  .divider{border:none;border-top:1px solid #e2e8f0;margin:20px 0}
+
+  /* Meta grid */
+  .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px}
+  .meta-section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.7px;color:#94a3b8;margin-bottom:6px}
+  .meta-name{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:3px}
+  .meta-addr{font-size:11px;color:#475569;line-height:1.6}
+  .meta-gstin{font-size:11px;color:#475569;margin-top:5px}
+
+  .ref-table{width:100%;border-collapse:collapse}
+  .ref-table tr td{padding:3px 0;font-size:11px;vertical-align:top}
+  .ref-table tr td:first-child{color:#64748b;width:45%}
+  .ref-table tr td:last-child{font-weight:600;color:#0f172a}
+
+  /* Terms row */
+  .terms{display:flex;gap:32px;font-size:11px;color:#475569;margin-bottom:20px}
+  .terms span strong{color:#0f172a;font-weight:600}
+
+  /* Items table */
+  table.items{width:100%;border-collapse:collapse;margin-bottom:4px}
+  table.items thead tr{border-bottom:2px solid #0f172a}
+  table.items th{padding:8px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;text-align:left}
   table.items th.r{text-align:right}
   table.items th.c{text-align:center}
-  table.items td{vertical-align:top}
-  .gst-block{display:flex;justify-content:flex-end;margin-top:6px}
-  .gst-table{width:340px;border-collapse:collapse}
-  .gst-table td{padding:4px 10px;font-size:10.5px;border-bottom:1px solid #eee}
-  .gst-table td.r{text-align:right;font-weight:600}
-  .gst-total td{font-weight:800;font-size:12px;border-top:2px solid #000;padding-top:6px}
-  .words{font-size:10.5px;margin:8px 0 14px;padding:8px 10px;background:#f9f9f9;border:1px solid #ddd;border-radius:4px}
-  .sig-row{display:flex;margin-top:18px;border-top:1px solid #ccc;padding-top:12px}
-  .sig-cell{flex:1;text-align:center;font-size:10px;color:#333}
-  .sig-line{border-top:1px solid #333;margin:24px 16px 6px}
-  .footer{margin-top:16px;padding-top:10px;border-top:1px solid #ccc;font-size:9.5px;color:#444;line-height:1.6}
-  .print-note{font-style:italic;font-size:9.5px;color:#777;margin:12px 0}
+  table.items tbody tr{border-bottom:1px solid #f1f5f9}
+  table.items tbody tr:last-child{border-bottom:none}
+  table.items td{padding:9px 10px;font-size:11.5px;vertical-align:top;color:#0f172a}
+  table.items td.r{text-align:right}
+  table.items td.c{text-align:center}
+  table.items td.code{font-family:'DM Mono',monospace;font-size:11px;font-weight:500}
+
+  /* Totals */
+  .totals-wrap{display:flex;justify-content:flex-end;margin-top:12px}
+  .totals-table{width:300px;border-collapse:collapse}
+  .totals-table td{padding:5px 0;font-size:11.5px}
+  .totals-table td.lbl{color:#64748b}
+  .totals-table td.val{text-align:right;font-weight:500}
+  .totals-table tr.sub td{border-top:1px solid #e2e8f0;padding-top:10px}
+  .totals-table tr.grand td{border-top:2px solid #0f172a;padding-top:8px;font-size:13px;font-weight:700}
+
+  /* Words */
+  .words{font-size:11px;color:#475569;margin:16px 0 24px;padding:10px 14px;background:#f8fafc;border-left:3px solid #e2e8f0;border-radius:0 6px 6px 0}
+
+  /* Signatures */
+  .sig-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:32px;padding-top:20px;border-top:1px solid #e2e8f0}
+  .sig-cell{text-align:center;font-size:10px;color:#64748b}
+  .sig-line{border-top:1px solid #94a3b8;margin:28px 20px 8px}
+  .sig-name{font-weight:600;color:#0f172a;font-size:11px}
+
+  /* Footer */
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}
+  .footer-left{font-size:10px;color:#94a3b8;line-height:1.6}
+  .footer-right{font-size:10px;color:#94a3b8;text-align:right}
+
   @media print{
     body{padding:0;max-width:100%}
-    @page{size:A4;margin:18mm 16mm}
+    @page{size:A4;margin:16mm 14mm}
   }
 </style>
 </head>
 <body>
 
-<div class="header-top">
+<!-- Header -->
+<div class="header">
   <div>
-    <div class="company-name">SSC Control Pvt. Ltd.</div>
-    <div class="company-sub">Industrial Automation &amp; Electrification</div>
-    <div style="font-size:9.5px;color:#555;margin-top:6px">
-      SSC Control Pvt. Ltd. Regd. Office: E/12, Siddhivinayak Towers, B/H DCP Office, Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
-      Phone: +91 79 4890 0177 &nbsp;|&nbsp; Email: sales@ssccontrol.com &nbsp;|&nbsp; Website: www.ssccontrol.com
+    <div class="co-name">SSC Control Pvt. Ltd.</div>
+    <div class="co-sub">Industrial Automation &amp; Electrification</div>
+    <div class="co-addr">
+      E/12, Siddhivinayak Towers, B/H DCP Office<br/>
+      Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
+      GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; ${order.fulfilment_center || 'Ahmedabad'}
     </div>
   </div>
+  <div style="text-align:right">
+    <img src="${window.location.origin}/ssc-logo.svg" alt="SSC" style="height:52px;width:auto;display:block;margin-left:auto;margin-bottom:10px"/>
+    <div class="doc-type-badge">${isSample ? 'Sample' : 'Delivery'}</div>
+    <div class="doc-title">${isSample ? 'Sample Challan' : 'Delivery Challan'}</div>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<!-- Bill To + Reference -->
+<div class="meta-grid">
   <div>
-    <img src="${window.location.origin}/ssc-logo.svg" alt="SSC Control" style="height:64px;width:auto;display:block"/>
+    <div class="meta-section-label">Bill To</div>
+    <div class="meta-name">${order.customer_name || '—'}</div>
+    <div class="meta-addr">${(order.dispatch_address || '').replace(/\n/g,'<br/>')}</div>
+    ${order.customer_gst ? `<div class="meta-gstin">GSTIN: <strong>${order.customer_gst}</strong></div>` : ''}
+  </div>
+  <div>
+    <div class="meta-section-label">Reference</div>
+    <table class="ref-table">
+      <tr><td>Challan No.</td><td class="mono">${activeDC}</td></tr>
+      <tr><td>Challan Date</td><td>${dcDate}</td></tr>
+      <tr><td>Order No.</td><td class="mono">${order.order_number || '—'}</td></tr>
+      ${order.po_number ? `<tr><td>PO No. / Date</td><td>${order.po_number} / ${poDate}</td></tr>` : ''}
+      ${(activeBatch?.invoice_number || order.invoice_number) ? `<tr><td>Invoice No.</td><td class="mono">${activeBatch?.invoice_number || order.invoice_number}</td></tr>` : ''}
+      ${order.vehicle_number ? `<tr><td>Vehicle No.</td><td>${order.vehicle_number}</td></tr>` : ''}
+      ${batchLabel ? `<tr><td>Batch</td><td>${batchLabel}</td></tr>` : ''}
+    </table>
   </div>
 </div>
 
-<div class="gstin-bar">GSTIN: 24ABGCS0605M1ZE &nbsp;&nbsp;&nbsp; <strong>SSC Control Pvt. Ltd. – ${order.fulfilment_center || 'Ahmedabad'}</strong></div>
+<hr class="divider"/>
 
-<div class="two-col">
-  <div class="cust-block">
-    <div class="cust-name">${order.customer_name || '—'}</div>
-    <div class="cust-addr">${(order.dispatch_address || '').replace(/\n/g,'<br/>')}</div>
-    ${order.customer_gst ? `<div class="cust-meta">GSTIN: <strong>${order.customer_gst}</strong></div>` : ''}
-    <div class="cust-meta" style="margin-top:8px">Registered</div>
-  </div>
-  <div class="challan-block">
-    <div class="challan-title">${isSample ? 'Sample Challan' : 'Delivery Challan'}</div>
-    <div class="challan-rows">
-      <table>
-        <tr><td>Challan no./date</td><td>${activeDC} / ${dcDate}</td></tr>
-        <tr><td>SO / Order no.</td><td>${order.order_number || '—'}</td></tr>
-        <tr><td>Ref. PO no./date</td><td>${order.po_number || '—'} / ${poDate}</td></tr>
-        ${(activeBatch?.invoice_number || order.invoice_number) ? `<tr><td>Invoice no.</td><td>${activeBatch?.invoice_number || order.invoice_number}</td></tr>` : ''}
-        ${order.vehicle_number ? `<tr><td>Vehicle no.</td><td>${order.vehicle_number}</td></tr>` : ''}
-        ${order.engineer_name ? `<tr><td>Contact person</td><td>${order.engineer_name}</td></tr>` : ''}
-        <tr><td>Mail</td><td>sales@ssccontrol.com</td></tr>
-        ${order.po_number ? `<tr><td>Your PO ref. with us</td><td>${order.reference_number || order.po_number}</td></tr>` : ''}
-        ${batchLabel ? `<tr><td>Batch</td><td>${batchLabel}</td></tr>` : ''}
-      </table>
-    </div>
-  </div>
+<!-- Terms -->
+<div class="terms">
+  <span>Delivery terms: <strong>${order.dispatch_mode || 'EXW Through Transport'}</strong></span>
+  <span>Payment terms: <strong>${order.credit_terms || '—'}</strong></span>
+  <span>Currency: <strong>INR</strong></span>
 </div>
 
-<div class="delivery-date">
-  Delivery date: &nbsp; <strong>Day ${dcDate} dispatched</strong>
-</div>
-
-<div class="deliver-to">
-  <strong>Please deliver to:</strong><br/>
-  ${order.customer_name || ''}<br/>
-  ${(order.dispatch_address || '—').replace(/\n/g,'<br/>')}
-</div>
-
-<div class="section" style="font-size:10.5px;color:#333;margin-bottom:10px">
-  Order confirmation: Delivery made as per PO ${order.po_number || '—'} dated ${poDate}. In case of any discrepancy in quantity or quality, please inform us within 48 hours of receipt.
-</div>
-
-<div class="terms-row">
-  <span>Terms of delivery: &nbsp;<strong>${order.dispatch_mode || 'EXW THROUGH TRANSPORT'}</strong></span>
-</div>
-<div class="terms-row">
-  <span>Terms of payment: &nbsp;<strong>${order.credit_terms || '—'}</strong></span>
-  <span>Currency &nbsp;<strong>INR</strong></span>
-</div>
-
-<div style="font-weight:700;font-size:11px;margin:12px 0 4px">Delivery as per order acknowledgment for all items:</div>
-
+<!-- Items -->
 <table class="items">
   <thead>
     <tr>
-      <th style="width:52px">Item</th>
-      <th>Material / Item Code</th>
-      <th class="c" style="width:80px">Delivered Qty</th>
-      <th class="c" style="width:52px">Unit</th>
-      <th style="width:110px">MFR Part No.</th>
-      <th class="r" style="width:90px">Price / Unit</th>
-      <th class="r" style="width:90px">Net Value</th>
+      <th style="width:40px">#</th>
+      <th>Item Code</th>
+      <th class="c" style="width:80px">Qty</th>
+      <th class="c" style="width:50px">Unit</th>
+      <th class="r" style="width:100px">Unit Price</th>
+      <th class="r" style="width:100px">Amount</th>
     </tr>
   </thead>
-  <tbody>${itemRows}</tbody>
+  <tbody>
+    ${items.map((item, idx) => `
+    <tr>
+      <td style="color:#94a3b8">${idx + 1}</td>
+      <td class="code">${item.item_code || '—'}</td>
+      <td class="c" style="font-weight:700">${item.qty}</td>
+      <td class="c" style="color:#64748b">Pc</td>
+      <td class="r">${(item.unit_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td class="r" style="font-weight:600">${(item.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>`).join('')}
+  </tbody>
 </table>
 
-<div class="gst-block">
-  <table class="gst-table">
-    <tr><td>IN: Central GST</td><td class="r">${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="r">9.00 %</td><td class="r">${cgst.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
-    <tr><td>IN: State GST</td><td class="r">${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="r">9.00 %</td><td class="r">${sgst.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
-    ${order.freight ? `<tr><td>Freight</td><td></td><td></td><td class="r">${(order.freight).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}
-    <tr class="gst-total"><td colspan="3"><strong>Total Amount:</strong></td><td class="r"><strong>${grandTotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></td></tr>
+<!-- Totals -->
+<div class="totals-wrap">
+  <table class="totals-table">
+    <tr><td class="lbl">Subtotal</td><td class="val">${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+    <tr><td class="lbl">CGST (9%)</td><td class="val">${cgst.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+    <tr><td class="lbl">SGST (9%)</td><td class="val">${sgst.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+    ${order.freight ? `<tr><td class="lbl">Freight</td><td class="val">${(order.freight).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}
+    <tr class="grand"><td class="lbl">Total Amount</td><td class="val">₹ ${grandTotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
   </table>
 </div>
 
-<div class="words">Amount in Words: <strong>${numToWords(grandTotal)}</strong></div>
+<div class="words">Amount in words: <strong>${numToWords(grandTotal)}</strong></div>
 
-<div style="font-size:10.5px;margin-bottom:14px">Yours Faithfully,<br/><strong>For SSC CONTROL PRIVATE LIMITED,</strong></div>
-
+<!-- Signatures -->
 <div class="sig-row">
-  <div class="sig-cell"><div class="sig-line"></div>Prepared By<br/><span style="color:#666">Store / Dispatch</span></div>
-  <div class="sig-cell"><div class="sig-line"></div>Checked By<br/><span style="color:#666">Accounts / Manager</span></div>
-  <div class="sig-cell"><div class="sig-line"></div>Authorised<br/><span style="color:#666;font-weight:700">Signatory</span></div>
+  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Prepared By</div>Store / Dispatch</div>
+  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Checked By</div>Accounts / Manager</div>
+  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Authorised Signatory</div>For SSC Control Pvt. Ltd.</div>
 </div>
 
-<div class="print-note">This document is a computer print-out and valid without signature.</div>
-
+<!-- Footer -->
 <div class="footer">
-  | Our GSTIN: 24ABGCS0605M1ZE | &nbsp;
-  | CIN: U29299GJ2000PTC037XXX | &nbsp;
-  | Our Bankers — HDFC Bank Ltd., Branch: Makarba, Ahmedabad | &nbsp;
-  | Bank Account No.: 50200031826271 | &nbsp;
-  | Bank IFSC Code: HDFC0001364 |<br/>
-  SSC Control Pvt. Ltd. Regd. Office: E/12, Siddhivinayak Towers, B/H DCP Office, Off. SG Highway, Makarba, Ahmedabad – 380 051 &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE
+  <div class="footer-left">
+    SSC Control Pvt. Ltd. &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; CIN: U29299GJ2000PTC037XXX<br/>
+    E/12, Siddhivinayak Towers, Off. SG Highway, Makarba, Ahmedabad – 380 051
+  </div>
+  <div class="footer-right">
+    sales@ssccontrol.com<br/>
+    www.ssccontrol.com
+  </div>
 </div>
 
 </body></html>`
