@@ -300,8 +300,9 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false) {
 <!-- Footer -->
 <div class="footer">
   <div class="footer-left">
-    SSC Control Pvt. Ltd. &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; CIN: U29299GJ2000PTC037XXX<br/>
-    E/12, Siddhivinayak Towers, Off. SG Highway, Makarba, Ahmedabad – 380 051
+    SSC Control Pvt. Ltd. &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; CIN: U51909GJ2021PTC122539<br/>
+    Ahmedabad: E/12, Siddhivinayak Towers, Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
+    Baroda: 31 GIDC Estate, B/h Bank Of Baroda, Makarpura, Vadodara – 390 010
   </div>
   <div class="footer-right">
     sales@ssccontrol.com<br/>
