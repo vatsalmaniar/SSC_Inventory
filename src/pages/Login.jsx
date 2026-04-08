@@ -10,9 +10,20 @@ export default function Login() {
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState('')
   const [showPwd, setShowPwd]       = useState(false)
-  const [view, setView]             = useState('login') // 'login' | 'overlay'
+  const [view, setView]             = useState('login') // 'login' | 'totp' | 'enroll' | 'overlay'
   const [overlayMsg, setOverlayMsg] = useState({ text: '', sub: '' })
+
+  // MFA state
+  const [mfaFactorId, setMfaFactorId]   = useState(null)
+  const [totpCode, setTotpCode]         = useState('')
+  const [mfaError, setMfaError]         = useState('')
+  const [mfaLoading, setMfaLoading]     = useState(false)
+  const [enrollData, setEnrollData]     = useState(null) // { id, qr_code, secret }
+  const [pendingSession, setPendingSession] = useState(null)
+  const [pendingProfile, setPendingProfile] = useState(null)
+
   const usernameRef = useRef(null)
+  const totpRef     = useRef(null)
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
@@ -74,8 +85,57 @@ export default function Login() {
       return
     }
 
+    // Admin requires MFA
+    if (profile.role === 'admin') {
+      setPendingSession(data.session)
+      setPendingProfile(profile)
+      await checkAdminMFA()
+      setLoading(false)
+      return
+    }
+
     await handleSession(data.session)
     setLoading(false)
+  }
+
+  async function checkAdminMFA() {
+    const { data: factors } = await sb.auth.mfa.listFactors()
+    const verified = (factors?.totp || []).find(f => f.status === 'verified')
+    if (verified) {
+      // Already enrolled — show code prompt
+      setMfaFactorId(verified.id)
+      setView('totp')
+      setTimeout(() => totpRef.current?.focus(), 100)
+    } else {
+      // First time — enroll
+      const { data: enroll, error: enrollErr } = await sb.auth.mfa.enroll({ factorType: 'totp' })
+      if (enrollErr) { setError('MFA setup failed: ' + enrollErr.message); return }
+      setEnrollData({ id: enroll.id, qr_code: enroll.totp.qr_code, secret: enroll.totp.secret })
+      setView('enroll')
+      setTimeout(() => totpRef.current?.focus(), 100)
+    }
+  }
+
+  async function submitTOTP() {
+    if (totpCode.length !== 6) { setMfaError('Enter the 6-digit code from your authenticator app.'); return }
+    setMfaLoading(true)
+    setMfaError('')
+    const { data: challenge, error: chalErr } = await sb.auth.mfa.challenge({ factorId: mfaFactorId })
+    if (chalErr) { setMfaError(chalErr.message); setMfaLoading(false); return }
+    const { error: verErr } = await sb.auth.mfa.verify({ factorId: mfaFactorId, challengeId: challenge.id, code: totpCode })
+    if (verErr) { setMfaError('Invalid code. Try again.'); setTotpCode(''); setMfaLoading(false); totpRef.current?.focus(); return }
+    setMfaLoading(false)
+    await handleSession(pendingSession)
+  }
+
+  async function submitEnroll() {
+    if (totpCode.length !== 6) { setMfaError('Enter the 6-digit code from your authenticator app.'); return }
+    setMfaLoading(true)
+    setMfaError('')
+    const { error: verErr } = await sb.auth.mfa.challengeAndVerify({ factorId: enrollData.id, code: totpCode })
+    if (verErr) { setMfaError('Invalid code. Make sure you scanned the QR code correctly.'); setTotpCode(''); setMfaLoading(false); totpRef.current?.focus(); return }
+    setMfaLoading(false)
+    await handleSession(pendingSession)
   }
 
   function goTo(path) {
@@ -199,6 +259,111 @@ export default function Login() {
                 <strong>Internal system — SSC Control Pvt. Ltd.</strong><br/>
                 Authorised personnel only
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MFA — Verify TOTP */}
+        {view === 'totp' && (
+          <div className="card">
+            <div className="card-band">
+              <div className="band-eyebrow">Two-factor authentication</div>
+              <div className="band-title">Enter your code</div>
+              <div className="band-sub">Open your authenticator app and enter the 6-digit code</div>
+            </div>
+            <div className="card-body">
+              {mfaError && (
+                <div className="error-msg show">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+                  </svg>
+                  <span>{mfaError}</span>
+                </div>
+              )}
+              <div className="field">
+                <label className="field-label">Authentication Code</label>
+                <div className="input-wrap">
+                  <span className="input-icon">
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                  </span>
+                  <input
+                    ref={totpRef}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={totpCode}
+                    onChange={e => { setTotpCode(e.target.value.replace(/\D/g, '')); setMfaError('') }}
+                    onKeyDown={e => e.key === 'Enter' && submitTOTP()}
+                    placeholder="000000"
+                    style={{letterSpacing:'0.3em',fontSize:20,fontFamily:'var(--mono)',textAlign:'center'}}
+                  />
+                </div>
+              </div>
+              <button className="submit-btn" onClick={submitTOTP} disabled={mfaLoading}>
+                {mfaLoading ? <><div className="spinner" /><span>Verifying...</span></> : <span>Verify</span>}
+              </button>
+              <button style={{marginTop:10,width:'100%',background:'none',border:'none',color:'var(--gray-400)',fontSize:13,cursor:'pointer'}} onClick={() => { setView('login'); setTotpCode(''); setMfaError('') }}>
+                Back to login
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* MFA — First time enroll */}
+        {view === 'enroll' && enrollData && (
+          <div className="card">
+            <div className="card-band">
+              <div className="band-eyebrow">Admin security setup</div>
+              <div className="band-title">Set up 2-factor auth</div>
+              <div className="band-sub">Scan with Google Authenticator or any TOTP app</div>
+            </div>
+            <div className="card-body">
+              {mfaError && (
+                <div className="error-msg show">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+                  </svg>
+                  <span>{mfaError}</span>
+                </div>
+              )}
+              <div style={{textAlign:'center',margin:'0 0 16px'}}>
+                <div dangerouslySetInnerHTML={{ __html: enrollData.qr_code }} style={{display:'inline-block',background:'white',padding:12,borderRadius:8,border:'1px solid var(--gray-200)'}} />
+                <div style={{marginTop:10,fontSize:11,color:'var(--gray-400)'}}>
+                  Can't scan? Enter manually:<br/>
+                  <span style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--gray-600)',letterSpacing:'0.1em',wordBreak:'break-all'}}>{enrollData.secret}</span>
+                </div>
+              </div>
+              <div className="field">
+                <label className="field-label">Confirm with 6-digit code</label>
+                <div className="input-wrap">
+                  <span className="input-icon">
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                  </span>
+                  <input
+                    ref={totpRef}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={totpCode}
+                    onChange={e => { setTotpCode(e.target.value.replace(/\D/g, '')); setMfaError('') }}
+                    onKeyDown={e => e.key === 'Enter' && submitEnroll()}
+                    placeholder="000000"
+                    style={{letterSpacing:'0.3em',fontSize:20,fontFamily:'var(--mono)',textAlign:'center'}}
+                  />
+                </div>
+              </div>
+              <button className="submit-btn" onClick={submitEnroll} disabled={mfaLoading}>
+                {mfaLoading ? <><div className="spinner" /><span>Activating...</span></> : <span>Activate 2FA</span>}
+              </button>
+              <button style={{marginTop:10,width:'100%',background:'none',border:'none',color:'var(--gray-400)',fontSize:13,cursor:'pointer'}} onClick={() => { setView('login'); setTotpCode(''); setMfaError('') }}>
+                Back to login
+              </button>
             </div>
           </div>
         )}
