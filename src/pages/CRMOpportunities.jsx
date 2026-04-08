@@ -5,6 +5,7 @@ import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import NewOppModal from './CRMNewOpportunity'
 import '../styles/crm.css'
+import '../styles/orders.css'
 
 const STAGES = ['LEAD_CAPTURED','CONTACTED','QUALIFIED','BOM_RECEIVED','QUOTATION_SENT','FOLLOW_UP','FINAL_NEGOTIATION']
 const TERMINAL = ['WON','LOST','ON_HOLD']
@@ -113,8 +114,8 @@ export default function CRMOpportunities() {
                 <button className={'crm-btn crm-btn-sm' + (view==='kanban'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none'}} onClick={() => setView('kanban')}>Kanban</button>
                 <button className={'crm-btn crm-btn-sm' + (view==='list'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => setView('list')}>List</button>
               </div>
-              <button className="crm-btn crm-btn-primary" onClick={() => setShowNewModal(true)}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <button className="new-order-btn" onClick={() => setShowNewModal(true)}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 New Lead
               </button>
             </div>

@@ -48,49 +48,40 @@ function buildMonthlyOpps(opps) {
   return months
 }
 
-function BubbleChart({ data }) {
-  const MAX_DOTS = 8
-  const R        = 5
-  const GAP      = 4
-  const SLOT     = R * 2 + GAP
-  const COL_GAP  = 32
-  const CHART_H  = MAX_DOTS * SLOT
-  const LABEL_H  = 16
-  const SVG_H    = CHART_H + LABEL_H
-  const maxCount = Math.max(...data.map(d => d.count), 1)
-  const COL_W    = R * 2
-  const W        = data.length * (COL_W + COL_GAP) - COL_GAP
+function MonthlyBarChart({ data }) {
+  const last8 = data.slice(-8)
+  const maxV   = Math.max(...last8.map(d => d.value), 1)
+  const H      = 64
   return (
-    <svg viewBox={`0 0 ${W} ${SVG_H}`} width="100%" style={{ display:'block' }}>
-      {data.map((d, i) => {
-        const filled = Math.round((d.count / maxCount) * MAX_DOTS)
-        const cx     = i * (COL_W + COL_GAP) + R
-        const isCur  = i === data.length - 1
-        const topFilledY = filled > 0 ? (MAX_DOTS - filled) * SLOT + R : CHART_H
+    <div style={{ display:'flex', gap:6, alignItems:'flex-end', height: H + 24, padding:'0 2px' }}>
+      {last8.map((d, i) => {
+        const barH   = d.value > 0 ? Math.max(5, Math.round((d.value / maxV) * H)) : 3
+        const isCur  = i === last8.length - 1
+        const isPrev = i === last8.length - 2
         return (
-          <g key={i}>
-            {isCur && d.count > 0 && (
-              <g>
-                <rect x={cx - 18} y={topFilledY - SLOT - 16} width={36} height={18} rx={9} fill="white"
-                  style={{ filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.14))' }} />
-                <text x={cx} y={topFilledY - SLOT - 4} textAnchor="middle" fontSize="7" fontWeight="600" fill="#1a4dab"
-                  fontFamily="Geist, sans-serif">{d.count}</text>
-              </g>
+          <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:0 }}>
+            {isCur && d.value > 0 && (
+              <div style={{ fontSize:9, fontWeight:700, color:'#1a4dab', whiteSpace:'nowrap', marginBottom:3 }}>
+                {fmtCr(d.value)}
+              </div>
             )}
-            {Array.from({ length: MAX_DOTS }).map((_, j) => {
-              const cy      = j * SLOT + R
-              const slotIdx = MAX_DOTS - 1 - j
-              const active  = slotIdx < filled
-              return <circle key={j} cx={cx} cy={cy} r={R}
-                fill={active ? (isCur ? '#1a4dab' : '#c2d9f5') : '#e2e8f0'} />
-            })}
-            <text x={cx} y={SVG_H - 2} textAnchor="middle" fontSize="7"
-              fill={isCur ? '#1a4dab' : '#94a3b8'} fontWeight={isCur ? '600' : '400'}
-              fontFamily="Geist, sans-serif">{d.label}</text>
-          </g>
+            {(!isCur || d.value === 0) && <div style={{ height:16 }} />}
+            <div style={{ flex:'none', width:'100%', display:'flex', alignItems:'flex-end', height: H }}>
+              <div style={{
+                width:'100%',
+                height: barH,
+                background: isCur ? '#1a4dab' : isPrev ? '#c2d9f5' : '#e8edf5',
+                borderRadius: '4px 4px 0 0',
+                transition:'height 0.5s ease',
+              }} />
+            </div>
+            <div style={{ fontSize:9, color: isCur ? '#1a4dab' : '#94a3b8', fontWeight: isCur ? 700 : 400, marginTop:4 }}>
+              {d.label}
+            </div>
+          </div>
         )
       })}
-    </svg>
+    </div>
   )
 }
 
@@ -164,6 +155,7 @@ export default function CRMDashboard() {
   const stageCounts = STAGE_ORDER.map(s => ({
     key: s, label: STAGE_LABELS[s],
     count: myOpps.filter(o => o.stage === s).length,
+    value: myOpps.filter(o => o.stage === s).reduce((a, o) => a + (o.estimated_value_inr || 0), 0),
     color: '#1a4dab',
   }))
   const stageMax = Math.max(...stageCounts.map(s => s.count), 1)
@@ -324,20 +316,29 @@ export default function CRMDashboard() {
             {/* Mid row */}
             <div className="dash-mid">
 
-              {/* Bubble chart */}
+              {/* Monthly pipeline bar chart */}
               <div className="dash-card dash-card-chart">
                 <div className="dash-card-head">
                   <div>
-                    <div className="dash-card-title">Opportunity Summary</div>
-                    <div className="dash-card-sub">Last 12 months · by count</div>
+                    <div className="dash-card-title">Monthly Pipeline Created</div>
+                    <div className="dash-card-sub">Last 8 months · by value</div>
                   </div>
                   <div style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:28, fontWeight:800, color:'#0e2d6a', letterSpacing:'-1px', lineHeight:1 }}>{myOpps.length}</div>
-                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>open opps</div>
+                    <div style={{ fontSize:24, fontWeight:800, color:'#0e2d6a', letterSpacing:'-1px', lineHeight:1 }}>{fmtCr(pipelineValue)}</div>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>total open pipeline</div>
                   </div>
                 </div>
-                <div style={{ padding:'12px 16px 16px' }}>
-                  <BubbleChart data={monthlyData} />
+                <div style={{ padding:'12px 18px 16px' }}>
+                  <MonthlyBarChart data={monthlyData} />
+                  {momPct !== null && (
+                    <div style={{ marginTop:8, fontSize:11, color:'#94a3b8' }}>
+                      vs last month:&nbsp;
+                      <span style={{ fontWeight:700, color: momPct >= 0 ? '#15803d' : '#dc2626' }}>
+                        {momPct >= 0 ? '+' : ''}{momPct}%
+                      </span>
+                      &nbsp;({thisMonth} vs {prevMonth} opps)
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -352,13 +353,16 @@ export default function CRMDashboard() {
                     const pct  = Math.round((s.count / stageMax) * 100)
                     const minW = s.count > 0 ? Math.max(pct, 6) : 0
                     return (
-                      <div key={s.key} style={{ padding:'10px 18px', borderBottom: i < stageCounts.length - 1 ? '1px solid #f8fafc' : 'none', cursor:'pointer' }}
+                      <div key={s.key} style={{ padding:'9px 18px', borderBottom: i < stageCounts.length - 1 ? '1px solid #f8fafc' : 'none', cursor:'pointer' }}
                         onClick={() => navigate('/crm/opportunities')}>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7 }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
                           <span style={{ fontSize:12, color: s.count > 0 ? '#334155' : '#94a3b8', fontWeight: s.count > 0 ? 600 : 400 }}>{s.label}</span>
-                          <span style={{ fontSize:14, fontWeight:800, color: s.count > 0 ? '#0f172a' : '#cbd5e1', minWidth:24, textAlign:'right' }}>{s.count}</span>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+                            {s.value > 0 && <span style={{ fontSize:11, color:'#64748b' }}>{fmtCr(s.value)}</span>}
+                            <span style={{ fontSize:13, fontWeight:800, color: s.count > 0 ? '#0f172a' : '#cbd5e1', minWidth:20, textAlign:'right' }}>{s.count}</span>
+                          </div>
                         </div>
-                        <div style={{ height:6, background:'#f1f5f9', borderRadius:6 }}>
+                        <div style={{ height:5, background:'#f1f5f9', borderRadius:6 }}>
                           {s.count > 0 && <div style={{ height:'100%', width: minW + '%', background: s.color, borderRadius:6, transition:'width 0.6s ease', minWidth:8 }} />}
                         </div>
                       </div>

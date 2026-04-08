@@ -510,7 +510,8 @@ export default function CRMOpportunityDetail() {
     // Extract @tagged names
     const tagged = [...notes.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
     setPostingAct(true)
-    await sb.from('crm_activities').insert({ opportunity_id: id, rep_id: user.id, activity_type: activityType, notes, tagged_users: tagged.length ? tagged : null })
+    const { error: actErr } = await sb.from('crm_activities').insert({ opportunity_id: id, rep_id: user.id, activity_type: activityType, notes, tagged_users: tagged.length ? tagged : null })
+    if (actErr) { alert('Error logging activity: ' + actErr.message); setPostingAct(false); return }
     if (tagged.length > 0) {
       await sb.from('notifications').insert(tagged.map(tname => ({
         user_name: tname,
@@ -524,6 +525,9 @@ export default function CRMOpportunityDetail() {
     const { data: c } = await sb.from('crm_activities').select('*, profiles(name)').eq('opportunity_id', id).order('created_at', { ascending: false })
     setActivities(c || [])
     setPostingAct(false)
+    // Switch to the tab where the new activity will appear
+    if (activityType === 'Note') setActTab('notes')
+    else if (['Call','Visit','Email','Sample'].includes(activityType)) setActTab('activity')
   }
 
   async function addTask() {
@@ -1397,7 +1401,7 @@ export default function CRMOpportunityDetail() {
               {[
                 ['activity','Activity', activities.filter(a => ['Call','Visit','Email','Sample'].includes(a.activity_type)).length],
                 ['notes','Notes', activities.filter(a => a.activity_type === 'Note').length],
-                ['log','Log', activities.filter(a => ['Stage Change','Quotation','Won','Lost'].includes(a.activity_type)).length],
+                ['log','Log', activities.filter(a => ['Stage Change','Quotation','Won','Lost','Created'].includes(a.activity_type)).length + (activities.some(a => a.activity_type === 'Created') ? 0 : 1)],
                 ['tasks', 'Tasks', pendingTasks.length],
               ].map(([key, label, count]) => (
                 <button key={key} onClick={() => setActTab(key)}
@@ -1527,9 +1531,11 @@ export default function CRMOpportunityDetail() {
 
             {/* ── LOG TAB ── */}
             {actTab === 'log' && (() => {
-              const logActs = activities.filter(a => ['Stage Change','Quotation','Won','Lost'].includes(a.activity_type))
-              const created = opp ? [{ id:'created', profiles:{ name: opp.assigned_rep_name || opp.profiles?.name }, notes:'Opportunity created', activity_type:'Created', created_at: opp.created_at }] : []
-              const all = [...logActs, ...created].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+              const logActs = activities.filter(a => ['Stage Change','Quotation','Won','Lost','Created'].includes(a.activity_type))
+              // Fallback synthetic entry only if no real 'Created' activity exists (for old opportunities)
+              const hasCreated = logActs.some(a => a.activity_type === 'Created')
+              const fallback = !hasCreated && opp ? [{ id:'created', profiles:{ name: opp.profiles?.name }, notes:'Opportunity created', activity_type:'Created', created_at: opp.created_at }] : []
+              const all = [...logActs, ...fallback].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
               const DOT_CLR = { 'Stage Change':'#d97706', 'Quotation':'#16a34a', 'Won':'#15803d', 'Lost':'#dc2626', 'Created':'#1a4dab' }
               return (
                 <div style={{ padding:'4px 0' }}>

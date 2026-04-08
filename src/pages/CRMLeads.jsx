@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
+import '../styles/orders.css'
 
 const SOURCES = ['Call','Visit','WhatsApp','Referral','Exhibition','Other']
 const SCENARIOS = ['NEW_CUST_NEW_PROD','OLD_CUST_NEW_PROD','NEW_CUST_OLD_PROD','DORMANT_REVIVAL']
@@ -71,8 +72,8 @@ export default function CRMLeads() {
               <div className="crm-page-sub">{filtered.length} leads</div>
             </div>
             <div className="crm-header-actions">
-              <button className="crm-btn crm-btn-primary" onClick={() => navigate('/crm/leads/new')}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <button className="new-order-btn" onClick={() => navigate('/crm/leads/new')}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 New Lead
               </button>
             </div>

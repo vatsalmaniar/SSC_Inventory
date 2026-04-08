@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
+import '../styles/orders.css'
 
 const INDUSTRIES = ['Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal','Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG','Energy','Automobile','Power Electronics','Datacenters','Road Construction','Cement','Tyre','Petroleum','Chemical']
 const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
@@ -79,8 +80,8 @@ export default function CRMCompanies() {
               <div className="crm-page-sub">{companies.length} companies</div>
             </div>
             <div className="crm-header-actions">
-              <button className="crm-btn crm-btn-primary" onClick={() => setShowForm(true)}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <button className="new-order-btn" onClick={() => setShowForm(true)}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Add Company
               </button>
             </div>

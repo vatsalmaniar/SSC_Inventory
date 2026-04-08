@@ -54,7 +54,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
     let allCustomers = []
     let from = 0
     while (true) {
-      const { data } = await sb.from('customers').select('id,customer_name,account_owner,customer_type').order('customer_name').range(from, from + 999)
+      const { data } = await sb.from('customers').select('id,customer_name,account_owner,customer_type,gst').order('customer_name').range(from, from + 999)
       if (!data || data.length === 0) break
       allCustomers = [...allCustomers, ...data]
       if (data.length < 1000) break
@@ -74,7 +74,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
     const custs = customerList || companies
     const repsAll = repList || reps
     if (!customerId) {
-      setForm(p => ({ ...p, company_id: '', account_type: '', assigned_rep_id: '', assigned_rep_name: '' }))
+      setForm(p => ({ ...p, company_id: '', account_type: '', assigned_rep_id: '', assigned_rep_name: '', gstin: '' }))
       setIsExisting(false)
       return
     }
@@ -87,6 +87,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
       account_type: cust.customer_type || '',
       assigned_rep_id: matchedRep?.id || '',
       assigned_rep_name: cust.account_owner || '',
+      gstin: cust.gst || p.gstin,
       // Switch to first opportunity stage when existing customer selected
       stage: 'BOM_RECEIVED',
       probability: STAGE_PROBABILITY['BOM_RECEIVED'],
@@ -128,6 +129,13 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
       product_notes:      form.opportunity_name.trim(),
     }).select().single()
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    // Log creation activity with the actual creator's ID (not the assigned rep)
+    await sb.from('crm_activities').insert({
+      opportunity_id: data.id,
+      rep_id: currentUser?.id || null,
+      activity_type: 'Created',
+      notes: 'Opportunity created',
+    })
     onCreated(data.id)
   }
 
@@ -221,8 +229,14 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
 
           {/* GST Number — mandatory */}
           <div>
-            <label style={LBL}>GST Number <span style={{color:'#dc2626'}}>*</span></label>
-            <input style={INP} value={form.gstin} onChange={e => setForm(p=>({...p,gstin:e.target.value}))}
+            <label style={LBL}>
+              GST Number <span style={{color:'#dc2626'}}>*</span>
+              {form.company_id && form.gstin && (
+                <span style={{marginLeft:6,fontSize:10,fontWeight:600,background:'#f0fdf4',color:'#15803d',borderRadius:4,padding:'1px 6px'}}>from Customer 360</span>
+              )}
+            </label>
+            <input style={{...INP, background: form.company_id && form.gstin ? '#f8fafc' : 'white', fontFamily:'var(--mono)', letterSpacing:'0.5px'}}
+              value={form.gstin} onChange={e => setForm(p=>({...p,gstin:e.target.value}))}
               placeholder="e.g. 24AABCS1429B1ZB" />
           </div>
 
