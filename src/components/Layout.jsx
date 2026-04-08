@@ -73,9 +73,16 @@ export default function Layout({ children, pageTitle, pageKey }) {
   const navigate  = useNavigate()
   const location  = useLocation()
   const bellRef   = useRef(null)
+  const searchRef = useRef(null)
+  const searchInputRef = useRef(null)
+  const searchTimer = useRef(null)
   const [user, setUser]           = useState({ name: '', avatar: '', role: '' })
   const [notifs, setNotifs]       = useState([])
   const [showNotifs, setShowNotifs] = useState(false)
+  const [searchQ, setSearchQ]     = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchResults, setSearchResults] = useState({ orders: [], companies: [], leads: [], opportunities: [] })
 
   useEffect(() => {
     sb.auth.getSession().then(async ({ data: { session } }) => {
@@ -129,6 +136,64 @@ export default function Layout({ children, pageTitle, pageKey }) {
     if (diff < 1440) return Math.floor(diff / 60) + 'h ago'
     return Math.floor(diff / 1440) + 'd ago'
   }
+
+  // Close search on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (searchRef.current && !searchRef.current.contains(e.target)) setSearchOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // Keyboard shortcut: Cmd+K / Ctrl+K
+  useEffect(() => {
+    function handleKey(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); searchInputRef.current?.focus(); setSearchOpen(true) }
+      if (e.key === 'Escape') { setSearchOpen(false); setSearchQ('') }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [])
+
+  function onSearchChange(e) {
+    const q = e.target.value
+    setSearchQ(q)
+    clearTimeout(searchTimer.current)
+    if (q.trim().length < 2) { setSearchResults({ orders: [], companies: [], leads: [], opportunities: [] }); setSearchOpen(q.length > 0); return }
+    setSearchLoading(true)
+    setSearchOpen(true)
+    searchTimer.current = setTimeout(() => doSearch(q.trim()), 300)
+  }
+
+  async function doSearch(q) {
+    const role = user.role
+    const canCRM = ['sales', 'ops', 'admin'].includes(role)
+    const canOrders = ['sales', 'ops', 'admin', 'accounts', 'fc_kaveri', 'fc_godawari'].includes(role)
+    const [ordersRes, companiesRes, leadsRes, oppsRes] = await Promise.all([
+      canOrders ? sb.from('orders').select('id,order_number,customer_name,status').or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`).eq('is_test', false).limit(5) : { data: [] },
+      canCRM    ? sb.from('customers').select('id,customer_name').ilike('customer_name', `%${q}%`).limit(5) : { data: [] },
+      canCRM    ? sb.from('crm_leads').select('id,contact_name_freetext,freetext_company,stage').or(`contact_name_freetext.ilike.%${q}%,freetext_company.ilike.%${q}%`).limit(5) : { data: [] },
+      canCRM    ? sb.from('crm_opportunities').select('id,opportunity_name,product_notes,stage').or(`opportunity_name.ilike.%${q}%,product_notes.ilike.%${q}%`).limit(5) : { data: [] },
+    ])
+    setSearchResults({
+      orders:        ordersRes.data || [],
+      companies:     companiesRes.data || [],
+      leads:         leadsRes.data || [],
+      opportunities: oppsRes.data || [],
+    })
+    setSearchLoading(false)
+  }
+
+  function goToResult(path) {
+    setSearchOpen(false)
+    setSearchQ('')
+    navigate(path)
+  }
+
+  const totalResults = searchResults.orders.length + searchResults.companies.length + searchResults.leads.length + searchResults.opportunities.length
+
+  const STATUS_LABEL = { pending:'Pending', dispatch:'Ready to Ship', partial_dispatch:'Partially Shipped', delivery_created:'At FC', picking:'Picking', packing:'Packing', goods_issued:'Goods Issued', invoice_generated:'Invoiced', dispatched_fc:'Delivered', cancelled:'Cancelled' }
 
   async function signOut() { await sb.auth.signOut(); navigate('/login') }
 
@@ -190,6 +255,103 @@ export default function Layout({ children, pageTitle, pageKey }) {
             <span className="ly-topbar-sep">/</span>
             <span className="ly-topbar-page">{pageTitle || 'Home'}</span>
           </div>
+          {/* Global Search */}
+          <div ref={searchRef} style={{position:'relative',flex:1,maxWidth:400,margin:'0 24px'}}>
+            <div style={{display:'flex',alignItems:'center',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:10,padding:'0 12px',gap:8,transition:'border-color 0.15s',borderColor:searchOpen?'#1a4dab':'var(--gray-200)'}}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:15,height:15,color:'var(--gray-400)',flexShrink:0}}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input
+                ref={searchInputRef}
+                value={searchQ}
+                onChange={onSearchChange}
+                onFocus={() => { if (searchQ.length >= 2) setSearchOpen(true) }}
+                placeholder="Search orders, customers, leads… (⌘K)"
+                style={{flex:1,border:'none',background:'none',outline:'none',fontFamily:'var(--font)',fontSize:13,color:'var(--gray-900)',padding:'8px 0'}}
+              />
+              {searchQ && <button onClick={() => { setSearchQ(''); setSearchOpen(false); setSearchResults({ orders:[], companies:[], leads:[], opportunities:[] }) }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--gray-400)',padding:0,lineHeight:1}}>✕</button>}
+              {!searchQ && <span style={{fontSize:11,color:'var(--gray-300)',background:'var(--gray-100)',border:'1px solid var(--gray-200)',borderRadius:4,padding:'2px 5px',flexShrink:0}}>⌘K</span>}
+            </div>
+            {searchOpen && (
+              <div style={{position:'absolute',top:'calc(100% + 6px)',left:0,right:0,background:'white',border:'1px solid var(--gray-200)',borderRadius:12,boxShadow:'0 8px 32px rgba(0,0,0,0.12)',zIndex:9999,overflow:'hidden',maxHeight:440,overflowY:'auto'}}>
+                {searchLoading ? (
+                  <div style={{padding:'20px',textAlign:'center',color:'var(--gray-400)',fontSize:13}}>Searching…</div>
+                ) : searchQ.length < 2 ? (
+                  <div style={{padding:'16px 18px',fontSize:12,color:'var(--gray-400)'}}>Type at least 2 characters to search</div>
+                ) : totalResults === 0 ? (
+                  <div style={{padding:'20px',textAlign:'center',color:'var(--gray-400)',fontSize:13}}>No results for "{searchQ}"</div>
+                ) : (
+                  <>
+                    {searchResults.orders.length > 0 && (
+                      <div>
+                        <div style={{padding:'10px 16px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)'}}>Orders</div>
+                        {searchResults.orders.map(o => (
+                          <div key={o.id} onClick={() => goToResult('/orders/'+o.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{width:28,height:28,borderRadius:7,background:'#e8f2fc',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              <svg fill="none" stroke="#1a4dab" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#1a4dab'}}>{o.order_number}</div>
+                              <div style={{fontSize:12,color:'var(--gray-500)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o.customer_name}</div>
+                            </div>
+                            <span style={{marginLeft:'auto',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'var(--gray-100)',color:'var(--gray-500)',flexShrink:0}}>{STATUS_LABEL[o.status] || o.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.companies.length > 0 && (
+                      <div>
+                        <div style={{padding:'10px 16px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)'}}>Customer 360</div>
+                        {searchResults.companies.map(c => (
+                          <div key={c.id} onClick={() => goToResult('/customers/'+c.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{width:28,height:28,borderRadius:7,background:'#f0fdf4',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              <svg fill="none" stroke="#059669" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:600,color:'var(--gray-900)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.customer_name}</div>
+                            </div>
+                            <span style={{marginLeft:'auto',fontSize:10,padding:'2px 7px',borderRadius:4,background:'#f0fdf4',color:'#059669',flexShrink:0,fontWeight:600}}>Customer</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.leads.length > 0 && (
+                      <div>
+                        <div style={{padding:'10px 16px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)'}}>Leads</div>
+                        {searchResults.leads.map(l => (
+                          <div key={l.id} onClick={() => goToResult('/crm/leads/'+l.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{width:28,height:28,borderRadius:7,background:'#fef3c7',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              <svg fill="none" stroke="#d97706" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:600,color:'var(--gray-900)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.contact_name_freetext || '—'}</div>
+                              {l.freetext_company && <div style={{fontSize:11,color:'var(--gray-400)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.freetext_company}</div>}
+                            </div>
+                            <span style={{marginLeft:'auto',fontSize:10,padding:'2px 7px',borderRadius:4,background:'#fef3c7',color:'#d97706',flexShrink:0,fontWeight:600}}>{l.stage || 'Lead'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.opportunities.length > 0 && (
+                      <div>
+                        <div style={{padding:'10px 16px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)'}}>Opportunities</div>
+                        {searchResults.opportunities.map(o => (
+                          <div key={o.id} onClick={() => goToResult('/crm/opportunities/'+o.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{width:28,height:28,borderRadius:7,background:'#f5f3ff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              <svg fill="none" stroke="#7c3aed" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:600,color:'var(--gray-900)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o.opportunity_name || o.product_notes || '—'}</div>
+                            </div>
+                            <span style={{marginLeft:'auto',fontSize:10,padding:'2px 7px',borderRadius:4,background:'#f5f3ff',color:'#7c3aed',flexShrink:0,fontWeight:600}}>{o.stage || 'Opp'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="ly-topbar-right">
             {/* Bell */}
             <div className="ly-bell-wrap" ref={bellRef}>

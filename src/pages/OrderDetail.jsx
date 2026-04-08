@@ -847,7 +847,8 @@ if (match) {
                           <tr>
                             <th style={{ paddingLeft: 16 }}>#</th>
                             <th>Item Code</th>
-                            <th>Dispatch Date</th>
+                            <th>Delivery Date</th>
+                            <th>Dispatched On</th>
                             <th style={{ textAlign: 'center' }}>Total Qty</th>
                             <th style={{ textAlign: 'center' }}>Dispatched</th>
                             <th style={{ textAlign: 'center', color: '#92400e' }}>Pending</th>
@@ -856,14 +857,19 @@ if (match) {
                           </tr>
                         </thead>
                         <tbody>
-                          {(order.order_items || []).filter(item => item.qty > (item.dispatched_qty || 0)).map(item => {
+                          {(order.order_items || []).filter(item => {
+                            const deliveredQty = batches.filter(b => b.status === 'dispatched_fc').reduce((s, b) => { const di = (b.dispatched_items || []).find(i => i.order_item_id === item.id); return s + (di?.qty || 0) }, 0)
+                            return item.qty > deliveredQty
+                          }).map(item => {
                             const dispQty    = item.dispatched_qty || 0
                             const pendingQty = item.qty - dispQty
+                            const itemBatch  = batches.find(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))
                             return (
                               <tr key={item.id}>
                                 <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
                                 <td className="mono">{item.item_code}</td>
                                 <td style={{ fontSize: 12 }}>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
+                                <td style={{ fontSize: 12, color: itemBatch?.delivered_at ? '#166534' : 'var(--gray-400)', fontWeight: itemBatch?.delivered_at ? 600 : 400 }}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>
                                 <td style={{ textAlign: 'center' }}>{item.qty}</td>
                                 <td style={{ textAlign: 'center', color: dispQty > 0 ? '#166534' : 'var(--gray-400)', fontWeight: 600 }}>{dispQty || '—'}</td>
                                 <td style={{ textAlign: 'center', fontWeight: 700, color: '#c2410c' }}>{pendingQty}</td>
@@ -883,10 +889,10 @@ if (match) {
                       <div className="od-dispatch-tile-header">
                         <span className="od-dispatch-tile-label">
                           <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><polyline points="20 6 9 17 4 12"/></svg>
-                          Dispatched Record
+                          Shipped
                         </span>
                         <span className="od-dispatch-tile-count" style={{ background: '#d1fae5', color: '#065f46' }}>
-                          {(order.order_items || []).reduce((s, i) => s + (i.dispatched_qty || 0), 0)} units dispatched
+                          {batches.filter(b => b.status === 'dispatched_fc').reduce((s, b) => s + (b.dispatched_items || []).reduce((bs, i) => bs + (i.qty || 0), 0), 0)} units shipped
                         </span>
                       </div>
                       <table className="od-items-table">
@@ -894,7 +900,8 @@ if (match) {
                           <tr>
                             <th style={{ paddingLeft: 16 }}>#</th>
                             <th>Item Code</th>
-                            <th>Dispatch Date</th>
+                            <th>Delivery Date</th>
+                            <th>Dispatched On</th>
                             <th style={{ textAlign: 'center' }}>Total Qty</th>
                             <th style={{ textAlign: 'center', color: '#166534' }}>Dispatched</th>
                             <th style={{ textAlign: 'center' }}>Pending</th>
@@ -903,14 +910,16 @@ if (match) {
                           </tr>
                         </thead>
                         <tbody>
-                          {(order.order_items || []).filter(item => (item.dispatched_qty || 0) > 0).map(item => {
-                            const dispQty    = item.dispatched_qty || 0
+                          {(order.order_items || []).filter(item => batches.some(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))).map(item => {
+                            const dispQty    = batches.filter(b => b.status === 'dispatched_fc').reduce((s, b) => { const di = (b.dispatched_items || []).find(i => i.order_item_id === item.id); return s + (di?.qty || 0) }, 0)
                             const pendingQty = item.qty - dispQty
+                            const itemBatch  = batches.find(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))
                             return (
                               <tr key={item.id} style={{ background: pendingQty === 0 ? '#f0fdf4' : undefined }}>
                                 <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
                                 <td className="mono">{item.item_code}</td>
                                 <td style={{ fontSize: 12 }}>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
+                                <td style={{ fontSize: 12, color: itemBatch?.delivered_at ? '#166534' : 'var(--gray-400)', fontWeight: itemBatch?.delivered_at ? 600 : 400 }}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>
                                 <td style={{ textAlign: 'center' }}>{item.qty}</td>
                                 <td style={{ textAlign: 'center', fontWeight: 700, color: '#166534' }}>{dispQty}</td>
                                 <td style={{ textAlign: 'center', color: pendingQty > 0 ? '#c2410c' : '#166534', fontWeight: 600 }}>
@@ -966,12 +975,15 @@ if (match) {
                         <th>Qty</th>
                         <th>LP Price</th><th>Disc %</th><th>Unit Price</th>
                         <th>Delivery Date</th>
+                        <th>Dispatched On</th>
                         <th>Cust. Ref No</th>
                         <th className="right" style={{ paddingRight: 20 }}>Total</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(order.order_items || []).map(item => (
+                      {(order.order_items || []).map(item => {
+                        const itemBatch = batches.find(b => (b.dispatched_items || []).some(di => di.order_item_id === item.id))
+                        return (
                         <tr key={item.id}>
                           <td style={{ paddingLeft: 20, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
                           <td className="mono">{item.item_code}</td>
@@ -980,10 +992,12 @@ if (match) {
                           <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td>
                           <td>₹{item.unit_price_after_disc}</td>
                           <td>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
+                          <td style={{color: itemBatch?.delivered_at ? '#166534' : 'var(--gray-400)', fontWeight: itemBatch?.delivered_at ? 600 : 400, fontSize:12}}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>
                           <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.customer_ref_no || '—'}</td>
                           <td className="right" style={{ paddingRight: 20 }}>₹{(item.total_price || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                   <div className="od-totals">
@@ -1050,6 +1064,22 @@ if (match) {
                           </a>
                         )}
                         {b.fulfilment_center && <div style={{fontSize:11,color:'var(--gray-400)',marginTop:3}}>{b.fulfilment_center}</div>}
+                        {(() => {
+                          const bItemIds = (b.dispatched_items || []).map(i => i.order_item_id).filter(Boolean)
+                          const planDates = bItemIds.length > 0
+                            ? [...new Set((order.order_items || []).filter(i => bItemIds.includes(i.id) && i.dispatch_date).map(i => i.dispatch_date))].sort()
+                            : [...new Set((order.order_items || []).filter(i => i.dispatch_date).map(i => i.dispatch_date))].sort()
+                          return planDates.length > 0 ? (
+                            <div style={{fontSize:11,color:'var(--gray-500)',marginTop:4}}>
+                              Planned: {planDates.map(d => fmt(d)).join(' – ')}
+                            </div>
+                          ) : null
+                        })()}
+                        {b.delivered_at && (
+                          <div style={{fontSize:11,color:'#166534',fontWeight:600,marginTop:2}}>
+                            ✓ Delivered: {fmt(b.delivered_at)}
+                          </div>
+                        )}
                       </div>
                     )
                   })}

@@ -339,7 +339,7 @@ export default function Orders() {
               </div>
 
               {/* Tile 3 — Today's Delivered Value */}
-              <div className="dash-tile" style={{ background: '#0891b2' }} onClick={() => navigate('/dispatch/today')}>
+              <div className="dash-tile" style={{ background: '#0891b2' }} onClick={() => navigate('/orders/list', { state: { filter: 'dispatched', timeline: 'today', dateMode: 'delivered_at' } })}>
                 <div className="dash-tile-head">
                   <div className="dash-tile-label">Today's Delivered</div>
                   <div className="dash-tile-arrow"><svg fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>

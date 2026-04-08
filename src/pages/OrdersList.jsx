@@ -79,15 +79,15 @@ function dispatchedValue(o) {
   return (o.order_items || []).reduce((s, i) => s + (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0), 0)
 }
 
-// Sum of all dispatched batch values — prefer confirmed INV batches, fall back to any batch with dispatched_items
+// Sum only fully delivered batches (status = dispatched_fc) — same logic as dashboard
 function confirmedDispatchedValue(o) {
-  const allBatches = (o.order_dispatches || [])
-  const confirmedBatches = allBatches.filter(b => b.invoice_number && !b.invoice_number.startsWith('Temp/'))
-  const batchesToUse = confirmedBatches.length > 0 ? confirmedBatches : allBatches
-  const batchTotal = batchesToUse.reduce((sum, b) =>
+  const deliveredBatches = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc')
+  const batchTotal = deliveredBatches.reduce((sum, b) =>
     sum + (b.dispatched_items || []).reduce((s, i) => s + (i.total_price || (i.unit_price * i.qty) || 0), 0), 0)
   if (batchTotal > 0) return batchTotal
-  return dispatchedValue(o)
+  // fallback for old orders without dispatched_items
+  if (o.status === 'dispatched_fc') return (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+  return 0
 }
 
 // Delivered filter: show confirmed dispatched value; all other filters: show pending for partial orders
@@ -128,7 +128,11 @@ const TIMELINES = [
 
 function inTimeline(o, t, customFrom, customTo, dateMode) {
   let dateStr
-  if (dateMode === 'delivery') {
+  if (dateMode === 'delivered_at') {
+    const dates = (o.order_dispatches || []).map(b => b.delivered_at).filter(Boolean).sort()
+    dateStr = dates[0] || null
+    if (!dateStr) return false
+  } else if (dateMode === 'delivery') {
     const dates = (o.order_items || []).map(i => i.dispatch_date).filter(Boolean).sort()
     dateStr = dates[0] || null
     if (!dateStr) return false
@@ -161,10 +165,10 @@ export default function OrdersList() {
   const [orders, setOrders]   = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter]     = useState(location.state?.filter || 'all')
-  const [timeline, setTimeline] = useState('all')
+  const [timeline, setTimeline] = useState(location.state?.timeline || 'all')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo]     = useState('')
-  const [dateMode, setDateMode]     = useState('order') // 'order' | 'delivery'
+  const [dateMode, setDateMode]     = useState(location.state?.dateMode || 'order') // 'order' | 'delivery' | 'delivered_at'
   const [search, setSearch]     = useState('')
   const [page, setPage]         = useState(1)
   const [showTest, setShowTest] = useState(false)
@@ -200,17 +204,12 @@ export default function OrdersList() {
     setLoading(false)
   }
 
-  // Has at least one confirmed (non-Temp) INV in order_dispatches — billing is complete for that batch
-  function hasConfirmedDelivery(o) {
-    return (o.order_dispatches || []).some(b => b.invoice_number && !b.invoice_number.startsWith('Temp/'))
-  }
-
   function matchFilter(o, f) {
     if (f === 'all')         return true
     if (f === 'undelivered') return isPendingDelivery(o)
     if (f === 'partial')     return isPartiallyDispatched(o) || o.status === 'partial_dispatch'
     if (f === 'inflow')      return isInFCFlow(o)
-    if (f === 'dispatched')  return o.status === 'dispatched_fc' || hasConfirmedDelivery(o)
+    if (f === 'dispatched')  return o.status === 'dispatched_fc' || (o.order_dispatches || []).some(b => b.status === 'dispatched_fc')
     if (f === 'sample')      return o.order_type === 'SAMPLE'
     if (f === 'approval')    return o.status === 'pending'
     if (f === 'cancelled')   return o.status === 'cancelled'
@@ -449,6 +448,9 @@ export default function OrdersList() {
             <button onClick={() => { setDateMode('delivery'); setPage(1) }}
               style={{ padding:'6px 12px', fontSize:12, fontWeight: dateMode === 'delivery' ? 700 : 400, background: dateMode === 'delivery' ? 'white' : 'transparent', color: dateMode === 'delivery' ? 'var(--gray-900)' : 'var(--gray-500)', border:'none', cursor:'pointer', fontFamily:'var(--font)', boxShadow: dateMode === 'delivery' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', margin: dateMode === 'delivery' ? 2 : 0, borderRadius: dateMode === 'delivery' ? 6 : 0 }}
             >Delivery Date</button>
+            <button onClick={() => { setDateMode('delivered_at'); setPage(1) }}
+              style={{ padding:'6px 12px', fontSize:12, fontWeight: dateMode === 'delivered_at' ? 700 : 400, background: dateMode === 'delivered_at' ? 'white' : 'transparent', color: dateMode === 'delivered_at' ? 'var(--gray-900)' : 'var(--gray-500)', border:'none', cursor:'pointer', fontFamily:'var(--font)', boxShadow: dateMode === 'delivered_at' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', margin: dateMode === 'delivered_at' ? 2 : 0, borderRadius: dateMode === 'delivered_at' ? 6 : 0 }}
+            >Delivered On</button>
           </div>
           </div>
           <div className="filter-bar" style={{ margin: 0, padding: 0 }}>
@@ -543,11 +545,7 @@ export default function OrdersList() {
                   const val        = displayValue(o, filter)
                   const ps         = pillStatus(o)
                   const mdates     = (o.order_items || []).map(i => i.dispatch_date).filter(Boolean).sort()
-                  const mDelivBatches = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc' && b.delivered_at)
-                  const mDeliveredAt  = mDelivBatches.length > 0
-                    ? mDelivBatches.sort((a,b) => b.delivered_at.localeCompare(a.delivered_at))[0].delivered_at
-                    : null
-                  const mDelivery  = mDeliveredAt ? fmt(mDeliveredAt) : (mdates.length > 0 ? fmt(mdates[0]) : null)
+                  const mDelivery     = mdates.length > 0 ? fmt(mdates[0]) : null
                   return (
                     <div key={o.id} className="order-card" style={{ animationDelay: i * 0.03 + 's' }} onClick={() => navigate('/orders/' + o.id)}>
                       <div className="order-card-top">
