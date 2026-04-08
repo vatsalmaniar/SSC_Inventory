@@ -107,9 +107,15 @@ export default function Login() {
       setView('totp')
       setTimeout(() => totpRef.current?.focus(), 100)
     } else {
-      // First time — enroll
+      // Unenroll any stuck unverified factors first
+      for (const f of (factors?.totp || [])) {
+        if (f.status !== 'verified') await sb.auth.mfa.unenroll({ factorId: f.id })
+      }
+      // Enroll fresh
       const { data: enroll, error: enrollErr } = await sb.auth.mfa.enroll({ factorType: 'totp' })
+      console.log('enroll result:', enroll, enrollErr)
       if (enrollErr) { setError('MFA setup failed: ' + enrollErr.message); return }
+      if (!enroll?.totp?.qr_code) { setError('MFA setup failed: no QR code returned. Check Supabase MFA settings.'); return }
       setEnrollData({ id: enroll.id, qr_code: enroll.totp.qr_code, secret: enroll.totp.secret })
       setView('enroll')
       setTimeout(() => totpRef.current?.focus(), 100)

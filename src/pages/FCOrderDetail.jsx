@@ -260,6 +260,7 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false) {
       <th>Item Code</th>
       <th class="c" style="width:80px">Qty</th>
       <th class="c" style="width:50px">Unit</th>
+      <th style="width:110px">Cust. Ref No</th>
       <th class="r" style="width:100px">Unit Price</th>
       <th class="r" style="width:100px">Amount</th>
     </tr>
@@ -271,6 +272,7 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false) {
       <td class="code">${item.item_code || '—'}</td>
       <td class="c" style="font-weight:700">${item.qty}</td>
       <td class="c" style="color:#64748b">Pc</td>
+      <td style="font-size:11px;color:#475569">${item.customer_ref_no || '—'}</td>
       <td class="r">${(item.unit_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td class="r" style="font-weight:600">${(item.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     </tr>`).join('')}
@@ -562,7 +564,7 @@ export default function FCOrderDetail() {
   async function confirmDelivered() {
     setSaving(true)
     if (activeBatch) {
-      await sb.from('order_dispatches').update({ status: 'dispatched_fc', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+      await sb.from('order_dispatches').update({ status: 'dispatched_fc', delivered_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
     // Order is fully done only when ALL batches are dispatched_fc
     const { data: allBatchData } = await sb.from('order_dispatches').select('status').eq('order_id', id)
@@ -776,6 +778,7 @@ export default function FCOrderDetail() {
                       <tr>
                         <th>#</th>
                         <th>Item Code</th>
+                        <th>Cust. Ref No</th>
                         <th style={{textAlign:'right'}}>Qty (This Batch)</th>
                         <th style={{textAlign:'right'}}>Unit Price</th>
                         <th style={{textAlign:'right'}}>Total</th>
@@ -783,11 +786,12 @@ export default function FCOrderDetail() {
                     </thead>
                     <tbody>
                       {(activeBatch?.dispatched_items || (order.order_items||[]).map(i => ({
-                        item_code: i.item_code, qty: i.qty, unit_price: i.unit_price_after_disc, total_price: i.total_price
+                        item_code: i.item_code, qty: i.qty, unit_price: i.unit_price_after_disc, total_price: i.total_price, customer_ref_no: i.customer_ref_no
                       }))).map((item, idx) => (
                         <tr key={idx}>
                           <td className="od-items-sr">{idx + 1}</td>
                           <td><span className="od-items-code">{item.item_code}</span></td>
+                          <td style={{fontSize:11,color:'var(--gray-500)'}}>{item.customer_ref_no || '—'}</td>
                           <td style={{textAlign:'right',fontWeight:600}}>{item.qty}</td>
                           <td style={{textAlign:'right'}}>₹{item.unit_price}</td>
                           <td style={{textAlign:'right',fontWeight:600}}>₹{(item.total_price || 0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>

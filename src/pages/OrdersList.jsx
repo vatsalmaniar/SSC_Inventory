@@ -193,7 +193,7 @@ export default function OrdersList() {
   async function loadOrders(testMode = false) {
     setLoading(true)
     const { data } = await sb.from('orders')
-      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,order_type,status,freight,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items)')
+      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,order_type,status,freight,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
       .gte('created_at', '2026-03-31').eq('is_test', testMode)
       .order('created_at', { ascending: false })
     setOrders(data || [])
@@ -233,9 +233,7 @@ export default function OrdersList() {
   const safePage   = Math.min(page, totalPages)
   const paginated  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  const sumTotal = filter === 'dispatched'
-    ? filtered.filter(o => o.status === 'dispatched_fc').reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)
-    : filtered.reduce((s, o) => s + displayValue(o, filter), 0)
+  const sumTotal = filtered.reduce((s, o) => s + displayValue(o, filter), 0)
 
   const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'Orders'
   const timelineLabel = timeline === 'custom'
@@ -491,7 +489,7 @@ export default function OrdersList() {
                       <th>Order #</th>
                       <th>Customer</th>
                       <th>Order Date</th>
-                      <th>Delivery Date</th>
+                      <th>{['dispatched','partial'].includes(filter) ? 'Delivered On' : 'Delivery Date'}</th>
                       <th>Account Owner</th>
                       <th>Items</th>
                       <th style={{ textAlign: 'right' }}>Value (₹)</th>
@@ -507,6 +505,10 @@ export default function OrdersList() {
                       const dates      = (o.order_items || []).map(i => i.dispatch_date).filter(Boolean).sort()
                       const deliveryDate = dates.length > 0 ? dates[0] : null
                       const multiDate    = dates.length > 1 && dates[dates.length - 1] !== dates[0]
+                      const deliveredBatches = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc' && b.delivered_at)
+                      const latestDeliveredAt = deliveredBatches.length > 0
+                        ? deliveredBatches.sort((a,b) => b.delivered_at.localeCompare(a.delivered_at))[0].delivered_at
+                        : null
                       return (
                         <tr key={o.id} className={isInFCFlow(o) ? 'row-delivery' : ''} onClick={() => navigate('/orders/' + o.id)}>
                           <td className="order-num-cell">
@@ -516,8 +518,10 @@ export default function OrdersList() {
                           <td className="customer-cell">{o.customer_name}</td>
                           <td>{fmt(o.order_date)}</td>
                           <td>
-                            {deliveryDate ? fmt(deliveryDate) : '—'}
-                            {multiDate && <span style={{ display:'block', fontSize:10, color:'var(--gray-400)' }}>to {fmt(dates[dates.length - 1])}</span>}
+                            {latestDeliveredAt
+                              ? <span style={{color:'#166534',fontWeight:600}}>{fmt(latestDeliveredAt)}</span>
+                              : deliveryDate ? fmt(deliveryDate) : '—'}
+                            {!latestDeliveredAt && multiDate && <span style={{ display:'block', fontSize:10, color:'var(--gray-400)' }}>to {fmt(dates[dates.length - 1])}</span>}
                           </td>
                           <td><OwnerChip name={o.account_owner || o.engineer_name} /></td>
                           <td>{(o.order_items || []).length}</td>
@@ -539,7 +543,11 @@ export default function OrdersList() {
                   const val        = displayValue(o, filter)
                   const ps         = pillStatus(o)
                   const mdates     = (o.order_items || []).map(i => i.dispatch_date).filter(Boolean).sort()
-                  const mDelivery  = mdates.length > 0 ? fmt(mdates[0]) : null
+                  const mDelivBatches = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc' && b.delivered_at)
+                  const mDeliveredAt  = mDelivBatches.length > 0
+                    ? mDelivBatches.sort((a,b) => b.delivered_at.localeCompare(a.delivered_at))[0].delivered_at
+                    : null
+                  const mDelivery  = mDeliveredAt ? fmt(mDeliveredAt) : (mdates.length > 0 ? fmt(mdates[0]) : null)
                   return (
                     <div key={o.id} className="order-card" style={{ animationDelay: i * 0.03 + 's' }} onClick={() => navigate('/orders/' + o.id)}>
                       <div className="order-card-top">

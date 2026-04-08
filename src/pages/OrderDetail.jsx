@@ -321,6 +321,7 @@ export default function OrderDetail() {
     const itemsJson = (order.order_items || []).map(i => ({
       order_item_id: i.id, item_code: i.item_code, qty: i.qty,
       unit_price: i.unit_price_after_disc, total_price: i.total_price,
+      customer_ref_no: i.customer_ref_no || null,
     }))
     const { data: batchData } = await sb.rpc('create_order_dispatch', {
       p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,
@@ -374,7 +375,7 @@ export default function OrderDetail() {
     if (error) { alert('Failed: ' + error.message); setSaving(false); return }
     const itemsJson = selected.map(i => {
       const full = (order.order_items || []).find(o => o.id === i.id) || {}
-      return { order_item_id: i.id, item_code: i.item_code, qty: parseFloat(i.dispatchQty), unit_price: full.unit_price_after_disc, total_price: (full.unit_price_after_disc || 0) * parseFloat(i.dispatchQty) }
+      return { order_item_id: i.id, item_code: i.item_code, qty: parseFloat(i.dispatchQty), unit_price: full.unit_price_after_disc, total_price: (full.unit_price_after_disc || 0) * parseFloat(i.dispatchQty), customer_ref_no: full.customer_ref_no || null }
     })
     const { data: batchData } = await sb.rpc('create_order_dispatch', {
       p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,

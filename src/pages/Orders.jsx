@@ -175,7 +175,7 @@ export default function Orders() {
   async function loadOrders() {
     setLoading(true)
     const { data } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,order_type,created_at,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date)')
+      .select('id,order_number,customer_name,status,order_type,created_at,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
       .gte('created_at', '2026-03-31').eq('is_test', false)
       .order('created_at', { ascending: false })
     setOrders(data || [])
@@ -185,19 +185,35 @@ export default function Orders() {
   const today = new Date().toISOString().slice(0, 10)
 
   const totalValue      = orders.reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)
-  const dispatchedValue = orders
-    .filter(o => o.status === 'dispatched_fc')
-    .reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)
+  const dispatchedValue = orders.reduce((s, o) => {
+    const deliveredBatches = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc')
+    const batchTotal = deliveredBatches.reduce((bs, b) =>
+      bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)
+    if (batchTotal > 0) return s + batchTotal
+    // fallback for old orders without dispatched_items
+    if (o.status === 'dispatched_fc') return s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0)
+    return s
+  }, 0)
   const pendingApproval = orders.filter(o => o.status === 'pending').length
   const activeOrders    = orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length
-  const todayDispatched = orders.filter(o => (o.order_items || []).some(i => i.dispatch_date === today))
+  // Use order_dispatches.created_at to find today's batches — sum dispatched_items.total_price for accurate invoice value
+  const todayDispatched = orders.filter(o => (o.order_dispatches || []).some(b => b.created_at?.slice(0,10) === today))
 
-  const todayDispatchValue = todayDispatched.reduce((s, o) =>
-    s + (o.order_items || []).filter(i => i.dispatch_date === today).reduce((a, i) => a + (i.total_price || 0), 0), 0)
+  const todayDispatchValue = todayDispatched.reduce((s, o) => {
+    const todayBatches = (o.order_dispatches || []).filter(b => b.created_at?.slice(0,10) === today)
+    return s + todayBatches.reduce((bs, b) =>
+      bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)
+  }, 0)
 
-  const todayDelivered = orders.filter(o => o.status === 'dispatched_fc' && (o.order_items || []).some(i => i.dispatch_date === today))
-  const todayDeliveredValue = todayDelivered.reduce((s, o) =>
-    s + (o.order_items || []).filter(i => i.dispatch_date === today).reduce((a, i) => a + (i.total_price || 0), 0), 0)
+  // Tile 3: orders with a batch confirmed delivered today (delivered_at = today)
+  const todayDelivered = orders.filter(o =>
+    (o.order_dispatches || []).some(b => b.delivered_at?.slice(0,10) === today)
+  )
+  const todayDeliveredValue = todayDelivered.reduce((s, o) => {
+    const todayBatches = (o.order_dispatches || []).filter(b => b.delivered_at?.slice(0,10) === today)
+    return s + todayBatches.reduce((bs, b) =>
+      bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)
+  }, 0)
 
   const sampleOrders = orders.filter(o => o.order_type === 'SAMPLE')
   const sampleValue  = sampleOrders.reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)

@@ -406,11 +406,13 @@ const mentionSuggestions = mentionQuery !== null
     ? activeBatch.dispatched_items.map((i, idx) => ({
         sr_no: idx + 1, item_code: i.item_code, qty: i.qty,
         unit_price: i.unit_price, total_price: i.total_price || (i.unit_price * i.qty),
+        customer_ref_no: i.customer_ref_no || null,
       }))
     : (order.order_items || []).filter(i => (i.dispatched_qty || 0) > 0).map((i, idx) => ({
         sr_no: idx + 1, item_code: i.item_code, qty: i.dispatched_qty,
         unit_price: i.unit_price_after_disc,
         total_price: (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0),
+        customer_ref_no: i.customer_ref_no || null,
       }))
   const dispatchedSubtotal = billingItems.reduce((s, i) => s + (i.total_price || 0), 0)
   const dispatchedTotal    = dispatchedSubtotal + (order.freight || 0)
@@ -615,6 +617,7 @@ const mentionSuggestions = mentionQuery !== null
                       <tr>
                         <th>#</th>
                         <th>Item Code</th>
+                        <th>Cust. Ref No</th>
                         <th style={{textAlign:'right',color:'#166534',fontWeight:700}}>Qty</th>
                         <th style={{textAlign:'right'}}>Unit Price</th>
                         <th style={{textAlign:'right'}}>Billing Value</th>
@@ -625,6 +628,7 @@ const mentionSuggestions = mentionQuery !== null
                         <tr key={item.sr_no}>
                           <td className="od-items-sr">{item.sr_no}</td>
                           <td><span className="od-items-code">{item.item_code}</span></td>
+                          <td style={{fontSize:11,color:'var(--gray-500)'}}>{item.customer_ref_no || '—'}</td>
                           <td style={{textAlign:'right',fontWeight:700,color:'#166534'}}>{item.qty}</td>
                           <td style={{textAlign:'right'}}>₹{item.unit_price}</td>
                           <td style={{textAlign:'right',fontWeight:700}}>₹{(item.total_price||0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
