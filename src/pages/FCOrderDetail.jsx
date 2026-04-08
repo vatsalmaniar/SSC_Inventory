@@ -567,9 +567,7 @@ export default function FCOrderDetail() {
     // Order is fully done only when ALL batches are dispatched_fc
     const { data: allBatchData } = await sb.from('order_dispatches').select('status').eq('order_id', id)
     const allBatchesDone = (allBatchData || []).every(b => b.status === 'dispatched_fc')
-    // Use the earliest pending batch status so order module shows correct stage
-    const pendingBatch = (allBatchData || []).find(b => b.status !== 'dispatched_fc')
-    const finalStatus = allBatchesDone ? 'dispatched_fc' : (pendingBatch?.status || 'delivery_created')
+    const finalStatus = allBatchesDone ? 'dispatched_fc' : 'partial_dispatch'
     const { error } = await sb.from('orders').update({ status: finalStatus, updated_at: new Date().toISOString() }).eq('id', id)
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
     await logActivity(allBatchesDone ? 'Order Delivered — all batches complete.' : 'Batch Delivered — remaining batch(es) still pending.')
