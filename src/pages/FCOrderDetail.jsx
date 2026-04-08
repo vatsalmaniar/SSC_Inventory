@@ -327,6 +327,7 @@ export default function FCOrderDetail() {
   const commentInputRef = useRef(null)
   const [order, setOrder]       = useState(null)
   const [activeBatch, setActiveBatch] = useState(null)
+  const [allBatches, setAllBatches]   = useState([])
   const [user, setUser]         = useState({ name: '', role: '', avatar: '' })
   const [profiles, setProfiles] = useState([])
   const [comments, setComments] = useState([])
@@ -376,13 +377,14 @@ export default function FCOrderDetail() {
     setOrder(data)
     // If a specific dispatch_id was passed (from DC-centric navigation), load that batch
     // Otherwise load the most recent batch
+    const { data: allB } = await sb.from('order_dispatches').select('*')
+      .eq('order_id', id).order('batch_no', { ascending: true })
+    setAllBatches(allB || [])
     if (dispatchId) {
-      const { data: batch } = await sb.from('order_dispatches').select('*').eq('id', dispatchId).single()
-      setActiveBatch(batch || null)
+      const found = (allB || []).find(b => b.id === dispatchId)
+      setActiveBatch(found || allB?.[allB.length - 1] || null)
     } else {
-      const { data: batches } = await sb.from('order_dispatches').select('*')
-        .eq('order_id', id).order('batch_no', { ascending: false }).limit(1)
-      setActiveBatch(batches?.[0] || null)
+      setActiveBatch(allB?.[allB.length - 1] || null)
     }
     setLoading(false)
     const { data: c } = await sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true })
@@ -992,6 +994,21 @@ export default function FCOrderDetail() {
             <div className="od-side-card">
               <div className="od-side-card-title">Delivery Challan</div>
               <div style={{padding:'0 16px 14px'}}>
+                {/* Batch switcher — only shown when multiple batches */}
+                {allBatches.length > 1 && (
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
+                    {allBatches.map(b => (
+                      <button key={b.id} onClick={() => setActiveBatch(b)}
+                        style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,border:'1px solid',cursor:'pointer',fontFamily:'var(--font)',
+                          background: activeBatch?.id === b.id ? '#1e3a5f' : 'white',
+                          color: activeBatch?.id === b.id ? 'white' : '#475569',
+                          borderColor: activeBatch?.id === b.id ? '#1e3a5f' : '#e2e8f0',
+                        }}>
+                        Batch {b.batch_no}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {activeBatch && <div style={{fontSize:10,color:'var(--gray-400)',fontWeight:600,marginBottom:4}}>BATCH {activeBatch.batch_no}</div>}
                 <div style={{fontFamily:'var(--mono)',fontSize:18,fontWeight:800,color: isTempDC ? '#92400e' : '#166534',letterSpacing:'-0.5px',marginBottom:4}}>
                   {activeDC || '—'}
