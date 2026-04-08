@@ -53,6 +53,7 @@ const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','pi_requested
 
 function isPendingDelivery(o) {
   if (['dispatched_fc', 'cancelled'].includes(o.status)) return false
+  if (o.status === 'partial_dispatch') return true  // always pending — some batches not yet delivered
   if (FC_ACTIVE_STATUSES.includes(o.status)) return false
   const items = o.order_items || []
   if (items.length > 0 && items.every(i => (i.dispatched_qty || 0) >= i.qty)) return false
@@ -207,7 +208,7 @@ export default function OrdersList() {
   function matchFilter(o, f) {
     if (f === 'all')         return true
     if (f === 'undelivered') return isPendingDelivery(o)
-    if (f === 'partial')     return isPartiallyDispatched(o)
+    if (f === 'partial')     return isPartiallyDispatched(o) || o.status === 'partial_dispatch'
     if (f === 'inflow')      return isInFCFlow(o)
     if (f === 'dispatched')  return o.status === 'dispatched_fc' || hasConfirmedDelivery(o)
     if (f === 'sample')      return o.order_type === 'SAMPLE'
