@@ -38,9 +38,10 @@ export default function CRMLeads() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
+    if (!['sales','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
     const [leadsRes, repsRes, principalsRes] = await Promise.all([
       sb.from('crm_leads').select('*, crm_companies(company_name), crm_principals(name), profiles(name)').order('created_at', { ascending: false }),
-      sb.from('profiles').select('id,name').in('role',['sales','ops','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin']),
       sb.from('crm_principals').select('*').order('name'),
     ])
     setLeads(leadsRes.data || [])
@@ -50,7 +51,7 @@ export default function CRMLeads() {
   }
 
   const q = search.trim().toLowerCase()
-  const isManager = ['admin','ops'].includes(user.role)
+  const isManager = user.role === 'admin'
   const filtered = leads
     .filter(l => isManager || l.assigned_rep_id === user.id)
     .filter(l => !q || (l.crm_companies?.company_name||l.freetext_company||'').toLowerCase().includes(q) || (l.contact_name_freetext||'').toLowerCase().includes(q) || (l.product_notes||'').toLowerCase().includes(q))

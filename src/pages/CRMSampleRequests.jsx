@@ -38,10 +38,11 @@ export default function CRMSampleRequests() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
+    if (!['sales','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
 
     const [srsRes, repsRes] = await Promise.all([
       sb.from('crm_sample_requests').select('*, crm_companies(company_name), crm_principals(name), crm_opportunities(id), crm_contacts(name)').order('created_at', { ascending: false }),
-      sb.from('profiles').select('id,name').in('role',['sales','ops','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin']),
     ])
     setSrs(srsRes.data || [])
     setReps(repsRes.data || [])
@@ -59,7 +60,7 @@ export default function CRMSampleRequests() {
     setUpdating(null)
   }
 
-  const isManager = ['admin','ops'].includes(user.role)
+  const isManager = user.role === 'admin'
   const q = search.trim().toLowerCase()
   const filtered = srs
     .filter(s => !q || (s.sr_number||'').toLowerCase().includes(q) || (s.crm_companies?.company_name||'').toLowerCase().includes(q))

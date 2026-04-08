@@ -232,7 +232,9 @@ export default function OrdersList() {
   const safePage   = Math.min(page, totalPages)
   const paginated  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  const sumTotal = filtered.reduce((s, o) => s + displayValue(o, filter), 0)
+  const sumTotal = filter === 'dispatched'
+    ? filtered.filter(o => o.status === 'dispatched_fc').reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)
+    : filtered.reduce((s, o) => s + displayValue(o, filter), 0)
 
   const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'Orders'
   const timelineLabel = timeline === 'custom'

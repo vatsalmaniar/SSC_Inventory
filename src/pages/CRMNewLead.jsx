@@ -1,39 +1,44 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
+import '../styles/orderdetail.css'
 
-const SOURCES    = ['Call','Visit','WhatsApp','Referral','Exhibition','Other']
-const SCENARIOS  = ['NEW_CUST_NEW_PROD','OLD_CUST_NEW_PROD','NEW_CUST_OLD_PROD','DORMANT_REVIVAL']
-function scenarioLabel(s) {
-  return { NEW_CUST_NEW_PROD:'New Cust · New Prod', OLD_CUST_NEW_PROD:'Old Cust · New Prod', NEW_CUST_OLD_PROD:'New Cust · Old Prod', DORMANT_REVIVAL:'Dormant Revival' }[s] || s
-}
-
-const FS = { padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }
+const SOURCES = ['Call','Visit','WhatsApp','Referral','Exhibition','Other']
 
 export default function CRMNewLead() {
-  const navigate = useNavigate()
-  const [user, setUser]           = useState({ name:'', role:'', id:'' })
+  const navigate  = useNavigate()
+  const dropRef   = useRef(null)
+  const [user, setUser]             = useState({ name:'', role:'', id:'' })
   const [principals, setPrincipals] = useState([])
-  const [reps, setReps]           = useState([])
-  const [saving, setSaving]       = useState(false)
+  const [reps, setReps]             = useState([])
+  const [saving, setSaving]         = useState(false)
 
-  // Step 1: company name check
-  const [companyInput, setCompanyInput] = useState('')
-  const [checking, setChecking]   = useState(false)
-  const [checkResult, setCheckResult] = useState(null) // null | { type:'existing'|'new', matches:[] }
-  const [selectedMatch, setSelectedMatch] = useState(null)
+  // Company search
+  const [companyQuery, setCompanyQuery]   = useState('')
+  const [companySuggestions, setCompanySuggestions] = useState([])
+  const [selectedCompany, setSelectedCompany]       = useState(null) // { id, company_name }
+  const [showDrop, setShowDrop]           = useState(false)
+  const [searchTimer, setSearchTimer]     = useState(null)
 
-  // Step 2: form
   const [form, setForm] = useState({
-    source: '', principal_id: '', product_notes: '',
-    scenario_type: '', assigned_rep_id: '', contact_name: '',
+    contact_name: '', source: '', principal_id: '',
+    product_notes: '', assigned_rep_id: '',
     estimated_value_inr: '', expected_close_date: '',
   })
 
   useEffect(() => { init() }, [])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function onClickOut(e) {
+      if (dropRef.current && !dropRef.current.contains(e.target)) setShowDrop(false)
+    }
+    document.addEventListener('mousedown', onClickOut)
+    return () => document.removeEventListener('mousedown', onClickOut)
+  }, [])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -41,60 +46,60 @@ export default function CRMNewLead() {
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
     setForm(p => ({ ...p, assigned_rep_id: session.user.id }))
-    const [principalsRes, repsRes] = await Promise.all([
+    const [pRes, rRes] = await Promise.all([
       sb.from('crm_principals').select('*').order('name'),
-      sb.from('profiles').select('id,name').in('role',['sales','ops','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin']),
     ])
-    setPrincipals(principalsRes.data || [])
-    setReps(repsRes.data || [])
+    setPrincipals(pRes.data || [])
+    setReps(rRes.data || [])
   }
 
-  async function checkCompany() {
-    if (!companyInput.trim()) return
-    setChecking(true)
-    setCheckResult(null); setSelectedMatch(null)
-    const { data } = await sb.from('customers')
-      .select('id,customer_name,customer_type,credit_terms')
-      .ilike('customer_name', '%' + companyInput.trim() + '%')
-      .limit(5)
-    const type = data?.length > 0 ? 'existing' : 'new'
-    setCheckResult({ type, matches: data || [] })
-    if (type === 'new') {
-      setForm(p => ({ ...p, scenario_type: 'NEW_CUST_NEW_PROD' }))
-    } else {
-      setSelectedMatch(data[0])
-      setForm(p => ({ ...p, scenario_type: 'OLD_CUST_NEW_PROD' }))
-    }
-    setChecking(false)
+  function onCompanyType(val) {
+    setCompanyQuery(val)
+    setSelectedCompany(null)
+    if (searchTimer) clearTimeout(searchTimer)
+    if (!val.trim()) { setCompanySuggestions([]); setShowDrop(false); return }
+    const t = setTimeout(async () => {
+      const { data } = await sb.from('customers').select('id,customer_name,customer_type').ilike('customer_name', '%' + val.trim() + '%').limit(8)
+      setCompanySuggestions(data || [])
+      setShowDrop(true)
+    }, 220)
+    setSearchTimer(t)
   }
+
+  function pickCompany(co) {
+    setSelectedCompany(co)
+    setCompanyQuery(co.customer_name)
+    setShowDrop(false)
+    setCompanySuggestions([])
+  }
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   async function save() {
-    if (!companyInput.trim()) { alert('Company name required'); return }
-    if (!checkResult) { alert('Please check the company first'); return }
+    if (!companyQuery.trim()) { alert('Company name required'); return }
     setSaving(true)
 
-    if (checkResult.type === 'existing') {
-      // Find or create crm_companies record, then create Opportunity
-      const matchName = selectedMatch?.customer_name || companyInput.trim()
+    if (selectedCompany?.id) {
+      // Find or create crm_companies record for this customer
+      const matchName = selectedCompany.customer_name
       let companyId = null
-      const { data: existingCo } = await sb.from('crm_companies')
-        .select('id').ilike('company_name', matchName).maybeSingle()
+      const { data: existingCo } = await sb.from('crm_companies').select('id').ilike('company_name', matchName).maybeSingle()
       if (existingCo?.id) {
         companyId = existingCo.id
       } else {
         const { data: newCo } = await sb.from('crm_companies').insert({
           company_name: matchName,
-          customer_type: selectedMatch?.customer_type || null,
+          customer_type: selectedCompany.customer_type || null,
           status: 'Active',
         }).select('id').single()
         companyId = newCo?.id
       }
-
+      // Existing company → Opportunity
       const { data, error } = await sb.from('crm_opportunities').insert({
         company_id: companyId,
         principal_id: form.principal_id || null,
         product_notes: form.product_notes.trim() || null,
-        scenario_type: form.scenario_type || 'OLD_CUST_NEW_PROD',
         assigned_rep_id: form.assigned_rep_id || user.id,
         estimated_value_inr: form.estimated_value_inr || null,
         expected_close_date: form.expected_close_date || null,
@@ -103,14 +108,13 @@ export default function CRMNewLead() {
       if (error) { alert('Error: ' + error.message); setSaving(false); return }
       navigate('/crm/opportunities/' + data.id)
     } else {
-      // New prospect → create Lead
+      // New company → Lead
       const { data, error } = await sb.from('crm_leads').insert({
-        freetext_company: companyInput.trim(),
+        freetext_company: companyQuery.trim(),
         contact_name_freetext: form.contact_name.trim() || null,
         source: form.source || null,
         principal_id: form.principal_id || null,
         product_notes: form.product_notes.trim() || null,
-        scenario_type: form.scenario_type || 'NEW_CUST_NEW_PROD',
         assigned_rep_id: form.assigned_rep_id || user.id,
         status: 'New',
       }).select().single()
@@ -119,151 +123,131 @@ export default function CRMNewLead() {
     }
   }
 
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+  const isExisting = !!selectedCompany?.id
 
   return (
     <Layout pageTitle="CRM — New" pageKey="crm">
-      <CRMSubNav active="leads" />
-      <div className="crm-page">
-        <div className="crm-body">
-          <div className="crm-page-header">
-            <div>
-              <div className="crm-page-title">New Lead / Opportunity</div>
-              <div className="crm-page-sub">Enter the company name — we'll check if they're an existing SSC customer</div>
-            </div>
-            <div className="crm-header-actions">
-              <button className="crm-btn" onClick={() => navigate('/crm')}>← Cancel</button>
+      <CRMSubNav active={isExisting ? 'opportunities' : 'leads'} />
+      <div className="od-page">
+        <div className="od-body" style={{ maxWidth: 760 }}>
+
+          <div className="od-header">
+            <div className="od-header-main">
+              <div className="od-header-left">
+                <div className="od-header-title">New {isExisting ? 'Opportunity' : 'Lead'}</div>
+                <div className="od-header-num">
+                  {isExisting
+                    ? 'Creating opportunity for existing company'
+                    : companyQuery && !selectedCompany
+                      ? 'New prospect — will create a lead'
+                      : 'Start by searching for the company'}
+                </div>
+              </div>
+              <div className="od-header-actions">
+                <button className="od-btn" onClick={() => navigate('/crm')}>← Cancel</button>
+              </div>
             </div>
           </div>
 
-          {/* Step 1: Company check */}
-          <div className="crm-card" style={{ maxWidth: 700, marginBottom: 16 }}>
-            <div className="crm-card-header"><div className="crm-card-title">Company</div></div>
-            <div className="crm-card-body">
-              <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-                <div style={{ flex:1 }}>
-                  <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }}>Company Name *</label>
-                  <input
-                    style={FS}
-                    value={companyInput}
-                    onChange={e => { setCompanyInput(e.target.value); setCheckResult(null); setSelectedMatch(null) }}
-                    placeholder="e.g. Haitian Plastics Machinery India Pvt Ltd"
-                    onKeyDown={e => e.key === 'Enter' && checkCompany()}
-                  />
-                </div>
-                <button className="crm-btn crm-btn-primary" onClick={checkCompany} disabled={checking || !companyInput.trim()} style={{ whiteSpace:'nowrap', flexShrink:0 }}>
-                  {checking ? 'Checking…' : 'Check'}
-                </button>
-              </div>
-
-              {checkResult && (
-                <div style={{ marginTop: 12 }}>
-                  {checkResult.type === 'existing' ? (
-                    <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:8, padding:'10px 14px' }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:'#15803d', marginBottom:6 }}>
-                        ✓ Existing SSC Customer — creating Opportunity
-                      </div>
-                      <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                        {checkResult.matches.map(m => (
-                          <button
-                            key={m.id}
-                            onClick={() => setSelectedMatch(m)}
-                            style={{ fontSize:12, padding:'4px 10px', borderRadius:6, border: selectedMatch?.id === m.id ? '2px solid #15803d' : '1px solid #bbf7d0', background: selectedMatch?.id === m.id ? '#dcfce7' : 'white', cursor:'pointer', fontFamily:'var(--font)', fontWeight: selectedMatch?.id === m.id ? 700 : 400 }}
-                          >
-                            {m.customer_name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'10px 14px' }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:'#1a4dab' }}>
-                        New Prospect — creating Lead
-                      </div>
-                      <div style={{ fontSize:11, color:'#3b82f6', marginTop:2 }}>
-                        Not found in SSC customer list. A lead will be created.
-                      </div>
-                    </div>
-                  )}
-                </div>
+          <div className="od-card">
+            <div className="od-card-header">
+              <div className="od-card-title">Details</div>
+              {isExisting && (
+                <span style={{ fontSize:11, fontWeight:700, background:'#f0fdf4', color:'#15803d', borderRadius:4, padding:'2px 8px' }}>Existing Customer</span>
+              )}
+              {companyQuery && !isExisting && (
+                <span style={{ fontSize:11, fontWeight:700, background:'#eff6ff', color:'#1a4dab', borderRadius:4, padding:'2px 8px' }}>New Prospect</span>
               )}
             </div>
-          </div>
+            <div className="od-card-body">
+              <div className="od-edit-form">
 
-          {/* Step 2: Form (shown after check) */}
-          {checkResult && (
-            <div className="crm-card" style={{ maxWidth: 700 }}>
-              <div className="crm-card-header">
-                <div className="crm-card-title">
-                  {checkResult.type === 'existing' ? 'Opportunity Details' : 'Lead Details'}
+                {/* Company — full width with dropdown */}
+                <div className="od-edit-field" ref={dropRef} style={{ position:'relative' }}>
+                  <label>Company *</label>
+                  <input
+                    value={companyQuery}
+                    onChange={e => onCompanyType(e.target.value)}
+                    onFocus={() => companySuggestions.length && setShowDrop(true)}
+                    placeholder="Type to search existing companies…"
+                    autoComplete="off"
+                  />
+                  {showDrop && companySuggestions.length > 0 && (
+                    <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid var(--gray-200)', borderRadius:8, boxShadow:'0 4px 16px rgba(0,0,0,0.1)', zIndex:50, overflow:'hidden', marginTop:2 }}>
+                      {companySuggestions.map(co => (
+                        <div key={co.id} onMouseDown={() => pickCompany(co)} style={{ padding:'10px 14px', fontSize:13, cursor:'pointer', borderBottom:'1px solid var(--gray-50)', fontFamily:'var(--font)' }}
+                          onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
+                          onMouseLeave={e => e.currentTarget.style.background='white'}
+                        >
+                          {co.customer_name}
+                        </div>
+                      ))}
+                      {companySuggestions.length === 0 && (
+                        <div style={{ padding:'10px 14px', fontSize:12, color:'var(--gray-400)', fontFamily:'var(--font)' }}>No matches — will create as new prospect</div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div className="crm-card-body">
-                <div className="crm-form">
-                  {checkResult.type === 'new' && (
-                    <div className="crm-edit-row">
-                      <div className="crm-edit-field">
-                        <label>Contact Name</label>
-                        <input style={FS} value={form.contact_name} onChange={e => set('contact_name', e.target.value)} placeholder="e.g. Ramesh Shah" />
-                      </div>
-                      <div className="crm-edit-field">
-                        <label>Source</label>
-                        <select style={FS} value={form.source} onChange={e => set('source', e.target.value)}>
-                          <option value="">— Select —</option>
-                          {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                  <div className="crm-edit-row">
-                    <div className="crm-edit-field">
-                      <label>Principal</label>
-                      <select style={FS} value={form.principal_id} onChange={e => set('principal_id', e.target.value)}>
-                        <option value="">— Select —</option>
-                        {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="crm-edit-field">
-                      <label>Scenario</label>
-                      <select style={FS} value={form.scenario_type} onChange={e => set('scenario_type', e.target.value)}>
-                        <option value="">— Select —</option>
-                        {SCENARIOS.map(s => <option key={s} value={s}>{scenarioLabel(s)}</option>)}
-                      </select>
-                    </div>
+
+                <div className="od-edit-row">
+                  <div className="od-edit-field">
+                    <label>Contact Name</label>
+                    <input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} placeholder="e.g. Ramesh Shah" />
                   </div>
-                  {checkResult.type === 'existing' && (
-                    <div className="crm-edit-row">
-                      <div className="crm-edit-field">
-                        <label>Estimated Value (INR)</label>
-                        <input style={FS} type="number" value={form.estimated_value_inr} onChange={e => set('estimated_value_inr', e.target.value)} placeholder="0" />
-                      </div>
-                      <div className="crm-edit-field">
-                        <label>Expected Close Date</label>
-                        <input style={FS} type="date" value={form.expected_close_date} onChange={e => set('expected_close_date', e.target.value)} />
-                      </div>
-                    </div>
-                  )}
-                  <div className="crm-edit-field">
-                    <label>Product Notes</label>
-                    <textarea style={{ ...FS, minHeight:72, resize:'vertical' }} value={form.product_notes} onChange={e => set('product_notes', e.target.value)} placeholder="What products / solutions are they interested in?" />
+                  <div className="od-edit-field">
+                    <label>Source</label>
+                    <select value={form.source} onChange={e => set('source', e.target.value)}>
+                      <option value="">— Select —</option>
+                      {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
-                  <div className="crm-edit-field">
+                </div>
+
+                <div className="od-edit-row">
+                  <div className="od-edit-field">
+                    <label>Principal</label>
+                    <select value={form.principal_id} onChange={e => set('principal_id', e.target.value)}>
+                      <option value="">— Select —</option>
+                      {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="od-edit-field">
                     <label>Assign To</label>
-                    <select style={FS} value={form.assigned_rep_id} onChange={e => set('assigned_rep_id', e.target.value)}>
-                      <option value="">— Self —</option>
+                    <select value={form.assigned_rep_id} onChange={e => set('assigned_rep_id', e.target.value)}>
                       {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                   </div>
-                  <div className="crm-form-actions">
-                    <button className="crm-btn" onClick={() => navigate('/crm')}>Cancel</button>
-                    <button className="crm-btn crm-btn-primary" onClick={save} disabled={saving}>
-                      {saving ? 'Creating…' : checkResult.type === 'existing' ? 'Create Opportunity' : 'Create Lead'}
-                    </button>
-                  </div>
                 </div>
+
+                {isExisting && (
+                  <div className="od-edit-row">
+                    <div className="od-edit-field">
+                      <label>Estimated Value (₹)</label>
+                      <input type="number" value={form.estimated_value_inr} onChange={e => set('estimated_value_inr', e.target.value)} placeholder="0" />
+                    </div>
+                    <div className="od-edit-field">
+                      <label>Expected Close Date</label>
+                      <input type="date" value={form.expected_close_date} onChange={e => set('expected_close_date', e.target.value)} />
+                    </div>
+                  </div>
+                )}
+
+                <div className="od-edit-field">
+                  <label>Product / Requirement Notes</label>
+                  <textarea rows={3} value={form.product_notes} onChange={e => set('product_notes', e.target.value)} placeholder="What products or solutions are they interested in?" />
+                </div>
+
+                <div style={{ display:'flex', gap:10, justifyContent:'flex-end', paddingTop:4 }}>
+                  <button className="od-btn" onClick={() => navigate('/crm')}>Cancel</button>
+                  <button className="od-btn od-btn-primary" onClick={save} disabled={saving || !companyQuery.trim()}>
+                    {saving ? 'Creating…' : isExisting ? 'Create Opportunity' : 'Create Lead'}
+                  </button>
+                </div>
+
               </div>
             </div>
-          )}
+          </div>
+
         </div>
       </div>
     </Layout>

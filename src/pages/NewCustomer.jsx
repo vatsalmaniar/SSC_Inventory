@@ -62,7 +62,7 @@ export default function NewCustomer() {
     billing_address: '', shipping_address: '',
     poc_name: '', poc_no: '', poc_email: '',
     director_name: '', director_no: '', director_email: '',
-    credit_terms: '', account_status: 'Active',
+    credit_terms: 'Against PI', account_status: 'Active',
     vi_shopfloor: '', vi_payment: '', vi_expected_business: '',
   })
   const [gstCertFile, setGstCertFile]   = useState(null)
@@ -113,11 +113,41 @@ export default function NewCustomer() {
 
   async function handleSave() {
     const newErrors = {}
-    if (!form.customer_name.trim()) newErrors.customer_name = 'Customer name is required'
-    if (!gstCertFile) newErrors.gst_cert = 'GST Certificate is required'
-    if (fileErrors.gst_cert) newErrors.gst_cert = fileErrors.gst_cert
-    if (fileErrors.msme_cert) newErrors.msme_cert = fileErrors.msme_cert
-    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return }
+    // Business Info
+    if (!form.customer_name.trim())  newErrors.customer_name   = 'Required'
+    if (!form.customer_type)         newErrors.customer_type   = 'Required'
+    if (!form.industry)              newErrors.industry        = 'Required'
+    if (!form.year_established)      newErrors.year_established= 'Required'
+    if (!form.premises)              newErrors.premises        = 'Required'
+    if (!form.turnover.trim())       newErrors.turnover        = 'Required'
+    // Tax & Compliance
+    if (!form.gst.trim())            newErrors.gst             = 'Required'
+    if (!gstCertFile)                newErrors.gst_cert        = 'GST Certificate is required'
+    if (fileErrors.gst_cert)         newErrors.gst_cert        = fileErrors.gst_cert
+    if (fileErrors.msme_cert)        newErrors.msme_cert       = fileErrors.msme_cert
+    if (!form.pan_card_no.trim())    newErrors.pan_card_no     = 'Required'
+    // Addresses
+    if (!form.billing_address.trim())  newErrors.billing_address  = 'Required'
+    if (!form.shipping_address.trim()) newErrors.shipping_address = 'Required'
+    // Contacts
+    if (!form.poc_name.trim())       newErrors.poc_name        = 'Required'
+    if (!form.poc_no.trim())         newErrors.poc_no          = 'Required'
+    if (!form.poc_email.trim())      newErrors.poc_email       = 'Required'
+    if (!form.director_name.trim())  newErrors.director_name   = 'Required'
+    if (!form.director_no.trim())    newErrors.director_no     = 'Required'
+    if (!form.director_email.trim()) newErrors.director_email  = 'Required'
+    // Credit
+    if (!form.credit_terms)          newErrors.credit_terms    = 'Required'
+    // Visual Inspection
+    if (!form.vi_shopfloor.trim())        newErrors.vi_shopfloor        = 'Required'
+    if (!form.vi_payment.trim())          newErrors.vi_payment          = 'Required'
+    if (!form.vi_expected_business.trim()) newErrors.vi_expected_business = 'Required'
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
 
     setSaving(true)
     try {
@@ -230,31 +260,36 @@ export default function NewCustomer() {
                       {errors.customer_name && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.customer_name}</div>}
                     </Field>
                   </div>
-                  <Field label="Customer Type">
-                    <select style={FIELD_STYLE} value={form.customer_type} onChange={e => set('customer_type', e.target.value)}>
+                  <Field label="Customer Type" required>
+                    <select style={inputStyle('customer_type')} value={form.customer_type} onChange={e => set('customer_type', e.target.value)}>
                       <option value="">— Select —</option>
                       {CUSTOMER_TYPES.map(t => <option key={t}>{t}</option>)}
                     </select>
+                    {errors.customer_type && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.customer_type}</div>}
                   </Field>
-                  <Field label="Industry">
-                    <select style={FIELD_STYLE} value={form.industry} onChange={e => set('industry', e.target.value)}>
+                  <Field label="Industry" required>
+                    <select style={inputStyle('industry')} value={form.industry} onChange={e => set('industry', e.target.value)}>
                       <option value="">— Select —</option>
                       {INDUSTRIES.map(i => <option key={i}>{i}</option>)}
                     </select>
+                    {errors.industry && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.industry}</div>}
                   </Field>
-                  <Field label="Year of Establishment">
-                    <input style={FIELD_STYLE} type="number" value={form.year_established} onChange={e => set('year_established', e.target.value)} placeholder="e.g. 2005" min="1900" max="2026" />
+                  <Field label="Year of Establishment" required>
+                    <input style={inputStyle('year_established')} type="number" value={form.year_established} onChange={e => set('year_established', e.target.value)} placeholder="e.g. 2005" min="1900" max="2026" />
+                    {errors.year_established && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.year_established}</div>}
                   </Field>
-                  <Field label="Premises">
-                    <select style={FIELD_STYLE} value={form.premises} onChange={e => set('premises', e.target.value)}>
+                  <Field label="Premises" required>
+                    <select style={inputStyle('premises')} value={form.premises} onChange={e => set('premises', e.target.value)}>
                       <option value="">— Select —</option>
                       <option>Owned</option>
                       <option>Rented</option>
                       <option>Leased</option>
                     </select>
+                    {errors.premises && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.premises}</div>}
                   </Field>
-                  <Field label="Annual Turnover">
-                    <input style={FIELD_STYLE} value={form.turnover} onChange={e => set('turnover', e.target.value)} placeholder="e.g. 2 Cr, 50L" />
+                  <Field label="Annual Turnover" required>
+                    <input style={inputStyle('turnover')} value={form.turnover} onChange={e => set('turnover', e.target.value)} placeholder="e.g. 2 Cr, 50L" />
+                    {errors.turnover && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.turnover}</div>}
                   </Field>
                 </div>
               </div>
@@ -265,8 +300,9 @@ export default function NewCustomer() {
               <div className="od-card-header"><div className="od-card-title">Tax & Compliance</div></div>
               <div className="od-card-body">
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                  <Field label="GST Number">
-                    <input style={FIELD_STYLE} value={form.gst} onChange={e => set('gst', e.target.value)} placeholder="e.g. 24ABCDE1234F1Z5" />
+                  <Field label="GST Number" required>
+                    <input style={inputStyle('gst')} value={form.gst} onChange={e => set('gst', e.target.value)} placeholder="e.g. 24ABCDE1234F1Z5" />
+                    {errors.gst && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.gst}</div>}
                   </Field>
                   <FileUploadField
                     label="GST Certificate" required
@@ -275,11 +311,12 @@ export default function NewCustomer() {
                     onChange={handleGstCert}
                     error={errors.gst_cert || fileErrors.gst_cert}
                   />
-                  <Field label="PAN Card No.">
-                    <input style={FIELD_STYLE} value={form.pan_card_no} onChange={e => set('pan_card_no', e.target.value)} placeholder="e.g. ABCDE1234F" />
+                  <Field label="PAN Card No." required>
+                    <input style={inputStyle('pan_card_no')} value={form.pan_card_no} onChange={e => set('pan_card_no', e.target.value)} placeholder="e.g. ABCDE1234F" />
+                    {errors.pan_card_no && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.pan_card_no}</div>}
                   </Field>
                   <Field label="MSME No.">
-                    <input style={FIELD_STYLE} value={form.msme_no} onChange={e => set('msme_no', e.target.value)} placeholder="MSME registration number" />
+                    <input style={FIELD_STYLE} value={form.msme_no} onChange={e => set('msme_no', e.target.value)} placeholder="MSME registration number (optional)" />
                   </Field>
                   <div style={{ gridColumn:'span 2' }}>
                     <FileUploadField
@@ -299,11 +336,13 @@ export default function NewCustomer() {
               <div className="od-card-header"><div className="od-card-title">Addresses</div></div>
               <div className="od-card-body">
                 <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                  <Field label="Billing Address">
-                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical' }} value={form.billing_address} onChange={e => set('billing_address', e.target.value)} placeholder="Full billing address" />
+                  <Field label="Billing Address" required>
+                    <textarea style={{ ...inputStyle('billing_address'), minHeight:72, resize:'vertical' }} value={form.billing_address} onChange={e => set('billing_address', e.target.value)} placeholder="Full billing address" />
+                    {errors.billing_address && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.billing_address}</div>}
                   </Field>
-                  <Field label="Shipping Address">
-                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical' }} value={form.shipping_address} onChange={e => set('shipping_address', e.target.value)} placeholder="Full shipping address (if different from billing)" />
+                  <Field label="Shipping Address" required>
+                    <textarea style={{ ...inputStyle('shipping_address'), minHeight:72, resize:'vertical' }} value={form.shipping_address} onChange={e => set('shipping_address', e.target.value)} placeholder="Full shipping address" />
+                    {errors.shipping_address && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.shipping_address}</div>}
                   </Field>
                 </div>
               </div>
@@ -315,18 +354,36 @@ export default function NewCustomer() {
               <div className="od-card-body">
                 <div style={SECTION_STYLE}>Point of Contact</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
-                  <Field label="Name"><input style={FIELD_STYLE} value={form.poc_name} onChange={e => set('poc_name', e.target.value)} placeholder="Contact person name" /></Field>
-                  <Field label="Phone"><input style={FIELD_STYLE} value={form.poc_no} onChange={e => set('poc_no', e.target.value)} placeholder="Mobile / office number" /></Field>
+                  <Field label="Name" required>
+                    <input style={inputStyle('poc_name')} value={form.poc_name} onChange={e => set('poc_name', e.target.value)} placeholder="Contact person name" />
+                    {errors.poc_name && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.poc_name}</div>}
+                  </Field>
+                  <Field label="Phone" required>
+                    <input style={inputStyle('poc_no')} value={form.poc_no} onChange={e => set('poc_no', e.target.value)} placeholder="Mobile / office number" />
+                    {errors.poc_no && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.poc_no}</div>}
+                  </Field>
                   <div style={{ gridColumn:'span 2' }}>
-                    <Field label="Email"><input style={FIELD_STYLE} type="email" value={form.poc_email} onChange={e => set('poc_email', e.target.value)} placeholder="contact@company.com" /></Field>
+                    <Field label="Email" required>
+                      <input style={inputStyle('poc_email')} type="email" value={form.poc_email} onChange={e => set('poc_email', e.target.value)} placeholder="contact@company.com" />
+                      {errors.poc_email && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.poc_email}</div>}
+                    </Field>
                   </div>
                 </div>
                 <div style={SECTION_STYLE}>Director / Decision Maker</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                  <Field label="Name"><input style={FIELD_STYLE} value={form.director_name} onChange={e => set('director_name', e.target.value)} placeholder="Director / owner name" /></Field>
-                  <Field label="Phone"><input style={FIELD_STYLE} value={form.director_no} onChange={e => set('director_no', e.target.value)} placeholder="Director contact number" /></Field>
+                  <Field label="Name" required>
+                    <input style={inputStyle('director_name')} value={form.director_name} onChange={e => set('director_name', e.target.value)} placeholder="Director / owner name" />
+                    {errors.director_name && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.director_name}</div>}
+                  </Field>
+                  <Field label="Phone" required>
+                    <input style={inputStyle('director_no')} value={form.director_no} onChange={e => set('director_no', e.target.value)} placeholder="Director contact number" />
+                    {errors.director_no && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.director_no}</div>}
+                  </Field>
                   <div style={{ gridColumn:'span 2' }}>
-                    <Field label="Email"><input style={FIELD_STYLE} type="email" value={form.director_email} onChange={e => set('director_email', e.target.value)} placeholder="director@company.com" /></Field>
+                    <Field label="Email" required>
+                      <input style={inputStyle('director_email')} type="email" value={form.director_email} onChange={e => set('director_email', e.target.value)} placeholder="director@company.com" />
+                      {errors.director_email && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.director_email}</div>}
+                    </Field>
                   </div>
                 </div>
               </div>
@@ -337,11 +394,18 @@ export default function NewCustomer() {
               <div className="od-card-header"><div className="od-card-title">Credit</div></div>
               <div className="od-card-body">
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                  <Field label="Credit Terms">
-                    <select style={FIELD_STYLE} value={form.credit_terms} onChange={e => set('credit_terms', e.target.value)}>
-                      <option value="">— Select —</option>
-                      {CREDIT_TERMS.map(t => <option key={t}>{t}</option>)}
-                    </select>
+                  <Field label="Credit Terms" required>
+                    {userRole === 'admin' ? (
+                      <select style={inputStyle('credit_terms')} value={form.credit_terms} onChange={e => set('credit_terms', e.target.value)}>
+                        <option value="">— Select —</option>
+                        {CREDIT_TERMS.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    ) : (
+                      <div style={{ ...FIELD_STYLE, background:'var(--gray-50)', color:'var(--gray-700)', cursor:'default' }}>
+                        Against PI <span style={{ fontSize:11, color:'var(--gray-400)', marginLeft:6 }}>(set by admin)</span>
+                      </div>
+                    )}
+                    {errors.credit_terms && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.credit_terms}</div>}
                   </Field>
                   <Field label="Account Status">
                     <select style={FIELD_STYLE} value={form.account_status} onChange={e => set('account_status', e.target.value)}>
@@ -366,20 +430,23 @@ export default function NewCustomer() {
                   Share your gut feeling after the visit. Be honest — these notes help the team understand this customer better.
                 </p>
                 <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                  <Field label="Shopfloor Observation">
-                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical', borderColor:'#fde68a' }}
+                  <Field label="Shopfloor Observation" required>
+                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical', borderColor: errors.vi_shopfloor ? '#e11d48' : '#fde68a' }}
                       value={form.vi_shopfloor} onChange={e => set('vi_shopfloor', e.target.value)}
                       placeholder="e.g. Shop floor filled with machines, active production, 3 CNC machines visible, ~20 workers on shift…" />
+                    {errors.vi_shopfloor && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.vi_shopfloor}</div>}
                   </Field>
-                  <Field label="Payment Assessment">
-                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical', borderColor:'#fde68a' }}
+                  <Field label="Payment Assessment" required>
+                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical', borderColor: errors.vi_payment ? '#e11d48' : '#fde68a' }}
                       value={form.vi_payment} onChange={e => set('vi_payment', e.target.value)}
                       placeholder="e.g. Ideal payment cycle 60 days, payment appears safe, no red flags, accounts dept present…" />
+                    {errors.vi_payment && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.vi_payment}</div>}
                   </Field>
-                  <Field label="Expected Business">
-                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical', borderColor:'#fde68a' }}
+                  <Field label="Expected Business" required>
+                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical', borderColor: errors.vi_expected_business ? '#e11d48' : '#fde68a' }}
                       value={form.vi_expected_business} onChange={e => set('vi_expected_business', e.target.value)}
                       placeholder="e.g. Annual potential ₹8–10L, primarily Mitsubishi PLCs, quarterly reorders expected…" />
+                    {errors.vi_expected_business && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.vi_expected_business}</div>}
                   </Field>
                 </div>
               </div>

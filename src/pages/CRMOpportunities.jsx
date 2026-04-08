@@ -3,14 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
+import NewOppModal from './CRMNewOpportunity'
 import '../styles/crm.css'
 
-const STAGES = ['LEAD_CAPTURED','CONTACTED','QUALIFIED','TECHNO_COMMERCIAL','FOLLOW_UP','QUOTATION_SENT','PO_RECEIVED']
+const STAGES = ['LEAD_CAPTURED','CONTACTED','QUALIFIED','BOM_RECEIVED','QUOTATION_SENT','FOLLOW_UP','FINAL_NEGOTIATION']
 const TERMINAL = ['WON','LOST','ON_HOLD']
+const LEAD_STAGES = ['LEAD_CAPTURED','CONTACTED','QUALIFIED']
+function recordType(stage) { return LEAD_STAGES.includes(stage) ? 'Lead' : 'Opportunity' }
 const STAGE_LABELS = {
   LEAD_CAPTURED:'Lead Captured', CONTACTED:'Contacted', QUALIFIED:'Qualified',
-  TECHNO_COMMERCIAL:'Techno-Comm', FOLLOW_UP:'Follow Up', QUOTATION_SENT:'Quote Sent',
-  PO_RECEIVED:'PO Received', WON:'Won', LOST:'Lost', ON_HOLD:'On Hold',
+  BOM_RECEIVED:'BOM Received', QUOTATION_SENT:'Quote Sent', FOLLOW_UP:'Follow Up',
+  FINAL_NEGOTIATION:'Final Negotiation', WON:'Won', LOST:'Lost', ON_HOLD:'On Hold',
 }
 const SCENARIOS = ['NEW_CUST_NEW_PROD','OLD_CUST_NEW_PROD','NEW_CUST_OLD_PROD','DORMANT_REVIVAL']
 
@@ -40,13 +43,13 @@ export default function CRMOpportunities() {
   const [reps, setReps]       = useState([])
   const [principals, setPrincipals] = useState([])
   const [loading, setLoading] = useState(true)
-  const [view, setView]       = useState('kanban')
+  const [view, setView]       = useState('list')
   const [search, setSearch]   = useState('')
   const [filterStage, setFilterStage]     = useState('')
   const [filterRep, setFilterRep]         = useState('')
   const [filterPrincipal, setFilterPrincipal] = useState('')
   const [filterScenario, setFilterScenario]   = useState('')
-  const [showTerminal, setShowTerminal]   = useState(false)
+  const [showNewModal, setShowNewModal]   = useState(false)
 
   useEffect(() => { init() }, [])
 
@@ -55,10 +58,11 @@ export default function CRMOpportunities() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
+    if (!['sales','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
 
     const [oppsRes, repsRes, principalsRes] = await Promise.all([
       sb.from('crm_opportunities').select('*, crm_companies(company_name), crm_principals(name), crm_contacts(name), profiles(name)').order('created_at', { ascending: false }),
-      sb.from('profiles').select('id,name').in('role',['sales','ops','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin']),
       sb.from('crm_principals').select('*').order('name'),
     ])
 
@@ -77,7 +81,7 @@ export default function CRMOpportunities() {
     setLoading(false)
   }
 
-  const isManager = ['admin','ops'].includes(user.role)
+  const isManager = user.role === 'admin'
   const q = search.trim().toLowerCase()
   const filtered = opps
     .filter(o => isManager || o.assigned_rep_id === user.id)
@@ -86,7 +90,6 @@ export default function CRMOpportunities() {
     .filter(o => !filterRep || o.assigned_rep_id === filterRep)
     .filter(o => !filterPrincipal || o.principal_id === filterPrincipal)
     .filter(o => !filterScenario || o.scenario_type === filterScenario)
-    .filter(o => showTerminal ? true : !TERMINAL.includes(o.stage))
 
   const totalValue = filtered.filter(o => !TERMINAL.includes(o.stage) || o.stage === 'WON').reduce((s, o) => s + (o.estimated_value_inr || 0), 0)
   const overdueCount = filtered.filter(o => isOverdue(o)).length
@@ -110,9 +113,9 @@ export default function CRMOpportunities() {
                 <button className={'crm-btn crm-btn-sm' + (view==='kanban'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none'}} onClick={() => setView('kanban')}>Kanban</button>
                 <button className={'crm-btn crm-btn-sm' + (view==='list'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => setView('list')}>List</button>
               </div>
-              <button className="crm-btn crm-btn-primary" onClick={() => navigate('/crm/opportunities/new')}>
+              <button className="crm-btn crm-btn-primary" onClick={() => setShowNewModal(true)}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                New Opportunity
+                New Lead
               </button>
             </div>
           </div>
@@ -140,10 +143,6 @@ export default function CRMOpportunities() {
                 {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             )}
-            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:'var(--gray-500)',cursor:'pointer',whiteSpace:'nowrap'}}>
-              <input type="checkbox" checked={showTerminal} onChange={e => setShowTerminal(e.target.checked)} />
-              Show Won/Lost/Hold
-            </label>
           </div>
 
           {loading ? (
@@ -155,6 +154,13 @@ export default function CRMOpportunities() {
           )}
         </div>
       </div>
+      {showNewModal && (
+        <NewOppModal
+          currentUser={user}
+          onClose={() => setShowNewModal(false)}
+          onCreated={newId => { setShowNewModal(false); navigate('/crm/opportunities/' + newId) }}
+        />
+      )}
     </Layout>
   )
 }
@@ -172,9 +178,15 @@ function KanbanView({ opps, navigate }) {
               <div className="crm-kanban-col-label">{STAGE_LABELS[stage]}</div>
               <div className="crm-kanban-col-count">{cards.length}</div>
             </div>
-            {cards.map(o => (
+            {cards.map(o => {
+              const type = recordType(o.stage)
+              return (
               <div key={o.id} className="crm-kanban-card" onClick={() => navigate('/crm/opportunities/' + o.id)}>
-                <div className="crm-kanban-company">{o.crm_companies?.company_name || '—'}</div>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4,marginBottom:2}}>
+                  <div className="crm-kanban-company">{o.opportunity_name || o.crm_companies?.company_name || '—'}</div>
+                  <span style={{ fontSize:9, fontWeight:700, borderRadius:4, padding:'1px 5px', flexShrink:0, background: type==='Lead'?'#fef3c7':'#eff6ff', color: type==='Lead'?'#b45309':'#1d4ed8' }}>{type}</span>
+                </div>
+                {o.crm_companies?.company_name && o.opportunity_name && <div style={{fontSize:10,color:'var(--gray-400)',marginBottom:2}}>{o.crm_companies.company_name}</div>}
                 {o.product_notes && <div className="crm-kanban-product">{o.product_notes.slice(0,60)}{o.product_notes.length > 60 ? '…' : ''}</div>}
                 <div className="crm-kanban-meta">
                   <div style={{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}}>
@@ -185,7 +197,7 @@ function KanbanView({ opps, navigate }) {
                 </div>
                 {o.profiles?.name && <div style={{fontSize:10,color:'var(--gray-400)',marginTop:4}}>{o.profiles.name}</div>}
               </div>
-            ))}
+            )})}
             {cards.length === 0 && (
               <div style={{textAlign:'center',fontSize:11,color:'var(--gray-300)',padding:'12px 0'}}>Empty</div>
             )}
@@ -203,9 +215,9 @@ function ListView({ opps, navigate }) {
         <table className="crm-table">
           <thead>
             <tr>
-              <th>Company</th>
+              <th>Company / Name</th>
+              <th>Type</th>
               <th>Principal</th>
-              <th>Scenario</th>
               <th>Stage</th>
               <th>Value</th>
               <th>Rep</th>
@@ -214,34 +226,47 @@ function ListView({ opps, navigate }) {
             </tr>
           </thead>
           <tbody>
-            {opps.map(o => (
-              <tr key={o.id} onClick={() => navigate('/crm/opportunities/' + o.id)}>
-                <td>
-                  <div className="crm-table-name">{o.crm_companies?.company_name || '—'}</div>
-                  {o.product_notes && <div className="crm-table-sub">{o.product_notes.slice(0,40)}{o.product_notes.length > 40 ? '…' : ''}</div>}
-                </td>
-                <td>{o.crm_principals?.name || '—'}</td>
-                <td>{o.scenario_type ? <span className={'crm-scenario-pill crm-scenario-' + o.scenario_type}>{scenarioLabel(o.scenario_type)}</span> : '—'}</td>
-                <td><StagePill stage={o.stage} /></td>
-                <td style={{whiteSpace:'nowrap',fontWeight:600}}>{fmtINR(o.estimated_value_inr) || '—'}</td>
-                <td>{o.profiles?.name || '—'}</td>
-                <td style={{whiteSpace:'nowrap'}}>{fmt(o.expected_close_date)}</td>
-                <td>{isOverdue(o) && <span className="crm-overdue-badge">Overdue</span>}</td>
-              </tr>
-            ))}
+            {opps.map(o => {
+              const type = recordType(o.stage)
+              return (
+                <tr key={o.id} onClick={() => navigate('/crm/opportunities/' + o.id)}>
+                  <td>
+                    <div className="crm-table-name">{o.opportunity_name || o.crm_companies?.company_name || '—'}</div>
+                    {o.crm_companies?.company_name && o.opportunity_name && <div className="crm-table-sub">{o.crm_companies.company_name}</div>}
+                  </td>
+                  <td>
+                    <span style={{ fontSize:10, fontWeight:700, borderRadius:4, padding:'2px 7px', whiteSpace:'nowrap',
+                      background: type==='Lead' ? '#fef3c7' : '#eff6ff',
+                      color: type==='Lead' ? '#b45309' : '#1d4ed8',
+                    }}>{type}</span>
+                  </td>
+                  <td>{o.crm_principals?.name || '—'}</td>
+                  <td><StagePill stage={o.stage} /></td>
+                  <td style={{whiteSpace:'nowrap',fontWeight:600}}>{fmtINR(o.estimated_value_inr) || '—'}</td>
+                  <td>{o.profiles?.name || '—'}</td>
+                  <td style={{whiteSpace:'nowrap'}}>{fmt(o.expected_close_date)}</td>
+                  <td>{isOverdue(o) && <span className="crm-overdue-badge">Overdue</span>}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
       {/* Mobile */}
       <div className="crm-card-list">
-        {opps.map(o => (
+        {opps.map(o => {
+          const type = recordType(o.stage)
+          return (
           <div key={o.id} className="crm-list-card" onClick={() => navigate('/crm/opportunities/' + o.id)}>
             <div className="crm-list-card-top">
               <div>
-                <div className="crm-list-card-name">{o.crm_companies?.company_name || '—'}</div>
-                <div className="crm-list-card-sub">{o.crm_principals?.name || ''}{o.product_notes ? ' · ' + o.product_notes.slice(0,40) : ''}</div>
+                <div className="crm-list-card-name">{o.opportunity_name || o.crm_companies?.company_name || '—'}</div>
+                <div className="crm-list-card-sub">{o.crm_companies?.company_name || ''}{o.crm_principals?.name ? ' · ' + o.crm_principals.name : ''}</div>
               </div>
-              <StagePill stage={o.stage} />
+              <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
+                <span style={{ fontSize:9, fontWeight:700, borderRadius:4, padding:'2px 6px', background: type==='Lead'?'#fef3c7':'#eff6ff', color: type==='Lead'?'#b45309':'#1d4ed8' }}>{type}</span>
+                <StagePill stage={o.stage} />
+              </div>
             </div>
             <div className="crm-list-card-bottom">
               {o.scenario_type && <span className={'crm-scenario-pill crm-scenario-' + o.scenario_type}>{scenarioLabel(o.scenario_type)}</span>}
@@ -251,9 +276,9 @@ function ListView({ opps, navigate }) {
               </div>
             </div>
           </div>
-        ))}
+        )})}
       </div>
-      {opps.length === 0 && <div className="crm-empty"><div className="crm-empty-title">No opportunities found</div></div>}
+      {opps.length === 0 && <div className="crm-empty"><div className="crm-empty-title">No leads or opportunities found</div></div>}
     </div>
   )
 }
@@ -265,7 +290,8 @@ function StagePill({ stage }) {
     ON_HOLD: { background:'#fffbeb', color:'#b45309' },
     FOLLOW_UP: { background:'#fff7ed', color:'#c2410c' },
     QUOTATION_SENT: { background:'#e8f2fc', color:'#1a4dab' },
-    PO_RECEIVED: { background:'#f0fdf4', color:'#15803d' },
+    BOM_RECEIVED:      { background:'#f5f3ff', color:'#7c3aed' },
+    FINAL_NEGOTIATION: { background:'#fef9c3', color:'#854d0e' },
   }
   const s = styles[stage] || { background:'#f1f5f9', color:'#475569' }
   return <span style={{...s, fontSize:10, fontWeight:700, borderRadius:4, padding:'2px 7px', whiteSpace:'nowrap'}}>{STAGE_LABELS[stage] || stage}</span>

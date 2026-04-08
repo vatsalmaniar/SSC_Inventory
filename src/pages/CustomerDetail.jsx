@@ -68,6 +68,12 @@ export default function CustomerDetail() {
   const [editData, setEditData]   = useState({})
   const [saving, setSaving]       = useState(false)
   const [approving, setApproving] = useState(false)
+  const [contacts, setContacts]   = useState([])
+  const [opps, setOpps]           = useState([])
+  const [oppTab, setOppTab]       = useState('open')
+  const [showContactModal, setShowContactModal] = useState(false)
+  const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
+  const [savingContact, setSavingContact] = useState(false)
 
   useEffect(() => { init() }, [id])
 
@@ -80,16 +86,36 @@ export default function CustomerDetail() {
     const custRes = await sb.from('customers').select('*').eq('id', id).single()
     if (!custRes.data) { navigate('/customers'); return }
 
-    const ordersRes = await sb.from('orders')
-      .select('id,order_number,customer_name,status,order_type,order_items(total_price),created_at,po_number')
-      .eq('is_test', false)
-      .ilike('customer_name', custRes.data.customer_name)
-      .order('created_at', { ascending: false })
+    const [ordersRes, contactsRes, oppsRes] = await Promise.all([
+      sb.from('orders')
+        .select('id,order_number,customer_name,status,order_type,order_items(total_price),created_at,po_number')
+        .eq('is_test', false)
+        .ilike('customer_name', custRes.data.customer_name)
+        .order('created_at', { ascending: false }),
+      sb.from('customer_contacts').select('*').eq('customer_id', id).order('created_at', { ascending: true }),
+      sb.from('crm_opportunities')
+        .select('id,opportunity_name,stage,estimated_value_inr,created_at,brands,profiles(name),crm_principals(name)')
+        .eq('customer_id', id)
+        .order('created_at', { ascending: false }),
+    ])
 
     setCustomer(custRes.data)
     setEditData(custRes.data)
     setOrders(ordersRes.data || [])
+    setContacts(contactsRes.data || [])
+    setOpps(oppsRes.data || [])
     setLoading(false)
+  }
+
+  async function saveContact() {
+    if (!contactForm.name.trim()) { alert('Name is required'); return }
+    setSavingContact(true)
+    const { data, error } = await sb.from('customer_contacts').insert({ ...contactForm, customer_id: id }).select().single()
+    if (error) { alert('Error: ' + error.message); setSavingContact(false); return }
+    setContacts(p => [...p, data])
+    setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
+    setShowContactModal(false)
+    setSavingContact(false)
   }
 
   async function approve() {
@@ -642,6 +668,93 @@ export default function CustomerDetail() {
                   </>
                 )}
               </div>
+
+              {/* ── Opportunities ── */}
+              {(() => {
+                const TERMINAL = ['WON','LOST','ON_HOLD']
+                const STAGE_LABELS = {
+                  LEAD_CAPTURED:'Lead Captured', CONTACTED:'Contacted', QUALIFIED:'Qualified',
+                  BOM_RECEIVED:'BOM Received', QUOTATION_SENT:'Quote Sent', FOLLOW_UP:'Follow Up',
+                  FINAL_NEGOTIATION:'Final Negotiation', WON:'Won', LOST:'Lost', ON_HOLD:'On Hold',
+                }
+                const STAGE_STYLES = {
+                  WON:              { background:'#f0fdf4', color:'#15803d' },
+                  LOST:             { background:'#fef2f2', color:'#dc2626' },
+                  ON_HOLD:          { background:'#fffbeb', color:'#b45309' },
+                  QUOTATION_SENT:   { background:'#e8f2fc', color:'#1a4dab' },
+                  FOLLOW_UP:        { background:'#fff7ed', color:'#c2410c' },
+                  FINAL_NEGOTIATION:{ background:'#fef9c3', color:'#854d0e' },
+                  BOM_RECEIVED:     { background:'#f5f3ff', color:'#7c3aed' },
+                }
+                const openOpps   = opps.filter(o => !TERMINAL.includes(o.stage))
+                const closedOpps = opps.filter(o => TERMINAL.includes(o.stage))
+                const shown      = oppTab === 'open' ? openOpps : closedOpps
+                return (
+                  <div className="od-card">
+                    <div className="od-card-header" style={{ paddingBottom:0, borderBottom:'none', flexDirection:'column', alignItems:'flex-start', gap:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', marginBottom:8 }}>
+                        <div className="od-card-title">Opportunities</div>
+                        <span style={{ fontSize:12, color:'var(--gray-400)', fontWeight:500 }}>{opps.length} total</span>
+                      </div>
+                      <div style={{ display:'flex', gap:0, borderBottom:'1px solid var(--gray-100)', width:'100%' }}>
+                        {[['open','Open',openOpps.length],['closed','Closed',closedOpps.length]].map(([key,label,count]) => (
+                          <button key={key} onClick={() => setOppTab(key)}
+                            style={{ padding:'8px 18px', fontSize:12, fontWeight:700, background:'none', border:'none', cursor:'pointer', fontFamily:'var(--font)',
+                              color: oppTab===key ? '#1a4dab' : 'var(--gray-400)',
+                              borderBottom: oppTab===key ? '2px solid #1a4dab' : '2px solid transparent',
+                              marginBottom:-1 }}>
+                            {label} <span style={{ fontSize:11, fontWeight:500, marginLeft:4, color: oppTab===key ? '#1a4dab' : 'var(--gray-400)' }}>({count})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {shown.length === 0 ? (
+                      <div className="od-card-body" style={{ textAlign:'center', padding:'28px 20px', color:'var(--gray-400)', fontSize:13 }}>
+                        No {oppTab} opportunities.
+                      </div>
+                    ) : (
+                      <table className="od-items-table">
+                        <thead>
+                          <tr>
+                            <th>Opportunity</th>
+                            <th>Stage</th>
+                            <th>Brands</th>
+                            <th>Rep</th>
+                            <th>Date</th>
+                            <th style={{ textAlign:'right' }}>Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shown.map(o => {
+                            const ss = STAGE_STYLES[o.stage] || { background:'#f1f5f9', color:'#475569' }
+                            return (
+                              <tr key={o.id} onClick={() => navigate('/crm/opportunities/' + o.id)} style={{ cursor:'pointer' }}>
+                                <td style={{ fontWeight:600, maxWidth:200 }}>
+                                  <div style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                    {o.opportunity_name || o.crm_principals?.name || '—'}
+                                  </div>
+                                </td>
+                                <td>
+                                  <span style={{ ...ss, fontSize:10, fontWeight:700, borderRadius:4, padding:'2px 7px', whiteSpace:'nowrap' }}>
+                                    {STAGE_LABELS[o.stage] || o.stage}
+                                  </span>
+                                </td>
+                                <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:140 }}>
+                                  {(o.brands && o.brands.length > 0) ? o.brands.slice(0,3).join(', ') : (o.crm_principals?.name || '—')}
+                                </td>
+                                <td style={{ fontSize:12, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{o.profiles?.name || '—'}</td>
+                                <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap', fontSize:12 }}>{fmt(o.created_at)}</td>
+                                <td className="right">{o.estimated_value_inr ? fmtINR(o.estimated_value_inr) : '—'}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )
+              })()}
+
             </div>
 
             {/* ── Sidebar ── */}
@@ -662,6 +775,39 @@ export default function CustomerDetail() {
                     </div>
                   : <div style={{ fontSize: 13, color: 'var(--gray-400)' }}>Unassigned</div>
                 }
+              </div>
+
+              {/* Contacts */}
+              <div className="od-side-card">
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                  <div className="od-side-card-title" style={{ margin:0 }}>Contacts ({contacts.length})</div>
+                  <button onClick={() => setShowContactModal(true)}
+                    style={{ fontSize:11, fontWeight:700, color:'#1a4dab', background:'#eff6ff', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'var(--font)' }}>
+                    + Add
+                  </button>
+                </div>
+                {contacts.length === 0 ? (
+                  <div style={{ fontSize:12, color:'var(--gray-400)', textAlign:'center', padding:'12px 0' }}>
+                    No contacts yet.<br/>
+                    <button onClick={() => setShowContactModal(true)} style={{ marginTop:8, fontSize:12, fontWeight:600, color:'#1a4dab', background:'none', border:'none', cursor:'pointer', fontFamily:'var(--font)' }}>+ Add Contact</button>
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {contacts.map(c => (
+                      <div key={c.id} style={{ display:'flex', gap:10, alignItems:'flex-start', paddingBottom:10, borderBottom:'1px solid var(--gray-50)' }}>
+                        <div style={{ width:32, height:32, borderRadius:8, background:'#e0e7ff', color:'#3730a3', fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                          {c.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2)}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:13, fontWeight:700, color:'var(--gray-900)' }}>{c.name}</div>
+                          {c.designation && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{c.designation}</div>}
+                          {c.phone && <a href={'tel:' + c.phone} style={{ display:'block', fontSize:12, color:'#1a4dab', marginTop:3, textDecoration:'none', fontWeight:500 }}>{c.phone}</a>}
+                          {c.email && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{c.email}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Stats */}
@@ -745,6 +891,35 @@ export default function CustomerDetail() {
           </div>
         </div>
       </div>
+      {/* Add Contact Modal */}
+      {showContactModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={e => { if (e.target===e.currentTarget) setShowContactModal(false) }}>
+          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:420, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Add Contact</div>
+              <button onClick={() => setShowContactModal(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+            </div>
+            <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:12 }}>
+              {[['name','Name *','text'],['designation','Title / Designation','text'],['phone','Phone','tel'],['whatsapp','WhatsApp','tel'],['email','Email','email']].map(([field, label, type]) => (
+                <div key={field}>
+                  <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</div>
+                  <input type={type} value={contactForm[field]} onChange={e => setContactForm(p => ({ ...p, [field]: e.target.value }))}
+                    style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ padding:'0 20px 18px', display:'flex', gap:8, justifyContent:'flex-end' }}>
+              <button onClick={() => setShowContactModal(false)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
+              <button onClick={saveContact} disabled={savingContact || !contactForm.name.trim()}
+                style={{ padding:'9px 18px', border:'none', borderRadius:8, background:'#1e3a5f', color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', opacity: contactForm.name.trim() ? 1 : 0.4 }}>
+                {savingContact ? 'Saving…' : 'Save Contact'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </Layout>
   )
 }
