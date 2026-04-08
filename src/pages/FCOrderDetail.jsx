@@ -462,10 +462,13 @@ export default function FCOrderDetail() {
 
   async function doAction(toStatus, activityMsg, extraUpdate = {}) {
     setSaving(true)
-    const { error } = await sb.from('orders').update({
-      status: toStatus, updated_at: new Date().toISOString(), ...extraUpdate
-    }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    // Update only this batch's status — each batch is processed independently
+    if (activeBatch) {
+      const { error } = await sb.from('order_dispatches').update({
+        status: toStatus, updated_at: new Date().toISOString(), ...extraUpdate
+      }).eq('id', activeBatch.id)
+      if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    }
     await logActivity(activityMsg)
     setConfirm(null)
     setSaving(false)
@@ -477,13 +480,16 @@ export default function FCOrderDetail() {
     let dcNum = null
     const nextStatus = order.order_type === 'SAMPLE' ? 'invoice_generated' : 'goods_issued'
     if (activeBatch) {
-      // Upgrade Temp/DC → SSC/DC on the batch
       const { data } = await sb.rpc('confirm_dispatch_dc', { p_dispatch_id: activeBatch.id })
       dcNum = data
-      await sb.from('order_dispatches').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+      const { error } = await sb.from('order_dispatches').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+      if (error) { alert('Error: ' + error.message); setSaving(false); return }
     }
-    const { error } = await sb.from('orders').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    // Update orders.status to notify accounts — only if order isn't already past this stage
+    const alreadyPast = ['dispatched_fc'].includes(order.status)
+    if (!alreadyPast) {
+      await sb.from('orders').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', id)
+    }
     const actMsg = order.order_type === 'SAMPLE'
       ? `Goods Issued — DC confirmed: ${dcNum || order.dc_number || '—'}. Sample ready for challan.`
       : `Goods Issued — DC confirmed: ${dcNum || order.dc_number || '—'}. Handed to Accounts for billing.`
@@ -542,14 +548,11 @@ export default function FCOrderDetail() {
       }
     }
     if (activeBatch) {
-      await sb.from('order_dispatches').update({
+      const { error } = await sb.from('order_dispatches').update({
         status: nextOrderStatus, ...updateFields, updated_at: new Date().toISOString(),
       }).eq('id', activeBatch.id)
+      if (error) { alert('Error: ' + error.message); setSaving(false); return }
     }
-    const { error } = await sb.from('orders').update({
-      status: nextOrderStatus, ...updateFields, updated_at: new Date().toISOString(),
-    }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
     await logActivity(`Delivery Ready — ${detail}. ${actSuffix}`)
     setShowDeliveryForm(false)
     setSaving(false)
@@ -561,13 +564,13 @@ export default function FCOrderDetail() {
     if (activeBatch) {
       await sb.from('order_dispatches').update({ status: 'dispatched_fc', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
-    // Check if all order items are fully dispatched
-    const { data: items } = await sb.from('order_items').select('qty, dispatched_qty').eq('order_id', id)
-    const allDone = (items || []).every(i => (i.dispatched_qty || 0) >= i.qty)
-    const finalStatus = allDone ? 'dispatched_fc' : 'dispatch'  // back to dispatch so ops can create next batch
+    // Order is fully done only when ALL batches are dispatched_fc
+    const { data: allBatchData } = await sb.from('order_dispatches').select('status').eq('order_id', id)
+    const allBatchesDone = (allBatchData || []).every(b => b.status === 'dispatched_fc')
+    const finalStatus = allBatchesDone ? 'dispatched_fc' : 'dispatch'
     const { error } = await sb.from('orders').update({ status: finalStatus, updated_at: new Date().toISOString() }).eq('id', id)
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
-    await logActivity(allDone ? 'Order Delivered — all batches complete.' : 'Batch Delivered — remaining items pending next batch by Ops.')
+    await logActivity(allBatchesDone ? 'Order Delivered — all batches complete.' : 'Batch Delivered — remaining batch(es) still pending.')
     setConfirm(null)
     setSaving(false)
     await loadOrder()
@@ -590,9 +593,12 @@ export default function FCOrderDetail() {
   if (!order) return null
 
   const isSample     = order.order_type === 'SAMPLE'
-  const pipelineIdx  = fcPipelineIdx(order.status)
-  const withAccounts = !isSample && WITH_ACCOUNTS.includes(order.status)
-  const isDelivered  = order.status === 'dispatched_fc'
+  // Use the active batch's own status/FC when available — each batch is independent
+  const batchStatus  = activeBatch ? (activeBatch.status || 'delivery_created') : order.status
+  const batchFC      = activeBatch?.fulfilment_center || order.fulfilment_center
+  const pipelineIdx  = fcPipelineIdx(batchStatus)
+  const withAccounts = !isSample && WITH_ACCOUNTS.includes(batchStatus)
+  const isDelivered  = batchStatus === 'dispatched_fc'
   const subtotal     = (order.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
   const grandTotal   = subtotal + (order.freight || 0)
   const activeDC     = activeBatch?.dc_number || order.dc_number  // prefer batch, fall back to legacy
@@ -609,10 +615,10 @@ export default function FCOrderDetail() {
             <div className="od-header-left">
               <div>
                 <div className="od-header-eyebrow">
-                  {order.order_type === 'SO' ? 'Standard Order' : order.order_type === 'CO' ? 'Customised Order' : 'Sample Request'} · {order.fulfilment_center || '—'}
+                  {order.order_type === 'SO' ? 'Standard Order' : order.order_type === 'CO' ? 'Customised Order' : 'Sample Request'} · {batchFC || '—'}
                   {isSample && <span style={{marginLeft:8,fontSize:10,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:4,padding:'1px 7px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
                   <span className={'od-status-badge ' + (isDelivered ? 'delivered' : withAccounts ? 'pending' : 'delivery')}>
-                    {isDelivered ? 'Delivered' : withAccounts ? 'With Accounts' : stageLabel(order.status)}
+                    {isDelivered ? 'Delivered' : withAccounts ? 'With Accounts' : stageLabel(batchStatus)}
                   </span>
                 </div>
                 <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a4dab',color:'inherit'}}>{order.customer_name}</span></div>
@@ -667,7 +673,7 @@ export default function FCOrderDetail() {
               <div className="od-pending-banner" style={{background:'#fefce8',border:'1px solid #fde047',color:'#92400e'}}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                 <div>
-                  <div className="od-pending-banner-label">With Accounts — {stageLabel(order.status)}</div>
+                  <div className="od-pending-banner-label">With Accounts — {stageLabel(batchStatus)}</div>
                   <div>Billing team is processing this order. You will be notified when it comes back.</div>
                 </div>
               </div>
@@ -678,8 +684,8 @@ export default function FCOrderDetail() {
               <div className="od-pending-banner" style={{background:'#f0fdf4',border:'1px solid #bbf7d0',color:'#166534'}}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 <div>
-                  <div className="od-pending-banner-label">Delivered — {order.fulfilment_center || ''}</div>
-                  <div>Order fully delivered and complete.</div>
+                  <div className="od-pending-banner-label">Delivered — {batchFC || ''}</div>
+                  <div>This batch has been delivered.</div>
                 </div>
               </div>
             )}
@@ -801,13 +807,20 @@ export default function FCOrderDetail() {
             </div>
 
             {/* Action card */}
-            {!withAccounts && !isDelivered && (
+            {!withAccounts && (() => {
+              // For multi-batch orders, use the active batch's own status for action gating
+              // so that an older batch can still be processed independently
+              const batchStatus = (allBatches.length > 1 && activeBatch != null)
+                ? (activeBatch.status || 'delivery_created')
+                : order.status
+              if (batchStatus === 'dispatched_fc') return null
+              return (
               <div className="od-card">
-                <div className="od-card-header"><div className="od-card-title">Action — {stageLabel(order.status)}</div></div>
+                <div className="od-card-header"><div className="od-card-title">Action — {stageLabel(batchStatus)}</div></div>
                 <div className="od-card-body">
 
                   {/* Picking */}
-                  {order.status === 'delivery_created' && !confirm && (
+                  {batchStatus === 'delivery_created' && !confirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Pick all items for this order from storage.</p>
                       <button className="od-mark-complete-btn" style={{background:'#15803d',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
@@ -819,7 +832,7 @@ export default function FCOrderDetail() {
                   )}
 
                   {/* Packing */}
-                  {order.status === 'picking' && !confirm && (
+                  {batchStatus === 'picking' && !confirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Pack all picked items ready for dispatch.</p>
                       <button className="od-mark-complete-btn" style={{background:'#15803d',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
@@ -831,7 +844,7 @@ export default function FCOrderDetail() {
                   )}
 
                   {/* Goods Issue */}
-                  {order.status === 'packing' && !confirm && (
+                  {batchStatus === 'packing' && !confirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:6}}>Issue goods from warehouse. This will confirm the DC number.</p>
                       {activeDC && <p style={{fontSize:13,fontFamily:'var(--mono)',fontWeight:700,color:'#92400e',marginBottom:14}}>DC will be confirmed as: {activeDC?.replace('Temp/','SSC/')}</p>}
@@ -844,7 +857,7 @@ export default function FCOrderDetail() {
                   )}
 
                   {/* Delivery Ready (regular SO/CO) */}
-                  {!isSample && order.status === 'invoice_generated' && !showDeliveryForm && !confirm && (
+                  {!isSample && batchStatus === 'invoice_generated' && !showDeliveryForm && !confirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Invoice has been generated. Enter vehicle / delivery details.</p>
                       <button className="od-mark-complete-btn" style={{background:'#15803d',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
@@ -856,7 +869,7 @@ export default function FCOrderDetail() {
                   )}
 
                   {/* Sample — Challan + Delivery Ready */}
-                  {isSample && order.status === 'invoice_generated' && !showDeliveryForm && !confirm && (
+                  {isSample && batchStatus === 'invoice_generated' && !showDeliveryForm && !confirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Goods issued. Generate the Sample Challan, then enter delivery details.</p>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -875,7 +888,7 @@ export default function FCOrderDetail() {
                   )}
 
                   {/* Delivery Ready form (both SO/CO and SAMPLE) */}
-                  {order.status === 'invoice_generated' && showDeliveryForm && (
+                  {batchStatus === 'invoice_generated' && showDeliveryForm && (
                     <div style={{display:'flex',flexDirection:'column',gap:12,maxWidth:440}}>
                       <div className="od-edit-field">
                         <label>Dispatch Mode</label>
@@ -951,7 +964,7 @@ export default function FCOrderDetail() {
                   )}
 
                   {/* Confirm Delivered */}
-                  {order.status === 'eway_generated' && !confirm && (
+                  {batchStatus === 'eway_generated' && !confirm && (
                     <div>
                       {order.eway_bill_number && <p style={{fontSize:13,fontFamily:'var(--mono)',fontWeight:700,color:'#166534',marginBottom:8}}>E-Way Bill: {order.eway_bill_number}</p>}
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Confirm order delivered to customer.</p>
@@ -983,7 +996,8 @@ export default function FCOrderDetail() {
                   )}
                 </div>
               </div>
-            )}
+            )
+          })()}
 
           </div>{/* end od-main */}
 

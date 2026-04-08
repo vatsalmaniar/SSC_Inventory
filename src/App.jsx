@@ -28,7 +28,7 @@ import FCDashboard from './pages/FCDashboard'
 import FCModule from './pages/FCModule'
 import FCOrderDetail from './pages/FCOrderDetail'
 import BillingDashboard from './pages/BillingDashboard'
-import SalesModule from './pages/SalesModule'
+import BillingList from './pages/BillingList'
 import BillingOrderDetail from './pages/BillingOrderDetail'
 
 export default function App() {
@@ -65,7 +65,7 @@ export default function App() {
         <Route path="/fc/list" element={<FCModule />} />
         <Route path="/fc/:id" element={<FCOrderDetail />} />
         <Route path="/billing" element={<BillingDashboard />} />
-        <Route path="/billing/list" element={<SalesModule />} />
+        <Route path="/billing/list" element={<BillingList />} />
         <Route path="/billing/:id" element={<BillingOrderDetail />} />
       </Routes>
     </BrowserRouter>

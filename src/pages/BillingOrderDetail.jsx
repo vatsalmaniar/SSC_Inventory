@@ -76,6 +76,7 @@ export default function BillingOrderDetail() {
   const commentInputRef = useRef(null)
   const [order, setOrder]         = useState(null)
   const [activeBatch, setActiveBatch] = useState(null)
+  const [allBatches, setAllBatches]   = useState([])
   const [user, setUser]           = useState({ name: '', role: '', avatar: '' })
   const [profiles, setProfiles]   = useState([])
   const [comments, setComments]   = useState([])
@@ -145,13 +146,14 @@ export default function BillingOrderDetail() {
       }, 0)
       setPiNumberInput(`PI-${yr}-${String(maxNum + 1).padStart(4, '0')}`)
     }
+    const { data: allB } = await sb.from('order_dispatches').select('*')
+      .eq('order_id', id).order('batch_no', { ascending: true })
+    setAllBatches(allB || [])
     if (dispatchId) {
-      const { data: batch } = await sb.from('order_dispatches').select('*').eq('id', dispatchId).single()
-      setActiveBatch(batch || null)
+      const found = (allB || []).find(b => b.id === dispatchId)
+      setActiveBatch(found || allB?.[allB.length - 1] || null)
     } else {
-      const { data: batches } = await sb.from('order_dispatches').select('*')
-        .eq('order_id', id).order('batch_no', { ascending: false }).limit(1)
-      setActiveBatch(batches?.[0] || null)
+      setActiveBatch(allB?.[allB.length - 1] || null)
     }
     setLoading(false)
     const { data: c } = await sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true })
@@ -258,7 +260,6 @@ export default function BillingOrderDetail() {
   async function handleCreditCheckClear() {
     setSaving(true)
     if (activeBatch) await sb.from('order_dispatches').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
-    await sb.from('orders').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity('Credit Check completed — payment clear.')
     setSaving(false); await loadOrder()
   }
@@ -269,7 +270,6 @@ export default function BillingOrderDetail() {
     if (activeBatch) {
       await sb.from('order_dispatches').update({ status: 'goods_issue_posted', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
-    await sb.from('orders').update({ status: 'goods_issue_posted', updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity('Goods Issue Posted. Invoice number will be assigned from Tally on upload.')
     setShowGIConfirm(false); setSaving(false); await loadOrder()
   }
@@ -285,7 +285,6 @@ export default function BillingOrderDetail() {
     if (activeBatch) {
       await sb.from('order_dispatches').update({ status: 'invoice_generated', invoice_number: finalInvNum, invoice_pdf_url: pdfUrl, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
-    await sb.from('orders').update({ status: 'invoice_generated', invoice_number: finalInvNum, invoice_pdf_url: pdfUrl, updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`Invoice Generated — ${finalInvNum}. Waiting for Fulfilment Centre to set delivery details.`)
     await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Invoice generated. Please set delivery details.`)
     setShowInvConfirm(false); setTallyInvNumber(''); setSaving(false); await loadOrder()
@@ -334,7 +333,6 @@ export default function BillingOrderDetail() {
   async function handlePICreditAutoPass() {
     setSaving(true)
     if (activeBatch) await sb.from('order_dispatches').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
-    await sb.from('orders').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity('PI Order — Credit check auto-passed. Payment was collected upfront via Proforma Invoice.')
     setSaving(false); await loadOrder()
   }
@@ -359,12 +357,6 @@ export default function BillingOrderDetail() {
         updated_at: new Date().toISOString()
       }).eq('id', activeBatch.id)
     }
-    await sb.from('orders').update({
-      status: 'eway_generated', eway_bill_number: ewayNumber.trim(),
-      ...(ewayPdfUrl && { eway_pdf_url: ewayPdfUrl }),
-      ...(eInvoiceUrl && { einvoice_pdf_url: eInvoiceUrl }),
-      updated_at: new Date().toISOString()
-    }).eq('id', id)
     await logActivity(`E-Way Bill generated — #${ewayNumber.trim()}. Handed to FC for final delivery.`)
     await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — E-Way Bill ready. Order handed back for delivery.`)
     setSaving(false); await loadOrder()
@@ -387,7 +379,10 @@ const mentionSuggestions = mentionQuery !== null
   )
   if (!order) return null
 
-  const pipelineIdx   = billingPipelineIdx(order.status)
+  // Use batch's own status — each batch is independent
+  const batchStatus   = activeBatch ? (activeBatch.status || 'delivery_created') : order.status
+  const batchFC       = activeBatch?.fulfilment_center || order.fulfilment_center
+  const pipelineIdx   = billingPipelineIdx(batchStatus)
   const piPhaseIdx    = piPipelineIdx(order.status)
   const isPIOrder     = activeBatch?.pi_required === true
   const isAdvanceOrder = order.credit_terms === 'Advance'
@@ -400,7 +395,7 @@ const mentionSuggestions = mentionQuery !== null
   const activeEway    = activeBatch?.eway_bill_number || order.eway_bill_number
   const isTempInv     = activeINV?.startsWith('Temp/')
   const isTempDC      = activeDC?.startsWith('Temp/')
-  const isWaitingFC   = order.status === 'invoice_generated'
+  const isWaitingFC   = batchStatus === 'invoice_generated'
   const isCreditOverride  = (activeBatch?.credit_override ?? order.credit_override) === true
   const activeInvPdfUrl   = activeBatch?.invoice_pdf_url || order.invoice_pdf_url || null
   const activeEwayPdfUrl      = activeBatch?.eway_pdf_url      || order.eway_pdf_url      || null
@@ -432,7 +427,7 @@ const mentionSuggestions = mentionQuery !== null
               <div>
                 <div className="od-header-eyebrow">
                   {order.order_type === 'SO' ? 'Standard Order' : 'Customised Order'}
-                  &nbsp;·&nbsp;{order.fulfilment_center || '—'}
+                  &nbsp;·&nbsp;{batchFC || '—'}
                   <span className={'od-status-badge ' + (isWaitingFC ? 'delivery' : isCreditOverride ? 'pending' : 'active')}>
                     {isWaitingFC ? 'Waiting for FC' : isCreditOverride ? '⚠️ Credit Override' : 'Billing'}
                   </span>
@@ -579,7 +574,7 @@ const mentionSuggestions = mentionQuery !== null
                   <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                   <div className="od-detail-field"><label>PO / Reference No.</label><div className="val">{order.po_number || '—'}</div></div>
                   <div className="od-detail-field"><label>Order Date</label><div className="val">{fmt(order.order_date)}</div></div>
-                  <div className="od-detail-field"><label>Fulfilment Centre</label><div className="val">{order.fulfilment_center || '—'}</div></div>
+                  <div className="od-detail-field"><label>Fulfilment Centre</label><div className="val">{batchFC || '—'}</div></div>
                   <div className="od-detail-field"><label>Credit Terms</label><div className="val">{order.credit_terms || '—'}</div></div>
                   <div className="od-detail-field"><label>Received Via</label><div className="val">{order.received_via || '—'}</div></div>
                   <div className="od-detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={order.account_owner || order.engineer_name} /></div></div>
@@ -656,9 +651,9 @@ const mentionSuggestions = mentionQuery !== null
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">
-                    {order.status === 'pi_requested'       && 'Action — Issue Proforma Invoice'}
-                    {order.status === 'pi_generated'       && 'Action — Confirm PI Sent to Customer'}
-                    {order.status === 'pi_payment_pending' && 'Action — Confirm Payment Received'}
+                    {order.status === 'pi_requested'        && 'Action — Issue Proforma Invoice'}
+                    {order.status === 'pi_generated'        && 'Action — Confirm PI Sent to Customer'}
+                    {order.status === 'pi_payment_pending'  && 'Action — Confirm Payment Received'}
                   </div>
                 </div>
                 <div className="od-card-body">
@@ -769,16 +764,16 @@ const mentionSuggestions = mentionQuery !== null
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">
-                    {order.status === 'goods_issued'       && 'Action — Credit Check'}
-                    {order.status === 'credit_check'       && 'Action — Post Goods Issue'}
-                    {order.status === 'goods_issue_posted' && 'Action — Generate Invoice'}
-                    {order.status === 'delivery_ready'     && 'Action — E-Way Bill'}
+                    {batchStatus === 'goods_issued'       && 'Action — Credit Check'}
+                    {batchStatus === 'credit_check'       && 'Action — Post Goods Issue'}
+                    {batchStatus === 'goods_issue_posted' && 'Action — Generate Invoice'}
+                    {batchStatus === 'delivery_ready'     && 'Action — E-Way Bill'}
                   </div>
                 </div>
                 <div className="od-card-body">
 
                   {/* STEP 1: Credit Check — PI Order or Advance (auto-pass) */}
-                  {order.status === 'goods_issued' && (isPIOrder || isAdvanceOrder) && (
+                  {batchStatus === 'goods_issued' && (isPIOrder || isAdvanceOrder) && (
                     <div>
                       <div style={{background: isAdvanceOrder ? '#f0fdf4' : '#faf5ff', border: `1px solid ${isAdvanceOrder ? '#bbf7d0' : '#e9d5ff'}`, borderRadius:10,padding:'12px 16px',marginBottom:14}}>
                         <div style={{fontSize:12,fontWeight:700,color: isAdvanceOrder ? '#166534' : '#7e22ce',marginBottom:4}}>
@@ -798,7 +793,7 @@ const mentionSuggestions = mentionQuery !== null
                   )}
 
                   {/* STEP 1: Credit Check — Normal Order */}
-                  {order.status === 'goods_issued' && !isPIOrder && !isAdvanceOrder && (
+                  {batchStatus === 'goods_issued' && !isPIOrder && !isAdvanceOrder && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:6}}>
                         Does this customer have a pending payment?
@@ -826,7 +821,7 @@ const mentionSuggestions = mentionQuery !== null
                   )}
 
                   {/* STEP 2: GI Posted */}
-                  {order.status === 'credit_check' && !showGIConfirm && (
+                  {batchStatus === 'credit_check' && !showGIConfirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Post the Goods Issue entry in the system.</p>
                       <button className="od-mark-complete-btn" style={{background:'#1a4dab',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
@@ -836,7 +831,7 @@ const mentionSuggestions = mentionQuery !== null
                       </button>
                     </div>
                   )}
-                  {order.status === 'credit_check' && showGIConfirm && (
+                  {batchStatus === 'credit_check' && showGIConfirm && (
                     <div style={{background:'#e8f2fc',border:'1px solid #c2d9f5',borderRadius:10,padding:16}}>
                       <p style={{fontSize:13,color:'#1a4dab',fontWeight:600,marginBottom:4}}>Confirm Goods Issue Posted?</p>
                       <p style={{fontSize:12,color:'var(--gray-500)',marginBottom:14}}>Invoice number will be entered from Tally when uploading the PDF.</p>
@@ -848,7 +843,7 @@ const mentionSuggestions = mentionQuery !== null
                   )}
 
                   {/* STEP 3: Generate Invoice */}
-                  {order.status === 'goods_issue_posted' && !showInvConfirm && (
+                  {batchStatus === 'goods_issue_posted' && !showInvConfirm && (
                     <div>
                       {activeINV && (
                         <div style={{background:'#fef3c7',border:'1px solid #fde68a',borderRadius:8,padding:'10px 14px',marginBottom:14}}>
@@ -865,7 +860,7 @@ const mentionSuggestions = mentionQuery !== null
                       </button>
                     </div>
                   )}
-                  {order.status === 'goods_issue_posted' && showInvConfirm && (
+                  {batchStatus === 'goods_issue_posted' && showInvConfirm && (
                     <div style={{background:'#f0fdf4',border:'1px solid #86efac',borderRadius:10,padding:16}}>
                       <p style={{fontSize:13,color:'#166534',fontWeight:600,marginBottom:4}}>Upload Invoice</p>
                       <p style={{fontSize:12,color:'var(--gray-500)',marginBottom:14}}>Enter the Tally invoice number and attach the PDF.</p>
@@ -908,7 +903,7 @@ const mentionSuggestions = mentionQuery !== null
                   )}
 
                   {/* STEP 4: E-Way Bill */}
-                  {order.status === 'delivery_ready' && (
+                  {batchStatus === 'delivery_ready' && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:6}}>
                         FC has confirmed delivery details. Enter E-Way Bill number.
@@ -967,7 +962,7 @@ const mentionSuggestions = mentionQuery !== null
                   )}
 
                   {/* COMPLETED: eway_generated / dispatched_fc */}
-                  {['eway_generated','dispatched_fc'].includes(order.status) && (
+                  {['eway_generated','dispatched_fc'].includes(batchStatus) && (
                     <div style={{background:'#f0fdf4',border:'1px solid #86efac',borderRadius:10,padding:16}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                         <svg fill="none" stroke="#166534" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:18,height:18,flexShrink:0}}><polyline points="20 6 9 17 4 12"/></svg>
@@ -1006,6 +1001,24 @@ const mentionSuggestions = mentionQuery !== null
             <div className="od-side-card">
               <div className="od-side-card-title">Key Numbers</div>
               <div style={{padding:'0 16px 16px',display:'flex',flexDirection:'column',gap:12}}>
+                {/* Batch switcher */}
+                {allBatches.length > 1 && (
+                  <div>
+                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:6}}>Batch</div>
+                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                      {allBatches.map(b => (
+                        <button key={b.id} onClick={() => setActiveBatch(b)}
+                          style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,border:'1px solid',cursor:'pointer',fontFamily:'var(--font)',
+                            background: activeBatch?.id === b.id ? '#1e3a5f' : 'white',
+                            color: activeBatch?.id === b.id ? 'white' : '#475569',
+                            borderColor: activeBatch?.id === b.id ? '#1e3a5f' : '#e2e8f0',
+                          }}>
+                          Batch {b.batch_no}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>SO / CO Number</div>
                   <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:'var(--blue-800)'}}>{order.order_number}</div>
