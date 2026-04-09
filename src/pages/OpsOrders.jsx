@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
@@ -104,7 +105,7 @@ export default function OpsOrders() {
     const { error } = await sb.from('orders')
       .update({ status: newStatus, notes: notes.trim(), updated_at: new Date().toISOString() })
       .eq('id', detail.id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast('Error: ' + error.message); setSaving(false); return }
     setSaving(false)
     setDetail(null)
     await loadOrders()

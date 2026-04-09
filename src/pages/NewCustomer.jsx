@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -122,20 +123,26 @@ export default function NewCustomer() {
     if (!form.turnover.trim())       newErrors.turnover        = 'Required'
     // Tax & Compliance
     if (!form.gst.trim())            newErrors.gst             = 'Required'
+    else if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(form.gst.trim())) newErrors.gst = 'Invalid GST format (e.g. 24ABCDE1234F1Z5)'
     if (!gstCertFile)                newErrors.gst_cert        = 'GST Certificate is required'
     if (fileErrors.gst_cert)         newErrors.gst_cert        = fileErrors.gst_cert
     if (fileErrors.msme_cert)        newErrors.msme_cert       = fileErrors.msme_cert
     if (!form.pan_card_no.trim())    newErrors.pan_card_no     = 'Required'
+    else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(form.pan_card_no.trim())) newErrors.pan_card_no = 'Invalid PAN format (e.g. ABCDE1234F)'
     // Addresses
     if (!form.billing_address.trim())  newErrors.billing_address  = 'Required'
     if (!form.shipping_address.trim()) newErrors.shipping_address = 'Required'
     // Contacts
     if (!form.poc_name.trim())       newErrors.poc_name        = 'Required'
     if (!form.poc_no.trim())         newErrors.poc_no          = 'Required'
+    else if (!/^[6-9][0-9]{9}$/.test(form.poc_no.trim())) newErrors.poc_no = 'Invalid mobile number (10 digits, starts with 6-9)'
     if (!form.poc_email.trim())      newErrors.poc_email       = 'Required'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.poc_email.trim())) newErrors.poc_email = 'Invalid email format'
     if (!form.director_name.trim())  newErrors.director_name   = 'Required'
     if (!form.director_no.trim())    newErrors.director_no     = 'Required'
+    else if (!/^[6-9][0-9]{9}$/.test(form.director_no.trim())) newErrors.director_no = 'Invalid mobile number (10 digits, starts with 6-9)'
     if (!form.director_email.trim()) newErrors.director_email  = 'Required'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.director_email.trim())) newErrors.director_email = 'Invalid email format'
     // Credit
     if (!form.credit_terms)          newErrors.credit_terms    = 'Required'
     // Visual Inspection
@@ -153,7 +160,7 @@ export default function NewCustomer() {
     try {
       // Generate customer_id server-side (SECURITY DEFINER bypasses RLS)
       const { data: generatedId, error: rpcErr } = await sb.rpc('generate_customer_id')
-      if (rpcErr) { alert('Error generating customer ID: ' + rpcErr.message); setSaving(false); return }
+      if (rpcErr) { toast('Error generating customer ID: ' + rpcErr.message); setSaving(false); return }
       const finalCustId = generatedId
 
       const { data: inserted, error: insertErr } = await sb.from('customers').insert({
@@ -184,7 +191,7 @@ export default function NewCustomer() {
         vi_expected_business: form.vi_expected_business || null,
       }).select('id').single()
 
-      if (insertErr) { alert('Error creating customer: ' + insertErr.message); setSaving(false); return }
+      if (insertErr) { toast('Error creating customer: ' + insertErr.message); setSaving(false); return }
       const newId = inserted.id
 
       // Upload GST cert — delete inserted row on failure to avoid orphan
@@ -193,7 +200,7 @@ export default function NewCustomer() {
         gstUrl = await uploadDoc(gstCertFile, `gst/${newId}/${Date.now()}.pdf`)
       } catch (uploadErr) {
         await sb.from('customers').delete().eq('id', newId)
-        alert('GST certificate upload failed — customer not saved. Please try again.\n' + uploadErr.message)
+        toast('GST certificate upload failed — customer not saved. Please try again.\n' + uploadErr.message)
         setSaving(false); return
       }
 
@@ -204,7 +211,7 @@ export default function NewCustomer() {
           msmeUrl = await uploadDoc(msmeCertFile, `msme/${newId}/${Date.now()}.pdf`)
         } catch (uploadErr) {
           await sb.from('customers').delete().eq('id', newId)
-          alert('MSME certificate upload failed — customer not saved. Please try again.\n' + uploadErr.message)
+          toast('MSME certificate upload failed — customer not saved. Please try again.\n' + uploadErr.message)
           setSaving(false); return
         }
       }
@@ -218,7 +225,7 @@ export default function NewCustomer() {
         navigate('/customers', { state: { submitted: true, custId: finalCustId } })
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      toast('Error: ' + err.message)
       setSaving(false)
     }
   }

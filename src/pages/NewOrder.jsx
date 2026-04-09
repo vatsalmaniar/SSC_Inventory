@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
@@ -83,7 +84,7 @@ export default function NewOrder() {
     const f = e.target.files?.[0]
     if (!f) return
     if (f.size > 200 * 1024) {
-      alert('File is too large. Maximum file size allowed: 200 KB')
+      toast('File is too large. Maximum file size allowed: 200 KB')
       e.target.value = ''
       return
     }
@@ -122,15 +123,15 @@ export default function NewOrder() {
 
   async function submitOrder() {
     const validItems = items.filter(i => i.item_code.trim())
-    if (!customerInput.trim())  { alert('Customer name is required'); return }
-    if (customerPending)        { alert('This customer is pending approval. Orders cannot be placed until the customer is approved in Customer 360.'); return }
-    if (!dispatchAddr.trim())   { alert('Dispatch address is required'); return }
-    if (orderType !== 'SAMPLE' && !poNumber.trim()) { alert('PO / Reference Number is required'); return }
-    if (!validItems.length)     { alert('Add at least one item'); return }
+    if (!customerInput.trim())  { toast('Customer name is required'); return }
+    if (customerPending)        { toast('This customer is pending approval. Orders cannot be placed until the customer is approved in Customer 360.'); return }
+    if (!dispatchAddr.trim())   { toast('Dispatch address is required'); return }
+    if (orderType !== 'SAMPLE' && !poNumber.trim()) { toast('PO / Reference Number is required'); return }
+    if (!validItems.length)     { toast('Add at least one item'); return }
     for (const item of validItems) {
-      if (!item.qty)             { alert(`Qty is required for item: ${item.item_code}`); return }
-      if (!item.lp_unit_price)   { alert(`LP Price is required for item: ${item.item_code}`); return }
-      if (!item.dispatch_date)   { alert(`Dispatch Date is required for item: ${item.item_code}`); return }
+      if (!item.qty)             { toast(`Qty is required for item: ${item.item_code}`); return }
+      if (!item.lp_unit_price)   { toast(`LP Price is required for item: ${item.item_code}`); return }
+      if (!item.dispatch_date)   { toast(`Dispatch Date is required for item: ${item.item_code}`); return }
     }
 
     setSubmitting(true)
@@ -167,7 +168,7 @@ export default function NewOrder() {
       is_test:           isTest,
     }).select().single()
 
-    if (error) { alert('Error: ' + error.message); setSubmitting(false); return }
+    if (error) { toast('Error: ' + error.message); setSubmitting(false); return }
 
     const { error: itemsError } = await sb.from('order_items').insert(
       validItems.map((item, i) => ({
@@ -183,7 +184,7 @@ export default function NewOrder() {
         customer_ref_no:       item.customer_ref_no?.trim() || null,
       }))
     )
-    if (itemsError) { alert('Order created but items failed to save: ' + itemsError.message); setSubmitting(false); return }
+    if (itemsError) { toast('Order created but items failed to save: ' + itemsError.message); setSubmitting(false); return }
 
     setSubmitting(false)
     navigate('/orders', { state: { success: order.order_number } })

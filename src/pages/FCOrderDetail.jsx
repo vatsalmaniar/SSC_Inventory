@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/orders.css'
@@ -315,7 +316,7 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false) {
 </body></html>`
 
   const w = window.open('', '_blank')
-  if (!w) { alert('Popup blocked — allow popups for this site and try again.'); return }
+  if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
   w.document.write(html)
   w.document.close()
 }
@@ -410,7 +411,7 @@ export default function FCOrderDetail() {
     const targets = profiles.filter(p => roles.includes(p.role))
     if (!targets.length) return
     await sb.from('notifications').insert(targets.map(t => ({
-      user_name: t.name, message, order_id: id,
+      user_name: t.name, user_id: t.id, message, order_id: id,
       order_number: order?.order_number || '', from_name: user.name,
     })))
   }
@@ -443,10 +444,11 @@ export default function FCOrderDetail() {
     const tagged = [...text.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
     await sb.from('order_comments').insert({ order_id: id, author_name: user.name, message: text, tagged_users: tagged })
     if (tagged.length > 0) {
-      await sb.from('notifications').insert(tagged.map(tname => ({
-        user_name: tname, message: `${user.name} tagged you in ${order?.order_number}`,
-        order_id: id, order_number: order?.order_number || '', from_name: user.name,
-      })))
+      const notifRows = tagged.map(tname => {
+        const p = profiles.find(pr => pr.name === tname)
+        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in ${order?.order_number}`, order_id: id, order_number: order?.order_number || '', from_name: user.name }
+      })
+      await sb.from('notifications').insert(notifRows)
     }
     setCommentText(''); setMentionQuery(null)
     const { data: c } = await sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true })
@@ -469,7 +471,7 @@ export default function FCOrderDetail() {
       const { error } = await sb.from('order_dispatches').update({
         status: toStatus, updated_at: new Date().toISOString(), ...extraUpdate
       }).eq('id', activeBatch.id)
-      if (error) { alert('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast('Error: ' + error.message); setSaving(false); return }
     }
     await logActivity(activityMsg)
     setConfirm(null)
@@ -485,7 +487,7 @@ export default function FCOrderDetail() {
       const { data } = await sb.rpc('confirm_dispatch_dc', { p_dispatch_id: activeBatch.id })
       dcNum = data
       const { error } = await sb.from('order_dispatches').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
-      if (error) { alert('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast('Error: ' + error.message); setSaving(false); return }
     }
     // Update orders.status to notify accounts — only if order isn't already past this stage
     const alreadyPast = ['dispatched_fc'].includes(order.status)
@@ -505,32 +507,32 @@ export default function FCOrderDetail() {
   }
 
   async function confirmDeliveryReady() {
-    if (!dispatchMode) { alert('Select a dispatch mode.'); return }
+    if (!dispatchMode) { toast('Select a dispatch mode.'); return }
     let updateFields = { dispatch_mode: dispatchMode, vehicle_type: null, vehicle_number: null, driver_name: null }
     let detail = ''
     if (dispatchMode === 'By Person') {
-      if (!personName.trim()) { alert('Enter person name.'); return }
+      if (!personName.trim()) { toast('Enter person name.'); return }
       updateFields.driver_name = personName.trim()
       detail = `By Person — ${personName.trim()}`
     } else if (dispatchMode === 'Vehicle') {
-      if (!vehicleType)       { alert('Select vehicle type.'); return }
-      if (!vehicleNum.trim()) { alert('Enter vehicle number.'); return }
-      if (!driverName.trim()) { alert('Enter driver name.'); return }
+      if (!vehicleType)       { toast('Select vehicle type.'); return }
+      if (!vehicleNum.trim()) { toast('Enter vehicle number.'); return }
+      if (!driverName.trim()) { toast('Enter driver name.'); return }
       updateFields.vehicle_type   = vehicleType
       updateFields.vehicle_number = vehicleNum.trim()
       updateFields.driver_name    = driverName.trim()
       detail = `Vehicle — ${vehicleType} · ${vehicleNum.trim()} · Driver: ${driverName.trim()}`
     } else if (dispatchMode === 'Porter') {
-      if (!personName.trim()) { alert('Enter porter name.'); return }
+      if (!personName.trim()) { toast('Enter porter name.'); return }
       updateFields.driver_name = personName.trim()
       detail = `Porter — ${personName.trim()}`
     } else if (dispatchMode === 'Transport') {
-      if (!transporterName.trim()) { alert('Enter transporter name.'); return }
+      if (!transporterName.trim()) { toast('Enter transporter name.'); return }
       updateFields.driver_name    = transporterName.trim()
       updateFields.vehicle_number = lrNumber.trim() || null
       detail = `Transport — ${transporterName.trim()}${transporterId.trim() ? ' · ID: ' + transporterId.trim() : ''}${lrNumber.trim() ? ' · LR: ' + lrNumber.trim() : ''}`
     } else if (dispatchMode === 'Courier') {
-      if (!courierCompany.trim()) { alert('Enter courier company.'); return }
+      if (!courierCompany.trim()) { toast('Enter courier company.'); return }
       updateFields.driver_name    = courierCompany.trim()
       updateFields.vehicle_number = trackingNum.trim() || null
       detail = `Courier — ${courierCompany.trim()}${trackingNum.trim() ? ' · Tracking: ' + trackingNum.trim() : ''}`
@@ -553,7 +555,7 @@ export default function FCOrderDetail() {
       const { error } = await sb.from('order_dispatches').update({
         status: nextOrderStatus, ...updateFields, updated_at: new Date().toISOString(),
       }).eq('id', activeBatch.id)
-      if (error) { alert('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast('Error: ' + error.message); setSaving(false); return }
     }
     await logActivity(`Delivery Ready — ${detail}. ${actSuffix}`)
     setShowDeliveryForm(false)
@@ -571,7 +573,7 @@ export default function FCOrderDetail() {
     const allBatchesDone = (allBatchData || []).every(b => b.status === 'dispatched_fc')
     const finalStatus = allBatchesDone ? 'dispatched_fc' : 'partial_dispatch'
     const { error } = await sb.from('orders').update({ status: finalStatus, updated_at: new Date().toISOString() }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast('Error: ' + error.message); setSaving(false); return }
     await logActivity(allBatchesDone ? 'Order Delivered — all batches complete.' : 'Batch Delivered — remaining batch(es) still pending.')
     setConfirm(null)
     setSaving(false)

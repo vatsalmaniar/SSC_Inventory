@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -116,10 +117,10 @@ export default function CRMFieldVisits() {
 
   async function saveVisit() {
     const companyName = form.company_freetext.trim() || acctSearch.trim()
-    if (!companyName) { alert('Account / Company is required'); return }
+    if (!companyName) { toast('Account / Company is required'); return }
     setForm(p => ({ ...p, company_freetext: companyName }))
-    if (!form.visit_date) { alert('Visit date is required'); return }
-    if (form.visit_type === 'JOINT_PRINCIPAL' && !form.principal_id) { alert('Principal is required'); return }
+    if (!form.visit_date) { toast('Visit date is required'); return }
+    if (form.visit_type === 'JOINT_PRINCIPAL' && !form.principal_id) { toast('Principal is required'); return }
     setSaving(true)
 
     const visitType = form.with_ssc && form.with_principal ? 'JOINT_SSC_TEAM'
@@ -143,7 +144,7 @@ export default function CRMFieldVisits() {
     }
 
     const { error } = await sb.from('crm_field_visits').insert(payload)
-    if (error) { alert('Error saving visit: ' + error.message); setSaving(false); return }
+    if (error) { toast('Error saving visit: ' + error.message); setSaving(false); return }
 
     // If linked to opportunity → post Visit activity on it
     if (form.opportunity_id) {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -108,10 +109,10 @@ export default function CustomerDetail() {
   }
 
   async function saveContact() {
-    if (!contactForm.name.trim()) { alert('Name is required'); return }
+    if (!contactForm.name.trim()) { toast('Name is required'); return }
     setSavingContact(true)
     const { data, error } = await sb.from('customer_contacts').insert({ ...contactForm, customer_id: id }).select().single()
-    if (error) { alert('Error: ' + error.message); setSavingContact(false); return }
+    if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
     setContacts(p => [...p, data])
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
     setShowContactModal(false)
@@ -160,11 +161,11 @@ export default function CustomerDetail() {
       vi_payment:      editData.vi_payment || null,
       vi_expected_business: editData.vi_expected_business || null,
     }).eq('id', id)
-    if (error) { alert('Error saving: ' + error.message); setSaving(false); return }
+    if (error) { toast('Error saving: ' + error.message); setSaving(false); return }
     // Re-fetch to verify the update actually persisted (RLS can silently block writes)
     const { data: fresh } = await sb.from('customers').select('*').eq('id', id).single()
     if (fresh && fresh.credit_terms !== editData.credit_terms) {
-      alert('Save blocked by database policy. Ask your admin to enable UPDATE policy on the customers table in Supabase.')
+      toast('Save blocked by database policy. Ask your admin to enable UPDATE policy on the customers table in Supabase.')
       setSaving(false); return
     }
     setCustomer(fresh || { ...customer, ...editData })

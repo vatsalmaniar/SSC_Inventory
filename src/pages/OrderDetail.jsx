@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
@@ -210,7 +211,7 @@ export default function OrderDetail() {
     setSaving(true)
     const validItems = editItems.filter(i => i.item_code.trim() && i.qty)
     if (!editData.customer_name.trim() || !validItems.length) {
-      alert('Customer name and at least one item are required.')
+      toast('Customer name and at least one item are required.')
       setSaving(false); return
     }
     const { error: hdrErr } = await sb.from('orders').update({
@@ -220,7 +221,7 @@ export default function OrderDetail() {
       freight: parseFloat(editData.freight) || 0, credit_terms: editData.credit_terms, notes: editData.notes,
       edited_by: user.name, updated_at: new Date().toISOString(),
     }).eq('id', id)
-    if (hdrErr) { alert('Failed to update order: ' + hdrErr.message); setSaving(false); return }
+    if (hdrErr) { toast('Failed to update order: ' + hdrErr.message); setSaving(false); return }
     const { error: itemsErr } = await sb.rpc('replace_order_items', {
       p_order_id: id,
       p_items: validItems.map((item, i) => ({
@@ -233,7 +234,7 @@ export default function OrderDetail() {
         customer_ref_no: item.customer_ref_no?.trim() || '',
       }))
     })
-    if (itemsErr) { alert('Failed to save items: ' + itemsErr.message); setSaving(false); return }
+    if (itemsErr) { toast('Failed to save items: ' + itemsErr.message); setSaving(false); return }
     const msg = reason.trim() ? `Order edited — ${reason.trim()}` : 'Order edited — details updated'
     await logActivity(msg)
     await loadOrder()
@@ -244,7 +245,7 @@ export default function OrderDetail() {
     setSaving(true)
     const validItems = editItems.filter(i => i.item_code.trim() && i.qty)
     if (!editData.customer_name.trim() || !validItems.length) {
-      alert('Customer name and at least one item are required.')
+      toast('Customer name and at least one item are required.')
       setSaving(false); return
     }
     const { error: hdrErr } = await sb.from('orders').update({
@@ -254,7 +255,7 @@ export default function OrderDetail() {
       freight: parseFloat(editData.freight) || 0, credit_terms: editData.credit_terms, notes: editData.notes,
       edited_by: user.name, updated_at: new Date().toISOString(),
     }).eq('id', id)
-    if (hdrErr) { alert('Failed to update order: ' + hdrErr.message); setSaving(false); return }
+    if (hdrErr) { toast('Failed to update order: ' + hdrErr.message); setSaving(false); return }
     const { error: itemsErr } = await sb.rpc('replace_order_items', {
       p_order_id: id,
       p_items: validItems.map((item, i) => ({
@@ -267,13 +268,13 @@ export default function OrderDetail() {
         customer_ref_no: item.customer_ref_no?.trim() || '',
       }))
     })
-    if (itemsErr) { alert('Failed to save items: ' + itemsErr.message); setSaving(false); return }
+    if (itemsErr) { toast('Failed to save items: ' + itemsErr.message); setSaving(false); return }
     const { data: updatedOrder } = await sb.from('orders').select('order_type').eq('id', id).single()
     const { error } = await sb.rpc('approve_order', {
       order_id: id, approver_name: user.name,
       order_type: updatedOrder?.order_type || editData.order_type,
     })
-    if (error) { alert('Approval error: ' + error.message); setSaving(false); return }
+    if (error) { toast('Approval error: ' + error.message); setSaving(false); return }
     await sb.from('orders').update({ status: 'inv_check', updated_at: new Date().toISOString() }).eq('id', id)
     await loadOrder()
     setEditMode(false); setSaving(false)
@@ -291,7 +292,7 @@ export default function OrderDetail() {
     const targets = profiles.filter(p => roles.includes(p.role))
     if (!targets.length) return
     await sb.from('notifications').insert(targets.map(t => ({
-      user_name: t.name, message, order_id: id,
+      user_name: t.name, user_id: t.id, message, order_id: id,
       order_number: order?.order_number || '', from_name: user.name,
     })))
   }
@@ -302,7 +303,7 @@ export default function OrderDetail() {
     setSaving(true)
     if (isPending) {
       const { error } = await sb.rpc('approve_order', { order_id: id, approver_name: user.name, order_type: order.order_type })
-      if (error) { alert('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast('Error: ' + error.message); setSaving(false); return }
       await sb.from('orders').update({ status: 'inv_check', updated_at: new Date().toISOString() }).eq('id', id)
       await logActivity('Order accepted — moved to Order Approved')
       await loadOrder(); setSaving(false)
@@ -330,12 +331,12 @@ export default function OrderDetail() {
       const addQty = item.qty - (item.dispatched_qty || 0)
       if (addQty <= 0) continue
       const { error } = await sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: addQty })
-      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message + '. Please refresh and try again.'); setSaving(false); return }
+      if (error) { toast('Failed to update item ' + item.item_code + ': ' + error.message + '. Please refresh and try again.'); setSaving(false); return }
     }
     const { error } = await sb.from('orders').update({
       status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
     }).eq('id', id)
-    if (error) { alert('Failed: ' + error.message); setSaving(false); return }
+    if (error) { toast('Failed: ' + error.message); setSaving(false); return }
     const itemsJson = (order.order_items || []).map(i => ({
       order_item_id: i.id, item_code: i.item_code, qty: i.qty,
       unit_price: i.unit_price_after_disc, total_price: i.total_price,
@@ -370,11 +371,11 @@ export default function OrderDetail() {
   // ── Partial: validate and save ──
   async function confirmPartialItems() {
     const selected = partialItems.filter(i => i.checked && parseFloat(i.dispatchQty) > 0)
-    if (!selected.length) { alert('Select at least one item with a dispatch quantity.'); return }
+    if (!selected.length) { toast('Select at least one item with a dispatch quantity.'); return }
     for (const item of selected) {
       const remaining = item.qty - (item.dispatched_qty || 0)
       if (parseFloat(item.dispatchQty) > remaining) {
-        alert(`${item.item_code}: dispatch qty (${item.dispatchQty}) exceeds remaining qty (${remaining}).`)
+        toast(`${item.item_code}: dispatch qty (${item.dispatchQty}) exceeds remaining qty (${remaining}).`)
         return
       }
     }
@@ -383,13 +384,13 @@ export default function OrderDetail() {
     const isPIOrder = order.credit_terms === 'Against PI' || order.credit_terms === 'Advance'
     for (const item of selected) {
       const { error } = await sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: parseFloat(item.dispatchQty) })
-      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message + '. Please refresh and try again.'); setSaving(false); return }
+      if (error) { toast('Failed to update item ' + item.item_code + ': ' + error.message + '. Please refresh and try again.'); setSaving(false); return }
     }
     const summary = selected.map(i => `${i.item_code}: ${i.dispatchQty} units`).join(', ')
     const { error } = await sb.from('orders').update({
       status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
     }).eq('id', id)
-    if (error) { alert('Failed: ' + error.message); setSaving(false); return }
+    if (error) { toast('Failed: ' + error.message); setSaving(false); return }
     const itemsJson = selected.map(i => {
       const full = (order.order_items || []).find(o => o.id === i.id) || {}
       return { order_item_id: i.id, item_code: i.item_code, qty: parseFloat(i.dispatchQty), unit_price: full.unit_price_after_disc, total_price: (full.unit_price_after_disc || 0) * parseFloat(i.dispatchQty), customer_ref_no: full.customer_ref_no || null }
@@ -450,13 +451,10 @@ if (match) {
     const tagged = [...text.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
     await sb.from('order_comments').insert({ order_id: id, author_name: user.name, message: text, tagged_users: tagged })
     if (tagged.length > 0) {
-      const notifRows = tagged.map(tname => ({
-        user_name: tname,
-        message: `${user.name} tagged you in ${order.order_number}`,
-        order_id: id,
-        order_number: order.order_number,
-        from_name: user.name,
-      }))
+      const notifRows = tagged.map(tname => {
+        const p = profiles.find(pr => pr.name === tname)
+        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in ${order.order_number}`, order_id: id, order_number: order.order_number, from_name: user.name }
+      })
       await sb.from('notifications').insert(notifRows)
     }
     setCommentText(''); setMentionQuery(null)
@@ -473,8 +471,8 @@ if (match) {
 
   async function cancelOrder() {
     const initiator = cancelInitiatorType === 'staff' ? cancelInitiatorName : (cancelInitiatorFreeText.trim() || 'Customer')
-    if (!initiator) { alert('Please select who initiated the cancellation.'); return }
-    if (!cancelReason.trim()) { alert('Please enter a reason.'); return }
+    if (!initiator) { toast('Please select who initiated the cancellation.'); return }
+    if (!cancelReason.trim()) { toast('Please enter a reason.'); return }
     setSaving(true)
     const logMsg = `Order cancelled — Initiated by: ${initiator} | Reason: ${cancelReason.trim()}`
     await sb.from('orders').update({ status: 'cancelled', cancelled_reason: cancelReason.trim(), updated_at: new Date().toISOString() }).eq('id', id)

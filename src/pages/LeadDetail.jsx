@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
 
@@ -105,7 +106,7 @@ export default function LeadDetail() {
   }
 
   async function saveEdit() {
-    if (!editData.company_name.trim()) { alert('Company name is required'); return }
+    if (!editData.company_name.trim()) { toast('Company name is required'); return }
     setSaving(true)
     await sb.from('leads').update({ ...editData, updated_at: new Date().toISOString() }).eq('id', id)
     await loadLead()

@@ -55,6 +55,8 @@ export default function CRMOpportunities() {
   const [filterPrincipal, setFilterPrincipal] = useState('')
   const [filterScenario, setFilterScenario]   = useState('')
   const [showNewModal, setShowNewModal]   = useState(false)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 50
 
   useEffect(() => { init() }, [])
 
@@ -66,20 +68,15 @@ export default function CRMOpportunities() {
     if (!['sales','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
 
     const [oppsRes, repsRes, principalsRes] = await Promise.all([
-      sb.from('crm_opportunities').select('*, crm_companies(company_name), crm_principals(name), crm_contacts(name), profiles(name), customers(customer_name)').order('created_at', { ascending: false }),
+      sb.from('crm_opportunities').select('*, crm_companies(company_name), crm_principals(name), crm_contacts(name), profiles(name), customers(customer_name), crm_activities(created_at)').order('created_at', { ascending: false }),
       sb.from('profiles').select('id,name').in('role',['sales','admin']),
       sb.from('crm_principals').select('*').order('name'),
     ])
 
-    // Fetch last activity per opportunity
-    const oppIds = (oppsRes.data || []).map(o => o.id)
-    let actMap = {}
-    if (oppIds.length > 0) {
-      const { data: acts } = await sb.from('crm_activities').select('opportunity_id, created_at').in('opportunity_id', oppIds).order('created_at', { ascending: false })
-      ;(acts || []).forEach(a => { if (!actMap[a.opportunity_id]) actMap[a.opportunity_id] = a.created_at })
-    }
-
-    const enriched = (oppsRes.data || []).map(o => ({ ...o, _lastActivity: actMap[o.id] || null }))
+    const enriched = (oppsRes.data || []).map(o => {
+      const acts = (o.crm_activities || []).map(a => a.created_at).filter(Boolean).sort().reverse()
+      return { ...o, _lastActivity: acts[0] || null }
+    })
     setOpps(enriched)
     setReps(repsRes.data || [])
     setPrincipals(principalsRes.data || [])
@@ -98,6 +95,9 @@ export default function CRMOpportunities() {
 
   const totalValue = filtered.filter(o => !TERMINAL.includes(o.stage) || o.stage === 'WON').reduce((s, o) => s + (o.estimated_value_inr || 0), 0)
   const overdueCount = filtered.filter(o => isOverdue(o)).length
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paged = view === 'list' ? filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE) : filtered
 
   return (
     <Layout pageTitle="CRM — Opportunities" pageKey="crm">
@@ -128,22 +128,22 @@ export default function CRMOpportunities() {
           <div className="crm-controls">
             <div className="crm-search-wrap">
               <svg className="crm-search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input className="crm-search-input" placeholder="Search company, product, principal..." value={search} onChange={e => setSearch(e.target.value)} />
+              <input className="crm-search-input" placeholder="Search company, product, principal..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
             </div>
-            <select className="crm-filter-select" value={filterStage} onChange={e => setFilterStage(e.target.value)}>
+            <select className="crm-filter-select" value={filterStage} onChange={e => { setFilterStage(e.target.value); setPage(1) }}>
               <option value="">All Stages</option>
               {[...STAGES,...TERMINAL].map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
             </select>
-            <select className="crm-filter-select" value={filterScenario} onChange={e => setFilterScenario(e.target.value)}>
+            <select className="crm-filter-select" value={filterScenario} onChange={e => { setFilterScenario(e.target.value); setPage(1) }}>
               <option value="">All Scenarios</option>
               {SCENARIOS.map(s => <option key={s} value={s}>{scenarioLabel(s)}</option>)}
             </select>
-            <select className="crm-filter-select" value={filterPrincipal} onChange={e => setFilterPrincipal(e.target.value)}>
+            <select className="crm-filter-select" value={filterPrincipal} onChange={e => { setFilterPrincipal(e.target.value); setPage(1) }}>
               <option value="">All Principals</option>
               {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             {isManager && (
-              <select className="crm-filter-select" value={filterRep} onChange={e => setFilterRep(e.target.value)}>
+              <select className="crm-filter-select" value={filterRep} onChange={e => { setFilterRep(e.target.value); setPage(1) }}>
                 <option value="">All Reps</option>
                 {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
@@ -155,7 +155,16 @@ export default function CRMOpportunities() {
           ) : view === 'kanban' ? (
             <KanbanView opps={filtered} navigate={navigate} />
           ) : (
-            <ListView opps={filtered} navigate={navigate} />
+            <>
+              <ListView opps={paged} navigate={navigate} />
+              {totalPages > 1 && (
+                <div style={{display:'flex',justifyContent:'center',alignItems:'center',gap:8,padding:'16px 0'}}>
+                  <button className="crm-btn crm-btn-sm" disabled={safePage<=1} onClick={()=>setPage(p=>p-1)}>Prev</button>
+                  <span style={{fontSize:12,color:'var(--gray-500)'}}>Page {safePage} of {totalPages} ({filtered.length} results)</span>
+                  <button className="crm-btn crm-btn-sm" disabled={safePage>=totalPages} onClick={()=>setPage(p=>p+1)}>Next</button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/orders.css'
@@ -197,7 +198,7 @@ export default function BillingOrderDetail() {
     const targets = profiles.filter(p => roles.includes(p.role))
     if (!targets.length) return
     await sb.from('notifications').insert(targets.map(t => ({
-      user_name: t.name, message, order_id: id,
+      user_name: t.name, user_id: t.id, message, order_id: id,
       order_number: order?.order_number || '', from_name: user.name,
     })))
   }
@@ -230,10 +231,11 @@ export default function BillingOrderDetail() {
     const tagged = [...text.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
     await sb.from('order_comments').insert({ order_id: id, author_name: user.name, message: text, tagged_users: tagged })
     if (tagged.length > 0) {
-      await sb.from('notifications').insert(tagged.map(tname => ({
-        user_name: tname, message: `${user.name} tagged you in ${order?.order_number}`,
-        order_id: id, order_number: order?.order_number || '', from_name: user.name,
-      })))
+      const notifRows = tagged.map(tname => {
+        const p = profiles.find(pr => pr.name === tname)
+        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in ${order?.order_number}`, order_id: id, order_number: order?.order_number || '', from_name: user.name }
+      })
+      await sb.from('notifications').insert(notifRows)
     }
     setCommentText(''); setMentionQuery(null)
     await reloadComments()
@@ -276,12 +278,12 @@ export default function BillingOrderDetail() {
 
   // STEP 3: goods_issue_posted → invoice_generated (Tally invoice number + PDF upload)
   async function confirmInvoiceGenerated() {
-    if (!invoicePdfFile) { alert('Please attach the invoice PDF before confirming.'); return }
+    if (!invoicePdfFile) { toast('Please attach the invoice PDF before confirming.'); return }
     const finalInvNum = tallyInvNumber.trim().toUpperCase()
-    if (!finalInvNum) { alert('Please enter the Tally invoice number.'); return }
+    if (!finalInvNum) { toast('Please enter the Tally invoice number.'); return }
     setSaving(true)
     let pdfUrl = null
-    try { pdfUrl = await uploadPdf(invoicePdfFile, `invoices/${id}`) } catch { alert('PDF upload failed. Please try again.'); setSaving(false); return }
+    try { pdfUrl = await uploadPdf(invoicePdfFile, `invoices/${id}`) } catch { toast('PDF upload failed. Please try again.'); setSaving(false); return }
     if (activeBatch) {
       await sb.from('order_dispatches').update({ status: 'invoice_generated', invoice_number: finalInvNum, invoice_pdf_url: pdfUrl, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
@@ -292,11 +294,11 @@ export default function BillingOrderDetail() {
 
   // PI STEP 1: pi_requested → pi_generated (issue PI)
   async function handleIssuePI() {
-    if (!piNumberInput.trim()) { alert('Enter a PI number.'); return }
-    if (!piPdfFile) { alert('Attach the Proforma Invoice PDF before issuing.'); return }
+    if (!piNumberInput.trim()) { toast('Enter a PI number.'); return }
+    if (!piPdfFile) { toast('Attach the Proforma Invoice PDF before issuing.'); return }
     setSaving(true)
     let piPdfUrl = null
-    try { piPdfUrl = await uploadPdf(piPdfFile, `pi/${id}`) } catch { alert('PDF upload failed. Please try again.'); setSaving(false); return }
+    try { piPdfUrl = await uploadPdf(piPdfFile, `pi/${id}`) } catch { toast('PDF upload failed. Please try again.'); setSaving(false); return }
     if (activeBatch) {
       await sb.from('order_dispatches').update({
         pi_number: piNumberInput.trim(), pi_pdf_url: piPdfUrl, updated_at: new Date().toISOString()
@@ -339,15 +341,15 @@ export default function BillingOrderDetail() {
 
   // STEP 4: delivery_ready → eway_generated
   async function confirmEwayBill() {
-    if (!ewayNumber.trim()) { alert('Enter E-Way Bill number.'); return }
+    if (!ewayNumber.trim()) { toast('Enter E-Way Bill number.'); return }
     setSaving(true)
     let ewayPdfUrl = null
     let eInvoiceUrl = null
     if (ewayPdfFile) {
-      try { ewayPdfUrl = await uploadPdf(ewayPdfFile, `eway/${id}`) } catch { alert('E-Way PDF upload failed. Please try again.'); setSaving(false); return }
+      try { ewayPdfUrl = await uploadPdf(ewayPdfFile, `eway/${id}`) } catch { toast('E-Way PDF upload failed. Please try again.'); setSaving(false); return }
     }
     if (eInvoicePdfFile) {
-      try { eInvoiceUrl = await uploadPdf(eInvoicePdfFile, `einvoice/${id}`) } catch { alert('e-Invoice PDF upload failed. Please try again.'); setSaving(false); return }
+      try { eInvoiceUrl = await uploadPdf(eInvoicePdfFile, `einvoice/${id}`) } catch { toast('e-Invoice PDF upload failed. Please try again.'); setSaving(false); return }
     }
     if (activeBatch) {
       await sb.from('order_dispatches').update({

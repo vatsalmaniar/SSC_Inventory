@@ -31,6 +31,8 @@ export default function CRMLeads() {
   const [filterSource, setFilterSource] = useState('')
   const [filterPrincipal, setFilterPrincipal] = useState('')
   const [filterRep, setFilterRep] = useState('')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 50
 
   useEffect(() => { init() }, [])
 
@@ -61,6 +63,10 @@ export default function CRMLeads() {
     .filter(l => !filterPrincipal || l.principal_id === filterPrincipal)
     .filter(l => !filterRep || l.assigned_rep_id === filterRep)
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
   return (
     <Layout pageTitle="CRM — Leads" pageKey="crm">
       <CRMSubNav active="leads" />
@@ -82,22 +88,22 @@ export default function CRMLeads() {
           <div className="crm-controls">
             <div className="crm-search-wrap">
               <svg className="crm-search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input className="crm-search-input" placeholder="Search company, contact, product..." value={search} onChange={e => setSearch(e.target.value)} />
+              <input className="crm-search-input" placeholder="Search company, contact, product..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
             </div>
-            <select className="crm-filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <select className="crm-filter-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
               <option value="">All Statuses</option>
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <select className="crm-filter-select" value={filterSource} onChange={e => setFilterSource(e.target.value)}>
+            <select className="crm-filter-select" value={filterSource} onChange={e => { setFilterSource(e.target.value); setPage(1) }}>
               <option value="">All Sources</option>
               {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <select className="crm-filter-select" value={filterPrincipal} onChange={e => setFilterPrincipal(e.target.value)}>
+            <select className="crm-filter-select" value={filterPrincipal} onChange={e => { setFilterPrincipal(e.target.value); setPage(1) }}>
               <option value="">All Principals</option>
               {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             {isManager && (
-              <select className="crm-filter-select" value={filterRep} onChange={e => setFilterRep(e.target.value)}>
+              <select className="crm-filter-select" value={filterRep} onChange={e => { setFilterRep(e.target.value); setPage(1) }}>
                 <option value="">All Reps</option>
                 {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
@@ -123,7 +129,7 @@ export default function CRMLeads() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map(l => (
+                    {paged.map(l => (
                       <tr key={l.id} onClick={() => navigate('/crm/leads/' + l.id)}>
                         <td><div className="crm-table-name">{l.crm_companies?.company_name || l.freetext_company || '—'}</div></td>
                         <td>{l.contact_name_freetext || '—'}</td>
@@ -145,7 +151,7 @@ export default function CRMLeads() {
               </div>
               {/* Mobile */}
               <div className="crm-card-list">
-                {filtered.map(l => (
+                {paged.map(l => (
                   <div key={l.id} className="crm-list-card" onClick={() => navigate('/crm/leads/' + l.id)}>
                     <div className="crm-list-card-top">
                       <div>
@@ -166,6 +172,13 @@ export default function CRMLeads() {
               </div>
               {filtered.length === 0 && (
                 <div className="crm-empty"><div className="crm-empty-title">No leads found</div></div>
+              )}
+              {totalPages > 1 && (
+                <div style={{display:'flex',justifyContent:'center',alignItems:'center',gap:8,padding:'16px 0'}}>
+                  <button className="crm-btn crm-btn-sm" disabled={safePage<=1} onClick={()=>setPage(p=>p-1)}>Prev</button>
+                  <span style={{fontSize:12,color:'var(--gray-500)'}}>Page {safePage} of {totalPages} ({filtered.length} results)</span>
+                  <button className="crm-btn crm-btn-sm" disabled={safePage>=totalPages} onClick={()=>setPage(p=>p+1)}>Next</button>
+                </div>
               )}
             </div>
           )}

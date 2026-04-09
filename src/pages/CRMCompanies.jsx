@@ -5,6 +5,7 @@ import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 import '../styles/orders.css'
+import { toast } from '../lib/toast'
 
 const INDUSTRIES = ['Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal','Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG','Energy','Automobile','Power Electronics','Datacenters','Road Construction','Cement','Tyre','Petroleum','Chemical']
 const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
@@ -23,6 +24,8 @@ export default function CRMCompanies() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving]   = useState(false)
   const [form, setForm]       = useState({ company_name:'', gstin:'', city:'', address:'', customer_type:'', industry:'', status:'Active', assigned_rep_id:'' })
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 50
 
   useEffect(() => { init() }, [])
 
@@ -41,13 +44,13 @@ export default function CRMCompanies() {
   }
 
   async function saveCompany() {
-    if (!form.company_name.trim()) { alert('Company name is required'); return }
+    if (!form.company_name.trim()) { toast('Company name is required'); return }
     setSaving(true)
     const { data, error } = await sb.from('crm_companies').insert({
       ...form,
       assigned_rep_id: form.assigned_rep_id || user.id,
     }).select('*, profiles(name)').single()
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast('Error: ' + error.message); setSaving(false); return }
     setCompanies(prev => [data, ...prev])
     setShowForm(false)
     setForm({ company_name:'', gstin:'', city:'', address:'', customer_type:'', industry:'', status:'Active', assigned_rep_id:'' })
@@ -61,6 +64,10 @@ export default function CRMCompanies() {
     .filter(c => !filterType || c.customer_type === filterType)
     .filter(c => !filterStatus || c.status === filterStatus)
     .filter(c => !filterIndustry || c.industry === filterIndustry)
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   function statusColor(s) {
     if (s === 'Active') return { background:'#f0fdf4', color:'#15803d' }
@@ -152,17 +159,17 @@ export default function CRMCompanies() {
           <div className="crm-controls">
             <div className="crm-search-wrap">
               <svg className="crm-search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input className="crm-search-input" placeholder="Search company or city..." value={search} onChange={e => setSearch(e.target.value)} />
+              <input className="crm-search-input" placeholder="Search company or city..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
             </div>
-            <select className="crm-filter-select" value={filterType} onChange={e => setFilterType(e.target.value)}>
+            <select className="crm-filter-select" value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1) }}>
               <option value="">All Types</option>
               {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-            <select className="crm-filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <select className="crm-filter-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
               <option value="">All Statuses</option>
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <select className="crm-filter-select" value={filterIndustry} onChange={e => setFilterIndustry(e.target.value)}>
+            <select className="crm-filter-select" value={filterIndustry} onChange={e => { setFilterIndustry(e.target.value); setPage(1) }}>
               <option value="">All Industries</option>
               {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
             </select>
@@ -185,7 +192,7 @@ export default function CRMCompanies() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map(c => (
+                    {paged.map(c => (
                       <tr key={c.id} onClick={() => navigate('/crm/companies/' + c.id)}>
                         <td>
                           <div className="crm-table-name">{c.company_name}</div>
@@ -203,7 +210,7 @@ export default function CRMCompanies() {
               </div>
               {/* Mobile */}
               <div className="crm-card-list">
-                {filtered.map(c => (
+                {paged.map(c => (
                   <div key={c.id} className="crm-list-card" onClick={() => navigate('/crm/companies/' + c.id)}>
                     <div className="crm-list-card-top">
                       <div>
@@ -218,6 +225,13 @@ export default function CRMCompanies() {
                   </div>
                 ))}
               </div>
+              {totalPages > 1 && (
+                <div className="crm-pagination">
+                  <button className="crm-btn crm-btn-sm" disabled={safePage <= 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                  <span style={{fontSize:13,color:'var(--gray-500)'}}>Page {safePage} of {totalPages} ({filtered.length} results)</span>
+                  <button className="crm-btn crm-btn-sm" disabled={safePage >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
+                </div>
+              )}
               {filtered.length === 0 && (
                 <div className="crm-empty">
                   <div className="crm-empty-title">No companies found</div>

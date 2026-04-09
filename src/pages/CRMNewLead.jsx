@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -77,7 +78,7 @@ export default function CRMNewLead() {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   async function save() {
-    if (!companyQuery.trim()) { alert('Company name required'); return }
+    if (!companyQuery.trim()) { toast('Company name required'); return }
     setSaving(true)
 
     if (selectedCompany?.id) {
@@ -105,7 +106,7 @@ export default function CRMNewLead() {
         expected_close_date: form.expected_close_date || null,
         stage: 'LEAD_CAPTURED',
       }).select().single()
-      if (error) { alert('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast('Error: ' + error.message); setSaving(false); return }
       navigate('/crm/opportunities/' + data.id)
     } else {
       // New company → Lead
@@ -118,7 +119,7 @@ export default function CRMNewLead() {
         assigned_rep_id: form.assigned_rep_id || user.id,
         status: 'New',
       }).select().single()
-      if (error) { alert('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast('Error: ' + error.message); setSaving(false); return }
       navigate('/crm/leads/' + data.id)
     }
   }

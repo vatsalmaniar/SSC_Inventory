@@ -96,8 +96,8 @@ export default function Layout({ children, pageTitle, pageKey }) {
       const name   = profile?.name || s.user.email.split('@')[0]
       const role   = profile?.role || 'sales'
       const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-      setUser({ name, avatar, role })
-      loadNotifs(name)
+      setUser({ name, avatar, role, id: s.user.id })
+      loadNotifs(s.user.id)
     })
   }, [])
 
@@ -110,10 +110,10 @@ export default function Layout({ children, pageTitle, pageKey }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  async function loadNotifs(name) {
+  async function loadNotifs(userId) {
     const { data } = await sb.from('notifications')
       .select('*')
-      .eq('user_name', name)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(30)
     setNotifs(data || [])

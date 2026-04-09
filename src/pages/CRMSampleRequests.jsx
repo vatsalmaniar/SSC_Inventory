@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -55,7 +56,7 @@ export default function CRMSampleRequests() {
     if (status === 'Dispatched') updateData.dispatched_date = new Date().toISOString().slice(0,10)
     if (status === 'Delivered')  updateData.delivered_date  = new Date().toISOString().slice(0,10)
     const { error } = await sb.from('crm_sample_requests').update(updateData).eq('id', srId)
-    if (error) { alert('Error: ' + error.message); setUpdating(null); return }
+    if (error) { toast('Error: ' + error.message); setUpdating(null); return }
     setSrs(prev => prev.map(s => s.id === srId ? { ...s, ...updateData } : s))
     setUpdating(null)
   }

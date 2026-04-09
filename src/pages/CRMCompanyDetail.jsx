@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -77,17 +78,17 @@ export default function CRMCompanyDetail() {
       status: editData.status,
       assigned_rep_id: editData.assigned_rep_id,
     }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast('Error: ' + error.message); setSaving(false); return }
     setCompany(p => ({ ...p, ...editData }))
     setEditMode(false)
     setSaving(false)
   }
 
   async function saveContact() {
-    if (!contactForm.name.trim()) { alert('Contact name is required'); return }
+    if (!contactForm.name.trim()) { toast('Contact name is required'); return }
     setSavingContact(true)
     const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: id }).select().single()
-    if (error) { alert('Error: ' + error.message); setSavingContact(false); return }
+    if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
     setContacts(prev => [...prev, data])
     setShowContactForm(false)
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'', is_decision_maker:false, is_influencer:false, notes:'' })

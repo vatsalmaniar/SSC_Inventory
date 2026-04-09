@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -126,7 +127,7 @@ export default function CRMLeadDetail() {
       assigned_rep_id: editData.assigned_rep_id,
       status: editData.status,
     }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast('Error: ' + error.message); setSaving(false); return }
     setLead(p => ({ ...p, ...editData }))
     setEditMode(false); setSaving(false)
   }
@@ -134,16 +135,16 @@ export default function CRMLeadDetail() {
   async function postActivity() {
     let notes = '', activityType = 'Note'
     if (actType === 'Call') {
-      if (!actDiscussion.trim()) { alert('Discussion notes required'); return }
+      if (!actDiscussion.trim()) { toast('Discussion notes required'); return }
       notes = actDiscussion.trim(); activityType = 'Call'
     } else if (actType === 'Visit') {
-      if (!actDiscussion.trim()) { alert('Discussion notes required'); return }
+      if (!actDiscussion.trim()) { toast('Discussion notes required'); return }
       notes = '[' + actVisitType + '] ' + actDiscussion.trim(); activityType = 'Visit'
     } else if (actType === 'Email') {
-      if (!actNotes.trim()) { alert('Notes required'); return }
+      if (!actNotes.trim()) { toast('Notes required'); return }
       notes = actNotes.trim(); activityType = 'Email'
     } else if (actType === 'Sample') {
-      if (!actNotes.trim()) { alert('Describe the samples submitted'); return }
+      if (!actNotes.trim()) { toast('Describe the samples submitted'); return }
       notes = 'Sample: ' + actNotes.trim(); activityType = 'Note'
     }
     setPostingAct(true)
@@ -189,7 +190,7 @@ export default function CRMLeadDetail() {
 
   async function saveQuote() {
     const valid = quoteRows.filter(r => r.item_code || r.description)
-    if (!valid.length) { alert('Add at least one item'); return }
+    if (!valid.length) { toast('Add at least one item'); return }
     setSavingQuote(true)
     await sb.from('crm_quote_items').delete().eq('lead_id', id)
     const { error } = await sb.from('crm_quote_items').insert(valid.map(r => ({
@@ -197,7 +198,7 @@ export default function CRMLeadDetail() {
       qty: parseFloat(r.qty) || 1, unit_price: parseFloat(r.unit_price) || 0,
       discount_pct: parseFloat(r.discount_pct) || 0, total_price: parseFloat(r.total_price) || 0,
     })))
-    if (error) { alert('Error saving quote: ' + error.message); setSavingQuote(false); return }
+    if (error) { toast('Error saving quote: ' + error.message); setSavingQuote(false); return }
     const { data: q } = await sb.from('crm_quote_items').select('*').eq('lead_id', id).order('created_at', { ascending: true })
     setQuoteItems(q || [])
     setQuoteLoaded(true)
@@ -214,7 +215,7 @@ export default function CRMLeadDetail() {
       assigned_rep_id: lead.assigned_rep_id || user.id,
       stage: 'LEAD_CAPTURED',
     }).select().single()
-    if (error) { alert('Error: ' + error.message); return }
+    if (error) { toast('Error: ' + error.message); return }
     await sb.from('crm_leads').update({ status: 'Converted' }).eq('id', id)
     navigate('/crm/opportunities/' + opp.id)
   }

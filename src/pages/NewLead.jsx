@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
 
@@ -47,8 +48,8 @@ export default function NewLead() {
   }
 
   async function submitLead() {
-    if (!leadName.trim()) { alert('Lead name is required'); return }
-    if (!companyName.trim()) { alert('Customer / company name is required'); return }
+    if (!leadName.trim()) { toast('Lead name is required'); return }
+    if (!companyName.trim()) { toast('Customer / company name is required'); return }
     setSubmitting(true)
     const { data, error } = await sb.from('leads').insert({
       lead_name:     leadName.trim() || null,
@@ -67,7 +68,7 @@ export default function NewLead() {
       created_by:    (await sb.auth.getUser()).data.user?.id,
     }).select().single()
     setSubmitting(false)
-    if (error) { alert('Error: ' + error.message); return }
+    if (error) { toast('Error: ' + error.message); return }
     navigate('/crm/' + data.id)
   }
 

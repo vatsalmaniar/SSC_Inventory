@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 
 const ALL_STAGES = [
   'LEAD_CAPTURED','CONTACTED','QUALIFIED','BOM_RECEIVED',
@@ -104,9 +105,9 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
   }
 
   async function save() {
-    if (!form.opportunity_name.trim()) { alert(isExisting ? 'Opportunity Name is required' : 'Lead Name is required'); return }
-    if (!form.company_id && !accountSearch.trim()) { alert('Account Name is required'); return }
-    if (!form.gstin.trim()) { alert('GST number is required'); return }
+    if (!form.opportunity_name.trim()) { toast(isExisting ? 'Opportunity Name is required' : 'Lead Name is required'); return }
+    if (!form.company_id && !accountSearch.trim()) { toast('Account Name is required'); return }
+    if (!form.gstin.trim()) { toast('GST number is required'); return }
     setSaving(true)
     const brandNames = principals.filter(p => selectedBrands.includes(p.id)).map(p => p.name)
     const { data, error } = await sb.from('crm_opportunities').insert({
@@ -128,7 +129,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
       principal_id:       selectedBrands[0] || null,
       product_notes:      form.opportunity_name.trim(),
     }).select().single()
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast('Error: ' + error.message); setSaving(false); return }
     // Log creation activity with the actual creator's ID (not the assigned rep)
     await sb.from('crm_activities').insert({
       opportunity_id: data.id,

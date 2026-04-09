@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import NewCustomerModal from './NewCustomerModal'
@@ -251,10 +252,10 @@ export default function CRMOpportunityDetail() {
   }
 
   async function saveCustContact() {
-    if (!contactForm.name.trim()) { alert('Name is required'); return }
+    if (!contactForm.name.trim()) { toast('Name is required'); return }
     setSavingContact(true)
     const { data, error } = await sb.from('customer_contacts').insert({ ...contactForm, customer_id: opp.customer_id }).select().single()
-    if (error) { alert('Error: ' + error.message); setSavingContact(false); return }
+    if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
     setCustContacts(p => [...p, data])
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
     setShowContactModal(false)
@@ -341,14 +342,14 @@ export default function CRMOpportunityDetail() {
 
   async function submitConvertOrder() {
     const validItems = sampleItems.filter(i => i.item_code?.trim())
-    if (!sampleCustomer?.customer_name) { alert('No customer linked to this opportunity'); return }
-    if (!sampleDispatchAddr.trim()) { alert('Dispatch address is required'); return }
-    if (!samplePoNumber.trim()) { alert('PO / Reference Number is required'); return }
-    if (!validItems.length) { alert('Add at least one item'); return }
+    if (!sampleCustomer?.customer_name) { toast('No customer linked to this opportunity'); return }
+    if (!sampleDispatchAddr.trim()) { toast('Dispatch address is required'); return }
+    if (!samplePoNumber.trim()) { toast('PO / Reference Number is required'); return }
+    if (!validItems.length) { toast('Add at least one item'); return }
     for (const item of validItems) {
-      if (!item.qty) { alert('Qty required for: ' + item.item_code); return }
-      if (!item.lp_unit_price) { alert('LP Price required for: ' + item.item_code); return }
-      if (!item.dispatch_date) { alert('Dispatch date required for: ' + item.item_code); return }
+      if (!item.qty) { toast('Qty required for: ' + item.item_code); return }
+      if (!item.lp_unit_price) { toast('LP Price required for: ' + item.item_code); return }
+      if (!item.dispatch_date) { toast('Dispatch date required for: ' + item.item_code); return }
     }
     setSubmittingSample(true)
     const { data: { session } } = await sb.auth.getSession()
@@ -369,7 +370,7 @@ export default function CRMOpportunityDetail() {
       created_by:        session.user.id,
       is_test:           false,
     }).select().single()
-    if (error) { alert('Error: ' + error.message); setSubmittingSample(false); return }
+    if (error) { toast('Error: ' + error.message); setSubmittingSample(false); return }
     const { error: itemsErr } = await sb.from('order_items').insert(
       validItems.map((item, i) => ({
         order_id:              order.id,
@@ -384,7 +385,7 @@ export default function CRMOpportunityDetail() {
         customer_ref_no:       item.customer_ref_no?.trim() || null,
       }))
     )
-    if (itemsErr) { alert('Order created but items failed: ' + itemsErr.message); setSubmittingSample(false); return }
+    if (itemsErr) { toast('Order created but items failed: ' + itemsErr.message); setSubmittingSample(false); return }
     setShowConvertModal(false)
     setSubmittingSample(false)
     navigate('/orders/' + order.id)
@@ -392,12 +393,12 @@ export default function CRMOpportunityDetail() {
 
   async function submitSample() {
     const validItems = sampleItems.filter(i => i.item_code?.trim())
-    if (!sampleCustomer?.customer_name) { alert('No customer linked to this opportunity'); return }
-    if (!sampleDispatchAddr.trim()) { alert('Dispatch address is required'); return }
-    if (!validItems.length) { alert('Add at least one item code'); return }
+    if (!sampleCustomer?.customer_name) { toast('No customer linked to this opportunity'); return }
+    if (!sampleDispatchAddr.trim()) { toast('Dispatch address is required'); return }
+    if (!validItems.length) { toast('Add at least one item code'); return }
     for (const item of validItems) {
-      if (!item.qty) { alert('Qty required for: ' + item.item_code); return }
-      if (!item.dispatch_date) { alert('Dispatch date required for: ' + item.item_code); return }
+      if (!item.qty) { toast('Qty required for: ' + item.item_code); return }
+      if (!item.dispatch_date) { toast('Dispatch date required for: ' + item.item_code); return }
     }
     setSubmittingSample(true)
     const { data: { session } } = await sb.auth.getSession()
@@ -418,7 +419,7 @@ export default function CRMOpportunityDetail() {
       created_by:        session.user.id,
       is_test:           false,
     }).select().single()
-    if (error) { alert('Error: ' + error.message); setSubmittingSample(false); return }
+    if (error) { toast('Error: ' + error.message); setSubmittingSample(false); return }
     const { error: itemsErr } = await sb.from('order_items').insert(
       validItems.map((item, i) => ({
         order_id:              order.id,
@@ -433,7 +434,7 @@ export default function CRMOpportunityDetail() {
         customer_ref_no:       item.customer_ref_no?.trim() || null,
       }))
     )
-    if (itemsErr) { alert('Order created but items failed: ' + itemsErr.message); setSubmittingSample(false); return }
+    if (itemsErr) { toast('Order created but items failed: ' + itemsErr.message); setSubmittingSample(false); return }
     setShowSampleModal(false)
     setSubmittingSample(false)
     navigate('/orders/' + order.id)
@@ -463,19 +464,19 @@ export default function CRMOpportunityDetail() {
       quotation_value_inr: editData.quotation_value_inr || null,
       so_number: editData.so_number || null,
     }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast('Error: ' + error.message); setSaving(false); return }
     setOpp(p => ({ ...p, ...editData }))
     setEditMode(false); setSaving(false)
   }
 
   async function changeStage(newStage) {
-    if (newStage === 'ON_HOLD' && !stageRevisit) { alert('Revisit date required for On Hold'); return }
+    if (newStage === 'ON_HOLD' && !stageRevisit) { toast('Revisit date required for On Hold'); return }
     setChangingStage(true)
     const updateData = { stage: newStage, updated_at: new Date().toISOString() }
     if (newStage === 'ON_HOLD') updateData.revisit_date = stageRevisit
     if (['WON','LOST','ON_HOLD'].includes(newStage) && stageReason) updateData.won_lost_on_hold_reason = stageReason
     const { error } = await sb.from('crm_opportunities').update(updateData).eq('id', id)
-    if (error) { alert('Error: ' + error.message); setChangingStage(false); return }
+    if (error) { toast('Error: ' + error.message); setChangingStage(false); return }
     if (newStage === 'WON' && opp?.company_id) {
       await sb.from('crm_companies').update({ status: 'Active' }).eq('id', opp.company_id)
     }
@@ -497,10 +498,10 @@ export default function CRMOpportunityDetail() {
     let notes = '', activityType = 'Note'
     const datePrefix = (actDate || actTime) ? '[' + (actDate || '') + (actDate && actTime ? ' ' : '') + (actTime || '') + '] ' : ''
     if (actType === 'Call') {
-      if (!actDiscussion.trim()) { alert('Discussion notes required'); return }
+      if (!actDiscussion.trim()) { toast('Discussion notes required'); return }
       notes = datePrefix + actDiscussion.trim(); activityType = 'Call'
     } else if (actType === 'Visit') {
-      if (!actPurpose.trim() && !actOutcome.trim()) { alert('Purpose or Outcome is required'); return }
+      if (!actPurpose.trim() && !actOutcome.trim()) { toast('Purpose or Outcome is required'); return }
       const parts = []
       if (actWithSSC) {
         const names = reps.filter(r => actSSCMembers.includes(r.id)).map(r => r.name)
@@ -516,28 +517,26 @@ export default function CRMOpportunityDetail() {
       if (actNextAction.trim()) lines.push('Next: ' + actNextAction.trim() + (actNextActionDate ? ' · ' + actNextActionDate : ''))
       notes = lines.join('\n'); activityType = 'Visit'
     } else if (actType === 'Email') {
-      if (!actNotes.trim()) { alert('Notes required'); return }
+      if (!actNotes.trim()) { toast('Notes required'); return }
       notes = datePrefix + actNotes.trim(); activityType = 'Email'
     } else if (actType === 'Note') {
-      if (!actNotes.trim()) { alert('Write a note first'); return }
+      if (!actNotes.trim()) { toast('Write a note first'); return }
       notes = actNotes.trim(); activityType = 'Note'
     } else {
-      if (!actNotes.trim()) { alert('Notes required'); return }
+      if (!actNotes.trim()) { toast('Notes required'); return }
       notes = datePrefix + actNotes.trim(); activityType = 'Note'
     }
     // Extract @tagged names
     const tagged = [...notes.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
     setPostingAct(true)
     const { error: actErr } = await sb.from('crm_activities').insert({ opportunity_id: id, rep_id: user.id, activity_type: activityType, notes })
-    if (actErr) { alert('Error logging activity: ' + actErr.message); setPostingAct(false); return }
+    if (actErr) { toast('Error logging activity: ' + actErr.message); setPostingAct(false); return }
     if (tagged.length > 0) {
-      await sb.from('notifications').insert(tagged.map(tname => ({
-        user_name: tname,
-        message: `${user.name} tagged you in an opportunity note`,
-        order_id: null,
-        order_number: opp.opportunity_name || opp.product_notes || 'Opportunity',
-        from_name: user.name,
-      })))
+      const notifRows = tagged.map(tname => {
+        const p = reps.find(r => r.name === tname)
+        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in an opportunity note`, order_id: null, order_number: opp.opportunity_name || opp.product_notes || 'Opportunity', from_name: user.name }
+      })
+      await sb.from('notifications').insert(notifRows)
     }
     // If Visit, also save to crm_field_visits so it appears on the Visits page
     if (activityType === 'Visit') {
@@ -793,7 +792,7 @@ export default function CRMOpportunityDetail() {
 
 </body></html>`
     const w = window.open('', '_blank')
-    if (!w) { alert('Popup blocked — allow popups for this site and try again.'); return }
+    if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
     w.document.write(html)
     w.document.close()
     w.focus()
@@ -802,10 +801,10 @@ export default function CRMOpportunityDetail() {
 
   async function saveQuote() {
     const valid = quoteRows.filter(r => r.item_code || r.description)
-    if (!valid.length) { alert('Add at least one item'); return }
+    if (!valid.length) { toast('Add at least one item'); return }
     for (const r of valid) {
       if (r.discount_pct === '' || r.discount_pct === null || r.discount_pct === undefined) {
-        alert('Discount % is required for: ' + (r.item_code || r.description)); return
+        toast('Discount % is required for: ' + (r.item_code || r.description)); return
       }
     }
     setSavingQuote(true)
@@ -824,7 +823,7 @@ export default function CRMOpportunityDetail() {
       revision    = existingForOpp[0].revision + 1
     } else {
       const { data: genNum, error: genErr } = await sb.rpc('generate_crm_quote_number', { p_fy: fy })
-      if (genErr) { alert('Error generating quote number: ' + genErr.message); setSavingQuote(false); return }
+      if (genErr) { toast('Error generating quote number: ' + genErr.message); setSavingQuote(false); return }
       quoteNumber = genNum
       revision    = 1
     }
@@ -841,7 +840,7 @@ export default function CRMOpportunityDetail() {
       opportunity_id: id, quote_number: quoteNumber, full_ref: fullRef,
       revision, items, total_value: total, created_by: user.id,
     })
-    if (error) { alert('Error saving quote: ' + error.message); setSavingQuote(false); return }
+    if (error) { toast('Error saving quote: ' + error.message); setSavingQuote(false); return }
 
     // Also keep crm_quote_items in sync (for backward compat)
     await sb.from('crm_quote_items').delete().eq('opportunity_id', id)
