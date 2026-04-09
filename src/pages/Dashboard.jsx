@@ -71,7 +71,7 @@ export default function Dashboard() {
     }
     const [{ data: profile }, { data: orders }] = await Promise.all([
       sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
-      sb.from('orders').select('status,order_items(total_price)').gte('created_at', '2026-03-31').eq('is_test', false),
+      sb.from('orders').select('status,freight,order_items(total_price)').gte('created_at', '2026-03-31').eq('is_test', false),
     ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
@@ -81,7 +81,7 @@ export default function Dashboard() {
       const active    = orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length
       const pending   = orders.filter(o => o.status === 'pending').length
       const delivered = orders.filter(o => o.status === 'dispatched_fc').length
-      const revenue   = orders.reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)
+      const revenue   = orders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0) + (o.freight || 0), 0)
       setStats({ active, pending, delivered, revenue })
     }
   }

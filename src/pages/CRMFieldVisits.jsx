@@ -6,6 +6,10 @@ import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 import '../styles/orders.css'
 
+const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
+function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
+function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7,whiteSpace:'nowrap'}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
+
 const VISIT_TYPES = ['SOLO','JOINT_PRINCIPAL','JOINT_SSC_TEAM']
 const VISIT_TYPE_LABELS = { SOLO:'Solo', JOINT_PRINCIPAL:'Joint w/ Principal', JOINT_SSC_TEAM:'Joint SSC Team' }
 
@@ -48,6 +52,7 @@ export default function CRMFieldVisits() {
   const [principals, setPrincipals] = useState([])
   const [loading, setLoading]       = useState(true)
   const [showModal, setShowModal]   = useState(false)
+  const [viewVisit, setViewVisit]   = useState(null)
   const [saving, setSaving]         = useState(false)
   const [search, setSearch]         = useState('')
   const [filterRep, setFilterRep]   = useState('')
@@ -249,8 +254,8 @@ export default function CRMFieldVisits() {
                     {filtered.map(v => {
                       const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
                       return (
-                        <tr key={v.id} style={{cursor: v.opportunity_id ? 'pointer' : 'default'}}
-                          onClick={() => v.opportunity_id && navigate('/crm/opportunities/' + v.opportunity_id)}>
+                        <tr key={v.id} style={{cursor:'pointer'}}
+                          onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}>
                           <td style={{whiteSpace:'nowrap',fontWeight:600}}>{fmt(v.visit_date)}</td>
                           <td><div className="crm-table-name">{v.company_freetext || '—'}</div></td>
                           <td>
@@ -258,8 +263,8 @@ export default function CRMFieldVisits() {
                               ? <div style={{fontSize:12,color:'#1a4dab',fontWeight:600,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{oppName}</div>
                               : <span style={{fontSize:11,color:'var(--gray-400)'}}>—</span>}
                           </td>
-                          <td>
-                            <span style={{fontSize:10,fontWeight:700,borderRadius:4,padding:'2px 7px',
+                          <td style={{whiteSpace:'nowrap'}}>
+                            <span style={{fontSize:10,fontWeight:700,borderRadius:4,padding:'2px 7px',whiteSpace:'nowrap',
                               background: v.visit_type==='SOLO'?'#f1f5f9':v.visit_type==='JOINT_PRINCIPAL'?'#e8f2fc':'#f5f3ff',
                               color: v.visit_type==='SOLO'?'#475569':v.visit_type==='JOINT_PRINCIPAL'?'#1a4dab':'#6d28d9'
                             }}>{VISIT_TYPE_LABELS[v.visit_type]}</span>
@@ -268,7 +273,7 @@ export default function CRMFieldVisits() {
                           <td style={{maxWidth:180}}>{v.purpose || '—'}</td>
                           <td style={{maxWidth:180}}>{v.outcome || '—'}</td>
                           <td>{v.next_action ? <div><div style={{fontSize:12}}>{v.next_action}</div>{v.next_action_date && <div style={{fontSize:11,color:'var(--gray-400)'}}>{fmt(v.next_action_date)}</div>}</div> : '—'}</td>
-                          <td>{v.profiles?.name || '—'}</td>
+                          <td style={{whiteSpace:'nowrap'}}><OwnerChip name={v.profiles?.name} /></td>
                         </tr>
                       )
                     })}
@@ -280,8 +285,8 @@ export default function CRMFieldVisits() {
                   const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
                   return (
                     <div key={v.id} className="crm-list-card"
-                      style={{cursor: v.opportunity_id ? 'pointer' : 'default'}}
-                      onClick={() => v.opportunity_id && navigate('/crm/opportunities/' + v.opportunity_id)}>
+                      style={{cursor:'pointer'}}
+                      onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}>
                       <div className="crm-list-card-top">
                         <div>
                           <div className="crm-list-card-name">{v.company_freetext || '—'}</div>
@@ -293,7 +298,7 @@ export default function CRMFieldVisits() {
                       {v.purpose && <div style={{fontSize:12,color:'var(--gray-600)',margin:'4px 0'}}>{v.purpose}</div>}
                       {v.outcome && <div style={{fontSize:12,color:'var(--gray-600)'}}>{v.outcome}</div>}
                       {v.next_action && <div style={{fontSize:12,color:'#1A3A8F',marginTop:4}}>Next: {v.next_action}{v.next_action_date?' · '+fmt(v.next_action_date):''}</div>}
-                      <div style={{fontSize:11,color:'var(--gray-400)',marginTop:6}}>{v.profiles?.name}</div>
+                      <div style={{marginTop:6}}><OwnerChip name={v.profiles?.name} /></div>
                     </div>
                   )
                 })}
@@ -302,6 +307,71 @@ export default function CRMFieldVisits() {
           )}
         </div>
       </div>
+
+      {/* ── Visit Detail Popup ── */}
+      {viewVisit && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={e => { if (e.target === e.currentTarget) setViewVisit(null) }}>
+          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:480, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'white', zIndex:1 }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>{viewVisit.company_freetext || '—'}</div>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:4, flexWrap:'wrap' }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'#475569' }}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:13,height:13}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    {(() => { const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; const d=new Date(viewVisit.visit_date); return `${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}` })()}
+                  </span>
+                  {viewVisit.created_at && (
+                    <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'#475569' }}>
+                      <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:13,height:13}}><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+                      {(() => { const d=new Date(viewVisit.created_at); return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}` })()}
+                    </span>
+                  )}
+                  <span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:4,
+                    background: viewVisit.visit_type==='SOLO'?'#f1f5f9':viewVisit.visit_type==='JOINT_PRINCIPAL'?'#e8f2fc':'#f5f3ff',
+                    color: viewVisit.visit_type==='SOLO'?'#475569':viewVisit.visit_type==='JOINT_PRINCIPAL'?'#1a4dab':'#6d28d9'
+                  }}>{VISIT_TYPE_LABELS[viewVisit.visit_type]}</span>
+                </div>
+              </div>
+              <button onClick={() => setViewVisit(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8', lineHeight:1, padding:4 }}>✕</button>
+            </div>
+            <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+              {(viewVisit.visit_type === 'JOINT_PRINCIPAL' || viewVisit.visit_type === 'JOINT_SSC_TEAM') && (() => {
+                const withPrincipal = viewVisit.visit_type === 'JOINT_PRINCIPAL'
+                const teamNames = (viewVisit.ssc_team_members || []).map(id => reps.find(r => r.id === id)?.name).filter(Boolean)
+                return (
+                  <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:6 }}>Visited With</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
+                    {withPrincipal && viewVisit.crm_principals?.name && (
+                      <OwnerChip name={viewVisit.crm_principals.name + (viewVisit.principal_rep_name ? ' · ' + viewVisit.principal_rep_name : '')} />
+                    )}
+                    {teamNames.map(name => (
+                      <OwnerChip key={name} name={name} />
+                    ))}
+                  </div></div>
+                )
+              })()}
+              {viewVisit.purpose && (
+                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:3 }}>Purpose</div>
+                <div style={{ fontSize:13 }}>{viewVisit.purpose}</div></div>
+              )}
+              {viewVisit.outcome && (
+                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:3 }}>Outcome</div>
+                <div style={{ fontSize:13 }}>{viewVisit.outcome}</div></div>
+              )}
+              {viewVisit.next_action && (
+                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:3 }}>Next Action</div>
+                <div style={{ fontSize:13 }}>{viewVisit.next_action}</div>
+                {viewVisit.next_action_date && <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{fmt(viewVisit.next_action_date)}</div>}</div>
+              )}
+              <div style={{ display:'flex', gap:24, paddingTop:4, borderTop:'1px solid #f1f5f9' }}>
+                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:6 }}>Rep</div>
+                <OwnerChip name={viewVisit.profiles?.name} /></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Log Visit Modal ── */}
       {showModal && (
