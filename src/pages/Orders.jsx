@@ -162,22 +162,22 @@ export default function Orders() {
       if (!data?.session) { navigate('/login'); return }
       session = data.session
     }
-    const [{ data: profile }] = await Promise.all([
-      sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
-      loadOrders(),
-    ])
+    const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setUser({ name, avatar, role })
+    await loadOrders(false, role === 'sales' ? session.user.id : null)
   }
 
-  async function loadOrders() {
+  async function loadOrders(testMode = false, salesUserId = null) {
     setLoading(true)
-    const { data } = await sb.from('orders')
+    let query = sb.from('orders')
       .select('id,order_number,customer_name,status,order_type,created_at,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
-      .gte('created_at', '2026-03-31').eq('is_test', false)
+      .gte('created_at', '2026-03-31').eq('is_test', testMode)
       .order('created_at', { ascending: false })
+    if (salesUserId) query = query.eq('created_by', salesUserId)
+    const { data } = await query
     setOrders(data || [])
     setLoading(false)
   }

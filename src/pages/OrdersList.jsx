@@ -184,22 +184,22 @@ export default function OrdersList() {
       if (!data?.session) { navigate('/login'); return }
       session = data.session
     }
-    const [{ data: profile }] = await Promise.all([
-      sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
-      loadOrders(),
-    ])
+    const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setUser({ name, avatar, role })
+    await loadOrders(false, role === 'sales' ? session.user.id : null)
   }
 
-  async function loadOrders(testMode = false) {
+  async function loadOrders(testMode = false, salesUserId = null) {
     setLoading(true)
-    const { data } = await sb.from('orders')
+    let query = sb.from('orders')
       .select('id,order_number,customer_name,account_owner,engineer_name,order_date,order_type,status,freight,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
       .gte('created_at', '2026-03-31').eq('is_test', testMode)
       .order('created_at', { ascending: false })
+    if (salesUserId) query = query.eq('created_by', salesUserId)
+    const { data } = await query
     setOrders(data || [])
     setLoading(false)
   }
@@ -322,7 +322,7 @@ export default function OrdersList() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {user.role === 'admin' && (
               <label style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:12,color:showTest ? '#b45309' : 'var(--gray-500)',fontWeight:showTest ? 600 : 400,background:showTest ? '#fef3c7' : 'transparent',border:showTest ? '1px solid #fde68a' : '1px solid var(--gray-200)',borderRadius:8,padding:'6px 12px',transition:'all 0.15s'}}>
-                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); loadOrders(e.target.checked) }} style={{accentColor:'#b45309',width:13,height:13}} />
+                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); loadOrders(e.target.checked, null) }} style={{accentColor:'#b45309',width:13,height:13}} />
                 Test Mode
               </label>
             )}
