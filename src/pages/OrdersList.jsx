@@ -195,7 +195,7 @@ export default function OrdersList() {
   async function loadOrders(testMode = false, salesUserId = null) {
     setLoading(true)
     let query = sb.from('orders')
-      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,order_type,status,freight,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
+      .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,order_items(id,sr_no,item_code,qty,dispatched_qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,customer_ref_no),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
       .gte('created_at', '2026-03-31').eq('is_test', testMode)
       .order('created_at', { ascending: false })
     if (salesUserId) query = query.eq('created_by', salesUserId)
@@ -265,12 +265,36 @@ export default function OrdersList() {
   function downloadDetailed() {
     const rows = []
     filtered.forEach(o => {
-      const items = o.order_items || []
+      const items      = o.order_items || []
+      const dispatches = o.order_dispatches || []
+      const dcNums     = dispatches.map(d => d.dc_number).filter(Boolean).join(', ')
+      const invNums    = dispatches.map(d => d.invoice_number).filter(Boolean).join(', ')
+      const ewayNums   = dispatches.map(d => d.eway_bill_number).filter(Boolean).join(', ')
+      const deliveredAt= dispatches.find(d => d.delivered_at)?.delivered_at
+      const orderStatus= statusLabel(pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status)
+
+      const baseRow = {
+        'Order #':          o.order_number,
+        'Order Type':       o.order_type || '',
+        'Customer':         o.customer_name,
+        'GST Number':       o.customer_gst || '',
+        'Order Date':       fmt(o.order_date),
+        'Account Owner':    o.engineer_name || '',
+        'PO Number':        o.po_number || '',
+        'Credit Terms':     o.credit_terms || '',
+        'Received Via':     o.received_via || '',
+        'Dispatch Address': o.dispatch_address || '',
+        'Notes':            o.notes || '',
+        'Status':           orderStatus,
+        'DC Number(s)':     dcNums,
+        'Invoice No(s)':    invNums,
+        'E-Way Bill(s)':    ewayNums,
+        'Delivered On':     deliveredAt ? fmt(deliveredAt) : '',
+      }
+
       if (items.length === 0) {
         rows.push({
-          'Order #': o.order_number, 'Customer': o.customer_name,
-          'Order Date': fmt(o.order_date), 'Account Owner': o.engineer_name || '',
-          'PO Number': o.po_number || '', 'Status': statusLabel(pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status),
+          ...baseRow,
           'Sr No': '', 'Item Code': '', 'Total Qty': '', 'Dispatched Qty': '',
           'Pending Qty': '', 'LP Price': '', 'Disc %': '', 'Unit Price': '',
           'Total Price': '', 'Dispatch Date': '', 'Cust. Ref No': '',
@@ -280,12 +304,7 @@ export default function OrdersList() {
         items.forEach((item, idx) => {
           const pending = Math.max(0, item.qty - (item.dispatched_qty || 0))
           rows.push({
-            'Order #':        idx === 0 ? o.order_number : '',
-            'Customer':       idx === 0 ? o.customer_name : '',
-            'Order Date':     idx === 0 ? fmt(o.order_date) : '',
-            'Account Owner':       idx === 0 ? (o.engineer_name || '') : '',
-            'PO Number':      idx === 0 ? (o.po_number || '') : '',
-            'Status':         idx === 0 ? statusLabel(pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status) : '',
+            ...(idx === 0 ? baseRow : Object.fromEntries(Object.keys(baseRow).map(k => [k, '']))),
             'Sr No':          item.sr_no,
             'Item Code':      item.item_code,
             'Total Qty':      item.qty,

@@ -132,10 +132,16 @@ export default function CRMOpportunityDetail() {
   const [actType, setActType]             = useState('Call')
   const [actDiscussion, setActDiscussion] = useState('')
   const [actVisitType, setActVisitType]   = useState('Alone')
+  const [actWithSSC, setActWithSSC]       = useState(false)
+  const [actWithPrincipal, setActWithPrincipal] = useState(false)
   const [actSSCMembers, setActSSCMembers] = useState([])
   const [actPartnerName, setActPartnerName] = useState('')
   const [actMetContact, setActMetContact] = useState('')
   const [actNotes, setActNotes]           = useState('')
+  const [actPurpose, setActPurpose]       = useState('')
+  const [actOutcome, setActOutcome]       = useState('')
+  const [actNextAction, setActNextAction] = useState('')
+  const [actNextActionDate, setActNextActionDate] = useState('')
   const [noteMentionQuery, setNoteMentionQuery] = useState(null)
   const noteInputRef = useRef(null)
   const [postingAct, setPostingAct]       = useState(false)
@@ -487,16 +493,21 @@ export default function CRMOpportunityDetail() {
       if (!actDiscussion.trim()) { alert('Discussion notes required'); return }
       notes = datePrefix + actDiscussion.trim(); activityType = 'Call'
     } else if (actType === 'Visit') {
-      if (!actDiscussion.trim()) { alert('Discussion notes required'); return }
-      let visitMeta = actVisitType
-      if (actVisitType === 'With SSC' && actSSCMembers.length > 0) {
+      if (!actPurpose.trim() && !actOutcome.trim()) { alert('Purpose or Outcome is required'); return }
+      const parts = []
+      if (actWithSSC) {
         const names = reps.filter(r => actSSCMembers.includes(r.id)).map(r => r.name)
-        visitMeta += ': ' + names.join(', ')
-      } else if (actVisitType === 'With Principal' && actPartnerName.trim()) {
-        visitMeta += ': ' + actPartnerName.trim()
+        parts.push('With SSC' + (names.length ? ': ' + names.join(', ') : ''))
       }
-      const metLine = actMetContact ? ' | Met: ' + (custContacts.find(c => c.id === actMetContact)?.name || '') : ''
-      notes = datePrefix + '[' + visitMeta + ']' + metLine + ' ' + actDiscussion.trim(); activityType = 'Visit'
+      if (actWithPrincipal && actPartnerName.trim()) {
+        parts.push('With Principal: ' + actPartnerName.trim())
+      }
+      const visitMeta = parts.length ? parts.join(' + ') : 'Solo'
+      const lines = ['Field visit · ' + visitMeta]
+      if (actPurpose.trim()) lines.push('Purpose: ' + actPurpose.trim())
+      if (actOutcome.trim()) lines.push('Outcome: ' + actOutcome.trim())
+      if (actNextAction.trim()) lines.push('Next: ' + actNextAction.trim() + (actNextActionDate ? ' · ' + actNextActionDate : ''))
+      notes = lines.join('\n'); activityType = 'Visit'
     } else if (actType === 'Email') {
       if (!actNotes.trim()) { alert('Notes required'); return }
       notes = datePrefix + actNotes.trim(); activityType = 'Email'
@@ -510,7 +521,7 @@ export default function CRMOpportunityDetail() {
     // Extract @tagged names
     const tagged = [...notes.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
     setPostingAct(true)
-    const { error: actErr } = await sb.from('crm_activities').insert({ opportunity_id: id, rep_id: user.id, activity_type: activityType, notes, tagged_users: tagged.length ? tagged : null })
+    const { error: actErr } = await sb.from('crm_activities').insert({ opportunity_id: id, rep_id: user.id, activity_type: activityType, notes })
     if (actErr) { alert('Error logging activity: ' + actErr.message); setPostingAct(false); return }
     if (tagged.length > 0) {
       await sb.from('notifications').insert(tagged.map(tname => ({
@@ -521,7 +532,26 @@ export default function CRMOpportunityDetail() {
         from_name: user.name,
       })))
     }
-    setActDiscussion(''); setActNotes(''); setActVisitType('Alone'); setActSSCMembers([]); setActPartnerName(''); setActMetContact(''); setActDate(''); setActTime(''); setNoteMentionQuery(null)
+    // If Visit, also save to crm_field_visits so it appears on the Visits page
+    if (activityType === 'Visit') {
+      const visitType = actWithSSC && actWithPrincipal ? 'JOINT_SSC_TEAM' : actWithSSC ? 'JOINT_SSC_TEAM' : actWithPrincipal ? 'JOINT_PRINCIPAL' : 'SOLO'
+      const { error: vErr } = await sb.from('crm_field_visits').insert({
+        rep_id: user.id,
+        visit_date: actDate || new Date().toISOString().slice(0,10),
+        visit_type: visitType,
+        company_freetext: opp.customers?.customer_name || opp.crm_companies?.company_name || opp.freetext_company || '',
+        opportunity_id: id,
+        purpose: actPurpose.trim() || null,
+        outcome: actOutcome.trim() || null,
+        next_action: actNextAction.trim() || null,
+        next_action_date: actNextActionDate || null,
+        principal_id: actWithPrincipal ? (opp.principal_id || null) : null,
+        principal_rep_name: actWithPrincipal ? (actPartnerName.trim() || null) : null,
+        ssc_team_members: actWithSSC ? actSSCMembers : [],
+      })
+      if (vErr) console.warn('Field visit save error:', vErr.message)
+    }
+    setActDiscussion(''); setActNotes(''); setActVisitType('Alone'); setActWithSSC(false); setActWithPrincipal(false); setActSSCMembers([]); setActPartnerName(''); setActMetContact(''); setActDate(''); setActTime(''); setActPurpose(''); setActOutcome(''); setActNextAction(''); setActNextActionDate(''); setNoteMentionQuery(null)
     const { data: c } = await sb.from('crm_activities').select('*, profiles(name)').eq('opportunity_id', id).order('created_at', { ascending: false })
     setActivities(c || [])
     setPostingAct(false)
@@ -774,21 +804,29 @@ export default function CRMOpportunityDetail() {
                   {/* Visit type sub-select + extra fields */}
                   {actType === 'Visit' && (
                     <div style={{ padding:'10px 20px 0', display:'flex', flexDirection:'column', gap:10 }}>
-                      {/* Visit type pills */}
+                      {/* Visit type checkboxes — can select both */}
                       <div>
-                        <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.5px' }}>Visit Type</div>
-                        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                          {VISIT_TYPES.map(vt => (
-                            <button key={vt} onClick={() => { setActVisitType(vt); setActSSCMembers([]); setActPartnerName('') }}
-                              style={{ fontSize:12, fontWeight:600, padding:'5px 12px', borderRadius:6, border:'1px solid', cursor:'pointer', fontFamily:'var(--font)',
-                                background: actVisitType===vt ? '#e8f2fc' : 'white', color: actVisitType===vt ? '#1a4dab' : '#475569',
-                                borderColor: actVisitType===vt ? '#c2d9f5' : '#e2e8f0',
-                              }}>{vt}</button>
+                        <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>Visit Type</div>
+                        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                          {[
+                            { key:'ssc', label:'With SSC', val:actWithSSC, set:v => { setActWithSSC(v); if (!v) setActSSCMembers([]) } },
+                            { key:'principal', label:'With Principal', val:actWithPrincipal, set:v => { setActWithPrincipal(v); if (!v) setActPartnerName('') } },
+                          ].map(opt => (
+                            <button key={opt.key} type="button" onClick={() => opt.set(!opt.val)}
+                              style={{ fontSize:12, fontWeight:600, padding:'5px 14px', borderRadius:6, border:'1px solid', cursor:'pointer', fontFamily:'var(--font)',
+                                background: opt.val ? '#e8f2fc' : 'white', color: opt.val ? '#1a4dab' : '#475569',
+                                borderColor: opt.val ? '#c2d9f5' : '#e2e8f0',
+                              }}>
+                              {opt.val ? '✓ ' : ''}{opt.label}
+                            </button>
                           ))}
+                          {!actWithSSC && !actWithPrincipal && (
+                            <span style={{ fontSize:12, color:'#94a3b8', alignSelf:'center', marginLeft:4 }}>Alone</span>
+                          )}
                         </div>
                       </div>
                       {/* With SSC — multi-select team members */}
-                      {actVisitType === 'With SSC' && (
+                      {actWithSSC && (
                         <div>
                           <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.5px' }}>SSC Team Members</div>
                           <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
@@ -807,7 +845,7 @@ export default function CRMOpportunityDetail() {
                         </div>
                       )}
                       {/* With Principal — partner name */}
-                      {actVisitType === 'With Principal' && (
+                      {actWithPrincipal && (
                         <div>
                           <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.5px' }}>Principal / Partner Name</div>
                           <input value={actPartnerName} onChange={e => setActPartnerName(e.target.value)}
@@ -910,8 +948,37 @@ export default function CRMOpportunityDetail() {
                         </div>
                       )}
                     </div>
+                  ) : actType === 'Visit' ? (
+                    /* Visit — Purpose + Outcome + Next Action */
+                    <div style={{ padding:'14px 20px', display:'flex', flexDirection:'column', gap:12 }}>
+                      <div>
+                        <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.5px' }}>Purpose / Agenda</div>
+                        <textarea autoFocus rows={2} value={actPurpose} onChange={e => setActPurpose(e.target.value)}
+                          placeholder="What was the visit about?"
+                          style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', resize:'vertical', outline:'none', boxSizing:'border-box', lineHeight:1.6 }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.5px' }}>Outcome</div>
+                        <textarea rows={2} value={actOutcome} onChange={e => setActOutcome(e.target.value)}
+                          placeholder="What was discussed / decided?"
+                          style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', resize:'vertical', outline:'none', boxSizing:'border-box', lineHeight:1.6 }} />
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.5px' }}>Next Action</div>
+                          <input value={actNextAction} onChange={e => setActNextAction(e.target.value)}
+                            placeholder="Follow-up action…"
+                            style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.5px' }}>Next Action Date</div>
+                          <input type="date" value={actNextActionDate} onChange={e => setActNextActionDate(e.target.value)}
+                            style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
+                        </div>
+                      </div>
+                    </div>
                   ) : (
-                    /* Discussion textarea for Call / Visit / Email */
+                    /* Discussion textarea for Call / Email */
                     <div style={{ padding:'14px 20px' }}>
                       <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.5px' }}>Discussion / Notes</div>
                       <textarea
@@ -927,8 +994,10 @@ export default function CRMOpportunityDetail() {
                   {/* Footer */}
                   <div style={{ padding:'0 20px 18px', display:'flex', gap:8, justifyContent:'flex-end' }}>
                     <button onClick={() => setShowActModal(false)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
-                    <button onClick={() => postActivity().then(() => setShowActModal(false))} disabled={postingAct || !(actType==='Note' ? actNotes.trim() : textVal.trim())}
-                      style={{ padding:'9px 18px', border:'none', borderRadius:8, background: sel.clr, color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', opacity: !(actType==='Note' ? actNotes.trim() : textVal.trim()) ? 0.4 : 1 }}>
+                    <button onClick={() => postActivity().then(() => setShowActModal(false))}
+                      disabled={postingAct || (actType==='Note' ? !actNotes.trim() : actType==='Visit' ? (!actPurpose.trim() && !actOutcome.trim()) : !textVal.trim())}
+                      style={{ padding:'9px 18px', border:'none', borderRadius:8, background: sel.clr, color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)',
+                        opacity: (actType==='Note' ? !actNotes.trim() : actType==='Visit' ? (!actPurpose.trim() && !actOutcome.trim()) : !textVal.trim()) ? 0.4 : 1 }}>
                       {postingAct ? 'Logging…' : actType === 'Note' ? 'Add Note' : 'Log ' + actType}
                     </button>
                   </div>
@@ -1534,7 +1603,7 @@ export default function CRMOpportunityDetail() {
               const logActs = activities.filter(a => ['Stage Change','Quotation','Won','Lost','Created'].includes(a.activity_type))
               // Fallback synthetic entry only if no real 'Created' activity exists (for old opportunities)
               const hasCreated = logActs.some(a => a.activity_type === 'Created')
-              const fallback = !hasCreated && opp ? [{ id:'created', profiles:{ name: opp.profiles?.name }, notes:'Opportunity created', activity_type:'Created', created_at: opp.created_at }] : []
+              const fallback = !hasCreated && opp ? [{ id:'created', profiles:{ name: null }, notes:'Opportunity created', activity_type:'Created', created_at: opp.created_at }] : []
               const all = [...logActs, ...fallback].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
               const DOT_CLR = { 'Stage Change':'#d97706', 'Quotation':'#16a34a', 'Won':'#15803d', 'Lost':'#dc2626', 'Created':'#1a4dab' }
               return (
@@ -1545,7 +1614,7 @@ export default function CRMOpportunityDetail() {
                       <div style={{ width:8, height:8, borderRadius:'50%', background: DOT_CLR[a.activity_type] || '#94a3b8', flexShrink:0, marginTop:5 }} />
                       <div>
                         <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-800)' }}><strong>{a.activity_type}</strong>{a.notes ? ': ' + a.notes : ''}</div>
-                        <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{a.profiles?.name} · {fmtTs(a.created_at)}</div>
+                        <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{a.profiles?.name || '—'} · {fmtTs(a.created_at)}</div>
                       </div>
                     </div>
                   ))}

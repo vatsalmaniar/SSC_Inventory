@@ -1048,7 +1048,7 @@ export default function FCOrderDetail() {
                 </div>
                 {isTempDC && <div style={{fontSize:11,color:'#92400e',fontWeight:600}}>Temp — will be confirmed at Goods Issue</div>}
                 {!isTempDC && activeDC && <div style={{fontSize:11,color:'#166534',fontWeight:600}}>Confirmed DC</div>}
-                {!isTempDC && activeDC && (['delivery_ready','eway_generated','dispatched_fc'].includes(order.status) || (isSample && order.status === 'invoice_generated')) && (
+                {!isTempDC && activeDC && (['delivery_ready','eway_generated','dispatched_fc'].includes(batchStatus) || (isSample && batchStatus === 'invoice_generated')) && (
                   <button
                     onClick={() => printDCChallan(order, activeBatch, activeDC, isSample)}
                     style={{marginTop:10,display:'inline-flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:8,border:'1px solid #1a4dab',background:'#e8f2fc',color:'#1a4dab',fontFamily:'var(--font)',fontSize:12,fontWeight:600,cursor:'pointer'}}>

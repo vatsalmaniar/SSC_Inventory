@@ -25,8 +25,10 @@ function emptyForm() {
   return {
     visit_date: new Date().toISOString().slice(0,10),
     visit_type: 'SOLO',
-    selected_customer_id: '',   // customers.id — used for opp lookup only, not saved
-    company_freetext: '',        // stored in DB as the display name
+    with_ssc: false,
+    with_principal: false,
+    selected_customer_id: '',
+    company_freetext: '',
     opportunity_id: '',
     purpose: '',
     outcome: '',
@@ -115,10 +117,14 @@ export default function CRMFieldVisits() {
     if (form.visit_type === 'JOINT_PRINCIPAL' && !form.principal_id) { alert('Principal is required'); return }
     setSaving(true)
 
+    const visitType = form.with_ssc && form.with_principal ? 'JOINT_SSC_TEAM'
+      : form.with_ssc ? 'JOINT_SSC_TEAM'
+      : form.with_principal ? 'JOINT_PRINCIPAL'
+      : 'SOLO'
     const payload = {
       rep_id: user.id,
       visit_date: form.visit_date,
-      visit_type: form.visit_type,
+      visit_type: visitType,
       company_freetext: form.company_freetext.trim(),
       company_id: null,
       opportunity_id: form.opportunity_id || null,
@@ -126,9 +132,9 @@ export default function CRMFieldVisits() {
       outcome: form.outcome.trim() || null,
       next_action: form.next_action.trim() || null,
       next_action_date: form.next_action_date || null,
-      principal_id: form.visit_type === 'JOINT_PRINCIPAL' ? (form.principal_id || null) : null,
-      principal_rep_name: form.visit_type === 'JOINT_PRINCIPAL' ? (form.principal_rep_name.trim() || null) : null,
-      ssc_team_members: form.visit_type === 'JOINT_SSC_TEAM' ? form.ssc_team_members : [],
+      principal_id: form.with_principal ? (form.principal_id || null) : null,
+      principal_rep_name: form.with_principal ? (form.principal_rep_name.trim() || null) : null,
+      ssc_team_members: form.with_ssc ? form.ssc_team_members : [],
     }
 
     const { error } = await sb.from('crm_field_visits').insert(payload)
@@ -171,9 +177,9 @@ export default function CRMFieldVisits() {
   const isManager = user.role === 'admin'
   const q = search.trim().toLowerCase()
   const filtered = visits
-    .filter(v => isManager || v.rep_id === user.id)
+    .filter(v => isManager || v.rep_id === user.id || (v.ssc_team_members || []).includes(user.id))
     .filter(v => !q || (v.company_freetext||'').toLowerCase().includes(q) || (v.purpose||'').toLowerCase().includes(q))
-    .filter(v => !filterRep || v.rep_id === filterRep)
+    .filter(v => !filterRep || v.rep_id === filterRep || (v.ssc_team_members || []).includes(filterRep))
 
   const toggleTeamMember = (repId) => {
     setForm(p => ({
@@ -382,21 +388,41 @@ export default function CRMFieldVisits() {
                 </div>
               )}
 
-              {/* Date + Visit Type */}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                <div>
-                  <label style={LBL}>Visit Date <span style={{color:'#dc2626'}}>*</span></label>
-                  <input type="date" value={form.visit_date} onChange={e => setForm(p=>({...p,visit_date:e.target.value}))} style={INP} />
-                </div>
-                <div>
-                  <label style={LBL}>Visit Type</label>
-                  <select value={form.visit_type} onChange={e => setForm(p=>({...p,visit_type:e.target.value,ssc_team_members:[]}))} style={INP}>
-                    {VISIT_TYPES.map(t => <option key={t} value={t}>{VISIT_TYPE_LABELS[t]}</option>)}
-                  </select>
+              {/* Date */}
+              <div>
+                <label style={LBL}>Visit Date <span style={{color:'#dc2626'}}>*</span></label>
+                <input type="date" value={form.visit_date} onChange={e => setForm(p=>({...p,visit_date:e.target.value}))} style={INP} />
+              </div>
+
+              {/* Visit Type checkboxes */}
+              <div>
+                <label style={LBL}>Visit Type</label>
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:2 }}>
+                  {[
+                    { key:'with_ssc', label:'With SSC' },
+                    { key:'with_principal', label:'With Principal' },
+                  ].map(opt => (
+                    <button key={opt.key} type="button"
+                      onClick={() => setForm(p => ({
+                        ...p, [opt.key]: !p[opt.key],
+                        ...(opt.key === 'with_ssc' && p.with_ssc ? { ssc_team_members:[] } : {}),
+                        ...(opt.key === 'with_principal' && p.with_principal ? { principal_id:'', principal_rep_name:'' } : {}),
+                      }))}
+                      style={{ fontSize:12, fontWeight:600, padding:'5px 14px', borderRadius:6, border:'1px solid', cursor:'pointer', fontFamily:'var(--font)',
+                        background: form[opt.key] ? '#e8f2fc' : 'white',
+                        color: form[opt.key] ? '#1a4dab' : '#475569',
+                        borderColor: form[opt.key] ? '#c2d9f5' : '#e2e8f0',
+                      }}>
+                      {form[opt.key] ? '✓ ' : ''}{opt.label}
+                    </button>
+                  ))}
+                  {!form.with_ssc && !form.with_principal && (
+                    <span style={{ fontSize:12, color:'#94a3b8', alignSelf:'center', marginLeft:4 }}>Alone</span>
+                  )}
                 </div>
               </div>
 
-              {form.visit_type === 'JOINT_PRINCIPAL' && (
+              {form.with_principal && (
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                   <div>
                     <label style={LBL}>Principal <span style={{color:'#dc2626'}}>*</span></label>
@@ -412,7 +438,7 @@ export default function CRMFieldVisits() {
                 </div>
               )}
 
-              {form.visit_type === 'JOINT_SSC_TEAM' && (
+              {form.with_ssc && (
                 <div>
                   <label style={LBL}>SSC Team Members</label>
                   <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:2}}>

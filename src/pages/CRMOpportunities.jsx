@@ -62,7 +62,7 @@ export default function CRMOpportunities() {
     if (!['sales','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
 
     const [oppsRes, repsRes, principalsRes] = await Promise.all([
-      sb.from('crm_opportunities').select('*, crm_companies(company_name), crm_principals(name), crm_contacts(name), profiles(name)').order('created_at', { ascending: false }),
+      sb.from('crm_opportunities').select('*, crm_companies(company_name), crm_principals(name), crm_contacts(name), profiles(name), customers(customer_name)').order('created_at', { ascending: false }),
       sb.from('profiles').select('id,name').in('role',['sales','admin']),
       sb.from('crm_principals').select('*').order('name'),
     ])
@@ -86,7 +86,7 @@ export default function CRMOpportunities() {
   const q = search.trim().toLowerCase()
   const filtered = opps
     .filter(o => isManager || o.assigned_rep_id === user.id)
-    .filter(o => !q || (o.crm_companies?.company_name||'').toLowerCase().includes(q) || (o.product_notes||'').toLowerCase().includes(q) || (o.crm_principals?.name||'').toLowerCase().includes(q))
+    .filter(o => !q || (o.crm_companies?.company_name||o.customers?.customer_name||o.freetext_company||'').toLowerCase().includes(q) || (o.product_notes||'').toLowerCase().includes(q) || (o.crm_principals?.name||'').toLowerCase().includes(q))
     .filter(o => !filterStage || o.stage === filterStage)
     .filter(o => !filterRep || o.assigned_rep_id === filterRep)
     .filter(o => !filterPrincipal || o.principal_id === filterPrincipal)
@@ -233,7 +233,7 @@ function ListView({ opps, navigate }) {
                     {isOverdue(o) && <span className="crm-overdue-badge" style={{marginTop:3,display:'inline-block'}}>Overdue</span>}
                   </td>
                   <td>
-                    <div style={{fontWeight:500,fontSize:13}}>{o.crm_companies?.company_name || o.freetext_company || '—'}</div>
+                    <div style={{fontWeight:500,fontSize:13}}>{o.crm_companies?.company_name || o.customers?.customer_name || o.freetext_company || '—'}</div>
                     {o.crm_principals?.name && <div className="crm-table-sub">{o.crm_principals.name}</div>}
                   </td>
                   <td style={{fontSize:13}}>{o.profiles?.name || '—'}</td>
@@ -254,7 +254,7 @@ function ListView({ opps, navigate }) {
             <div className="crm-list-card-top">
               <div>
                 <div className="crm-list-card-name">{o.opportunity_name || o.crm_companies?.company_name || '—'}</div>
-                <div className="crm-list-card-sub">{o.crm_companies?.company_name || ''}{o.crm_principals?.name ? ' · ' + o.crm_principals.name : ''}</div>
+                <div className="crm-list-card-sub">{o.crm_companies?.company_name || o.customers?.customer_name || o.freetext_company || ''}{o.crm_principals?.name ? ' · ' + o.crm_principals.name : ''}</div>
               </div>
               <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
                 <span style={{ fontSize:9, fontWeight:700, borderRadius:4, padding:'2px 6px', background: type==='Lead'?'#fef3c7':'#eff6ff', color: type==='Lead'?'#b45309':'#1d4ed8' }}>{type}</span>
