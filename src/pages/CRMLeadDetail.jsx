@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { fmtTs } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -15,12 +16,6 @@ const VISIT_TYPES = ['Alone','With SSC','With Principal']
 
 function scenarioLabel(s) {
   return { NEW_CUST_NEW_PROD:'New Cust · New Prod', OLD_CUST_NEW_PROD:'Old Cust · New Prod', NEW_CUST_OLD_PROD:'New Cust · Old Prod', DORMANT_REVIVAL:'Dormant Revival' }[s] || s
-}
-function fmtTs(d) {
-  if (!d) return ''
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ', ' + dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0')
 }
 function fmtINR(v) {
   if (!v && v !== 0) return '—'
@@ -226,7 +221,7 @@ export default function CRMLeadDetail() {
   const actText      = (actType === 'Call' || actType === 'Visit') ? actDiscussion : actNotes
 
   if (loading) return <Layout pageTitle="Lead" pageKey="crm"><CRMSubNav active="leads"/><div className="crm-loading"><div className="loading-spin"/>Loading...</div></Layout>
-  if (!lead) return null
+  if (!lead) return <Layout pageTitle="Lead" pageKey="crm"><CRMSubNav active="leads"/><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Lead not found</div><div style={{fontSize:13}}>This lead may have been deleted or you don't have access.</div></div></div></Layout>
 
   return (
     <Layout pageTitle="CRM — Lead" pageKey="crm">

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { fmtTs } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
 
@@ -23,12 +24,6 @@ const INDUSTRIES = [
   'Power','Printing','Real Estate','Textile','Water Treatment','Other'
 ]
 
-function fmtTs(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ', ' + dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0')
-}
 
 function stageLabel(key) { return STAGES.find(s => s.key === key)?.label || key }
 
@@ -200,7 +195,7 @@ export default function LeadDetail() {
       <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div>
     </Layout>
   )
-  if (!lead) return null
+  if (!lead) return <Layout pageTitle="Lead" pageKey="leads"><div className="od-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Lead not found</div><div style={{fontSize:13}}>This lead may have been deleted or you don't have access.</div></div></div></Layout>
 
   return (
     <Layout pageTitle="Lead Detail" pageKey="crm">

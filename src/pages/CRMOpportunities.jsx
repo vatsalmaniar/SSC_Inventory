@@ -29,11 +29,6 @@ function fmtINR(v) {
   if (!v) return null
   return '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })
 }
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  return dt.getDate().toString().padStart(2,'0') + '-' + (dt.getMonth()+1).toString().padStart(2,'0') + '-' + dt.getFullYear()
-}
 function isOverdue(opp) {
   if (opp.stage !== 'FOLLOW_UP') return false
   const lastAct = opp._lastActivity

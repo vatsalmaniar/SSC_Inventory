@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { MO, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
@@ -8,12 +9,6 @@ function fmtCr(val) {
   if (val >= 1e7) return '₹' + (val / 1e7).toFixed(2) + ' Cr'
   if (val >= 1e5) return '₹' + (val / 1e5).toFixed(2) + ' L'
   return '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 0 })
-}
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()]
 }
 function statusLabel(s) {
   return {
@@ -54,7 +49,7 @@ function buildMonthlyData(orders) {
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     months.push({
-      label: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()],
+      label: MO[d.getMonth()],
       year: d.getFullYear(), month: d.getMonth(), count: 0, value: 0,
     })
   }
@@ -174,7 +169,7 @@ export default function Orders() {
     setLoading(true)
     let query = sb.from('orders')
       .select('id,order_number,customer_name,status,order_type,created_at,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
-      .gte('created_at', '2026-03-31').eq('is_test', testMode)
+      .gte('created_at', FY_START).eq('is_test', testMode)
       .order('created_at', { ascending: false })
     if (salesUserId) query = query.eq('created_by', salesUserId)
     const { data } = await query

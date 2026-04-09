@@ -1,17 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
 const BILLING_MODULE_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ' ' + dt.getFullYear()
-}
 
 function statusLabel(s) {
   return {
@@ -62,7 +57,7 @@ export default function SalesModule() {
     const { data } = await sb.from('orders')
       .select('id,order_number,customer_name,status,order_type,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc),order_dispatches(id,batch_no,invoice_number,eway_bill_number,dispatched_items)')
       .in('status', BILLING_MODULE_STATUSES)
-      .gte('created_at', '2026-03-31')
+      .gte('created_at', FY_START)
       .eq('is_test', testMode)
       .neq('order_type', 'SAMPLE')
       .order('created_at', { ascending: false })

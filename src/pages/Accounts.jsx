@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { sb } from '../lib/supabase'
+import { fmtDateTime } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/accounts.css'
 
@@ -13,12 +14,6 @@ function extractLocation(filename) {
   return LOCATION_MAP[part] || part
 }
 
-function fmt(d) {
-  if (!d) return '—'
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  const h = d.getHours(), m = d.getMinutes()
-  return d.getDate()+' '+mo[d.getMonth()]+' '+d.getFullYear()+' '+(h<10?'0':'')+h+':'+(m<10?'0':'')+m
-}
 
 export default function Accounts() {
   const navigate = useNavigate()
@@ -156,7 +151,7 @@ export default function Accounts() {
                     <div className="acc-status-dot" style={{ background: isOld?'#ef4444':'#22c55e' }} />
                     <div>
                       <div className="acc-status-name">{loc} Warehouse</div>
-                      <div className="acc-status-meta">Last upload: {fmt(updatedAt)} · {count} products</div>
+                      <div className="acc-status-meta">Last upload: {fmtDateTime(updatedAt)} · {count} products</div>
                     </div>
                   </div>
                   <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>

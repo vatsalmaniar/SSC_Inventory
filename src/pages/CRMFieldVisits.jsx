@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -20,11 +21,6 @@ const STAGE_LABELS = {
   FINAL_NEGOTIATION:'Final Negotiation', WON:'Won', LOST:'Lost', ON_HOLD:'On Hold',
 }
 
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  return dt.getDate().toString().padStart(2,'0') + '-' + (dt.getMonth()+1).toString().padStart(2,'0') + '-' + dt.getFullYear()
-}
 
 function emptyForm() {
   return {
@@ -257,7 +253,7 @@ export default function CRMFieldVisits() {
                       return (
                         <tr key={v.id} style={{cursor:'pointer'}}
                           onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}>
-                          <td style={{whiteSpace:'nowrap',fontWeight:600}}>{fmt(v.visit_date)}</td>
+                          <td style={{whiteSpace:'nowrap',fontWeight:600}}>{fmtNum(v.visit_date)}</td>
                           <td><div className="crm-table-name">{v.company_freetext || '—'}</div></td>
                           <td>
                             {oppName
@@ -273,7 +269,7 @@ export default function CRMFieldVisits() {
                           </td>
                           <td style={{maxWidth:180}}>{v.purpose || '—'}</td>
                           <td style={{maxWidth:180}}>{v.outcome || '—'}</td>
-                          <td>{v.next_action ? <div><div style={{fontSize:12}}>{v.next_action}</div>{v.next_action_date && <div style={{fontSize:11,color:'var(--gray-400)'}}>{fmt(v.next_action_date)}</div>}</div> : '—'}</td>
+                          <td>{v.next_action ? <div><div style={{fontSize:12}}>{v.next_action}</div>{v.next_action_date && <div style={{fontSize:11,color:'var(--gray-400)'}}>{fmtNum(v.next_action_date)}</div>}</div> : '—'}</td>
                           <td style={{whiteSpace:'nowrap'}}><OwnerChip name={v.profiles?.name} /></td>
                         </tr>
                       )
@@ -294,11 +290,11 @@ export default function CRMFieldVisits() {
                           <div className="crm-list-card-sub">{VISIT_TYPE_LABELS[v.visit_type]}{v.crm_principals?.name?' · '+v.crm_principals.name:''}</div>
                           {oppName && <div style={{fontSize:11,color:'#1a4dab',marginTop:2}}>{oppName}</div>}
                         </div>
-                        <span style={{fontSize:11,color:'var(--gray-500)',whiteSpace:'nowrap'}}>{fmt(v.visit_date)}</span>
+                        <span style={{fontSize:11,color:'var(--gray-500)',whiteSpace:'nowrap'}}>{fmtNum(v.visit_date)}</span>
                       </div>
                       {v.purpose && <div style={{fontSize:12,color:'var(--gray-600)',margin:'4px 0'}}>{v.purpose}</div>}
                       {v.outcome && <div style={{fontSize:12,color:'var(--gray-600)'}}>{v.outcome}</div>}
-                      {v.next_action && <div style={{fontSize:12,color:'#1A3A8F',marginTop:4}}>Next: {v.next_action}{v.next_action_date?' · '+fmt(v.next_action_date):''}</div>}
+                      {v.next_action && <div style={{fontSize:12,color:'#1A3A8F',marginTop:4}}>Next: {v.next_action}{v.next_action_date?' · '+fmtNum(v.next_action_date):''}</div>}
                       <div style={{marginTop:6}}><OwnerChip name={v.profiles?.name} /></div>
                     </div>
                   )
@@ -320,7 +316,7 @@ export default function CRMFieldVisits() {
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:4, flexWrap:'wrap' }}>
                   <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'#475569' }}>
                     <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:13,height:13}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                    {(() => { const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; const d=new Date(viewVisit.visit_date); return `${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}` })()}
+                    {fmtNum(viewVisit.visit_date)}
                   </span>
                   {viewVisit.created_at && (
                     <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'#475569' }}>
@@ -363,7 +359,7 @@ export default function CRMFieldVisits() {
               {viewVisit.next_action && (
                 <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:3 }}>Next Action</div>
                 <div style={{ fontSize:13 }}>{viewVisit.next_action}</div>
-                {viewVisit.next_action_date && <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{fmt(viewVisit.next_action_date)}</div>}</div>
+                {viewVisit.next_action_date && <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{fmtNum(viewVisit.next_action_date)}</div>}</div>
               )}
               <div style={{ display:'flex', gap:24, paddingTop:4, borderTop:'1px solid #f1f5f9' }}>
                 <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:6 }}>Rep</div>

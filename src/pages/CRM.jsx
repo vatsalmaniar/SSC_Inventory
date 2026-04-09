@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { fmtShort } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
 
@@ -17,12 +18,6 @@ const STAGES = [
 
 function stageLabel(key) { return STAGES.find(s => s.key === key)?.label || key }
 
-function fmtDate(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()]
-}
 
 export default function CRM() {
   const navigate = useNavigate()
@@ -186,7 +181,7 @@ export default function CRM() {
                         <div className="crm-card-contact">{lead.contact_person || '—'}{lead.designation ? ' · ' + lead.designation : ''}</div>
                         <div className="crm-card-footer">
                           <span className="crm-card-source">{lead.lead_source || '—'}</span>
-                          <span className="crm-card-date">{fmtDate(lead.updated_at)}</span>
+                          <span className="crm-card-date">{fmtShort(lead.updated_at)}</span>
                         </div>
                         {lead.owner_name && <div className="crm-card-owner" style={{marginTop:6}}>👤 {lead.owner_name}</div>}
                       </div>
@@ -235,7 +230,7 @@ export default function CRM() {
                         <td>{lead.customer_type || '—'}</td>
                         <td><span className={'crm-stage-pill ' + lead.stage}>{stageLabel(lead.stage)}</span></td>
                         <td>{lead.owner_name || '—'}</td>
-                        <td>{fmtDate(lead.updated_at)}</td>
+                        <td>{fmtShort(lead.updated_at)}</td>
                       </tr>
                     ))}
                   </tbody>

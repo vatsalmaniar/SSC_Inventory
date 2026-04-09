@@ -2,23 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { fmt, fmtTs } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ' ' + dt.getFullYear()
-}
-
-function fmtTs(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ', ' + dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0')
-}
 
 const ORDER_MODULE_STAGES = [
   { key: 'pending',          label: 'Order Created'   },
@@ -285,7 +273,7 @@ export default function OrderDetail() {
     const { error } = await sb.from('order_comments').insert({
       order_id: id, author_name: user.name, message, tagged_users: [], is_activity: true
     })
-    if (error) console.warn('logActivity failed:', error.message)
+    // silently ignore activity log failures
   }
 
   async function notifyUsers(roles, message) {
@@ -488,7 +476,7 @@ if (match) {
       <div className="od-page"><div className="loading-state" style={{ paddingTop: 80 }}><div className="loading-spin" />Loading...</div></div>
     </Layout>
   )
-  if (!order) return null
+  if (!order) return <Layout pageTitle="Order Detail" pageKey="orders"><div className="od-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Order not found</div><div style={{fontSize:13}}>This order may have been deleted or you don't have access.</div></div></div></Layout>
 
   const subtotal       = (order.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
   const grandTotal     = subtotal + (order.freight || 0)

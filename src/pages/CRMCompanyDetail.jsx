@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -9,11 +10,6 @@ import '../styles/crm.css'
 const INDUSTRIES = ['Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal','Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG','Energy','Automobile','Power Electronics','Datacenters','Road Construction','Cement','Tyre','Petroleum','Chemical']
 const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
 
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  return dt.getDate().toString().padStart(2,'0') + '-' + (dt.getMonth()+1).toString().padStart(2,'0') + '-' + dt.getFullYear()
-}
 
 function scenarioLabel(s) {
   return { NEW_CUST_NEW_PROD:'New Cust · New Prod', OLD_CUST_NEW_PROD:'Old Cust · New Prod', NEW_CUST_OLD_PROD:'New Cust · Old Prod', DORMANT_REVIVAL:'Dormant Revival' }[s] || s
@@ -96,7 +92,7 @@ export default function CRMCompanyDetail() {
   }
 
   if (loading) return <Layout pageTitle="CRM — Company" pageKey="crm"><CRMSubNav active="companies" /><div className="crm-loading"><div className="loading-spin"/>Loading...</div></Layout>
-  if (!company) return null
+  if (!company) return <Layout pageTitle="CRM — Company" pageKey="crm"><CRMSubNav active="companies"/><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Company not found</div><div style={{fontSize:13}}>This company may have been deleted or you don't have access.</div></div></div></Layout>
 
   const isDormant = company.status === 'Dormant'
   const hasRevival = opps.some(o => o.scenario_type === 'DORMANT_REVIVAL' && !['WON','LOST'].includes(o.stage))
@@ -193,7 +189,7 @@ export default function CRMCompanyDetail() {
                       <div className="crm-detail-field"><label>Customer Type</label><div className="val">{company.customer_type||'—'}</div></div>
                       <div className="crm-detail-field"><label>Industry</label><div className="val">{company.industry||'—'}</div></div>
                       <div className="crm-detail-field"><label>Assigned Rep</label><div className="val">{company.profiles?.name||'—'}</div></div>
-                      <div className="crm-detail-field"><label>Last Order Date</label><div className="val">{fmt(company.last_order_date)}</div></div>
+                      <div className="crm-detail-field"><label>Last Order Date</label><div className="val">{fmtNum(company.last_order_date)}</div></div>
                       <div className="crm-detail-field" style={{gridColumn:'span 2'}}><label>Address</label><div className="val">{company.address||'—'}</div></div>
                     </div>
                   )}
@@ -214,7 +210,7 @@ export default function CRMCompanyDetail() {
                       style={{padding:'12px 18px',borderBottom:'1px solid var(--gray-50)',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
                       <div>
                         <div style={{fontWeight:600,fontSize:13}}>{o.product_notes || '—'}</div>
-                        <div style={{fontSize:11,color:'var(--gray-500)',marginTop:2}}>{o.crm_principals?.name || ''}{o.expected_close_date ? ' · Close: ' + fmt(o.expected_close_date) : ''}</div>
+                        <div style={{fontSize:11,color:'var(--gray-500)',marginTop:2}}>{o.crm_principals?.name || ''}{o.expected_close_date ? ' · Close: ' + fmtNum(o.expected_close_date) : ''}</div>
                       </div>
                       <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
                         {o.estimated_value_inr && <span style={{fontSize:12,fontWeight:700}}>₹{o.estimated_value_inr.toLocaleString('en-IN')}</span>}

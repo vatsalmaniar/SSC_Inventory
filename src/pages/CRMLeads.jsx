@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -12,11 +13,6 @@ const STATUSES = ['New','Contacted','Converted','Not a Fit']
 
 function scenarioLabel(s) {
   return { NEW_CUST_NEW_PROD:'New Cust · New Prod', OLD_CUST_NEW_PROD:'Old Cust · New Prod', NEW_CUST_OLD_PROD:'New Cust · Old Prod', DORMANT_REVIVAL:'Dormant Revival' }[s] || s
-}
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  return dt.getDate().toString().padStart(2,'0') + '-' + (dt.getMonth()+1).toString().padStart(2,'0') + '-' + dt.getFullYear()
 }
 
 export default function CRMLeads() {
@@ -137,7 +133,7 @@ export default function CRMLeads() {
                         <td>{l.crm_principals?.name || '—'}</td>
                         <td>{l.scenario_type ? <span className={'crm-scenario-pill crm-scenario-' + l.scenario_type}>{scenarioLabel(l.scenario_type)}</span> : '—'}</td>
                         <td>{l.profiles?.name || '—'}</td>
-                        <td style={{whiteSpace:'nowrap'}}>{fmt(l.created_at)}</td>
+                        <td style={{whiteSpace:'nowrap'}}>{fmtNum(l.created_at)}</td>
                         <td>
                           <span style={{fontSize:11,fontWeight:700,borderRadius:4,padding:'2px 7px',
                             background: l.status==='New'?'#e8f2fc': l.status==='Contacted'?'#fff7ed': l.status==='Converted'?'#f0fdf4':'#fef2f2',
@@ -165,7 +161,7 @@ export default function CRMLeads() {
                     </div>
                     <div className="crm-list-card-bottom">
                       {l.scenario_type && <span className={'crm-scenario-pill crm-scenario-' + l.scenario_type}>{scenarioLabel(l.scenario_type)}</span>}
-                      <span style={{fontSize:11,color:'var(--gray-400)'}}>{fmt(l.created_at)}</span>
+                      <span style={{fontSize:11,color:'var(--gray-400)'}}>{fmtNum(l.created_at)}</span>
                     </div>
                   </div>
                 ))}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
@@ -45,7 +46,7 @@ export default function BillingDashboard() {
     const { data } = await sb.from('orders')
       .select('id,order_number,customer_name,status,credit_override,order_type,created_at,order_dispatches(id,batch_no,invoice_number,pi_number,pi_required,credit_override)')
       .in('status', BILLING_STATUSES)
-      .gte('created_at', '2026-03-31').eq('is_test', false)
+      .gte('created_at', FY_START).eq('is_test', false)
       .neq('order_type', 'SAMPLE')
       .order('updated_at', { ascending: false })
     setOrders(data || [])

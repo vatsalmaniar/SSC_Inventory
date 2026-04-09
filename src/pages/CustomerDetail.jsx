@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -21,12 +22,6 @@ const INDUSTRIES = [
 
 const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
 
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ' ' + dt.getFullYear()
-}
 function fmtINR(v) {
   if (!v && v !== 0) return '—'
   return '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })
@@ -180,7 +175,7 @@ export default function CustomerDetail() {
       </div></div>
     </Layout>
   )
-  if (!customer) return null
+  if (!customer) return <Layout pageTitle="Customer" pageKey="customer360"><div className="od-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Customer not found</div><div style={{fontSize:13}}>This customer may have been deleted or you don't have access.</div></div></div></Layout>
 
   const activeOrders    = orders.filter(o => !['cancelled','delivered','dispatched_fc'].includes(o.status))
   const completedOrders = orders.filter(o => ['delivered','dispatched_fc'].includes(o.status))

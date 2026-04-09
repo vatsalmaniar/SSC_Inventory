@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
@@ -16,12 +17,6 @@ const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
 function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7,whiteSpace:'nowrap'}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
 
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ' ' + dt.getFullYear()
-}
 
 const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','pi_requested','pi_generated','pi_payment_pending','goods_issued','pending_billing','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_pending','eway_generated']
 
@@ -89,7 +84,7 @@ export default function OpsOrders() {
     setLoading(true)
     const { data } = await sb.from('orders')
       .select('id,order_number,customer_name,account_owner,engineer_name,order_date,status,freight,order_items(id,qty,dispatched_qty,total_price)')
-      .gte('created_at', '2026-03-31').eq('is_test', false)
+      .gte('created_at', FY_START).eq('is_test', false)
       .order('created_at', { ascending: false })
     setOrders(data || [])
     setLoading(false)

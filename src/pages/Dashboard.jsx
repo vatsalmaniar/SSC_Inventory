@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { FY_START } from '../lib/fmt'
 import '../styles/dashboard.css'
 
 const APPS = [
@@ -71,7 +72,7 @@ export default function Dashboard() {
     }
     const [{ data: profile }, { data: orders }] = await Promise.all([
       sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
-      sb.from('orders').select('status,freight,order_items(total_price)').gte('created_at', '2026-03-31').eq('is_test', false),
+      sb.from('orders').select('status,freight,order_items(total_price)').gte('created_at', FY_START).eq('is_test', false),
     ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'

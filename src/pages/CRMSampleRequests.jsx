@@ -2,17 +2,13 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 
 const SR_STATUSES = ['Pending','Dispatched','Delivered']
 
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  return dt.getDate().toString().padStart(2,'0') + '-' + (dt.getMonth()+1).toString().padStart(2,'0') + '-' + dt.getFullYear()
-}
 function statusStyle(s) {
   if (s === 'Pending')    return { background:'#fffbeb', color:'#b45309' }
   if (s === 'Dispatched') return { background:'#e8f2fc', color:'#1a4dab' }
@@ -128,9 +124,9 @@ export default function CRMSampleRequests() {
                           <td>{s.crm_companies?.company_name || '—'}</td>
                           <td>{s.crm_principals?.name || '—'}</td>
                           <td>{s.items?.length || 0} item{(s.items?.length||0) !== 1 ? 's' : ''}</td>
-                          <td style={{whiteSpace:'nowrap'}}>{fmt(s.requested_date)}</td>
-                          <td style={{whiteSpace:'nowrap'}}>{fmt(s.dispatched_date)}</td>
-                          <td style={{whiteSpace:'nowrap'}}>{fmt(s.delivered_date)}</td>
+                          <td style={{whiteSpace:'nowrap'}}>{fmtNum(s.requested_date)}</td>
+                          <td style={{whiteSpace:'nowrap'}}>{fmtNum(s.dispatched_date)}</td>
+                          <td style={{whiteSpace:'nowrap'}}>{fmtNum(s.delivered_date)}</td>
                           <td><span style={{...statusStyle(s.status), fontSize:11, fontWeight:700, borderRadius:4, padding:'2px 7px'}}>{s.status}</span></td>
                           <td>
                             <div style={{display:'flex',gap:6}} onClick={e => e.stopPropagation()}>
@@ -181,7 +177,7 @@ export default function CRMSampleRequests() {
                       <span style={{...statusStyle(s.status), fontSize:11, fontWeight:700, borderRadius:4, padding:'2px 7px', whiteSpace:'nowrap'}}>{s.status}</span>
                     </div>
                     <div className="crm-list-card-bottom">
-                      <span style={{fontSize:11,color:'var(--gray-400)'}}>{s.items?.length || 0} items · {fmt(s.requested_date)}</span>
+                      <span style={{fontSize:11,color:'var(--gray-400)'}}>{s.items?.length || 0} items · {fmtNum(s.requested_date)}</span>
                       <div style={{display:'flex',gap:6}} onClick={e => e.stopPropagation()}>
                         {s.status === 'Pending' && <button className="crm-btn crm-btn-sm" onClick={() => updateStatus(s.id, 'Dispatched')}>Dispatch</button>}
                         {s.status === 'Dispatched' && <button className="crm-btn crm-btn-sm crm-btn-green" onClick={() => updateStatus(s.id, 'Delivered')}>Delivered</button>}

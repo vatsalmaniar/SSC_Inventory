@@ -1,17 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
 const BILLING_BATCH_STATUSES = ['goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ' ' + dt.getFullYear()
-}
 
 function statusLabel(s) {
   return {
@@ -59,7 +54,7 @@ export default function BillingList() {
       .in('status', BILLING_BATCH_STATUSES)
       .eq('orders.is_test', false)
       .neq('orders.order_type', 'SAMPLE')
-      .gte('created_at', '2026-03-31')
+      .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
     setBatches(data || [])
     setLoading(false)

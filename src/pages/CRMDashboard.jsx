@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { fmtShort, MO } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -19,12 +20,6 @@ function fmtCr(val) {
   if (val >= 1e5) return '₹' + (val / 1e5).toFixed(2) + ' L'
   return '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 0 })
 }
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()]
-}
 function fmtINR(v) {
   if (!v) return '₹0'
   return '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })
@@ -36,7 +31,7 @@ function buildMonthlyOpps(opps) {
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     months.push({
-      label: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()],
+      label: MO[d.getMonth()],
       year: d.getFullYear(), month: d.getMonth(), count: 0, value: 0,
     })
   }
@@ -491,7 +486,7 @@ export default function CRMDashboard() {
                             <div className="dash-row-cust">{taskCompanyName(t)}</div>
                           </div>
                           <div style={{ textAlign:'right', flexShrink:0, fontSize:11, color:'#94a3b8' }}>
-                            {t.due_date ? fmt(t.due_date) : 'No date'}
+                            {t.due_date ? fmtShort(t.due_date) : 'No date'}
                           </div>
                         </div>
                       ))

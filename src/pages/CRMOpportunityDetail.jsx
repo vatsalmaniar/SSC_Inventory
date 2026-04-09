@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { fmt, fmtNum, fmtTs } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import NewCustomerModal from './NewCustomerModal'
@@ -47,17 +48,6 @@ const VISIT_TYPES = ['Alone','With SSC','With Principal']
 
 function scenarioLabel(s) {
   return { NEW_CUST_NEW_PROD:'New Cust · New Prod', OLD_CUST_NEW_PROD:'Old Cust · New Prod', NEW_CUST_OLD_PROD:'New Cust · Old Prod', DORMANT_REVIVAL:'Dormant Revival' }[s] || s
-}
-function fmtTs(d) {
-  if (!d) return ''
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ', ' + dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0')
-}
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  return dt.getDate().toString().padStart(2,'0') + '-' + (dt.getMonth()+1).toString().padStart(2,'0') + '-' + dt.getFullYear()
 }
 function fmtINR(v) {
   if (!v && v !== 0) return '—'
@@ -555,7 +545,7 @@ export default function CRMOpportunityDetail() {
         principal_rep_name: actWithPrincipal ? (actPartnerName.trim() || null) : null,
         ssc_team_members: actWithSSC ? actSSCMembers : [],
       })
-      if (vErr) console.warn('Field visit save error:', vErr.message)
+      // silently ignore field visit save errors
     }
     setActDiscussion(''); setActNotes(''); setActVisitType('Alone'); setActWithSSC(false); setActWithPrincipal(false); setActSSCMembers([]); setActPartnerName(''); setActMetContact(''); setActDate(''); setActTime(''); setActPurpose(''); setActOutcome(''); setActNextAction(''); setActNextActionDate(''); setNoteMentionQuery(null)
     const { data: c } = await sb.from('crm_activities').select('*, profiles(name)').eq('opportunity_id', id).order('created_at', { ascending: false })
@@ -616,9 +606,7 @@ export default function CRMOpportunityDetail() {
     const custName = opp?.customers?.customer_name || opp?.crm_companies?.company_name || opp?.freetext_company || '—'
     const items = q.items || []
     const subtotal = items.reduce((s,i) => s + (i.total_price || 0), 0)
-    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-    const dt = new Date(q.created_at)
-    const dateStr = `${dt.getDate()} ${mo[dt.getMonth()]} ${dt.getFullYear()}`
+    const dateStr = fmt(q.created_at)
 
     // Fetch customer details for address + GST + payment terms
     let custAddr = '', custGst = '', creditTerms = ''
@@ -879,7 +867,7 @@ export default function CRMOpportunityDetail() {
   const actText      = (actType === 'Call' || actType === 'Visit') ? actDiscussion : actNotes
 
   if (loading) return <Layout pageTitle="Opportunity" pageKey="crm"><CRMSubNav active="opportunities"/><div className="crm-loading"><div className="loading-spin"/>Loading...</div></Layout>
-  if (!opp) return null
+  if (!opp) return <Layout pageTitle="Opportunity" pageKey="crm"><CRMSubNav active="opportunities"/><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Opportunity not found</div><div style={{fontSize:13}}>This opportunity may have been deleted or you don't have access.</div></div></div></Layout>
 
   return (
     <Layout pageTitle="CRM — Opportunity" pageKey="crm">
@@ -1502,7 +1490,7 @@ export default function CRMOpportunityDetail() {
                       <div className="od-detail-field"><label>Account Type</label><div className="val">{opp.account_type||'—'}</div></div>
                       <div className="od-detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={opp.profiles?.name} /></div></div>
                       <div className="od-detail-field"><label>Probability</label><div className="val">{opp.probability != null ? opp.probability + '%' : '—'}</div></div>
-                      <div className="od-detail-field"><label>Close Date</label><div className="val">{fmt(opp.close_date || opp.expected_close_date)}</div></div>
+                      <div className="od-detail-field"><label>Close Date</label><div className="val">{fmtNum(opp.close_date || opp.expected_close_date)}</div></div>
                       <div className="od-detail-field"><label>Opportunity Type</label><div className="val">{opp.opportunity_type === 'NEW_BUSINESS' ? 'New Business' : opp.opportunity_type === 'EXISTING_BUSINESS' ? 'Existing Business' : '—'}</div></div>
                       <div className="od-detail-field"><label>Opportunity Value</label><div className="val" style={{fontWeight:700,color:'#15803d'}}>{fmtINR(quoteTotal || opp.estimated_value_inr)}</div></div>
                       <div className="od-detail-field"><label>Lead Source</label><div className="val">{opp.lead_source ? opp.lead_source + (opp.lead_source_detail ? ' · ' + opp.lead_source_detail : '') : '—'}</div></div>
@@ -1514,7 +1502,7 @@ export default function CRMOpportunityDetail() {
                       {opp.description && <div className="od-detail-field" style={{gridColumn:'span 2'}}><label>Description</label><div className="val">{opp.description}</div></div>}
                       {opp.so_number && <div className="od-detail-field"><label>SO Number</label><div className="val">{opp.so_number}</div></div>}
                       {opp.won_lost_on_hold_reason && <div className="od-detail-field" style={{gridColumn:'span 2'}}><label>Reason</label><div className="val">{opp.won_lost_on_hold_reason}</div></div>}
-                      {opp.revisit_date && <div className="od-detail-field"><label>Revisit Date</label><div className="val" style={{color:'#b45309',fontWeight:600}}>{fmt(opp.revisit_date)}</div></div>}
+                      {opp.revisit_date && <div className="od-detail-field"><label>Revisit Date</label><div className="val" style={{color:'#b45309',fontWeight:600}}>{fmtNum(opp.revisit_date)}</div></div>}
                     </div>
                   )}
                 </div>
@@ -1674,9 +1662,7 @@ export default function CRMOpportunityDetail() {
                     <div style={{ padding:'14px 16px', fontSize:12, color:'var(--gray-400)' }}>No stage changes yet.</div>
                   ) : (
                     stageActs.map((a, i) => {
-                      const dt = new Date(a.created_at)
-                      const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-                      const dateStr = dt.getDate() + ' ' + mo[dt.getMonth()] + ' ' + dt.getFullYear() + ', ' + dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0')
+                      const dateStr = fmtTs(a.created_at)
                       const clr = a.activity_type === 'Won' ? '#15803d' : a.activity_type === 'Lost' ? '#dc2626' : '#1a4dab'
                       const stageLabel = a.notes || a.activity_type
                       return (
@@ -1698,7 +1684,7 @@ export default function CRMOpportunityDetail() {
                             </div>
                             <div style={{ display:'flex', justifyContent:'space-between', fontSize:11 }}>
                               <span style={{ color:'var(--gray-500)', minWidth:110 }}>Close Date:</span>
-                              <span style={{ fontWeight:600, color:'var(--gray-800)' }}>{fmt(opp.expected_close_date)}</span>
+                              <span style={{ fontWeight:600, color:'var(--gray-800)' }}>{fmtNum(opp.expected_close_date)}</span>
                             </div>
                             <div style={{ display:'flex', justifyContent:'space-between', fontSize:11 }}>
                               <span style={{ color:'var(--gray-500)', minWidth:110 }}>Last Modified By:</span>

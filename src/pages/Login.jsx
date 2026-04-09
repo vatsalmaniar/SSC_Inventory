@@ -107,7 +107,7 @@ export default function Login() {
       }
       // Enroll fresh
       const { data: enroll, error: enrollErr } = await sb.auth.mfa.enroll({ factorType: 'totp' })
-      console.log('enroll result:', enroll, enrollErr)
+
       if (enrollErr) { setError('MFA setup failed: ' + enrollErr.message); return }
       if (!enroll?.totp?.qr_code) { setError('MFA setup failed: no QR code returned. Check Supabase MFA settings.'); return }
       setEnrollData({ id: enroll.id, qr_code: enroll.totp.qr_code, secret: enroll.totp.secret })

@@ -1,17 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
 const WITH_ACCOUNTS = ['goods_issued','credit_check','goods_issue_posted','delivery_ready']
 
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return dt.getDate() + ' ' + mo[dt.getMonth()] + ' ' + dt.getFullYear()
-}
 
 function statusLabel(s) {
   return {
@@ -64,7 +59,7 @@ export default function FCModule() {
     let q = sb.from('order_dispatches')
       .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, is_test, freight, order_items(id, qty, dispatched_qty))')
       .eq('orders.is_test', testMode)
-      .gte('created_at', '2026-03-31')
+      .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
     if (center) q = q.eq('fulfilment_center', center)
     const { data } = await q

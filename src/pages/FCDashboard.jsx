@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
@@ -8,11 +9,6 @@ function fmtCr(val) {
   if (val >= 1e7) return '₹' + (val / 1e7).toFixed(2) + ' Cr'
   if (val >= 1e5) return '₹' + (val / 1e5).toFixed(2) + ' L'
   return '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 0 })
-}
-function fmt(d) {
-  if (!d) return '—'
-  const dt = new Date(d)
-  return dt.getDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()]
 }
 function statusLabel(s) {
   return {
@@ -58,7 +54,7 @@ export default function FCDashboard() {
     let q = sb.from('orders')
       .select('id,order_number,customer_name,status,fulfilment_center,credit_override,order_type,created_at,order_dispatches(id,batch_no,dc_number,pi_number,pi_required,status)')
       .in('status', FC_ALL_STATUSES)
-      .gte('created_at', '2026-03-31').eq('is_test', false)
+      .gte('created_at', FY_START).eq('is_test', false)
       .order('updated_at', { ascending: false })
     if (fc) q = q.eq('fulfilment_center', fc)
     const { data } = await q

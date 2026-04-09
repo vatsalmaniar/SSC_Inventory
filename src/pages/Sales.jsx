@@ -1,15 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { fmtDateTime } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/sales.css'
 
-function fmt(d) {
-  if (!d) return '—'
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  const h = d.getHours(), m = d.getMinutes()
-  return d.getDate()+' '+mo[d.getMonth()]+' '+d.getFullYear()+' · '+(h<10?'0':'')+h+':'+(m<10?'0':'')+m
-}
 function sc(qty) { return qty === 0 ? 'zero' : qty <= 5 ? 'low' : 'ok' }
 function sl(qty) { return qty === 0 ? 'Out of stock' : qty <= 5 ? 'Low stock' : 'In stock' }
 
@@ -98,7 +93,7 @@ export default function Sales() {
         {lastDate && (
           <div className="update-banner">
             <div className="update-dot" />
-            <div className="update-text">Last synced <strong>{fmt(lastDate)}</strong></div>
+            <div className="update-text">Last synced <strong>{fmtDateTime(lastDate)}</strong></div>
           </div>
         )}
 
@@ -224,7 +219,7 @@ export default function Sales() {
                       <circle cx="12" cy="12" r="10"/>
                       <path d="M12 6v6l4 2"/>
                     </svg>
-                    <span>Updated <strong>{fmt(new Date(item.updated_at))}</strong></span>
+                    <span>Updated <strong>{fmtDateTime(new Date(item.updated_at))}</strong></span>
                   </div>
                 </div>
               )
