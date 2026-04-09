@@ -49,6 +49,9 @@ export default function OrderDetail() {
   const [saving, setSaving]         = useState(false)
   const [showCancel, setShowCancel] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const [cancelInitiatorType, setCancelInitiatorType] = useState('staff')
+  const [cancelInitiatorName, setCancelInitiatorName] = useState('')
+  const [cancelInitiatorFreeText, setCancelInitiatorFreeText] = useState('')
 
   const [editMode, setEditMode]   = useState(false)
   const [editData, setEditData]   = useState({})
@@ -460,11 +463,16 @@ if (match) {
   }
 
   async function cancelOrder() {
+    const initiator = cancelInitiatorType === 'staff' ? cancelInitiatorName : (cancelInitiatorFreeText.trim() || 'Customer')
+    if (!initiator) { alert('Please select who initiated the cancellation.'); return }
     if (!cancelReason.trim()) { alert('Please enter a reason.'); return }
     setSaving(true)
+    const logMsg = `Order cancelled — Initiated by: ${initiator} | Reason: ${cancelReason.trim()}`
     await sb.from('orders').update({ status: 'cancelled', cancelled_reason: cancelReason.trim(), updated_at: new Date().toISOString() }).eq('id', id)
-    await logActivity(`Order cancelled — Reason: ${cancelReason.trim()}`)
-    setShowCancel(false); setCancelReason('')
+    await sb.from('order_comments').insert({
+      order_id: id, author_name: user.name, message: logMsg, tagged_users: [], is_activity: true, is_cancellation: true
+    })
+    setShowCancel(false); setCancelReason(''); setCancelInitiatorType('staff'); setCancelInitiatorName(''); setCancelInitiatorFreeText('')
     await loadOrder(); setSaving(false)
   }
 
@@ -535,7 +543,7 @@ if (match) {
                       )}
                     </>
                   )}
-                  {!editMode && (
+                  {!editMode && user.role === 'admin' && (
                     <button className="od-btn od-btn-danger" onClick={() => setShowCancel(true)}>
                       <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                       Cancel Order
@@ -1134,15 +1142,16 @@ if (match) {
                 )}
                 {comments.map(c => {
                   const isSystem = c.is_activity === true
-                  const dotColor = c.message.includes('cancelled') || c.message.includes('Cancelled') ? '#ef4444'
+                  const isCancelLog = c.is_cancellation === true || (c.message.includes('cancelled') || c.message.includes('Cancelled'))
+                  const dotColor = isCancelLog ? '#ef4444'
                     : c.message.includes('Dispatch') || c.message.includes('dispatch') ? '#1a4dab'
                     : c.message.includes('Invoice') ? '#7c3aed'
                     : '#16a34a'
                   return isSystem ? (
-                    <div key={c.id} className="od-activity-item">
-                      <div className="od-activity-dot" style={{ background: dotColor }} />
+                    <div key={c.id} className="od-activity-item" style={isCancelLog ? { background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 10px', marginLeft: -4 } : {}}>
+                      <div className="od-activity-dot" style={{ background: dotColor, flexShrink: 0 }} />
                       <div>
-                        <div className="od-activity-val" style={{ fontSize: 12, fontWeight: 600 }}>{c.message}</div>
+                        <div className="od-activity-val" style={{ fontSize: 12, fontWeight: 600, color: isCancelLog ? '#dc2626' : undefined }}>{c.message}</div>
                         <div className="od-activity-time">{c.author_name} · {fmtTs(c.created_at)}</div>
                       </div>
                     </div>
@@ -1234,14 +1243,42 @@ if (match) {
 
       {showCancel && (
         <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCancel(false) }}>
-          <div className="od-cancel-modal">
-            <div className="od-cancel-title">Are you sure?</div>
-            <div className="od-cancel-sub">This will cancel the order. Please provide a reason.</div>
-            <textarea className="od-cancel-textarea" value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="e.g. Customer requested cancellation..." autoFocus />
+          <div className="od-cancel-modal" style={{ maxWidth: 480 }}>
+            <div className="od-cancel-title" style={{ color: '#dc2626' }}>Cancel Order</div>
+            <div className="od-cancel-sub">This will move the order to Cancelled. All delivery information will be preserved. Only admins can perform this action.</div>
+
+            <div style={{ marginTop: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', marginBottom: 8 }}>Who initiated the cancellation?</div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {['staff', 'customer'].map(type => (
+                  <button key={type} onClick={() => { setCancelInitiatorType(type); setCancelInitiatorName(''); setCancelInitiatorFreeText('') }}
+                    style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: '1px solid ' + (cancelInitiatorType === type ? '#dc2626' : 'var(--gray-200)'), background: cancelInitiatorType === type ? '#fff1f2' : 'white', color: cancelInitiatorType === type ? '#dc2626' : 'var(--gray-700)', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    {type === 'staff' ? 'Staff Member' : 'Customer'}
+                  </button>
+                ))}
+              </div>
+              {cancelInitiatorType === 'staff' ? (
+                <select value={cancelInitiatorName} onChange={e => setCancelInitiatorName(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gray-200)', fontFamily: 'var(--font)', fontSize: 13, background: 'white' }}>
+                  <option value="">Select staff member…</option>
+                  {profiles.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              ) : (
+                <input value={cancelInitiatorFreeText} onChange={e => setCancelInitiatorFreeText(e.target.value)}
+                  placeholder="Customer name (optional)"
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gray-200)', fontFamily: 'var(--font)', fontSize: 13, boxSizing: 'border-box' }} />
+              )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', marginBottom: 8 }}>Reason / Issue <span style={{ color: '#dc2626' }}>*</span></div>
+              <textarea className="od-cancel-textarea" value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="e.g. Wrong item delivered, customer refused delivery…" autoFocus style={{ borderColor: '#fecaca' }} />
+            </div>
+
             <div className="od-cancel-actions">
-              <button className="od-btn" onClick={() => { setShowCancel(false); setCancelReason('') }}>Dismiss</button>
-              <button className="od-btn od-btn-danger" onClick={cancelOrder} disabled={saving} style={{ background: '#fff1f2', borderColor: '#fecdd3' }}>
-                {saving ? 'Cancelling...' : 'Confirm Cancel'}
+              <button className="od-btn" onClick={() => { setShowCancel(false); setCancelReason(''); setCancelInitiatorType('staff'); setCancelInitiatorName(''); setCancelInitiatorFreeText('') }}>Dismiss</button>
+              <button className="od-btn od-btn-danger" onClick={cancelOrder} disabled={saving}>
+                {saving ? 'Cancelling...' : 'Confirm Cancellation'}
               </button>
             </div>
           </div>

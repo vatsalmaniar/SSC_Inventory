@@ -109,6 +109,7 @@ export default function CRMOpportunityDetail() {
   const [activities, setActivities] = useState([])
   const [tasks, setTasks]           = useState([])
   const [quoteItems, setQuoteItems] = useState([])
+  const [quoteHistory, setQuoteHistory] = useState([])
   const [principals, setPrincipals] = useState([])
   const [reps, setReps]             = useState([])
   const [contacts, setContacts]     = useState([])
@@ -194,13 +195,14 @@ export default function CRMOpportunityDetail() {
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
     if (!['sales','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
-    const [oppRes, actsRes, tasksRes, quoteRes, principalsRes, repsRes] = await Promise.all([
+    const [oppRes, actsRes, tasksRes, quoteRes, principalsRes, repsRes, qHistRes] = await Promise.all([
       sb.from('crm_opportunities').select('*, crm_companies(id,company_name), crm_principals(name), crm_contacts(name,phone), profiles(name), customers(id,customer_name,account_owner)').eq('id', id).single(),
       sb.from('crm_activities').select('*, profiles(name)').eq('opportunity_id', id).order('created_at', { ascending: false }),
       sb.from('crm_tasks').select('*, profiles(name)').eq('opportunity_id', id).order('due_date', { ascending: true }),
       sb.from('crm_quote_items').select('*').eq('opportunity_id', id).order('created_at', { ascending: true }),
       sb.from('crm_principals').select('*').order('name'),
       sb.from('profiles').select('id,name').in('role',['sales','admin']),
+      sb.from('crm_quotes').select('*, profiles(name)').eq('opportunity_id', id).order('revision', { ascending: false }),
     ])
     const oppData = oppRes.data
     setOpp(oppData)
@@ -218,6 +220,7 @@ export default function CRMOpportunityDetail() {
       setQuoteItems(quoteRes.data)
       setQuoteLoaded(true)
     }
+    setQuoteHistory(qHistRes.data || [])
     setPrincipals(pList)
     setReps(repsRes.data || [])
     if (oppData?.company_id) {
@@ -598,30 +601,249 @@ export default function CRMOpportunityDetail() {
     }))
   }
 
+  function getFY() {
+    const now = new Date()
+    const yr  = now.getFullYear()
+    const mo  = now.getMonth() + 1
+    const startYr = mo >= 4 ? yr : yr - 1
+    return `${String(startYr).slice(2)}-${String(startYr + 1).slice(2)}`
+  }
+
+  async function printQuote(q) {
+    const custName = opp?.customers?.customer_name || opp?.crm_companies?.company_name || opp?.freetext_company || '—'
+    const items = q.items || []
+    const subtotal = items.reduce((s,i) => s + (i.total_price || 0), 0)
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    const dt = new Date(q.created_at)
+    const dateStr = `${dt.getDate()} ${mo[dt.getMonth()]} ${dt.getFullYear()}`
+
+    // Fetch customer details for address + GST + payment terms
+    let custAddr = '', custGst = '', creditTerms = ''
+    if (opp?.customer_id) {
+      const { data: cust } = await sb.from('customers').select('billing_address,gst,credit_terms').eq('id', opp.customer_id).single()
+      custAddr    = cust?.billing_address || ''
+      custGst     = cust?.gst || ''
+      creditTerms = cust?.credit_terms || ''
+    }
+    const isAgainstPI = creditTerms === 'Against PI'
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<title>Quotation ${q.full_ref}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:860px;margin:0 auto;line-height:1.5}
+  .mono{font-family:'DM Mono',monospace}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
+  .co-name{font-size:17px;font-weight:700;color:#0f172a;margin-bottom:2px}
+  .co-sub{font-size:11px;color:#64748b;margin-bottom:8px}
+  .co-addr{font-size:10.5px;color:#475569;line-height:1.6}
+  .doc-title{font-size:28px;font-weight:700;color:#0f172a;text-align:right;letter-spacing:-0.5px}
+  .doc-type-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;padding:3px 10px;border-radius:4px;margin-bottom:6px;background:#eff6ff;color:#1d4ed8;text-align:right}
+  .divider{border:none;border-top:1px solid #e2e8f0;margin:20px 0}
+  .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px}
+  .meta-section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.7px;color:#94a3b8;margin-bottom:6px}
+  .meta-name{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:3px}
+  .meta-addr{font-size:11px;color:#475569;line-height:1.6}
+  .meta-gstin{font-size:11px;color:#475569;margin-top:5px}
+  .ref-table{width:100%;border-collapse:collapse}
+  .ref-table tr td{padding:3px 0;font-size:11px;vertical-align:top}
+  .ref-table tr td:first-child{color:#64748b;width:45%}
+  .ref-table tr td:last-child{font-weight:600;color:#0f172a}
+  .terms{display:flex;gap:32px;font-size:11px;color:#475569;margin-bottom:20px}
+  .terms span strong{color:#0f172a;font-weight:600}
+  table.items{width:100%;border-collapse:collapse;margin-bottom:4px}
+  table.items thead tr{border-bottom:2px solid #0f172a}
+  table.items th{padding:8px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;text-align:left}
+  table.items th.r{text-align:right}
+  table.items tbody tr{border-bottom:1px solid #f1f5f9}
+  table.items tbody tr:last-child{border-bottom:none}
+  table.items td{padding:9px 10px;font-size:11.5px;vertical-align:top;color:#0f172a}
+  table.items td.r{text-align:right}
+  table.items td.code{font-family:'DM Mono',monospace;font-size:11px;font-weight:500}
+  .totals-wrap{display:flex;justify-content:flex-end;margin-top:12px}
+  .totals-table{width:300px;border-collapse:collapse}
+  .totals-table td{padding:5px 0;font-size:11.5px}
+  .totals-table td.lbl{color:#64748b}
+  .totals-table td.val{text-align:right;font-weight:500}
+  .totals-table tr.grand td{border-top:2px solid #0f172a;padding-top:8px;font-size:13px;font-weight:700}
+  .notes-box{font-size:11px;color:#475569;margin:16px 0 24px;padding:10px 14px;background:#f8fafc;border-left:3px solid #e2e8f0;border-radius:0 6px 6px 0}
+  .sig-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:32px;padding-top:20px;border-top:1px solid #e2e8f0}
+  .sig-cell{text-align:center;font-size:10px;color:#64748b}
+  .sig-line{border-top:1px solid #94a3b8;margin:28px 20px 8px}
+  .sig-name{font-weight:600;color:#0f172a;font-size:11px}
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}
+  .footer-left{font-size:10px;color:#94a3b8;line-height:1.6}
+  .footer-right{font-size:10px;color:#94a3b8;text-align:right}
+  @media print{body{padding:0;max-width:100%}@page{size:A4;margin:16mm 14mm}}
+</style></head><body>
+
+<div class="header">
+  <div>
+    <div class="co-name">SSC Control Pvt. Ltd.</div>
+    <div class="co-sub">Industrial Automation &amp; Electrification</div>
+    <div class="co-addr">
+      E/12, Siddhivinayak Towers, B/H DCP Office<br/>
+      Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
+      GSTIN: 24ABGCS0605M1ZE
+    </div>
+  </div>
+  <div style="text-align:right">
+    <img src="${window.location.origin}/ssc-logo.svg" alt="SSC" style="height:52px;width:auto;display:block;margin-left:auto;margin-bottom:10px"/>
+    <div class="doc-type-badge">Quotation</div>
+    <div class="doc-title">Quotation</div>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<div class="meta-grid">
+  <div>
+    <div class="meta-section-label">Prepared For</div>
+    <div class="meta-name">${custName}</div>
+    ${custAddr ? `<div class="meta-addr">${custAddr.replace(/\n/g,'<br/>')}</div>` : ''}
+    ${custGst ? `<div class="meta-gstin">GSTIN: <strong>${custGst}</strong></div>` : ''}
+  </div>
+  <div>
+    <div class="meta-section-label">Reference</div>
+    <table class="ref-table">
+      <tr><td>Quote Ref.</td><td class="mono">${q.full_ref}</td></tr>
+      <tr><td>Date</td><td>${dateStr}</td></tr>
+      <tr><td>Revision</td><td>${q.revision}</td></tr>
+      ${q.profiles?.name ? `<tr><td>Prepared By</td><td>${q.profiles.name}</td></tr>` : ''}
+    </table>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<div class="terms">
+  <span>Payment Terms: <strong>${creditTerms || '—'}</strong></span>
+  <span>Currency: <strong>INR</strong></span>
+  ${isAgainstPI ? '<span style="color:#b45309;font-weight:600">⚠ Order against Proforma Invoice</span>' : ''}
+</div>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th style="width:36px">#</th>
+      <th>Item Code / Description</th>
+      <th class="r" style="width:60px">Qty</th>
+      <th class="r" style="width:105px">LP Price (₹)</th>
+      <th class="r" style="width:60px">Disc %</th>
+      <th class="r" style="width:110px">Unit Price (₹)</th>
+      <th class="r" style="width:110px">Total (₹)</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${items.map((it,i) => `<tr>
+      <td style="color:#94a3b8">${i+1}</td>
+      <td class="code">${it.item_code||it.description||'—'}</td>
+      <td class="r">${it.qty}</td>
+      <td class="r">${(it.unit_price||0).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+      <td class="r">${it.discount_pct||0}%</td>
+      <td class="r">${((it.unit_price||0)*(1-(it.discount_pct||0)/100)).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+      <td class="r" style="font-weight:600">${(it.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+    </tr>`).join('')}
+  </tbody>
+</table>
+
+<div class="totals-wrap">
+  <table class="totals-table">
+    <tr><td class="lbl">Subtotal</td><td class="val">${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>
+    <tr><td class="lbl">GST (18%)</td><td class="val">As applicable / Extra</td></tr>
+    <tr><td class="lbl">Freight</td><td class="val">Extra / Actual</td></tr>
+    <tr class="grand"><td class="lbl">Quote Value</td><td class="val">₹ ${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>
+  </table>
+</div>
+
+<div class="notes-box">
+  <strong>Note:</strong> All prices are exclusive of GST. Freight charges will be billed at actuals.${isAgainstPI ? ' This quotation is valid against Proforma Invoice only.' : ''} Prices are subject to change without prior notice.
+</div>
+
+<div class="sig-row">
+  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Prepared By</div>Sales Team</div>
+  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Authorised By</div>Manager</div>
+  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Authorised Signatory</div>For SSC Control Pvt. Ltd.</div>
+</div>
+
+<div class="footer">
+  <div class="footer-left">
+    SSC Control Pvt. Ltd. &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; CIN: U51909GJ2021PTC122539<br/>
+    Ahmedabad: E/12, Siddhivinayak Towers, Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
+    Baroda: 31 GIDC Estate, B/h Bank Of Baroda, Makarpura, Vadodara – 390 010
+  </div>
+  <div class="footer-right">sales@ssccontrol.com<br/>www.ssccontrol.com</div>
+</div>
+
+</body></html>`
+    const w = window.open('', '_blank')
+    if (!w) { alert('Popup blocked — allow popups for this site and try again.'); return }
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    setTimeout(() => w.print(), 600)
+  }
+
   async function saveQuote() {
     const valid = quoteRows.filter(r => r.item_code || r.description)
     if (!valid.length) { alert('Add at least one item'); return }
     setSavingQuote(true)
-    await sb.from('crm_quote_items').delete().eq('opportunity_id', id)
-    const { error } = await sb.from('crm_quote_items').insert(valid.map(r => ({
-      opportunity_id: id, item_code: r.item_code || null, description: r.description || null,
+
+    // Determine quote number + revision
+    const fy = getFY()
+    const { data: existingForOpp } = await sb.from('crm_quotes')
+      .select('quote_number, revision')
+      .eq('opportunity_id', id)
+      .order('revision', { ascending: false })
+      .limit(1)
+
+    let quoteNumber, revision
+    if (existingForOpp?.length) {
+      quoteNumber = existingForOpp[0].quote_number
+      revision    = existingForOpp[0].revision + 1
+    } else {
+      const { data: genNum, error: genErr } = await sb.rpc('generate_crm_quote_number', { p_fy: fy })
+      if (genErr) { alert('Error generating quote number: ' + genErr.message); setSavingQuote(false); return }
+      quoteNumber = genNum
+      revision    = 1
+    }
+    const fullRef = `${quoteNumber}/${revision}`
+
+    const total = valid.reduce((s,r) => s + (parseFloat(r.total_price)||0), 0)
+    const items = valid.map(r => ({
+      item_code: r.item_code || null, description: r.description || null,
       qty: parseFloat(r.qty) || 1, unit_price: parseFloat(r.unit_price) || 0,
       discount_pct: parseFloat(r.discount_pct) || 0, total_price: parseFloat(r.total_price) || 0,
-    })))
-    if (error) { alert('Error saving quote: ' + error.message); setSavingQuote(false); return }
-    const total = valid.reduce((s,r) => s + (parseFloat(r.total_price)||0), 0)
-    await sb.from('crm_opportunities').update({ estimated_value_inr: total }).eq('id', id)
-    await sb.from('crm_activities').insert({
-      opportunity_id: id, rep_id: user.id,
-      activity_type: 'Quotation',
-      notes: `Quote updated: ${valid.length} item${valid.length>1?'s':''} · Total ${fmtINR(total)}`,
+    }))
+
+    const { error } = await sb.from('crm_quotes').insert({
+      opportunity_id: id, quote_number: quoteNumber, full_ref: fullRef,
+      revision, items, total_value: total, created_by: user.id,
     })
-    const [quoteRes, actsRes] = await Promise.all([
+    if (error) { alert('Error saving quote: ' + error.message); setSavingQuote(false); return }
+
+    // Also keep crm_quote_items in sync (for backward compat)
+    await sb.from('crm_quote_items').delete().eq('opportunity_id', id)
+    await sb.from('crm_quote_items').insert(items.map(r => ({ opportunity_id: id, ...r })))
+
+    await sb.from('crm_opportunities').update({
+      estimated_value_inr: total, quotation_ref: fullRef, quotation_value_inr: total, quotation_revision: revision,
+    }).eq('id', id)
+    await sb.from('crm_activities').insert({
+      opportunity_id: id, rep_id: user.id, activity_type: 'Quotation',
+      notes: `Quote ${fullRef} — ${valid.length} item${valid.length>1?'s':''} · Total ${fmtINR(total)}`,
+    })
+
+    const [quoteRes, actsRes, qHistRes] = await Promise.all([
       sb.from('crm_quote_items').select('*').eq('opportunity_id', id).order('created_at', { ascending: true }),
       sb.from('crm_activities').select('*, profiles(name)').eq('opportunity_id', id).order('created_at', { ascending: false }),
+      sb.from('crm_quotes').select('*, profiles(name)').eq('opportunity_id', id).order('revision', { ascending: false }),
     ])
     setQuoteItems(quoteRes.data || [])
     setActivities(actsRes.data || [])
+    setQuoteHistory(qHistRes.data || [])
     setQuoteLoaded(true)
     setSavingQuote(false)
   }
@@ -1286,24 +1508,34 @@ export default function CRMOpportunityDetail() {
                   {quoteLoaded && <span style={{ fontSize:11, color:'var(--gray-400)' }}>{quoteItems.length} items · {fmtINR(quoteItems.reduce((s,q)=>s+(q.total_price||0),0))}</span>}
                 </div>
                 <div style={{ borderTop:'1px solid var(--gray-100)', borderBottom:'1px solid var(--gray-100)' }}>
-                  <table className="no-items-table">
+                  <table className="no-items-table" style={{ minWidth:'unset', tableLayout:'fixed', width:'100%' }}>
+                    <colgroup>
+                      <col style={{ width:32 }} />
+                      <col style={{ width:'auto' }} />
+                      <col style={{ width:68 }} />
+                      <col style={{ width:100 }} />
+                      <col style={{ width:62 }} />
+                      <col style={{ width:100 }} />
+                      <col style={{ width:100 }} />
+                      <col style={{ width:28 }} />
+                    </colgroup>
                     <thead>
                       <tr>
-                        <th style={{ width:40, paddingLeft:16 }}>#</th>
-                        <th className="col-code">Item Code <span style={{color:'#dc2626'}}>*</span></th>
-                        <th className="col-qty">Qty <span style={{color:'#dc2626'}}>*</span></th>
-                        <th className="col-lp">LP Price (₹) <span style={{color:'#dc2626'}}>*</span></th>
-                        <th className="col-disc">Disc %</th>
-                        <th className="col-unit">Unit Price (₹)</th>
-                        <th className="col-total">Total (₹)</th>
-                        <th style={{ width:32 }}></th>
+                        <th style={{ paddingLeft:12 }}>#</th>
+                        <th>Item Code <span style={{color:'#dc2626'}}>*</span></th>
+                        <th>Qty <span style={{color:'#dc2626'}}>*</span></th>
+                        <th>LP Price (₹) <span style={{color:'#dc2626'}}>*</span></th>
+                        <th>Disc %</th>
+                        <th>Unit Price (₹)</th>
+                        <th>Total (₹)</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
                       {quoteRows.map((row, idx) => (
                         <tr key={row._id} className={row.item_code ? 'row-filled' : ''}>
-                          <td style={{ paddingLeft:16, color:'var(--gray-400)', fontSize:11, width:40 }}>{idx+1}</td>
-                          <td className="col-code">
+                          <td style={{ paddingLeft:12, color:'var(--gray-400)', fontSize:11 }}>{idx+1}</td>
+                          <td>
                             <Typeahead
                               value={row.item_code}
                               onChange={v => updateQuoteRow(idx, 'item_code', v)}
@@ -1313,13 +1545,13 @@ export default function CRMOpportunityDetail() {
                               renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>}
                             />
                           </td>
-                          <td className="col-qty"><input type="number" value={row.qty} onChange={e=>updateQuoteRow(idx,'qty',e.target.value)} placeholder="0" min="0" /></td>
-                          <td className="col-lp"><input type="number" value={row.unit_price} onChange={e=>updateQuoteRow(idx,'unit_price',e.target.value)} placeholder="0.00" min="0" step="0.01" /></td>
-                          <td className="col-disc"><input type="number" value={row.discount_pct} onChange={e=>updateQuoteRow(idx,'discount_pct',e.target.value)} placeholder="0" min="0" max="100" /></td>
-                          <td className="col-unit"><input readOnly value={unitAfterDisc(row) > 0 ? unitAfterDisc(row).toFixed(2) : ''} placeholder="—" className="calc-field" /></td>
-                          <td className="col-total"><input readOnly value={row.total_price || ''} placeholder="—" className="calc-field total-field" /></td>
-                          <td style={{ width:32 }}>
-                            {quoteRows.length > 1 && <button onClick={() => setQuoteRows(prev=>prev.filter((_,i)=>i!==idx))} style={{ background:'none',border:'none',cursor:'pointer',color:'var(--gray-400)',fontSize:18,padding:'0 4px',lineHeight:1 }}>×</button>}
+                          <td><input type="number" value={row.qty} onChange={e=>updateQuoteRow(idx,'qty',e.target.value)} placeholder="0" min="0" /></td>
+                          <td><input type="number" value={row.unit_price} onChange={e=>updateQuoteRow(idx,'unit_price',e.target.value)} placeholder="0.00" min="0" step="0.01" /></td>
+                          <td><input type="number" value={row.discount_pct} onChange={e=>updateQuoteRow(idx,'discount_pct',e.target.value)} placeholder="0" min="0" max="100" /></td>
+                          <td><input readOnly value={unitAfterDisc(row) > 0 ? unitAfterDisc(row).toFixed(2) : ''} placeholder="—" className="calc-field" /></td>
+                          <td><input readOnly value={row.total_price || ''} placeholder="—" className="calc-field total-field" /></td>
+                          <td>
+                            {quoteRows.length > 1 && <button onClick={() => setQuoteRows(prev=>prev.filter((_,i)=>i!==idx))} style={{ background:'none',border:'none',cursor:'pointer',color:'var(--gray-400)',fontSize:18,padding:'0 2px',lineHeight:1 }}>×</button>}
                           </td>
                         </tr>
                       ))}
@@ -1339,6 +1571,33 @@ export default function CRMOpportunityDetail() {
                   <button className="od-btn od-btn-primary" style={{ padding:'6px 10px', fontSize:12 }} onClick={saveQuote} disabled={savingQuote}>{savingQuote?'Saving...':'Save Quote'}</button>
                 </div>
               </div>
+
+              {/* Quote History */}
+              {quoteHistory.length > 0 && (
+                <div className="od-card">
+                  <div className="od-card-header">
+                    <div className="od-card-title">Quote Revisions</div>
+                    <span style={{ fontSize:11, color:'var(--gray-400)' }}>{quoteHistory.length} revision{quoteHistory.length > 1 ? 's' : ''}</span>
+                  </div>
+                  <div style={{ padding:'0 4px' }}>
+                    {quoteHistory.map((q, idx) => (
+                      <div key={q.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom: idx < quoteHistory.length - 1 ? '1px solid var(--gray-100)' : 'none' }}>
+                        <div>
+                          <div style={{ fontFamily:'var(--mono)', fontWeight:700, fontSize:13, color:'#1a4dab' }}>{q.full_ref}</div>
+                          <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>
+                            {fmtINR(q.total_value)} · {q.items?.length || 0} items · {q.profiles?.name || '—'} · {fmtTs(q.created_at)}
+                          </div>
+                        </div>
+                        <button onClick={() => printQuote(q)}
+                          style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', border:'1px solid #1a4dab', borderRadius:7, background:'#eff6ff', color:'#1a4dab', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', flexShrink:0, marginLeft:12 }}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                          Download
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
             </div>
 

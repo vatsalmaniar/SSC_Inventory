@@ -209,7 +209,7 @@ export default function OrdersList() {
     if (f === 'undelivered') return isPendingDelivery(o)
     if (f === 'partial')     return isPartiallyDispatched(o) || o.status === 'partial_dispatch'
     if (f === 'inflow')      return isInFCFlow(o)
-    if (f === 'dispatched')  return o.status === 'dispatched_fc' || (o.order_dispatches || []).some(b => b.status === 'dispatched_fc')
+    if (f === 'dispatched')  return o.status !== 'cancelled' && (o.status === 'dispatched_fc' || (o.order_dispatches || []).some(b => b.status === 'dispatched_fc'))
     if (f === 'sample')      return o.order_type === 'SAMPLE'
     if (f === 'approval')    return o.status === 'pending'
     if (f === 'cancelled')   return o.status === 'cancelled'
