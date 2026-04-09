@@ -1486,7 +1486,7 @@ export default function CRMOpportunityDetail() {
                     <div className="od-detail-grid">
                       <div className="od-detail-field"><label>Account</label><div className="val">{opp.customers?.customer_name || opp.crm_companies?.company_name || '—'}</div></div>
                       <div className="od-detail-field"><label>Account Type</label><div className="val">{opp.account_type||'—'}</div></div>
-                      <div className="od-detail-field"><label>Account Owner</label><div className="val">{opp.profiles?.name||'—'}</div></div>
+                      <div className="od-detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={opp.profiles?.name} /></div></div>
                       <div className="od-detail-field"><label>Probability</label><div className="val">{opp.probability != null ? opp.probability + '%' : '—'}</div></div>
                       <div className="od-detail-field"><label>Close Date</label><div className="val">{fmt(opp.close_date || opp.expected_close_date)}</div></div>
                       <div className="od-detail-field"><label>Opportunity Type</label><div className="val">{opp.opportunity_type === 'NEW_BUSINESS' ? 'New Business' : opp.opportunity_type === 'EXISTING_BUSINESS' ? 'Existing Business' : '—'}</div></div>
