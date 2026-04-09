@@ -85,16 +85,10 @@ export default function Login() {
       return
     }
 
-    // Admin requires MFA
-    if (profile.role === 'admin') {
-      setPendingSession(data.session)
-      setPendingProfile(profile)
-      await checkAdminMFA()
-      setLoading(false)
-      return
-    }
-
-    await handleSession(data.session)
+    // All users require MFA
+    setPendingSession(data.session)
+    setPendingProfile(profile)
+    await checkAdminMFA()
     setLoading(false)
   }
 
