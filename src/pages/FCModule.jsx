@@ -62,18 +62,13 @@ export default function FCModule() {
   async function loadBatches(center, testMode = false) {
     setLoading(true)
     let q = sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, created_at, orders(id, order_number, customer_name, order_type, order_date, is_test, freight, order_items(id, qty, dispatched_qty))')
+      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, is_test, freight, order_items(id, qty, dispatched_qty))')
+      .eq('orders.is_test', testMode)
       .gte('created_at', '2026-03-31')
       .order('created_at', { ascending: false })
+    if (center) q = q.eq('fulfilment_center', center)
     const { data } = await q
-    // Filter by test mode and optional center client-side using the batch's own fulfilment_center
-    const rows = (data || []).filter(b => {
-      if (!b.orders) return false
-      if (b.orders.is_test !== testMode) return false
-      if (center && b.fulfilment_center !== center) return false
-      return true
-    })
-    setBatches(rows)
+    setBatches(data || [])
     setLoading(false)
   }
 

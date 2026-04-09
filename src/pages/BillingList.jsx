@@ -55,16 +55,13 @@ export default function BillingList() {
   async function loadBatches() {
     setLoading(true)
     const { data } = await sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, created_at, orders(id, order_number, customer_name, order_type, order_date, is_test, credit_terms, freight, order_items(id, qty, dispatched_qty))')
+      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, is_test, credit_terms, freight, order_items(id, qty, dispatched_qty))')
+      .in('status', BILLING_BATCH_STATUSES)
+      .eq('orders.is_test', false)
+      .neq('orders.order_type', 'SAMPLE')
       .gte('created_at', '2026-03-31')
       .order('created_at', { ascending: false })
-    const rows = (data || []).filter(b => {
-      if (!b.orders) return false
-      if (b.orders.is_test) return false
-      if (b.orders.order_type === 'SAMPLE') return false
-      return BILLING_BATCH_STATUSES.includes(effStatus(b))
-    })
-    setBatches(rows)
+    setBatches(data || [])
     setLoading(false)
   }
 

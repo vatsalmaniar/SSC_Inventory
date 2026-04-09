@@ -213,24 +213,27 @@ export default function OrderDetail() {
       alert('Customer name and at least one item are required.')
       setSaving(false); return
     }
-    await sb.from('orders').update({
+    const { error: hdrErr } = await sb.from('orders').update({
       customer_name: editData.customer_name.trim(), customer_gst: editData.customer_gst.trim(),
       dispatch_address: editData.dispatch_address.trim(), po_number: editData.po_number.trim(),
       order_date: editData.order_date, order_type: editData.order_type, received_via: editData.received_via,
       freight: parseFloat(editData.freight) || 0, credit_terms: editData.credit_terms, notes: editData.notes,
       edited_by: user.name, updated_at: new Date().toISOString(),
     }).eq('id', id)
-    const { error: delErr } = await sb.from('order_items').delete().eq('order_id', id)
-    if (delErr) { alert('Failed to clear items: ' + delErr.message); setSaving(false); return }
-    const { error: insErr } = await sb.from('order_items').insert(validItems.map((item, i) => ({
-      order_id: id, sr_no: i + 1, item_code: item.item_code.trim(),
-      qty: parseFloat(item.qty), lp_unit_price: parseFloat(item.lp_unit_price) || 0,
-      discount_pct: parseFloat(item.discount_pct) || 0,
-      unit_price_after_disc: parseFloat(item.unit_price_after_disc) || 0,
-      total_price: parseFloat(item.total_price) || 0, dispatch_date: item.dispatch_date || null,
-      customer_ref_no: item.customer_ref_no?.trim() || null,
-    })))
-    if (insErr) { alert('Failed to save items: ' + insErr.message); setSaving(false); return }
+    if (hdrErr) { alert('Failed to update order: ' + hdrErr.message); setSaving(false); return }
+    const { error: itemsErr } = await sb.rpc('replace_order_items', {
+      p_order_id: id,
+      p_items: validItems.map((item, i) => ({
+        sr_no: i + 1, item_code: item.item_code.trim(),
+        qty: parseFloat(item.qty), lp_unit_price: parseFloat(item.lp_unit_price) || 0,
+        discount_pct: parseFloat(item.discount_pct) || 0,
+        unit_price_after_disc: parseFloat(item.unit_price_after_disc) || 0,
+        total_price: parseFloat(item.total_price) || 0,
+        dispatch_date: item.dispatch_date || '',
+        customer_ref_no: item.customer_ref_no?.trim() || '',
+      }))
+    })
+    if (itemsErr) { alert('Failed to save items: ' + itemsErr.message); setSaving(false); return }
     const msg = reason.trim() ? `Order edited — ${reason.trim()}` : 'Order edited — details updated'
     await logActivity(msg)
     await loadOrder()
@@ -244,22 +247,27 @@ export default function OrderDetail() {
       alert('Customer name and at least one item are required.')
       setSaving(false); return
     }
-    await sb.from('orders').update({
+    const { error: hdrErr } = await sb.from('orders').update({
       customer_name: editData.customer_name.trim(), customer_gst: editData.customer_gst.trim(),
       dispatch_address: editData.dispatch_address.trim(), po_number: editData.po_number.trim(),
       order_date: editData.order_date, order_type: editData.order_type, received_via: editData.received_via,
       freight: parseFloat(editData.freight) || 0, credit_terms: editData.credit_terms, notes: editData.notes,
       edited_by: user.name, updated_at: new Date().toISOString(),
     }).eq('id', id)
-    await sb.from('order_items').delete().eq('order_id', id)
-    await sb.from('order_items').insert(validItems.map((item, i) => ({
-      order_id: id, sr_no: i + 1, item_code: item.item_code.trim(),
-      qty: parseFloat(item.qty), lp_unit_price: parseFloat(item.lp_unit_price) || 0,
-      discount_pct: parseFloat(item.discount_pct) || 0,
-      unit_price_after_disc: parseFloat(item.unit_price_after_disc) || 0,
-      total_price: parseFloat(item.total_price) || 0, dispatch_date: item.dispatch_date || null,
-      customer_ref_no: item.customer_ref_no?.trim() || null,
-    })))
+    if (hdrErr) { alert('Failed to update order: ' + hdrErr.message); setSaving(false); return }
+    const { error: itemsErr } = await sb.rpc('replace_order_items', {
+      p_order_id: id,
+      p_items: validItems.map((item, i) => ({
+        sr_no: i + 1, item_code: item.item_code.trim(),
+        qty: parseFloat(item.qty), lp_unit_price: parseFloat(item.lp_unit_price) || 0,
+        discount_pct: parseFloat(item.discount_pct) || 0,
+        unit_price_after_disc: parseFloat(item.unit_price_after_disc) || 0,
+        total_price: parseFloat(item.total_price) || 0,
+        dispatch_date: item.dispatch_date || '',
+        customer_ref_no: item.customer_ref_no?.trim() || '',
+      }))
+    })
+    if (itemsErr) { alert('Failed to save items: ' + itemsErr.message); setSaving(false); return }
     const { data: updatedOrder } = await sb.from('orders').select('order_type').eq('id', id).single()
     const { error } = await sb.rpc('approve_order', {
       order_id: id, approver_name: user.name,
@@ -319,8 +327,10 @@ export default function OrderDetail() {
     setSaving(true)
     const isPIOrder = order.credit_terms === 'Against PI' || order.credit_terms === 'Advance'
     for (const item of (order.order_items || [])) {
-      const { error } = await sb.from('order_items').update({ dispatched_qty: item.qty }).eq('id', item.id)
-      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
+      const addQty = item.qty - (item.dispatched_qty || 0)
+      if (addQty <= 0) continue
+      const { error } = await sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: addQty })
+      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message + '. Please refresh and try again.'); setSaving(false); return }
     }
     const { error } = await sb.from('orders').update({
       status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
@@ -372,9 +382,8 @@ export default function OrderDetail() {
     setSaving(true)
     const isPIOrder = order.credit_terms === 'Against PI' || order.credit_terms === 'Advance'
     for (const item of selected) {
-      const newDispatched = (item.dispatched_qty || 0) + parseFloat(item.dispatchQty)
-      const { error } = await sb.from('order_items').update({ dispatched_qty: newDispatched }).eq('id', item.id)
-      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message); setSaving(false); return }
+      const { error } = await sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: parseFloat(item.dispatchQty) })
+      if (error) { alert('Failed to update item ' + item.item_code + ': ' + error.message + '. Please refresh and try again.'); setSaving(false); return }
     }
     const summary = selected.map(i => `${i.item_code}: ${i.dispatchQty} units`).join(', ')
     const { error } = await sb.from('orders').update({
