@@ -73,7 +73,10 @@ export default function OrderDetail() {
   const [batches, setBatches]                     = useState([])
 
   // Edit confirmation
-  const [showEditConfirm, setShowEditConfirm] = useState(false)
+  const [showEditConfirm, setShowEditConfirm]     = useState(false)
+  const [showSaveReason, setShowSaveReason]       = useState(false)
+  const [editReason, setEditReason]               = useState('')
+  const [pendingSaveApprove, setPendingSaveApprove] = useState(false)
 
   useEffect(() => { init() }, [id])
 
@@ -128,6 +131,7 @@ export default function OrderDetail() {
     : order?.status
   const isOps            = ['ops', 'admin'].includes(user.role)
   const isPending        = order?.status === 'pending'
+  const isEditable       = ['pending', 'inv_check', 'inventory_check'].includes(order?.status)
   const isCancelled      = order?.status === 'cancelled'
   const isInFCFlow       = FC_ACTIVE_STATUSES.includes(order?.status)
   const pipelineIdx      = ORDER_PIPELINE_KEYS.indexOf(effectiveStatus)
@@ -199,7 +203,7 @@ export default function OrderDetail() {
     return data || []
   }
 
-  async function saveEdits() {
+  async function saveEdits(reason = '') {
     setSaving(true)
     const validItems = editItems.filter(i => i.item_code.trim() && i.qty)
     if (!editData.customer_name.trim() || !validItems.length) {
@@ -224,12 +228,13 @@ export default function OrderDetail() {
       customer_ref_no: item.customer_ref_no?.trim() || null,
     })))
     if (insErr) { alert('Failed to save items: ' + insErr.message); setSaving(false); return }
-    await logActivity('Order edited — details updated')
+    const msg = reason.trim() ? `Order edited — ${reason.trim()}` : 'Order edited — details updated'
+    await logActivity(msg)
     await loadOrder()
     setEditMode(false); setSaving(false)
   }
 
-  async function saveAndApprove() {
+  async function saveAndApprove(reason = '') {
     setSaving(true)
     const validItems = editItems.filter(i => i.item_code.trim() && i.qty)
     if (!editData.customer_name.trim() || !validItems.length) {
@@ -512,18 +517,18 @@ if (match) {
               </button>
               {isOps && !isCancelled && (
                 <>
-                  {isPending && !editMode && (
+                  {isEditable && !editMode && (
                     <button className="od-btn od-btn-edit" onClick={() => setShowEditConfirm(true)}>
                       <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       Edit Order
                     </button>
                   )}
-                  {isPending && editMode && (
+                  {isEditable && editMode && (
                     <>
                       <button className="od-btn" onClick={() => setEditMode(false)} disabled={saving}>Discard</button>
-                      <button className="od-btn od-btn-edit" onClick={saveEdits} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
-                      {(order.order_type !== 'SAMPLE' || user.role === 'admin') && (
-                        <button className="od-btn od-btn-approve" onClick={saveAndApprove} disabled={saving}>
+                      <button className="od-btn od-btn-edit" onClick={() => { setEditReason(''); setPendingSaveApprove(false); setShowSaveReason(true) }} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
+                      {isPending && (order.order_type !== 'SAMPLE' || user.role === 'admin') && (
+                        <button className="od-btn od-btn-approve" onClick={() => { setEditReason(''); setPendingSaveApprove(true); setShowSaveReason(true) }} disabled={saving}>
                           <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
                           {saving ? 'Approving...' : 'Save & Approve'}
                         </button>
@@ -1200,6 +1205,28 @@ if (match) {
             <div className="od-cancel-actions" style={{ marginTop: 20 }}>
               <button className="od-btn" onClick={() => setShowEditConfirm(false)}>No, Go Back</button>
               <button className="od-btn od-btn-edit" onClick={() => { setShowEditConfirm(false); enterEditMode() }}>Yes, Edit Order</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSaveReason && (
+        <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowSaveReason(false) }}>
+          <div className="od-cancel-modal" style={{ maxWidth: 440 }}>
+            <div className="od-cancel-title">Reason for Edit</div>
+            <div className="od-cancel-sub">Why is this order being edited? This will be logged in the activity feed.</div>
+            <textarea className="od-cancel-textarea" value={editReason} onChange={e => setEditReason(e.target.value)}
+              placeholder="e.g. Customer changed quantity, wrong product code entered…" autoFocus />
+            <div className="od-cancel-actions">
+              <button className="od-btn" onClick={() => setShowSaveReason(false)}>Cancel</button>
+              <button className="od-btn od-btn-edit" disabled={!editReason.trim()}
+                onClick={() => {
+                  setShowSaveReason(false)
+                  if (pendingSaveApprove) saveAndApprove(editReason)
+                  else saveEdits(editReason)
+                }}>
+                {pendingSaveApprove ? 'Save & Approve' : 'Save Changes'}
+              </button>
             </div>
           </div>
         </div>
