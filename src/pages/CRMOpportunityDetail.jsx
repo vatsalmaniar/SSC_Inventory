@@ -96,7 +96,7 @@ function StagePill({ stage }) {
 }
 
 function emptyQuoteItem() {
-  return { _id: Date.now() + Math.random(), item_code:'', description:'', qty:'1', unit_price:'', discount_pct:'0', total_price:'' }
+  return { _id: Date.now() + Math.random(), item_code:'', description:'', qty:'1', unit_price:'', discount_pct:'', total_price:'' }
 }
 function unitAfterDisc(row) {
   return (parseFloat(row.unit_price)||0) * (1 - (parseFloat(row.discount_pct)||0) / 100)
@@ -734,10 +734,8 @@ export default function CRMOpportunityDetail() {
       <th style="width:36px">#</th>
       <th>Item Code / Description</th>
       <th class="r" style="width:60px">Qty</th>
-      <th class="r" style="width:105px">LP Price (₹)</th>
-      <th class="r" style="width:60px">Disc %</th>
-      <th class="r" style="width:110px">Unit Price (₹)</th>
-      <th class="r" style="width:110px">Total (₹)</th>
+      <th class="r" style="width:130px">Unit Price (₹)</th>
+      <th class="r" style="width:130px">Total (₹)</th>
     </tr>
   </thead>
   <tbody>
@@ -745,8 +743,6 @@ export default function CRMOpportunityDetail() {
       <td style="color:#94a3b8">${i+1}</td>
       <td class="code">${it.item_code||it.description||'—'}</td>
       <td class="r">${it.qty}</td>
-      <td class="r">${(it.unit_price||0).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
-      <td class="r">${it.discount_pct||0}%</td>
       <td class="r">${((it.unit_price||0)*(1-(it.discount_pct||0)/100)).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
       <td class="r" style="font-weight:600">${(it.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
     </tr>`).join('')}
@@ -781,6 +777,20 @@ export default function CRMOpportunityDetail() {
   <div class="footer-right">sales@ssccontrol.com<br/>www.ssccontrol.com</div>
 </div>
 
+<div style="margin-top:16px;padding-top:12px;border-top:1px solid #f1f5f9">
+  <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#94a3b8;margin-bottom:8px">Authorised Channel Partner</div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+    <img src="${window.location.origin}/logo/Mitsubishi_logo.svg" alt="Mitsubishi" style="height:20px;width:auto;filter:grayscale(100%) opacity(0.55)"/>
+    <img src="${window.location.origin}/logo/abb-logo-33px.svg" alt="ABB" style="height:20px;width:auto;filter:grayscale(100%) opacity(0.55)"/>
+    <img src="${window.location.origin}/logo/logo-hoffman.svg" alt="nVent Hoffman" style="height:20px;width:auto;filter:grayscale(100%) opacity(0.55)"/>
+    <img src="${window.location.origin}/logo/Hicoologo.png" alt="Hicool" style="height:20px;width:auto;filter:grayscale(100%) opacity(0.55)"/>
+    <img src="${window.location.origin}/logo/connectwell_logo.svg" alt="Connectwell" style="height:20px;width:auto;filter:grayscale(100%) opacity(0.55)"/>
+    <img src="${window.location.origin}/logo/logo_schmersal.svg" alt="Schmersal" style="height:20px;width:auto;filter:grayscale(100%) opacity(0.55)"/>
+    <img src="${window.location.origin}/logo/Unison_1.png" alt="Unison" style="height:20px;width:auto;filter:grayscale(100%) opacity(0.55)"/>
+    <img src="${window.location.origin}/logo/GIC_Logo.svg" alt="GIC" style="height:20px;width:auto;filter:grayscale(100%) opacity(0.55)"/>
+  </div>
+</div>
+
 </body></html>`
     const w = window.open('', '_blank')
     if (!w) { alert('Popup blocked — allow popups for this site and try again.'); return }
@@ -793,6 +803,11 @@ export default function CRMOpportunityDetail() {
   async function saveQuote() {
     const valid = quoteRows.filter(r => r.item_code || r.description)
     if (!valid.length) { alert('Add at least one item'); return }
+    for (const r of valid) {
+      if (r.discount_pct === '' || r.discount_pct === null || r.discount_pct === undefined) {
+        alert('Discount % is required for: ' + (r.item_code || r.description)); return
+      }
+    }
     setSavingQuote(true)
 
     // Determine quote number + revision
@@ -1552,7 +1567,7 @@ export default function CRMOpportunityDetail() {
                           </td>
                           <td><input type="number" value={row.qty} onChange={e=>updateQuoteRow(idx,'qty',e.target.value)} placeholder="0" min="0" /></td>
                           <td><input type="number" value={row.unit_price} onChange={e=>updateQuoteRow(idx,'unit_price',e.target.value)} placeholder="0.00" min="0" step="0.01" /></td>
-                          <td><input type="number" value={row.discount_pct} onChange={e=>updateQuoteRow(idx,'discount_pct',e.target.value)} placeholder="0" min="0" max="100" /></td>
+                          <td><input type="number" value={row.discount_pct} onChange={e=>updateQuoteRow(idx,'discount_pct',e.target.value)} placeholder="req *" min="0" max="100" style={row.discount_pct===''||row.discount_pct===null||row.discount_pct===undefined?{borderColor:'#fca5a5',background:'#fff5f5'}:{}} /></td>
                           <td><input readOnly value={unitAfterDisc(row) > 0 ? unitAfterDisc(row).toFixed(2) : ''} placeholder="—" className="calc-field" /></td>
                           <td><input readOnly value={row.total_price || ''} placeholder="—" className="calc-field total-field" /></td>
                           <td>
