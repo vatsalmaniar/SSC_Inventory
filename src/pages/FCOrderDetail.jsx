@@ -708,39 +708,55 @@ export default function FCOrderDetail() {
                       {isTempDC && <span style={{fontSize:10,background:'#fef3c7',color:'#92400e',borderRadius:4,padding:'1px 6px',marginLeft:8,fontWeight:600}}>TEMP</span>}
                     </div>
                   </div>
-                  {order.invoice_number && (
-                    <div className="od-detail-field">
-                      <label>Invoice</label>
-                      <div className="val" style={{fontFamily:'var(--mono)',fontWeight:700,color:order.invoice_number?.startsWith('Temp/') ? '#92400e' : '#166534'}}>
-                        {order.invoice_number}
-                        {order.invoice_number?.startsWith('Temp/') && <span style={{fontSize:10,background:'#fef3c7',color:'#92400e',borderRadius:4,padding:'1px 6px',marginLeft:8,fontWeight:600}}>TEMP</span>}
+                  {(() => {
+                    const inv = activeBatch?.invoice_number || order.invoice_number
+                    if (!inv) return null
+                    const isTemp = inv?.startsWith('Temp/')
+                    return (
+                      <div className="od-detail-field">
+                        <label>Invoice</label>
+                        <div className="val" style={{fontFamily:'var(--mono)',fontWeight:700,color:isTemp ? '#92400e' : '#166534'}}>
+                          {inv}
+                          {isTemp && <span style={{fontSize:10,background:'#fef3c7',color:'#92400e',borderRadius:4,padding:'1px 6px',marginLeft:8,fontWeight:600}}>TEMP</span>}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {order.eway_bill_number && (
-                    <div className="od-detail-field">
-                      <label>E-Way Bill</label>
-                      <div className="val" style={{fontFamily:'var(--mono)',fontWeight:700,color:'#166534'}}>{order.eway_bill_number}</div>
-                    </div>
-                  )}
+                    )
+                  })()}
+                  {(() => {
+                    const eway = activeBatch?.eway_bill_number || (!activeBatch ? order.eway_bill_number : null)
+                    if (!eway) return null
+                    return (
+                      <div className="od-detail-field">
+                        <label>E-Way Bill</label>
+                        <div className="val" style={{fontFamily:'var(--mono)',fontWeight:700,color:'#166534'}}>{eway}</div>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             </div>
 
-            {/* Vehicle details if set */}
-            {order.dispatch_mode && (
-              <div className="od-card">
-                <div className="od-card-header"><div className="od-card-title">Delivery Details</div></div>
-                <div className="od-card-body">
-                  <div className="od-detail-grid">
-                    <div className="od-detail-field"><label>Mode</label><div className="val">{order.dispatch_mode}</div></div>
-                    {order.vehicle_type   && <div className="od-detail-field"><label>Vehicle Type</label><div className="val">{order.vehicle_type}</div></div>}
-                    {order.vehicle_number && <div className="od-detail-field"><label>{order.dispatch_mode === 'Transport' ? 'LR Number' : order.dispatch_mode === 'Courier' ? 'Tracking No.' : 'Vehicle No.'}</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{order.vehicle_number}</div></div>}
-                    {order.driver_name    && <div className="od-detail-field"><label>{order.dispatch_mode === 'Transport' ? 'Transporter' : order.dispatch_mode === 'Courier' ? 'Courier Co.' : order.dispatch_mode === 'By Person' || order.dispatch_mode === 'Porter' ? 'Name' : 'Driver'}</label><div className="val">{order.driver_name}</div></div>}
+            {/* Vehicle details — read from active batch, not order level */}
+            {(() => {
+              const mode   = activeBatch?.dispatch_mode || (!activeBatch ? order.dispatch_mode : null)
+              const vType  = activeBatch?.vehicle_type  || (!activeBatch ? order.vehicle_type  : null)
+              const vNum   = activeBatch?.vehicle_number|| (!activeBatch ? order.vehicle_number : null)
+              const driver = activeBatch?.driver_name   || (!activeBatch ? order.driver_name   : null)
+              if (!mode) return null
+              return (
+                <div className="od-card">
+                  <div className="od-card-header"><div className="od-card-title">Delivery Details</div></div>
+                  <div className="od-card-body">
+                    <div className="od-detail-grid">
+                      <div className="od-detail-field"><label>Mode</label><div className="val">{mode}</div></div>
+                      {vType  && <div className="od-detail-field"><label>Vehicle Type</label><div className="val">{vType}</div></div>}
+                      {vNum   && <div className="od-detail-field"><label>{mode === 'Transport' ? 'LR Number' : mode === 'Courier' ? 'Tracking No.' : 'Vehicle No.'}</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{vNum}</div></div>}
+                      {driver && <div className="od-detail-field"><label>{mode === 'Transport' ? 'Transporter' : mode === 'Courier' ? 'Courier Co.' : mode === 'By Person' || mode === 'Porter' ? 'Name' : 'Driver'}</label><div className="val">{driver}</div></div>}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Order info */}
             <div className="od-card">
@@ -812,9 +828,8 @@ export default function FCOrderDetail() {
 
             {/* Action card */}
             {!withAccounts && (() => {
-              // For multi-batch orders, use the active batch's own status for action gating
-              // so that an older batch can still be processed independently
-              const batchStatus = (allBatches.length > 1 && activeBatch != null)
+              // Always use activeBatch.status when a batch exists — order.status is not reliably updated during batch lifecycle
+              const batchStatus = activeBatch != null
                 ? (activeBatch.status || 'delivery_created')
                 : order.status
               if (batchStatus === 'dispatched_fc') return null
@@ -970,7 +985,7 @@ export default function FCOrderDetail() {
                   {/* Confirm Delivered */}
                   {batchStatus === 'eway_generated' && !confirm && (
                     <div>
-                      {order.eway_bill_number && <p style={{fontSize:13,fontFamily:'var(--mono)',fontWeight:700,color:'#166534',marginBottom:8}}>E-Way Bill: {order.eway_bill_number}</p>}
+                      {(activeBatch?.eway_bill_number || order.eway_bill_number) && <p style={{fontSize:13,fontFamily:'var(--mono)',fontWeight:700,color:'#166534',marginBottom:8}}>E-Way Bill: {activeBatch?.eway_bill_number || order.eway_bill_number}</p>}
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Confirm order delivered to customer.</p>
                       <button className="od-mark-complete-btn" style={{background:'#14532d',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
                         onClick={() => setConfirm({ key: 'delivered', label: 'Confirm order has been delivered to the customer?' })}>
@@ -1041,44 +1056,57 @@ export default function FCOrderDetail() {
                     {isSample ? 'Download Sample Challan' : 'Download DC Challan'}
                   </button>
                 )}
-                {(activeBatch?.invoice_number || order.invoice_number) && (
-                  <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
-                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>Invoice</div>
-                    <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:700,color:(activeBatch?.invoice_number || order.invoice_number)?.startsWith('Temp/') ? '#92400e' : '#166534'}}>
-                      {activeBatch?.invoice_number || order.invoice_number}
+                {(() => {
+                  const inv    = activeBatch ? activeBatch.invoice_number    : order.invoice_number
+                  const invPdf = activeBatch ? activeBatch.invoice_pdf_url   : order.invoice_pdf_url
+                  if (!inv) return null
+                  const isTemp = inv?.startsWith('Temp/')
+                  return (
+                    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
+                      <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>Invoice</div>
+                      <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:700,color:isTemp ? '#92400e' : '#166534'}}>{inv}</div>
+                      {invPdf && (
+                        <a href={invPdf} target="_blank" rel="noreferrer"
+                          style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          View Invoice PDF
+                        </a>
+                      )}
                     </div>
-                    {(activeBatch?.invoice_pdf_url || order.invoice_pdf_url) && (
-                      <a href={activeBatch?.invoice_pdf_url || order.invoice_pdf_url} target="_blank" rel="noreferrer"
-                        style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                  )
+                })()}
+                {(() => {
+                  const eway    = activeBatch ? activeBatch.eway_bill_number : order.eway_bill_number
+                  const ewayPdf = activeBatch ? activeBatch.eway_pdf_url     : order.eway_pdf_url
+                  if (!eway) return null
+                  return (
+                    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
+                      <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>E-Way Bill</div>
+                      <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:700,color:'#166534'}}>{eway}</div>
+                      {ewayPdf && (
+                        <a href={ewayPdf} target="_blank" rel="noreferrer"
+                          style={{fontSize:11,color:'#166534',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          View E-Way Bill PDF
+                        </a>
+                      )}
+                    </div>
+                  )
+                })()}
+                {(() => {
+                  const einvPdf = activeBatch ? activeBatch.einvoice_pdf_url : order.einvoice_pdf_url
+                  if (!einvPdf) return null
+                  return (
+                    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
+                      <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>E-Invoice</div>
+                      <a href={einvPdf} target="_blank" rel="noreferrer"
+                        style={{fontSize:11,color:'#7c3aed',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
                         <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                        View Invoice PDF
+                        View E-Invoice PDF
                       </a>
-                    )}
-                  </div>
-                )}
-                {(activeBatch?.eway_bill_number || order.eway_bill_number) && (
-                  <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
-                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>E-Way Bill</div>
-                    <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:700,color:'#166534'}}>{activeBatch?.eway_bill_number || order.eway_bill_number}</div>
-                    {(activeBatch?.eway_pdf_url || order.eway_pdf_url) && (
-                      <a href={activeBatch?.eway_pdf_url || order.eway_pdf_url} target="_blank" rel="noreferrer"
-                        style={{fontSize:11,color:'#166534',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
-                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                        View E-Way Bill PDF
-                      </a>
-                    )}
-                  </div>
-                )}
-                {(activeBatch?.einvoice_pdf_url || order.einvoice_pdf_url) && (
-                  <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
-                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>E-Invoice</div>
-                    <a href={activeBatch?.einvoice_pdf_url || order.einvoice_pdf_url} target="_blank" rel="noreferrer"
-                      style={{fontSize:11,color:'#7c3aed',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      View E-Invoice PDF
-                    </a>
-                  </div>
-                )}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
 

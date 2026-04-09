@@ -389,17 +389,17 @@ const mentionSuggestions = mentionQuery !== null
   const activePINum   = activeBatch?.pi_number || null
   const activePIPdf   = activeBatch?.pi_pdf_url || null
   const isInPIPhase   = ['pi_requested','pi_generated','pi_payment_pending'].includes(order.status)
-  // Prefer batch-level DC/INV (new system); fall back to order columns (legacy)
+  // When a batch is active, use ONLY that batch's data — never bleed other batch/order-level columns
   const activeDC      = activeBatch?.dc_number || order.dc_number
-  const activeINV     = activeBatch?.invoice_number || order.invoice_number
-  const activeEway    = activeBatch?.eway_bill_number || order.eway_bill_number
+  const activeINV     = activeBatch ? activeBatch.invoice_number    : order.invoice_number
+  const activeEway    = activeBatch ? activeBatch.eway_bill_number  : order.eway_bill_number
   const isTempInv     = activeINV?.startsWith('Temp/')
   const isTempDC      = activeDC?.startsWith('Temp/')
   const isWaitingFC   = batchStatus === 'invoice_generated'
   const isCreditOverride  = (activeBatch?.credit_override ?? order.credit_override) === true
-  const activeInvPdfUrl   = activeBatch?.invoice_pdf_url || order.invoice_pdf_url || null
-  const activeEwayPdfUrl      = activeBatch?.eway_pdf_url      || order.eway_pdf_url      || null
-  const activeEInvoicePdfUrl  = activeBatch?.einvoice_pdf_url  || order.einvoice_pdf_url  || null
+  const activeInvPdfUrl       = activeBatch ? activeBatch.invoice_pdf_url   : (order.invoice_pdf_url   || null)
+  const activeEwayPdfUrl      = activeBatch ? activeBatch.eway_pdf_url      : (order.eway_pdf_url      || null)
+  const activeEInvoicePdfUrl  = activeBatch ? activeBatch.einvoice_pdf_url  : (order.einvoice_pdf_url  || null)
 
   // Items: normalize to {item_code, qty, unit_price, total_price} regardless of source
   const billingItems = activeBatch?.dispatched_items
