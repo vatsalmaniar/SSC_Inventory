@@ -9,6 +9,10 @@ import '../styles/crm.css'
 import '../styles/orderdetail.css'
 import '../styles/neworder.css'
 
+const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
+function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
+function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
+
 const STAGE_ORDER  = ['LEAD_CAPTURED','CONTACTED','QUALIFIED','BOM_RECEIVED','QUOTATION_SENT','FOLLOW_UP','FINAL_NEGOTIATION']
 const TERMINAL     = ['WON','LOST','ON_HOLD']
 const STAGE_LABELS = {
@@ -878,8 +882,9 @@ export default function CRMOpportunityDetail() {
                 </div>
                 <div className="od-header-title">{opp.product_notes || opp.crm_companies?.company_name || '—'}</div>
                 <div className="od-header-num">{opp.crm_companies?.company_name || '—'}</div>
-                <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2}}>
-                  {opp.profiles?.name || '—'}{opp.crm_principals?.name ? ' · ' + opp.crm_principals.name : ''}
+                <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4,flexWrap:'wrap'}}>
+                  <OwnerChip name={opp.profiles?.name} />
+                  {opp.crm_principals?.name && <span style={{fontSize:12,color:'var(--gray-400)'}}>· {opp.crm_principals.name}</span>}
                 </div>
               </div>
               <div className="od-header-actions">

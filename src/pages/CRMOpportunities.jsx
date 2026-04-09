@@ -7,6 +7,10 @@ import NewOppModal from './CRMNewOpportunity'
 import '../styles/crm.css'
 import '../styles/orders.css'
 
+const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
+function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
+function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
+
 const STAGES = ['LEAD_CAPTURED','CONTACTED','QUALIFIED','BOM_RECEIVED','QUOTATION_SENT','FOLLOW_UP','FINAL_NEGOTIATION']
 const TERMINAL = ['WON','LOST','ON_HOLD']
 const LEAD_STAGES = ['LEAD_CAPTURED','CONTACTED','QUALIFIED']
@@ -196,7 +200,7 @@ function KanbanView({ opps, navigate }) {
                   </div>
                   {o.estimated_value_inr && <div className="crm-kanban-value">{fmtINR(o.estimated_value_inr)}</div>}
                 </div>
-                {o.profiles?.name && <div style={{fontSize:10,color:'var(--gray-400)',marginTop:4}}>{o.profiles.name}</div>}
+                {o.profiles?.name && <div style={{marginTop:6}}><OwnerChip name={o.profiles.name} /></div>}
               </div>
             )})}
             {cards.length === 0 && (
@@ -236,7 +240,7 @@ function ListView({ opps, navigate }) {
                     <div style={{fontWeight:500,fontSize:13}}>{o.crm_companies?.company_name || o.customers?.customer_name || o.freetext_company || '—'}</div>
                     {o.crm_principals?.name && <div className="crm-table-sub">{o.crm_principals.name}</div>}
                   </td>
-                  <td style={{fontSize:13}}>{o.profiles?.name || '—'}</td>
+                  <td><OwnerChip name={o.profiles?.name} /></td>
                   <td><StagePill stage={o.stage} /></td>
                   <td style={{whiteSpace:'nowrap',fontWeight:600}}>{fmtINR(o.estimated_value_inr) || '—'}</td>
                 </tr>
@@ -267,6 +271,7 @@ function ListView({ opps, navigate }) {
                 {isOverdue(o) && <span className="crm-overdue-badge">Overdue</span>}
                 {o.estimated_value_inr && <span style={{fontSize:12,fontWeight:700,color:'var(--gray-700)'}}>{fmtINR(o.estimated_value_inr)}</span>}
               </div>
+              {o.profiles?.name && <div style={{marginTop:4}}><OwnerChip name={o.profiles.name} /></div>}
             </div>
           </div>
         )})}
