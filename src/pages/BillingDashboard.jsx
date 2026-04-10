@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
+import BillingSubNav from '../components/BillingSubNav'
 import '../styles/orders.css'
 
 function fmtCr(val) {
@@ -26,6 +27,7 @@ export default function BillingDashboard() {
   const navigate = useNavigate()
   const [user, setUser]     = useState({ name: '', role: '' })
   const [orders, setOrders] = useState([])
+  const [purchaseInvCount, setPurchaseInvCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { init() }, [])
@@ -50,6 +52,11 @@ export default function BillingDashboard() {
       .neq('order_type', 'SAMPLE')
       .order('updated_at', { ascending: false })
     setOrders(data || [])
+
+    // Purchase invoices pending action
+    const { count: piCount } = await sb.from('purchase_invoices').select('id', { count:'exact', head:true }).in('status', ['three_way_check','invoice_pending']).eq('is_test', false).gte('created_at', FY_START)
+    setPurchaseInvCount(piCount || 0)
+
     setLoading(false)
   }
 
@@ -85,6 +92,7 @@ export default function BillingDashboard() {
 
   return (
     <Layout pageTitle="Billing" pageKey="billing">
+      <BillingSubNav active="dashboard" />
       <div className="dash-page">
         <div className="dash-body">
 
@@ -193,7 +201,20 @@ export default function BillingDashboard() {
                 </div>
               </div>
 
-              {/* Tile 5 — Credit Overrides (light) */}
+              {/* Tile 5 — Purchase Invoices (light) */}
+              <div className="dash-tile dash-tile-light" onClick={() => navigate('/procurement/invoices')}>
+                <div className="dash-tile-head">
+                  <div className="dash-tile-label">Purchase Invoices</div>
+                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
+                </div>
+                <div className="dash-tile-value" style={{ color: purchaseInvCount > 0 ? '#854d0e' : undefined }}>{purchaseInvCount}</div>
+                <div className="dash-tile-meta">
+                  <span className="dash-tile-sub">pending match or posting</span>
+                  {purchaseInvCount > 0 && <span className="dash-tile-badge" style={{ background:'#fef9c3', color:'#854d0e' }}>Needs action</span>}
+                </div>
+              </div>
+
+              {/* Tile 6 — Credit Overrides (light) */}
               <div className="dash-tile dash-tile-light" onClick={() => navigate('/billing/list')}>
                 <div className="dash-tile-head">
                   <div className="dash-tile-label">Credit Overrides</div>

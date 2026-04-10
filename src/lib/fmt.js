@@ -1,7 +1,11 @@
 export const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-// Financial year start — update this once per year (April 1)
-export const FY_START = '2026-03-31'
+// Financial year start — auto-computed, never needs manual update
+// FY runs Apr 1 → Mar 31. If today is Jan-Mar, FY started last year's April.
+const _now = new Date()
+const _fyYear = _now.getMonth() >= 3 ? _now.getFullYear() : _now.getFullYear() - 1
+export const FY_START = `${_fyYear}-04-01`
+export const FY_LABEL = `FY ${String(_fyYear).slice(2)}-${String(_fyYear + 1).slice(2)}`
 
 // 5 Mar 2026
 export function fmt(d) {

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmt, FY_START } from '../lib/fmt'
+import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
+import BillingSubNav from '../components/BillingSubNav'
 import '../styles/orders.css'
 
 const BILLING_BATCH_STATUSES = ['goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
@@ -102,6 +103,7 @@ export default function BillingList() {
 
   return (
     <Layout pageTitle="Billing" pageKey="billing">
+      <BillingSubNav active="dispatch" />
       <div className="od-list-page">
         <div className="od-list-body">
 
@@ -154,7 +156,7 @@ export default function BillingList() {
                 </div>
               </div>
               <div className="od-stat-val">{counts.dispatched_fc}</div>
-              <div className="od-stat-sub">dispatched FY 26-27</div>
+              <div className="od-stat-sub">dispatched {FY_LABEL}</div>
             </div>
           </div>
 

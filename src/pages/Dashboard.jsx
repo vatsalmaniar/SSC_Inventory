@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { FY_START } from '../lib/fmt'
+import { FY_START, FY_LABEL } from '../lib/fmt'
 import '../styles/dashboard.css'
 
 const APPS = [
@@ -46,6 +46,18 @@ const APPS = [
     roles: ['accounts', 'ops', 'admin'],
     color: { bg: '#faf5ff', icon: '#7e22ce' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  },
+  {
+    key: 'procurement', label: 'Procurement', desc: 'Purchase orders & GRN', path: '/procurement',
+    roles: ['ops', 'admin'],
+    color: { bg: '#fef3c7', icon: '#b45309' },
+    icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
+  },
+  {
+    key: 'vendor360', label: 'Vendor 360', desc: 'Vendor profiles & contacts', path: '/vendors',
+    roles: ['ops', 'admin'],
+    color: { bg: '#e0f2fe', icon: '#0369a1' },
+    icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>,
   },
   {
     key: 'upload', label: 'Upload', desc: 'Sync inventory data', path: '/accounts',
@@ -118,7 +130,7 @@ export default function Dashboard() {
     },
     {
       label: 'Pending Review', num: stats.pending, trend: stats.pending > 0 ? 'warn' : 'neu', trendLabel: 'need action',
-      path: '/orders/manage',
+      path: '/ops',
       icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
       bg: '#fffbeb', color: '#b45309',
     },
@@ -129,7 +141,7 @@ export default function Dashboard() {
       bg: '#f0fdf4', color: '#16a34a',
     },
     {
-      label: 'Total Revenue', num: fmtVal(stats.revenue), trend: 'up', trendLabel: 'FY 26-27',
+      label: 'Total Revenue', num: fmtVal(stats.revenue), trend: 'up', trendLabel: FY_LABEL,
       path: '/orders',
       icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg>,
       bg: '#f5f3ff', color: '#7e22ce',

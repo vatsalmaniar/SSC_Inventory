@@ -186,7 +186,7 @@ export default function CRMDashboard() {
               <div className="dash-date">{now.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}</div>
             </div>
             <div style={{ display:'flex', gap:10 }}>
-              <button className="new-order-btn" onClick={() => navigate('/crm/new')}>
+              <button className="new-order-btn" onClick={() => navigate('/crm/leads/new')}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 New Lead
               </button>
@@ -287,7 +287,7 @@ export default function CRMDashboard() {
               </div>
 
               {/* Overdue Tasks */}
-              <div className="dash-tile dash-tile-light">
+              <div className="dash-tile dash-tile-light" onClick={() => navigate('/crm')} style={{cursor:'pointer'}}>
                 <div className="dash-tile-head">
                   <div className="dash-tile-label">Overdue Tasks</div>
                   <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>

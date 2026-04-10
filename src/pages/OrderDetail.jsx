@@ -63,6 +63,7 @@ export default function OrderDetail() {
   const [pendingPartialSelected, setPendingPartialSelected] = useState([])
   const [isNextBatch, setIsNextBatch]             = useState(false)
   const [batches, setBatches]                     = useState([])
+  const [linkedPO, setLinkedPO]                   = useState(null)
 
   // Edit confirmation
   const [showEditConfirm, setShowEditConfirm]     = useState(false)
@@ -101,6 +102,13 @@ export default function OrderDetail() {
     setBatches(batches || [])
     setComments(comments || [])
     setProfiles(profileList || [])
+    // Load linked PO for CO orders
+    if (data?.order_type === 'CO') {
+      const { data: po } = await sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery').eq('order_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      setLinkedPO(po || null)
+    } else {
+      setLinkedPO(null)
+    }
     setLoading(false)
   }
 
@@ -770,6 +778,44 @@ if (match) {
                 )}
               </div>
             </div>
+
+            {/* Linked PO for CO orders */}
+            {order.order_type === 'CO' && (
+              <div className="od-card" style={{marginTop:16}}>
+                <div className="od-card-header">
+                  <div className="od-card-title">
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:16,height:16,marginRight:6,verticalAlign:'middle'}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+                    Purchase Order
+                  </div>
+                </div>
+                <div className="od-card-body">
+                  {linkedPO ? (
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+                      <div>
+                        <div style={{fontFamily:'var(--mono)',fontWeight:700,fontSize:14,color:'#1a4dab',cursor:'pointer'}} onClick={() => navigate('/procurement/po/' + linkedPO.id)}>
+                          {linkedPO.po_number}
+                        </div>
+                        <div style={{fontSize:12,color:'var(--gray-500)',marginTop:2}}>{linkedPO.vendor_name || '—'}</div>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:12}}>
+                        <span className={'pill pill-' + (linkedPO.status === 'material_received' || linkedPO.status === 'closed' ? 'dispatched_fc' : linkedPO.status === 'cancelled' ? 'cancelled' : 'goods_issued')} style={{fontSize:11}}>
+                          {linkedPO.status === 'draft' ? 'Draft' : linkedPO.status === 'pending_approval' ? 'Pending Approval' : linkedPO.status === 'approved' ? 'Approved' : linkedPO.status === 'placed' ? 'Placed' : linkedPO.status === 'acknowledged' ? 'Acknowledged' : linkedPO.status === 'delivery_confirmation' ? 'Delivery Confirmed' : linkedPO.status === 'material_received' ? 'Material Received' : linkedPO.status === 'closed' ? 'Closed' : linkedPO.status === 'cancelled' ? 'Cancelled' : linkedPO.status}
+                        </span>
+                        <button className="od-btn" style={{fontSize:12,padding:'4px 10px'}} onClick={() => navigate('/procurement/po/' + linkedPO.id)}>View PO</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+                      <div style={{fontSize:13,color:'#b45309'}}>
+                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14,verticalAlign:'middle',marginRight:4}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        No Purchase Order created yet
+                      </div>
+                      {isOps && <button className="od-btn" style={{fontSize:12,padding:'4px 10px'}} onClick={() => navigate('/procurement/po/new?order_id=' + id)}>Create PO</button>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Products */}
             <div className="od-card">

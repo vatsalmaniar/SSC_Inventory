@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
+import FCSubNav from '../components/FCSubNav'
 import '../styles/orders.css'
 
 function fmtCr(val) {
@@ -29,6 +30,7 @@ export default function FCDashboard() {
   const navigate = useNavigate()
   const [user, setUser]     = useState({ name: '', role: '', fc: '' })
   const [orders, setOrders] = useState([])
+  const [pendingGrns, setPendingGrns] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { init() }, [])
@@ -47,6 +49,12 @@ export default function FCDashboard() {
     if (!['fc_kaveri','fc_godawari','ops','admin','accounts'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, role, fc })
     await loadOrders(fc)
+
+    // Pending inward GRNs count
+    let grnQ = sb.from('grn').select('id', { count:'exact', head:true }).in('status', ['draft','checking']).eq('is_test', false)
+    if (fc) grnQ = grnQ.eq('fulfilment_center', fc)
+    const { count: grnCount } = await grnQ
+    setPendingGrns(grnCount || 0)
   }
 
   async function loadOrders(fc) {
@@ -86,6 +94,7 @@ export default function FCDashboard() {
 
   return (
     <Layout pageTitle="Fulfilment Centre" pageKey="fc">
+      <FCSubNav active="dashboard" />
       <div className="dash-page">
         <div className="dash-body">
 
@@ -191,7 +200,20 @@ export default function FCDashboard() {
                 </div>
               </div>
 
-              {/* Tile 5 — E-Way / Dispatch (light) */}
+              {/* Tile 5 — Pending Inward (light) */}
+              <div className="dash-tile dash-tile-light" onClick={() => navigate('/fc/grn')}>
+                <div className="dash-tile-head">
+                  <div className="dash-tile-label">Pending Inward</div>
+                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
+                </div>
+                <div className="dash-tile-value" style={{ color: pendingGrns > 0 ? '#b45309' : undefined }}>{pendingGrns}</div>
+                <div className="dash-tile-meta">
+                  <span className="dash-tile-sub">GRNs awaiting inspection / confirmation</span>
+                  {pendingGrns > 0 && <span className="dash-tile-badge" style={{ background:'#fffbeb', color:'#b45309' }}>Needs inspection</span>}
+                </div>
+              </div>
+
+              {/* Tile 6 — E-Way / Dispatch (light) */}
               <div className="dash-tile dash-tile-light" onClick={() => navigate('/fc/list')}>
                 <div className="dash-tile-head">
                   <div className="dash-tile-label">Ready to Dispatch</div>

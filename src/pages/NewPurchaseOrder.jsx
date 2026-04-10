@@ -1,0 +1,575 @@
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
+import Typeahead from '../components/Typeahead'
+import Layout from '../components/Layout'
+import '../styles/neworder.css'
+
+const FC_ADDRESSES = {
+  Kaveri: 'SSC Control Pvt Ltd, 17(A) Ashwamegh Warehouse, Behind New Ujala Hotel, Sarkhej Bavla Highway, Sarkhej, Ahmedabad, Gujarat 382210',
+  Godawari: 'SSC Control Pvt Ltd, 31 GIDC Estate, B/h Bank Of, Makarpura, Vadodara, Gujarat 390010',
+}
+
+function emptyItem() {
+  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '' }
+}
+
+export default function NewPurchaseOrder() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const orderId = searchParams.get('order_id')
+
+  const [user, setUser]         = useState({ name: '', avatar: '', role: '', id: '' })
+  const [submitting, setSubmitting] = useState(false)
+
+  // Vendor
+  const [vendorText, setVendorText] = useState('')
+  const [vendorId, setVendorId]     = useState('')
+  const [vendorName, setVendorName] = useState('')
+  const [vendorPaymentTerms, setVendorPaymentTerms] = useState('')
+
+  // PO header
+  const [poType, setPoType]                 = useState('SO')
+  const [poDate, setPoDate]                 = useState(new Date().toISOString().slice(0, 10))
+  const [expectedDelivery, setExpectedDelivery] = useState('')
+  const [sscCoNo, setSscCoNo]               = useState('')
+  const [notes, setNotes]                   = useState('')
+  const [purchaseRequisition, setPurchaseRequisition] = useState('')
+  const [fulfilmentCenter, setFulfilmentCenter] = useState('')
+
+  // Test mode
+  const [isTest, setIsTest] = useState(false)
+
+  // CO order prefill
+  const [coOrder, setCOOrder] = useState(null)
+  const [coText, setCOText] = useState('')
+  const [sscNotes, setSscNotes] = useState('')
+
+  // Document upload
+  const [poFile, setPoFile]       = useState(null)
+  const [poFileName, setPoFileName] = useState('')
+
+  // Items
+  const [items, setItems] = useState([emptyItem(), emptyItem(), emptyItem()])
+
+  useEffect(() => { init() }, [])
+
+  async function init() {
+    let { data: { session } } = await sb.auth.getSession()
+    if (!session) {
+      const { data } = await sb.auth.refreshSession()
+      if (!data?.session) { navigate('/login'); return }
+      session = data.session
+    }
+    const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
+    const name   = profile?.name || session.user.email.split('@')[0]
+    const role   = profile?.role || 'sales'
+    if (!['ops','admin'].includes(role)) { navigate('/dashboard'); return }
+    const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    setUser({ name, avatar, role, id: session.user.id })
+
+    // If creating from a CO order via URL param, pre-fill
+    if (orderId) {
+      setPoType('CO')
+      await loadCOOrder(orderId)
+    }
+  }
+
+  async function fetchPendingCOs(q) {
+    // Search CO orders by order_number or customer_name
+    const { data: coOrders } = await sb.from('orders')
+      .select('id,order_number,customer_name')
+      .eq('order_type', 'CO')
+      .eq('is_test', false)
+      .in('status', ['inv_check', 'inventory_check', 'dispatch', 'pending', 'confirmed'])
+      .or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (!coOrders?.length) return []
+
+    // Filter out COs that already have a PO linked
+    const coIds = coOrders.map(o => o.id)
+    const { data: linkedPos } = await sb.from('purchase_orders').select('order_id').in('order_id', coIds)
+    const linkedSet = new Set((linkedPos || []).map(p => p.order_id))
+    return coOrders.filter(o => !linkedSet.has(o.id))
+  }
+
+  async function loadCOOrder(coId) {
+    const { data: order } = await sb.from('orders')
+      .select('id,order_number,customer_name,order_items(item_code,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date)')
+      .eq('id', coId).single()
+    if (!order) return
+    setCOOrder(order)
+    setCOText(order.order_number + ' — ' + order.customer_name)
+    setSscCoNo(order.order_number)
+    setSscNotes(`Customer: ${order.customer_name}`)
+    const prefilled = (order.order_items || []).map(oi => ({
+      item_code: oi.item_code || '',
+      qty: String(oi.qty || ''),
+      lp_unit_price: String(oi.lp_unit_price || ''),
+      discount_pct: String(oi.discount_pct || '0'),
+      unit_price_after_disc: String(oi.unit_price_after_disc || ''),
+      total_price: String(oi.total_price || ''),
+      delivery_date: oi.dispatch_date || '',
+    }))
+    if (prefilled.length) setItems(prefilled)
+  }
+
+  function selectCO(co) {
+    loadCOOrder(co.id)
+  }
+
+  function handlePoTypeChange(type) {
+    setPoType(type)
+    if (type !== 'CO') {
+      setCOOrder(null)
+      setCOText('')
+      setSscCoNo('')
+      setSscNotes('')
+      setItems([emptyItem(), emptyItem(), emptyItem()])
+    }
+  }
+
+  async function fetchVendors(q) {
+    const { data } = await sb.from('vendors').select('id,vendor_code,vendor_name,credit_terms')
+      .eq('status','active').eq('is_test', false)
+      .or(`vendor_name.ilike.%${q}%,vendor_code.ilike.%${q}%`).order('vendor_name').limit(20)
+    return data || []
+  }
+
+  function selectVendor(v) {
+    setVendorText(v.vendor_name)
+    setVendorId(v.id)
+    setVendorName(v.vendor_name)
+    setVendorPaymentTerms(v.credit_terms || '')
+  }
+
+  function handlePoFile(e) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    if (f.size > 200 * 1024) {
+      toast('File is too large. Maximum file size allowed: 200 KB')
+      e.target.value = ''
+      return
+    }
+    setPoFile(f)
+    setPoFileName(f.name)
+  }
+
+  async function fetchItems(q) {
+    const { data } = await sb.from('items').select('item_code')
+      .ilike('item_code', '%' + q + '%').limit(10)
+    return data || []
+  }
+
+  function selectItemCode(idx, item) {
+    setItems(prev => {
+      const next = [...prev]
+      next[idx] = { ...next[idx], item_code: item.item_code }
+      return next
+    })
+  }
+
+  function updateItem(idx, field, value) {
+    setItems(prev => {
+      const next = [...prev]
+      next[idx] = { ...next[idx], [field]: value }
+      const item = next[idx]
+      const lp   = parseFloat(item.lp_unit_price) || 0
+      const disc = parseFloat(item.discount_pct)  || 0
+      const qty  = parseFloat(item.qty)            || 0
+      const unit = lp * (1 - disc / 100)
+      next[idx].unit_price_after_disc = unit ? unit.toFixed(2) : ''
+      next[idx].total_price = (unit && qty) ? (unit * qty).toFixed(2) : ''
+      return next
+    })
+  }
+
+  function addRow()       { setItems(prev => [...prev, emptyItem()]) }
+  function removeRow(idx) { setItems(prev => prev.filter((_, i) => i !== idx)) }
+
+  const filledItems = items.filter(i => i.item_code.trim())
+  const grandTotal  = filledItems.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0)
+  const isCO = poType === 'CO'
+
+  async function submitPO(submitForApproval) {
+    if (!vendorId)          { toast('Please select a vendor'); return }
+    if (isCO && !coOrder)   { toast('Please select a Custom Order (SSC CO No.)'); return }
+    if (!fulfilmentCenter)  { toast('Please select a delivery address (FC)'); return }
+    if (!filledItems.length){ toast('Add at least one line item'); return }
+    for (const item of filledItems) {
+      if (!item.qty || parseFloat(item.qty) <= 0) { toast(`Qty is required for item: ${item.item_code}`); return }
+      if (!item.lp_unit_price || parseFloat(item.lp_unit_price) <= 0) { toast(`LP Price is required for item: ${item.item_code}`); return }
+      if (!item.delivery_date) { toast(`Delivery Date is required for item: ${item.item_code}`); return }
+    }
+
+    setSubmitting(true)
+
+    // Upload document if provided
+    let poDocUrl = null
+    if (poFile) {
+      const ext  = poFile.name.split('.').pop()
+      const path = `purchase-orders/${Date.now()}.${ext}`
+      const { error: upErr } = await sb.storage.from('po-documents').upload(path, poFile)
+      if (!upErr) {
+        const { data: { publicUrl } } = sb.storage.from('po-documents').getPublicUrl(path)
+        poDocUrl = publicUrl
+      }
+    }
+
+    try {
+      // Temp number — real PO number assigned on approval
+      const tempNum = `Temp/${isCO ? 'PCO' : 'PO'}${Date.now().toString(36).toUpperCase()}`
+
+      const { data: po, error: insertErr } = await sb.from('purchase_orders').insert({
+        po_number:         tempNum,
+        vendor_id:         vendorId,
+        vendor_name:       vendorName,
+        order_id:          coOrder?.id || orderId || null,
+        order_number:      coOrder?.order_number || null,
+        status:            submitForApproval ? 'pending_approval' : 'draft',
+        po_date:           poDate,
+        expected_delivery: expectedDelivery || null,
+        fulfilment_center: fulfilmentCenter || null,
+        notes:             notes.trim() || null,
+        reference:         sscCoNo.trim() || coOrder?.order_number || null,
+        ssc_notes:         sscNotes.trim() || null,
+        purchase_requisition: purchaseRequisition.trim() || null,
+        po_document_url:   poDocUrl,
+        total_amount:      grandTotal,
+        payment_terms:     vendorPaymentTerms || null,
+        created_by:        user.id,
+        submitted_by_name: user.name,
+        is_test:           isTest,
+      }).select('id').single()
+
+      if (insertErr) { toast('Error: ' + insertErr.message); setSubmitting(false); return }
+
+      const lineItems = filledItems.map((item, idx) => ({
+        po_id:            po.id,
+        sr_no:            idx + 1,
+        item_code:        item.item_code.trim(),
+        qty:              parseFloat(item.qty),
+        lp_unit_price:    parseFloat(item.lp_unit_price) || null,
+        discount_pct:     parseFloat(item.discount_pct) || 0,
+        unit_price:       parseFloat(item.unit_price_after_disc) || parseFloat(item.lp_unit_price) || 0,
+        total_price:      parseFloat(item.total_price),
+        delivery_date:    item.delivery_date || null,
+      }))
+
+      const { error: itemsErr } = await sb.from('po_items').insert(lineItems)
+      if (itemsErr) toast('PO created but items failed: ' + itemsErr.message)
+
+      toast('Purchase Order created — PO number will be assigned on approval', 'success')
+      navigate('/procurement/po/' + po.id)
+    } catch (err) {
+      toast('Error: ' + err.message)
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Layout pageTitle="New Purchase Order" pageKey="procurement">
+    <div className="no-page">
+
+      <div className="no-body">
+        <div className="no-page-title">New Purchase Order</div>
+        <div className="no-page-sub">{isCO && coOrder ? `Creating PO against ${coOrder.order_number} — ${coOrder.customer_name}` : 'Fill in the details below to create a new purchase order.'}</div>
+
+        {/* ── CO Order Info Banner ── */}
+        {isCO && coOrder && (
+          <div style={{ display:'flex', alignItems:'center', gap:10, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 16px', marginBottom:4 }}>
+            <svg fill="none" stroke="#1d4ed8" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:'#1e40af' }}>Against Custom Order {coOrder.order_number}</div>
+              <div style={{ fontSize:12, color:'#3b82f6' }}>Customer: {coOrder.customer_name} — Items auto-filled from order</div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Vendor Information ── */}
+        <div className="no-card">
+          <div className="no-section-title">
+            <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Vendor Information
+          </div>
+
+          <div className="no-row full">
+            <div className="no-field">
+              <label>Vendor Name <span className="req">*</span></label>
+              <Typeahead
+                value={vendorText}
+                onChange={v => { setVendorText(v); if (!v.trim()) { setVendorId(''); setVendorName(''); setVendorPaymentTerms('') } }}
+                onSelect={selectVendor}
+                placeholder="Search vendor by name or code..."
+                fetchFn={fetchVendors}
+                renderItem={v => (
+                  <>
+                    <div className="typeahead-item-main" style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      {v.vendor_name}
+                      <span style={{ fontSize:10, color:'var(--gray-400)', fontFamily:'var(--mono)' }}>{v.vendor_code}</span>
+                    </div>
+                  </>
+                )}
+              />
+            </div>
+          </div>
+
+          <div className="no-row three">
+            <div className="no-field">
+              <label>Credit Terms</label>
+              <input
+                value={vendorPaymentTerms}
+                readOnly
+                placeholder="Auto-filled on vendor select"
+                style={{ background: 'var(--gray-50)', color: vendorPaymentTerms ? 'var(--gray-800)' : 'var(--gray-400)', cursor: 'default' }}
+              />
+            </div>
+            <div className="no-field">
+              <label>Delivery Address (FC) <span className="req">*</span></label>
+              <select value={fulfilmentCenter} onChange={e => setFulfilmentCenter(e.target.value)}>
+                <option value="">— Select FC —</option>
+                <option value="Kaveri">Kaveri (Ahmedabad)</option>
+                <option value="Godawari">Godawari (Vadodara)</option>
+              </select>
+            </div>
+            <div className="no-field">
+              <label>Purchase Requisition From</label>
+              <input value={purchaseRequisition} onChange={e => setPurchaseRequisition(e.target.value)} placeholder="Optional — who raised the PR" />
+            </div>
+          </div>
+
+          {fulfilmentCenter && (
+            <div className="no-row full" style={{ marginTop: 4 }}>
+              <div className="no-field">
+                <label>Delivery Address</label>
+                <textarea value={FC_ADDRESSES[fulfilmentCenter] || ''} readOnly rows={2} style={{ background:'var(--gray-50)', color:'var(--gray-700)', cursor:'default' }} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── PO Details ── */}
+        <div className="no-card">
+          <div className="no-section-title">
+            <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            PO Details
+          </div>
+
+          <div className="no-row three">
+            <div className="no-field">
+              <label>PO Date <span className="req">*</span></label>
+              <input type="date" value={poDate} onChange={e => setPoDate(e.target.value)} />
+            </div>
+            <div className="no-field">
+              <label>PO Type <span className="req">*</span></label>
+              <select value={poType} onChange={e => handlePoTypeChange(e.target.value)}>
+                <option value="SO">Stock Order (SO)</option>
+                <option value="CO">Against Customer Order (CO)</option>
+              </select>
+            </div>
+            <div className="no-field">
+              <label>Expected Delivery</label>
+              <input type="date" value={expectedDelivery} onChange={e => setExpectedDelivery(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="no-row">
+            <div className="no-field">
+              <label>{isCO ? 'SSC CO No.' : 'PO / Reference Number'} {isCO && <span className="req">*</span>}</label>
+              {isCO ? (
+                <Typeahead
+                  value={coText}
+                  onChange={v => { setCOText(v); if (!v.trim()) { setCOOrder(null); setSscCoNo(''); setSscNotes(''); setItems([emptyItem(), emptyItem(), emptyItem()]) } }}
+                  onSelect={selectCO}
+                  placeholder="Type CO number or customer name..."
+                  fetchFn={fetchPendingCOs}
+                  renderItem={co => (
+                    <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                      <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:600 }}>{co.order_number}</div>
+                      <div style={{ fontSize:11, color:'var(--gray-500)' }}>{co.customer_name}</div>
+                    </div>
+                  )}
+                />
+              ) : (
+                <input value={sscCoNo} onChange={e => setSscCoNo(e.target.value)} placeholder="e.g. Reference, Indent No." />
+              )}
+            </div>
+            <div className="no-field">
+              <label>Notes (for Vendor)</label>
+              <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any special instructions for vendor..." />
+            </div>
+          </div>
+
+          <div className="no-row">
+            <div className="no-field">
+              <label>Notes for SSC (Internal)</label>
+              <input
+                value={sscNotes}
+                onChange={e => setSscNotes(e.target.value)}
+                placeholder={isCO ? 'Auto-filled with customer name' : 'Internal notes for team reference'}
+                style={isCO && coOrder ? { background: 'var(--gray-50)' } : {}}
+              />
+            </div>
+          </div>
+
+          {/* Document Upload */}
+          <div className="no-row full" style={{ marginTop: 4 }}>
+            <div className="no-field">
+              <label>Supporting Document (optional)</label>
+              <label className="no-file-label">
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx" onChange={handlePoFile} style={{ display: 'none' }} />
+                <div className={'no-file-box' + (poFileName ? ' has-file' : '')}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width: 20, height: 20 }}>
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <span>{poFileName || 'Click to upload (PDF, image, Excel — e.g. special price sheet)'}</span>
+                  {poFileName && (
+                    <button
+                      type="button"
+                      onClick={e => { e.preventDefault(); setPoFile(null); setPoFileName('') }}
+                      style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', fontSize: 16 }}
+                    >×</button>
+                  )}
+                </div>
+              </label>
+              <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>Maximum file size allowed: 200 KB. Upload special price approvals, quotations, etc.</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Line Items ── */}
+        <div className="no-card no-card-items">
+          <div className="no-section-title">
+            <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+              <rect x="9" y="3" width="6" height="4" rx="1"/>
+              <path d="M9 12h6M9 16h4"/>
+            </svg>
+            Order Items
+          </div>
+
+          <div className="no-items-table-wrap">
+            <table className="no-items-table">
+              <thead>
+                <tr>
+                  <th className="col-sr">#</th>
+                  <th className="col-code">Item Code <span className="req">*</span></th>
+                  <th className="col-qty">Qty <span className="req">*</span></th>
+                  <th className="col-lp">LP Price (₹) <span className="req">*</span></th>
+                  <th className="col-disc">Disc %</th>
+                  <th className="col-unit">Unit Price (₹)</th>
+                  <th className="col-total">Total (₹)</th>
+                  <th className="col-date">Delivery Date <span className="req">*</span></th>
+                  <th className="col-del"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, idx) => (
+                  <tr key={idx} className={item.item_code ? 'row-filled' : ''}>
+                    <td className="col-sr">{idx + 1}</td>
+                    <td className="col-code">
+                      <Typeahead
+                        value={item.item_code}
+                        onChange={v => updateItem(idx, 'item_code', v)}
+                        onSelect={it => selectItemCode(idx, it)}
+                        placeholder="Search or type..."
+                        fetchFn={fetchItems}
+                        renderItem={it => (
+                          <div className="typeahead-item-main" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{it.item_code}</div>
+                        )}
+                      />
+                    </td>
+                    <td className="col-qty">
+                      <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', e.target.value)} placeholder="0" min="0" />
+                    </td>
+                    <td className="col-lp">
+                      <input type="number" value={item.lp_unit_price} onChange={e => updateItem(idx, 'lp_unit_price', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                    </td>
+                    <td className="col-disc">
+                      <input type="number" value={item.discount_pct} onChange={e => updateItem(idx, 'discount_pct', e.target.value)} placeholder="0" min="0" max="100" />
+                    </td>
+                    <td className="col-unit">
+                      <input readOnly value={item.unit_price_after_disc} placeholder="—" className="calc-field" />
+                    </td>
+                    <td className="col-total">
+                      <input readOnly value={item.total_price} placeholder="—" className="calc-field total-field" />
+                    </td>
+                    <td className="col-date">
+                      <input type="date" value={item.delivery_date} onChange={e => updateItem(idx, 'delivery_date', e.target.value)} />
+                    </td>
+                    <td className="col-del">
+                      {items.length > 1 && (
+                        <button className="del-row-btn" onClick={() => removeRow(idx)} title="Remove row">
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                            <path d="M10 11v6M14 11v6"/>
+                          </svg>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button className="no-add-row-btn" onClick={addRow}>
+            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Row
+          </button>
+        </div>
+
+        {/* ── Totals ── */}
+        <div className="no-card no-totals-card">
+          <div className="no-totals-row">
+            <div style={{ flex: 1 }} />
+            <div className="no-totals-summary">
+              <div className="no-total-line grand">
+                <span>Grand Total</span>
+                <span>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Actions ── */}
+        <div className="no-actions">
+          {user.role === 'admin' && (
+            <label style={{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:isTest ? '#b45309' : 'var(--gray-500)',fontWeight:isTest ? 600 : 400,background:isTest ? '#fef3c7' : 'transparent',border:isTest ? '1px solid #fde68a' : '1px solid transparent',borderRadius:8,padding:'6px 12px',transition:'all 0.15s'}}>
+              <input type="checkbox" checked={isTest} onChange={e => setIsTest(e.target.checked)} style={{accentColor:'#b45309',width:14,height:14}} />
+              Test Mode
+            </label>
+          )}
+          <div style={{ flex: 1 }} />
+          <button className="no-cancel-btn" onClick={() => navigate('/procurement/po')}>Cancel</button>
+          <button className="no-cancel-btn" onClick={() => submitPO(false)} disabled={submitting}>
+            {submitting ? 'Saving…' : 'Save as Draft'}
+          </button>
+          <button className="no-submit-btn" onClick={() => submitPO(true)} disabled={submitting}>
+            {submitting ? (
+              <><div className="no-spinner" />Submitting...</>
+            ) : (
+              <><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Submit for Approval</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+    </Layout>
+  )
+}

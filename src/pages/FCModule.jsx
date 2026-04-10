@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmt, FY_START } from '../lib/fmt'
+import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
+import FCSubNav from '../components/FCSubNav'
 import '../styles/orders.css'
 
 const WITH_ACCOUNTS = ['goods_issued','credit_check','goods_issue_posted','delivery_ready']
@@ -104,6 +105,7 @@ export default function FCModule() {
 
   return (
     <Layout pageTitle="Fulfilment Center" pageKey="fc">
+      <FCSubNav active="list" />
       <div className="od-list-page">
         <div className="od-list-body">
 
@@ -158,7 +160,7 @@ export default function FCModule() {
                 </div>
               </div>
               <div className="od-stat-val">{counts.dispatched_fc}</div>
-              <div className="od-stat-sub">dispatched FY 26-27</div>
+              <div className="od-stat-sub">dispatched {FY_LABEL}</div>
             </div>
           </div>
 

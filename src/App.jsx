@@ -24,6 +24,19 @@ import CRMNewOpportunity from './pages/CRMNewOpportunity'
 import CRMFieldVisits from './pages/CRMFieldVisits'
 import CRMSampleRequests from './pages/CRMSampleRequests'
 import CRMTargets from './pages/CRMTargets'
+import VendorMaster from './pages/VendorMaster'
+import NewVendor from './pages/NewVendor'
+import VendorDetail from './pages/VendorDetail'
+import ProcurementDashboard from './pages/ProcurementDashboard'
+import PurchaseOrderList from './pages/PurchaseOrderList'
+import NewPurchaseOrder from './pages/NewPurchaseOrder'
+import PurchaseOrderDetail from './pages/PurchaseOrderDetail'
+import ProcurementOrders from './pages/ProcurementOrders'
+import GRNList from './pages/GRNList'
+import NewGRN from './pages/NewGRN'
+import GRNDetail from './pages/GRNDetail'
+import PurchaseInvoiceList from './pages/PurchaseInvoiceList'
+import PurchaseInvoiceDetail from './pages/PurchaseInvoiceDetail'
 import FCDashboard from './pages/FCDashboard'
 import FCModule from './pages/FCModule'
 import FCOrderDetail from './pages/FCOrderDetail'
@@ -61,8 +74,23 @@ export default function App() {
         <Route path="/crm/visits" element={<CRMFieldVisits />} />
         <Route path="/crm/samples" element={<CRMSampleRequests />} />
         <Route path="/crm/targets" element={<CRMTargets />} />
+        <Route path="/vendors" element={<VendorMaster />} />
+        <Route path="/vendors/new" element={<NewVendor />} />
+        <Route path="/vendors/:id" element={<VendorDetail />} />
+        <Route path="/procurement" element={<ProcurementDashboard />} />
+        <Route path="/procurement/po" element={<PurchaseOrderList />} />
+        <Route path="/procurement/po/new" element={<NewPurchaseOrder />} />
+        <Route path="/procurement/po/:id" element={<PurchaseOrderDetail />} />
+        <Route path="/procurement/orders" element={<ProcurementOrders />} />
+        <Route path="/procurement/grn" element={<Navigate to="/fc/grn" replace />} />
+        <Route path="/procurement/grn/new" element={<Navigate to="/fc/grn/new" replace />} />
+        <Route path="/procurement/invoices" element={<PurchaseInvoiceList />} />
+        <Route path="/procurement/invoices/:id" element={<PurchaseInvoiceDetail />} />
         <Route path="/fc" element={<FCDashboard />} />
         <Route path="/fc/list" element={<FCModule />} />
+        <Route path="/fc/grn" element={<GRNList />} />
+        <Route path="/fc/grn/new" element={<NewGRN />} />
+        <Route path="/fc/grn/:id" element={<GRNDetail />} />
         <Route path="/fc/:id" element={<FCOrderDetail />} />
         <Route path="/billing" element={<BillingDashboard />} />
         <Route path="/billing/list" element={<BillingList />} />

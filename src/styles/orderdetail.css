@@ -46,13 +46,14 @@
   position: relative;
   background: #f6f8fc;
   color: #8896b3;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  padding: 0 8px 0 20px;
+  padding: 0 6px 0 18px;
   cursor: default;
   user-select: none;
   transition: background 0.15s, color 0.15s;
   white-space: nowrap;
+  min-width: 0;
 }
 .od-pipe-stage::after {
   content: '';
