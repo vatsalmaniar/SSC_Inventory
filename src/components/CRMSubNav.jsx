@@ -28,13 +28,15 @@ export default function CRMSubNav({ active, onAdd }) {
           </button>
         ))}
       </div>
-      <button
-        className="crm-btn crm-btn-primary"
-        style={{ margin:'0 16px', fontSize:12, padding:'5px 14px' }}
-        onClick={handleAdd}
-      >
-        {addLabel}
-      </button>
+      {onAdd && (
+        <button
+          className="crm-btn crm-btn-primary"
+          style={{ margin:'0 16px', fontSize:12, padding:'5px 14px' }}
+          onClick={onAdd}
+        >
+          {addLabel}
+        </button>
+      )}
     </div>
   )
 }

@@ -25,7 +25,8 @@ export default function CRMNewLead() {
   const [searchTimer, setSearchTimer]     = useState(null)
 
   const [form, setForm] = useState({
-    contact_name: '', source: '', principal_id: '',
+    contact_name: '', contact_phone: '', contact_email: '', contact_designation: '',
+    source: '', principal_id: '',
     product_notes: '', assigned_rep_id: '',
     estimated_value_inr: '', expected_close_date: '',
   })
@@ -99,6 +100,9 @@ export default function CRMNewLead() {
       // Existing company → Opportunity
       const { data, error } = await sb.from('crm_opportunities').insert({
         company_id: companyId,
+        customer_id: selectedCompany.id,
+        account_type: selectedCompany.customer_type || null,
+        freetext_company: matchName,
         principal_id: form.principal_id || null,
         product_notes: form.product_notes.trim() || null,
         assigned_rep_id: form.assigned_rep_id || user.id,
@@ -113,6 +117,9 @@ export default function CRMNewLead() {
       const { data, error } = await sb.from('crm_leads').insert({
         freetext_company: companyQuery.trim(),
         contact_name_freetext: form.contact_name.trim() || null,
+        contact_phone: form.contact_phone.trim() || null,
+        contact_email: form.contact_email.trim() || null,
+        contact_designation: form.contact_designation.trim() || null,
         source: form.source || null,
         principal_id: form.principal_id || null,
         product_notes: form.product_notes.trim() || null,
@@ -196,15 +203,30 @@ export default function CRMNewLead() {
                     <input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} placeholder="e.g. Ramesh Shah" />
                   </div>
                   <div className="od-edit-field">
+                    <label>Designation</label>
+                    <input value={form.contact_designation} onChange={e => set('contact_designation', e.target.value)} placeholder="e.g. Purchase Manager" />
+                  </div>
+                </div>
+
+                <div className="od-edit-row">
+                  <div className="od-edit-field">
+                    <label>Phone</label>
+                    <input value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} placeholder="e.g. 9876543210" />
+                  </div>
+                  <div className="od-edit-field">
+                    <label>Email</label>
+                    <input type="email" value={form.contact_email} onChange={e => set('contact_email', e.target.value)} placeholder="e.g. ramesh@company.com" />
+                  </div>
+                </div>
+
+                <div className="od-edit-row">
+                  <div className="od-edit-field">
                     <label>Source</label>
                     <select value={form.source} onChange={e => set('source', e.target.value)}>
                       <option value="">— Select —</option>
                       {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
-                </div>
-
-                <div className="od-edit-row">
                   <div className="od-edit-field">
                     <label>Principal</label>
                     <select value={form.principal_id} onChange={e => set('principal_id', e.target.value)}>
@@ -212,6 +234,9 @@ export default function CRMNewLead() {
                       {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
+                </div>
+
+                <div className="od-edit-row">
                   <div className="od-edit-field">
                     <label>Assign To</label>
                     <select value={form.assigned_rep_id} onChange={e => set('assigned_rep_id', e.target.value)}>

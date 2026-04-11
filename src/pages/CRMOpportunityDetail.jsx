@@ -244,9 +244,30 @@ export default function CRMOpportunityDetail() {
   async function saveCustContact() {
     if (!contactForm.name.trim()) { toast('Name is required'); return }
     setSavingContact(true)
-    const { data, error } = await sb.from('customer_contacts').insert({ ...contactForm, customer_id: opp.customer_id }).select().single()
-    if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
-    setCustContacts(p => [...p, data])
+    if (opp.customer_id) {
+      const { data, error } = await sb.from('customer_contacts').insert({ ...contactForm, customer_id: opp.customer_id }).select().single()
+      if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+      setCustContacts(p => [...p, data])
+    } else {
+      let companyId = opp.company_id
+      if (!companyId) {
+        // Auto-create crm_companies from freetext
+        const { data: newCo } = await sb.from('crm_companies').insert({
+          company_name: opp.freetext_company || opp.customers?.customer_name || 'Unknown',
+          status: 'Active',
+        }).select('id').single()
+        if (newCo?.id) {
+          companyId = newCo.id
+          await sb.from('crm_opportunities').update({ company_id: companyId }).eq('id', id)
+          setOpp(p => ({ ...p, company_id: companyId }))
+        }
+      }
+      if (companyId) {
+        const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: companyId }).select().single()
+        if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+        setContacts(p => [...p, data])
+      }
+    }
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
     setShowContactModal(false)
     setSavingContact(false)
@@ -609,12 +630,12 @@ export default function CRMOpportunityDetail() {
     const dateStr = fmt(q.created_at)
 
     // Fetch customer details for address + GST + payment terms
-    let custAddr = '', custGst = '', creditTerms = ''
+    let custAddr = '', custGst = '', creditTerms = 'Against PI'
     if (opp?.customer_id) {
       const { data: cust } = await sb.from('customers').select('billing_address,gst,credit_terms').eq('id', opp.customer_id).single()
       custAddr    = cust?.billing_address || ''
       custGst     = cust?.gst || ''
-      creditTerms = cust?.credit_terms || ''
+      creditTerms = cust?.credit_terms || 'Against PI'
     }
     const isAgainstPI = creditTerms === 'Against PI'
 
@@ -882,8 +903,8 @@ export default function CRMOpportunityDetail() {
                 <div className="od-header-eyebrow">
                   Opportunity · <StagePill stage={opp.stage} />
                 </div>
-                <div className="od-header-title">{opp.product_notes || opp.crm_companies?.company_name || '—'}</div>
-                <div className="od-header-num">{opp.crm_companies?.company_name || '—'}</div>
+                <div className="od-header-title">{opp.product_notes || opp.customers?.customer_name || opp.crm_companies?.company_name || opp.freetext_company || '—'}</div>
+                <div className="od-header-num">{opp.customers?.customer_name || opp.crm_companies?.company_name || opp.freetext_company || '—'}</div>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4,flexWrap:'wrap'}}>
                   <OwnerChip name={opp.profiles?.name} />
                   {opp.crm_principals?.name && <span style={{fontSize:12,color:'var(--gray-400)'}}>· {opp.crm_principals.name}</span>}
@@ -1083,13 +1104,13 @@ export default function CRMOpportunityDetail() {
                         </div>
                       )}
                       {/* Met with — customer contact */}
-                      {custContacts.length > 0 && (
+                      {[...custContacts, ...contacts].length > 0 && (
                         <div>
                           <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', marginBottom:5, textTransform:'uppercase', letterSpacing:'0.5px' }}>Met With</div>
                           <select value={actMetContact} onChange={e => setActMetContact(e.target.value)}
                             style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box', background:'white' }}>
                             <option value="">— Select contact —</option>
-                            {custContacts.map(c => (
+                            {[...custContacts, ...contacts].map(c => (
                               <option key={c.id} value={c.id}>{c.name}{c.designation ? ' · ' + c.designation : ''}</option>
                             ))}
                           </select>
@@ -1486,7 +1507,7 @@ export default function CRMOpportunityDetail() {
                     </div>
                   ) : (
                     <div className="od-detail-grid">
-                      <div className="od-detail-field"><label>Account</label><div className="val">{opp.customers?.customer_name || opp.crm_companies?.company_name || '—'}</div></div>
+                      <div className="od-detail-field"><label>Account</label><div className="val">{opp.customers?.customer_name || opp.crm_companies?.company_name || opp.freetext_company || '—'}</div></div>
                       <div className="od-detail-field"><label>Account Type</label><div className="val">{opp.account_type||'—'}</div></div>
                       <div className="od-detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={opp.profiles?.name} /></div></div>
                       <div className="od-detail-field"><label>Probability</label><div className="val">{opp.probability != null ? opp.probability + '%' : '—'}</div></div>
@@ -1613,25 +1634,24 @@ export default function CRMOpportunityDetail() {
 
               {/* Contacts */}
               <div className="od-side-card">
+                {(() => {
+                  const allContacts = [...custContacts, ...contacts]
+                  return <>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-                  <div className="od-side-card-title" style={{ margin:0 }}>Contacts ({custContacts.length})</div>
-                  {opp.customer_id && (
-                    <button onClick={() => setShowContactModal(true)}
-                      style={{ fontSize:11, fontWeight:700, color:'#1a4dab', background:'#eff6ff', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'var(--font)' }}>
-                      + Add
-                    </button>
-                  )}
+                  <div className="od-side-card-title" style={{ margin:0 }}>Contacts ({allContacts.length})</div>
+                  <button onClick={() => setShowContactModal(true)}
+                    style={{ fontSize:11, fontWeight:700, color:'#1a4dab', background:'#eff6ff', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'var(--font)' }}>
+                    + Add
+                  </button>
                 </div>
-                {!opp.customer_id ? (
-                  <div style={{ fontSize:12, color:'var(--gray-400)' }}>Link a customer account to manage contacts.</div>
-                ) : custContacts.length === 0 ? (
+                {allContacts.length === 0 ? (
                   <div style={{ fontSize:12, color:'var(--gray-400)', textAlign:'center', padding:'10px 0' }}>
                     No contacts yet.<br/>
                     <button onClick={() => setShowContactModal(true)} style={{ marginTop:6, fontSize:12, fontWeight:600, color:'#1a4dab', background:'none', border:'none', cursor:'pointer', fontFamily:'var(--font)' }}>+ Add Contact</button>
                   </div>
                 ) : (
                   <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                    {custContacts.map(c => (
+                    {allContacts.map(c => (
                       <div key={c.id} style={{ display:'flex', gap:10, alignItems:'flex-start', paddingBottom:10, borderBottom:'1px solid var(--gray-50)' }}>
                         <div style={{ width:32, height:32, borderRadius:8, background:'#e0e7ff', color:'#3730a3', fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                           {c.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2)}
@@ -1646,6 +1666,8 @@ export default function CRMOpportunityDetail() {
                     ))}
                   </div>
                 )}
+                  </>
+                })()}
               </div>
             {/* Stage History — Salesforce style */}
             {(() => {

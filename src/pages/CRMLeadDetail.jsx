@@ -80,6 +80,11 @@ export default function CRMLeadDetail() {
   const [savingQuote, setSavingQuote] = useState(false)
   const [quoteLoaded, setQuoteLoaded] = useState(false)
 
+  const [leadContacts, setLeadContacts]         = useState([])
+  const [showContactModal, setShowContactModal] = useState(false)
+  const [contactForm, setContactForm]           = useState({ name:'', designation:'', phone:'', email:'' })
+  const [savingContact, setSavingContact]       = useState(false)
+
   useEffect(() => { init() }, [id])
 
   async function init() {
@@ -107,7 +112,38 @@ export default function CRMLeadDetail() {
     }
     setPrincipals(principalsRes.data || [])
     setReps(repsRes.data || [])
+    if (leadRes.data?.company_id) {
+      const { data: ctcts } = await sb.from('crm_contacts').select('*').eq('company_id', leadRes.data.company_id).order('created_at')
+      setLeadContacts(ctcts || [])
+    }
     setLoading(false)
+  }
+
+  async function saveLeadContact() {
+    if (!contactForm.name.trim()) { toast('Name is required'); return }
+    setSavingContact(true)
+    const companyId = lead.company_id
+    if (!companyId) {
+      // Create crm_companies record from freetext
+      const { data: newCo } = await sb.from('crm_companies').insert({
+        company_name: lead.freetext_company || 'Unknown',
+        status: 'Active',
+      }).select('id').single()
+      if (newCo?.id) {
+        await sb.from('crm_leads').update({ company_id: newCo.id }).eq('id', id)
+        setLead(p => ({ ...p, company_id: newCo.id }))
+        const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: newCo.id }).select().single()
+        if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+        setLeadContacts(p => [...p, data])
+      }
+    } else {
+      const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: companyId }).select().single()
+      if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+      setLeadContacts(p => [...p, data])
+    }
+    setContactForm({ name:'', designation:'', phone:'', email:'' })
+    setShowContactModal(false)
+    setSavingContact(false)
   }
 
   async function saveLead() {
@@ -115,6 +151,9 @@ export default function CRMLeadDetail() {
     const { error } = await sb.from('crm_leads').update({
       freetext_company: editData.freetext_company,
       contact_name_freetext: editData.contact_name_freetext,
+      contact_phone: editData.contact_phone,
+      contact_email: editData.contact_email,
+      contact_designation: editData.contact_designation,
       source: editData.source,
       principal_id: editData.principal_id,
       product_notes: editData.product_notes,
@@ -125,6 +164,14 @@ export default function CRMLeadDetail() {
     if (error) { toast('Error: ' + error.message); setSaving(false); return }
     setLead(p => ({ ...p, ...editData }))
     setEditMode(false); setSaving(false)
+  }
+
+  async function goToCustomer() {
+    const name = lead.crm_companies?.company_name || lead.freetext_company
+    if (!name) return
+    const { data } = await sb.from('customers').select('id').ilike('customer_name', name).maybeSingle()
+    if (data?.id) navigate('/customers/' + data.id)
+    else navigate('/customers?search=' + encodeURIComponent(name))
   }
 
   async function postActivity() {
@@ -238,7 +285,11 @@ export default function CRMLeadDetail() {
                   <span className="od-status-badge" style={STATUS_STYLE[lead.status] || {}}>{lead.status}</span>
                   {lead.scenario_type && <span className={'crm-scenario-pill crm-scenario-' + lead.scenario_type}>{scenarioLabel(lead.scenario_type)}</span>}
                 </div>
-                <div className="od-header-title">{lead.crm_companies?.company_name || lead.freetext_company || '—'}</div>
+                <div className="od-header-title">
+                  <span onClick={goToCustomer} style={{ color:'#2563eb', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted' }}>
+                    {lead.crm_companies?.company_name || lead.freetext_company || '—'}
+                  </span>
+                </div>
                 <div className="od-header-num">
                   {lead.contact_name_freetext || lead.crm_contacts?.name || ''}
                   {lead.crm_principals?.name ? ' · ' + lead.crm_principals.name : ''}
@@ -277,6 +328,11 @@ export default function CRMLeadDetail() {
                         <div className="od-edit-field"><label>Contact Name</label><input value={editData.contact_name_freetext||''} onChange={e=>setEditData(p=>({...p,contact_name_freetext:e.target.value}))}/></div>
                       </div>
                       <div className="od-edit-row">
+                        <div className="od-edit-field"><label>Designation</label><input value={editData.contact_designation||''} onChange={e=>setEditData(p=>({...p,contact_designation:e.target.value}))} placeholder="e.g. Purchase Manager"/></div>
+                        <div className="od-edit-field"><label>Phone</label><input value={editData.contact_phone||''} onChange={e=>setEditData(p=>({...p,contact_phone:e.target.value}))} placeholder="e.g. 9876543210"/></div>
+                      </div>
+                      <div className="od-edit-row">
+                        <div className="od-edit-field"><label>Email</label><input type="email" value={editData.contact_email||''} onChange={e=>setEditData(p=>({...p,contact_email:e.target.value}))} placeholder="e.g. name@company.com"/></div>
                         <div className="od-edit-field"><label>Source</label>
                           <select value={editData.source||''} onChange={e=>setEditData(p=>({...p,source:e.target.value}))}>
                             <option value="">—</option>{SOURCES.map(s=><option key={s} value={s}>{s}</option>)}
@@ -311,9 +367,16 @@ export default function CRMLeadDetail() {
                     </div>
                   ) : (
                     <div className="od-detail-grid">
+                      <div className="od-detail-field"><label>Company</label><div className="val" style={{ fontWeight:600 }}>
+                        <span onClick={goToCustomer} style={{ color:'#2563eb', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted' }}>
+                          {lead.crm_companies?.company_name || lead.freetext_company || '—'}
+                        </span>
+                      </div></div>
                       <div className="od-detail-field"><label>Source</label><div className="val">{lead.source||'—'}</div></div>
+                      <div className="od-detail-field"><label>Contact</label><div className="val">{lead.contact_name_freetext||lead.crm_contacts?.name||'—'}{lead.contact_designation ? ' · ' + lead.contact_designation : ''}</div></div>
+                      <div className="od-detail-field"><label>Phone</label><div className="val">{lead.contact_phone ? <a href={'tel:'+lead.contact_phone} style={{color:'#2563eb'}}>{lead.contact_phone}</a> : '—'}</div></div>
+                      <div className="od-detail-field"><label>Email</label><div className="val">{lead.contact_email ? <a href={'mailto:'+lead.contact_email} style={{color:'#2563eb'}}>{lead.contact_email}</a> : '—'}</div></div>
                       <div className="od-detail-field"><label>Principal</label><div className="val">{lead.crm_principals?.name||'—'}</div></div>
-                      <div className="od-detail-field"><label>Contact</label><div className="val">{lead.contact_name_freetext||lead.crm_contacts?.name||'—'}</div></div>
                       <div className="od-detail-field"><label>Assigned Rep</label><div className="val">{lead.profiles?.name||'—'}</div></div>
                       <div className="od-detail-field" style={{ gridColumn:'span 2' }}><label>Product Notes</label><div className="val">{lead.product_notes||'—'}</div></div>
                     </div>
@@ -438,14 +501,52 @@ export default function CRMLeadDetail() {
               <div className="od-side-card">
                 <div className="od-side-card-title">Quick Info</div>
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                  <div className="od-detail-field"><label>Company</label><div className="val" style={{ fontWeight:600 }}>{lead.crm_companies?.company_name || lead.freetext_company || '—'}</div></div>
-                  <div className="od-detail-field"><label>Contact</label><div className="val">{lead.contact_name_freetext || lead.crm_contacts?.name || '—'}</div></div>
+                  <div className="od-detail-field"><label>Company</label><div className="val" style={{ fontWeight:600 }}>
+                    <span onClick={goToCustomer} style={{ color:'#2563eb', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted' }}>
+                      {lead.crm_companies?.company_name || lead.freetext_company || '—'}
+                    </span>
+                  </div></div>
+                  <div className="od-detail-field"><label>Contact</label><div className="val">{lead.contact_name_freetext || lead.crm_contacts?.name || '—'}{lead.contact_designation ? ' · ' + lead.contact_designation : ''}</div></div>
+                  {lead.contact_phone && <div className="od-detail-field"><label>Phone</label><div className="val"><a href={'tel:'+lead.contact_phone} style={{color:'#2563eb'}}>{lead.contact_phone}</a></div></div>}
                   <div className="od-detail-field"><label>Principal</label><div className="val">{lead.crm_principals?.name || '—'}</div></div>
                   <div className="od-detail-field"><label>Rep</label><div className="val">{lead.profiles?.name || '—'}</div></div>
                   {quoteTotal > 0 && (
                     <div className="od-detail-field"><label>Quote Value</label><div className="val od-side-val-big" style={{ color:'#1a4dab' }}>{fmtINR(quoteTotal)}</div></div>
                   )}
                 </div>
+              </div>
+
+              {/* Contacts */}
+              <div className="od-side-card">
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                  <div className="od-side-card-title" style={{ margin:0 }}>Contacts ({leadContacts.length})</div>
+                  <button onClick={() => setShowContactModal(true)}
+                    style={{ fontSize:11, fontWeight:700, color:'#1a4dab', background:'#eff6ff', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'var(--font)' }}>
+                    + Add
+                  </button>
+                </div>
+                {leadContacts.length === 0 ? (
+                  <div style={{ fontSize:12, color:'var(--gray-400)', textAlign:'center', padding:'10px 0' }}>
+                    No contacts yet.<br/>
+                    <button onClick={() => setShowContactModal(true)} style={{ marginTop:6, fontSize:12, fontWeight:600, color:'#1a4dab', background:'none', border:'none', cursor:'pointer', fontFamily:'var(--font)' }}>+ Add Contact</button>
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {leadContacts.map(c => (
+                      <div key={c.id} style={{ display:'flex', gap:10, alignItems:'flex-start', paddingBottom:10, borderBottom:'1px solid var(--gray-50)' }}>
+                        <div style={{ width:32, height:32, borderRadius:8, background:'#e0e7ff', color:'#3730a3', fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                          {c.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2)}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:13, fontWeight:700, color:'var(--gray-900)' }}>{c.name}</div>
+                          {c.designation && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{c.designation}</div>}
+                          {c.phone && <a href={'tel:' + c.phone} style={{ display:'block', fontSize:12, color:'#1a4dab', marginTop:3, textDecoration:'none', fontWeight:500 }}>{c.phone}</a>}
+                          {c.email && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{c.email}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Activity Log */}
@@ -501,6 +602,41 @@ export default function CRMLeadDetail() {
 
         </div>
       </div>
+
+      {/* Add Contact Modal */}
+      {showContactModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
+          onClick={() => setShowContactModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'white', borderRadius:16, width:'100%', maxWidth:440, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ padding:'18px 24px 14px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid var(--gray-100)' }}>
+              <div style={{ fontSize:16, fontWeight:700 }}>Add Contact</div>
+              <button onClick={() => setShowContactModal(false)} style={{ width:32, height:32, borderRadius:'50%', background:'var(--gray-100)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--gray-600)', fontSize:18 }}>×</button>
+            </div>
+            <div style={{ padding:'20px 24px' }}>
+              <div className="od-edit-form">
+                <div className="od-edit-field"><label>Name *</label>
+                  <input value={contactForm.name} onChange={e => setContactForm(p => ({ ...p, name: e.target.value }))} placeholder="Contact name" />
+                </div>
+                <div className="od-edit-field"><label>Designation</label>
+                  <input value={contactForm.designation} onChange={e => setContactForm(p => ({ ...p, designation: e.target.value }))} placeholder="e.g. Purchase Manager" />
+                </div>
+                <div className="od-edit-row">
+                  <div className="od-edit-field"><label>Phone</label>
+                    <input value={contactForm.phone} onChange={e => setContactForm(p => ({ ...p, phone: e.target.value }))} placeholder="e.g. 9876543210" />
+                  </div>
+                  <div className="od-edit-field"><label>Email</label>
+                    <input type="email" value={contactForm.email} onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))} placeholder="e.g. name@company.com" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding:'14px 24px', borderTop:'1px solid var(--gray-100)', display:'flex', justifyContent:'flex-end', gap:10, background:'var(--gray-50)', borderRadius:'0 0 16px 16px' }}>
+              <button className="od-btn" onClick={() => setShowContactModal(false)}>Cancel</button>
+              <button className="od-btn od-btn-primary" onClick={saveLeadContact} disabled={savingContact}>{savingContact ? 'Saving...' : 'Add Contact'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }
