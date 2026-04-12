@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
-import NewOppModal from './CRMNewOpportunity'
 import '../styles/crm.css'
 import '../styles/orders.css'
 
@@ -49,7 +48,6 @@ export default function CRMOpportunities() {
   const [filterRep, setFilterRep]         = useState('')
   const [filterPrincipal, setFilterPrincipal] = useState('')
   const [filterScenario, setFilterScenario]   = useState('')
-  const [showNewModal, setShowNewModal]   = useState(false)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 50
 
@@ -113,7 +111,7 @@ export default function CRMOpportunities() {
                 <button className={'crm-btn crm-btn-sm' + (view==='kanban'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none'}} onClick={() => setView('kanban')}>Kanban</button>
                 <button className={'crm-btn crm-btn-sm' + (view==='list'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => setView('list')}>List</button>
               </div>
-              <button className="new-order-btn" onClick={() => setShowNewModal(true)}>
+              <button className="new-order-btn" onClick={() => navigate('/crm/leads/new')}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 New Lead
               </button>
@@ -163,13 +161,6 @@ export default function CRMOpportunities() {
           )}
         </div>
       </div>
-      {showNewModal && (
-        <NewOppModal
-          currentUser={user}
-          onClose={() => setShowNewModal(false)}
-          onCreated={newId => { setShowNewModal(false); navigate('/crm/opportunities/' + newId) }}
-        />
-      )}
     </Layout>
   )
 }
