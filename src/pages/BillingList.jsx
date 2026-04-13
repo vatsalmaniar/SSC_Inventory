@@ -6,11 +6,14 @@ import Layout from '../components/Layout'
 import BillingSubNav from '../components/BillingSubNav'
 import '../styles/orders.css'
 
-const BILLING_BATCH_STATUSES = ['goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
+const BILLING_BATCH_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 
 
 function statusLabel(s) {
   return {
+    pi_requested:       'Issue PI',
+    pi_generated:       'PI Sent',
+    pi_payment_pending: 'PI Payment Pending',
     goods_issued:       'Credit Check',
     credit_check:       'GI Posted',
     goods_issue_posted: 'Invoice Pending',
@@ -51,7 +54,7 @@ export default function BillingList() {
   async function loadBatches() {
     setLoading(true)
     const { data } = await sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, is_test, credit_terms, freight, order_items(id, qty, dispatched_qty))')
+      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, credit_terms, freight, order_items(id, qty, dispatched_qty))')
       .in('status', BILLING_BATCH_STATUSES)
       .eq('orders.is_test', false)
       .neq('orders.order_type', 'SAMPLE')
@@ -61,7 +64,7 @@ export default function BillingList() {
     setLoading(false)
   }
 
-  const actionStatuses  = ['goods_issued','goods_issue_posted','delivery_ready']
+  const actionStatuses  = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','goods_issue_posted','delivery_ready']
   const waitingStatuses = ['credit_check','invoice_generated','eway_generated']
 
   function matchFilter(b) {
@@ -226,6 +229,7 @@ export default function BillingList() {
                     <tbody>
                       {filtered.map(b => {
                         const s = effStatus(b)
+                        const isCancelled = b.orders?.status === 'cancelled'
                         const isDelivered = s === 'dispatched_fc'
                         const hasInv = b.invoice_number && !b.invoice_number.startsWith('Temp/')
                         const batchVal = (b.dispatched_items || []).length
@@ -253,8 +257,8 @@ export default function BillingList() {
                             <td>{(b.dispatched_items || b.orders?.order_items || []).length}</td>
                             <td className="amount-cell">₹{batchVal.toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
                             <td className="status-cell">
-                              <span className={pillClass(s)}>{statusLabel(s)}</span>
-                              {b.credit_override && <div style={{fontSize:10,color:'#dc2626',fontWeight:600,marginTop:2}}>⚠️ Override</div>}
+                              <span className={isCancelled ? 'pill pill-cancelled' : pillClass(s)}>{isCancelled ? 'Cancelled' : statusLabel(s)}</span>
+                              {!isCancelled && b.credit_override && <div style={{fontSize:10,color:'#dc2626',fontWeight:600,marginTop:2}}>⚠️ Override</div>}
                             </td>
                           </tr>
                         )
@@ -265,6 +269,7 @@ export default function BillingList() {
                 <div style={{padding:'0 4px 4px'}}>
                   {filtered.map((b, i) => {
                     const s = effStatus(b)
+                    const isCancelled = b.orders?.status === 'cancelled'
                     const isDelivered = s === 'dispatched_fc'
                     const hasInv = b.invoice_number && !b.invoice_number.startsWith('Temp/')
                     const batchVal = (b.dispatched_items || []).length
@@ -274,7 +279,7 @@ export default function BillingList() {
                       <div key={b.id} className="order-card" style={{animationDelay: i * 0.03 + 's'}} onClick={() => navigate('/billing/' + b.order_id, { state: { dispatch_id: b.id } })}>
                         <div className="order-card-top">
                           <div>
-                            <div className="order-num" style={{fontFamily:'var(--mono)',color:hasInv?(isDelivered?'#166534':'var(--gray-800)'):'#92400e'}}>
+                            <div className="order-num" style={{fontFamily:'var(--mono)',color:isCancelled?'#be123c':hasInv?(isDelivered?'#166534':'var(--gray-800)'):'#92400e'}}>
                               {hasInv ? b.invoice_number : (b.dc_number || '—')}
                               {!hasInv && <span style={{marginLeft:6,fontSize:9,background:'#fef3c7',color:'#92400e',borderRadius:3,padding:'1px 5px',fontWeight:600}}>No Invoice</span>}
                             </div>
@@ -283,8 +288,8 @@ export default function BillingList() {
                             <div className="order-date">{b.fulfilment_center || '—'} · {fmt(b.created_at)}</div>
                           </div>
                           <div style={{textAlign:'right'}}>
-                            <span className={pillClass(s)}>{statusLabel(s)}</span>
-                            {b.credit_override && <div style={{fontSize:10,color:'#dc2626',fontWeight:600,marginTop:4}}>⚠️ Override</div>}
+                            <span className={isCancelled ? 'pill pill-cancelled' : pillClass(s)}>{isCancelled ? 'Cancelled' : statusLabel(s)}</span>
+                            {!isCancelled && b.credit_override && <div style={{fontSize:10,color:'#dc2626',fontWeight:600,marginTop:4}}>⚠️ Override</div>}
                           </div>
                         </div>
                         <div className="order-card-bottom">

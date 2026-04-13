@@ -609,6 +609,7 @@ export default function FCOrderDetail() {
   )
   if (!order) return <Layout pageTitle="FC Order" pageKey="fc"><div className="od-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Order not found</div><div style={{fontSize:13}}>This order may have been deleted or you don't have access.</div></div></div></Layout>
 
+  const isCancelled  = order.status === 'cancelled'
   const isSample     = order.order_type === 'SAMPLE'
   // Use the active batch's own status/FC when available — each batch is independent
   const batchStatus  = activeBatch ? (activeBatch.status || 'delivery_created') : order.status
@@ -634,8 +635,8 @@ export default function FCOrderDetail() {
                 <div className="od-header-eyebrow">
                   {order.order_type === 'SO' ? 'Standard Order' : order.order_type === 'CO' ? 'Customised Order' : 'Sample Request'} · {batchFC || '—'}
                   {isSample && <span style={{marginLeft:8,fontSize:10,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:4,padding:'1px 7px',letterSpacing:'0.5px',verticalAlign:'middle'}}>SAMPLE</span>}
-                  <span className={'od-status-badge ' + (isDelivered ? 'delivered' : withAccounts ? 'pending' : 'delivery')}>
-                    {isDelivered ? 'Delivered' : withAccounts ? 'With Accounts' : stageLabel(batchStatus)}
+                  <span className={'od-status-badge ' + (isCancelled ? 'cancelled' : isDelivered ? 'delivered' : withAccounts ? 'pending' : 'delivery')}>
+                    {isCancelled ? 'Cancelled' : isDelivered ? 'Delivered' : withAccounts ? 'With Accounts' : stageLabel(batchStatus)}
                   </span>
                 </div>
                 <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a4dab',color:'inherit'}}>{order.customer_name}</span></div>
@@ -686,6 +687,16 @@ export default function FCOrderDetail() {
           <div className="od-main">
 
             {/* With Accounts banner */}
+            {isCancelled && (
+              <div className="od-pending-banner" style={{background:'#fff1f2',border:'1px solid #fecdd3',color:'#be123c'}}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:20,height:20}}><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+                <div>
+                  <div className="od-pending-banner-label">Order Cancelled</div>
+                  <div>This order has been cancelled. No further action is required.</div>
+                </div>
+              </div>
+            )}
+
             {withAccounts && (
               <div className="od-pending-banner" style={{background:'#fefce8',border:'1px solid #fde047',color:'#92400e'}}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
@@ -843,7 +854,7 @@ export default function FCOrderDetail() {
             </div>
 
             {/* Action card */}
-            {!withAccounts && (() => {
+            {!withAccounts && !isCancelled && (() => {
               // Always use activeBatch.status when a batch exists — order.status is not reliably updated during batch lifecycle
               const batchStatus = activeBatch != null
                 ? (activeBatch.status || 'delivery_created')

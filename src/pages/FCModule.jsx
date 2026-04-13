@@ -61,7 +61,7 @@ export default function FCModule() {
   async function loadBatches(center, testMode = false) {
     setLoading(true)
     let q = sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, is_test, freight, order_items(id, qty, dispatched_qty))')
+      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, freight, order_items(id, qty, dispatched_qty))')
       .eq('orders.is_test', testMode)
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
@@ -235,6 +235,7 @@ export default function FCModule() {
                     <tbody>
                       {filtered.map(b => {
                         const s = effStatus(b)
+                        const isCancelled = b.orders?.status === 'cancelled'
                         const isWaiting   = WITH_ACCOUNTS.includes(s)
                         const isDelivered = s === 'dispatched_fc'
                         const isTempDC    = b.dc_number?.startsWith('Temp/')
@@ -256,7 +257,7 @@ export default function FCModule() {
                             <td>{(b.dispatched_items || b.orders?.order_items || []).length}</td>
                             <td className="amount-cell">₹{batchVal.toLocaleString('en-IN', { maximumFractionDigits:2 })}</td>
                             <td className="status-cell">
-                              <span className={'pill pill-' + (isDelivered ? 'dispatched_fc' : isWaiting ? 'waiting' : s)}>{statusLabel(s)}</span>
+                              <span className={'pill pill-' + (isCancelled ? 'cancelled' : isDelivered ? 'dispatched_fc' : isWaiting ? 'waiting' : s)}>{isCancelled ? 'Cancelled' : statusLabel(s)}</span>
                             </td>
                           </tr>
                         )
@@ -267,6 +268,7 @@ export default function FCModule() {
                 <div style={{ padding:'0 4px 4px' }}>
                   {filtered.map((b, i) => {
                     const s = effStatus(b)
+                    const isCancelled = b.orders?.status === 'cancelled'
                     const isDelivered = s === 'dispatched_fc'
                     const isTempDC    = b.dc_number?.startsWith('Temp/')
                     const batchVal    = (b.dispatched_items || []).length
@@ -276,7 +278,7 @@ export default function FCModule() {
                       <div key={b.id} className="order-card" style={{ animationDelay: i * 0.03 + 's' }} onClick={() => navigate('/fc/' + b.order_id, { state: { dispatch_id: b.id } })}>
                         <div className="order-card-top">
                           <div>
-                            <div className="order-num" style={{ fontFamily:'var(--mono)', color: isTempDC ? '#92400e' : isDelivered ? '#166534' : 'var(--gray-800)' }}>
+                            <div className="order-num" style={{ fontFamily:'var(--mono)', color: isCancelled ? '#be123c' : isTempDC ? '#92400e' : isDelivered ? '#166534' : 'var(--gray-800)' }}>
                               {b.dc_number || '—'}
                               {b.batch_no > 1 && <span style={{marginLeft:6,fontSize:9,fontWeight:700,background:'#e0e7ff',color:'#3730a3',borderRadius:3,padding:'1px 5px',verticalAlign:'middle'}}>BATCH {b.batch_no}</span>}
                             </div>
@@ -284,7 +286,7 @@ export default function FCModule() {
                             <div className="order-customer">{b.orders?.customer_name}</div>
                             <div className="order-date">{b.orders?.fulfilment_center || '—'} · {fmt(b.created_at)}</div>
                           </div>
-                          <span className={'pill pill-' + (isDelivered ? 'dispatched_fc' : s)}>{statusLabel(s)}</span>
+                          <span className={'pill pill-' + (isCancelled ? 'cancelled' : isDelivered ? 'dispatched_fc' : s)}>{isCancelled ? 'Cancelled' : statusLabel(s)}</span>
                         </div>
                         <div className="order-card-bottom">
                           <span className="order-items-count">{(b.dispatched_items || b.orders?.order_items || []).length} items</span>

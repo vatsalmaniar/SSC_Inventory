@@ -909,15 +909,18 @@ if (match) {
                 // ── DUAL TILE VIEW: separate pending and dispatched ──
                 <>
                   {/* Tile 1: Pending items */}
-                  {hasAnyPending && (
+                  {(hasAnyPending || !batches.some(b => b.status === 'dispatched_fc')) && (
                     <div className="od-dispatch-tile od-dispatch-tile-pending">
                       <div className="od-dispatch-tile-header">
                         <span className="od-dispatch-tile-label">
                           <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                          Pending Items
+                          {hasAnyPending ? 'Pending Items' : 'In Transit'}
                         </span>
                         <span className="od-dispatch-tile-count">
-                          {(order.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.dispatched_qty || 0)), 0)} units pending
+                          {hasAnyPending
+                            ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.dispatched_qty || 0)), 0)} units pending`
+                            : `${(order.order_items || []).reduce((s, i) => s + (i.dispatched_qty || 0), 0)} units in transit`
+                          }
                         </span>
                       </div>
                       <table className="od-items-table">
@@ -962,7 +965,7 @@ if (match) {
                   )}
 
                   {/* Tile 2: Dispatched record */}
-                  {hasAnyDispatched && (
+                  {batches.some(b => b.status === 'dispatched_fc') && (
                     <div className="od-dispatch-tile od-dispatch-tile-dispatched">
                       <div className="od-dispatch-tile-header">
                         <span className="od-dispatch-tile-label">

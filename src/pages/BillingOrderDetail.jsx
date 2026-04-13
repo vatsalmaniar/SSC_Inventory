@@ -403,6 +403,7 @@ const mentionSuggestions = mentionQuery !== null
   const isAdvanceOrder = order.credit_terms === 'Advance'
   const activePINum   = activeBatch?.pi_number || null
   const activePIPdf   = activeBatch?.pi_pdf_url || null
+  const isCancelled   = order.status === 'cancelled'
   const isInPIPhase   = ['pi_requested','pi_generated','pi_payment_pending'].includes(order.status)
   // When a batch is active, use ONLY that batch's data — never bleed other batch/order-level columns
   const activeDC      = activeBatch?.dc_number || order.dc_number
@@ -445,8 +446,8 @@ const mentionSuggestions = mentionQuery !== null
                 <div className="od-header-eyebrow">
                   {order.order_type === 'SO' ? 'Standard Order' : 'Customised Order'}
                   &nbsp;·&nbsp;{batchFC || '—'}
-                  <span className={'od-status-badge ' + (isWaitingFC ? 'delivery' : isCreditOverride ? 'pending' : 'active')}>
-                    {isWaitingFC ? 'Waiting for FC' : isCreditOverride ? '⚠️ Credit Override' : 'Billing'}
+                  <span className={'od-status-badge ' + (isCancelled ? 'cancelled' : isWaitingFC ? 'delivery' : isCreditOverride ? 'pending' : 'active')}>
+                    {isCancelled ? 'Cancelled' : isWaitingFC ? 'Waiting for FC' : isCreditOverride ? '⚠️ Credit Override' : 'Billing'}
                   </span>
                   {isCreditOverride && (
                     <span style={{marginLeft:8,background:'#fee2e2',color:'#be123c',borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700}}>
@@ -488,8 +489,18 @@ const mentionSuggestions = mentionQuery !== null
           </div>
         </div>
 
+        {isCancelled && (
+          <div className="od-pending-banner" style={{background:'#fff1f2',border:'1px solid #fecdd3',color:'#be123c'}}>
+            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:20,height:20}}><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+            <div>
+              <div className="od-pending-banner-label">Order Cancelled</div>
+              <div>This order has been cancelled. No further action is required.</div>
+            </div>
+          </div>
+        )}
+
         {/* ── Pipeline bar ── */}
-        {isInPIPhase ? (
+        {!isCancelled && isInPIPhase ? (
           <div className="od-pipeline-bar">
             <div className="od-pipeline-stages">
               {PI_STAGES.map((stage, idx) => {
@@ -667,7 +678,7 @@ const mentionSuggestions = mentionQuery !== null
             </div>
 
             {/* ── PI Action Cards ── */}
-            {isInPIPhase && ['accounts','admin'].includes(user.role) && (
+            {isInPIPhase && !isCancelled && ['accounts','admin'].includes(user.role) && (
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">
@@ -780,7 +791,7 @@ const mentionSuggestions = mentionQuery !== null
             )}
 
             {/* ── Action Card ── */}
-            {!isWaitingFC && !isInPIPhase && ['accounts','admin'].includes(user.role) && (
+            {!isWaitingFC && !isInPIPhase && !isCancelled && ['accounts','admin'].includes(user.role) && (
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">
