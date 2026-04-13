@@ -282,9 +282,7 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${grn.notes}</div>
 
   if (loading) return (
     <Layout pageTitle="GRN" pageKey="fc">
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:80, gap:10, color:'var(--gray-400)' }}>
-        <div className="loading-spin"/>Loading...
-      </div>
+      <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div>
     </Layout>
   )
 

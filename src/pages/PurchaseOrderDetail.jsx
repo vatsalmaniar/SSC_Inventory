@@ -48,6 +48,7 @@ export default function PurchaseOrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [po, setPo]               = useState(null)
+  const [vendorCode, setVendorCode] = useState('')
   const [items, setItems]         = useState([])
   const [grns, setGrns] = useState([])
   const [grnItemsByPOItem, setGrnItemsByPOItem] = useState({})
@@ -108,6 +109,10 @@ export default function PurchaseOrderDetail() {
     const poRes = await sb.from('purchase_orders').select('*').eq('id', id).single()
     if (poRes.error || !poRes.data) { setPo(null); setLoading(false); return }
     setPo(poRes.data)
+    // Non-blocking vendor code lookup
+    if (poRes.data?.vendor_id) {
+      sb.from('vendors').select('vendor_code').eq('id', poRes.data.vendor_id).maybeSingle().then(({ data: v }) => setVendorCode(v?.vendor_code || ''))
+    }
     const [itemsRes, datesRes, commentsRes] = await Promise.all([
       sb.from('po_items').select('*').eq('po_id', id).order('sr_no'),
       sb.from('po_delivery_dates').select('*').eq('po_id', id).order('created_at', { ascending: false }).then(r => r).catch(() => ({ data: [] })),
@@ -327,6 +332,7 @@ export default function PurchaseOrderDetail() {
   <div>
     <div class="meta-section-label">Vendor</div>
     <div class="meta-name">${po.vendor_name || '—'}</div>
+    ${vendorCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Vendor Code: <strong style="font-family:'DM Mono',monospace">${vendorCode}</strong></div>` : ''}
   </div>
   <div>
     <div class="meta-section-label">Reference</div>
@@ -672,9 +678,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${po.not
 
   if (loading) return (
     <Layout pageTitle="Purchase Order" pageKey="procurement">
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:80, gap:10, color:'var(--gray-400)' }}>
-        <div className="loading-spin"/>Loading...
-      </div>
+      <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div>
     </Layout>
   )
 
@@ -883,6 +887,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${po.not
                         ) : (po.vendor_name || '—')}
                       </div>
                     </div>
+                    <div className="od-detail-field"><label>Vendor Code</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{vendorCode || '—'}</div></div>
                     <div className="od-detail-field"><label>Submitted By</label><div className="val"><OwnerChip name={po.submitted_by_name} /></div></div>
                     <div className="od-detail-field"><label>Payment Terms</label><div className="val">{po.payment_terms || '—'}</div></div>
                     {po.order_number && (

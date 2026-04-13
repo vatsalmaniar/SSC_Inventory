@@ -91,7 +91,7 @@ export default function CRMCompanyDetail() {
     setSavingContact(false)
   }
 
-  if (loading) return <Layout pageTitle="CRM — Company" pageKey="crm"><CRMSubNav active="companies" /><div className="crm-loading"><div className="loading-spin"/>Loading...</div></Layout>
+  if (loading) return <Layout pageTitle="CRM — Company" pageKey="crm"><CRMSubNav active="companies" /><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div></Layout>
   if (!company) return <Layout pageTitle="CRM — Company" pageKey="crm"><CRMSubNav active="companies"/><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Company not found</div><div style={{fontSize:13}}>This company may have been deleted or you don't have access.</div></div></div></Layout>
 
   const isDormant = company.status === 'Dormant'

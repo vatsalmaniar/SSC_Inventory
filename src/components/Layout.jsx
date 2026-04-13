@@ -96,7 +96,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
   const [searchQ, setSearchQ]     = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
-  const [searchResults, setSearchResults] = useState({ orders: [], companies: [], leads: [], opportunities: [] })
+  const [searchResults, setSearchResults] = useState({ orders: [], companies: [], leads: [], opportunities: [], vendors: [], purchaseOrders: [], grns: [], purchaseInvoices: [] })
 
   useEffect(() => {
     sb.auth.getSession().then(async ({ data: { session } }) => {
@@ -133,11 +133,17 @@ export default function Layout({ children, pageTitle, pageKey }) {
     setNotifs(data || [])
   }
 
-  async function markAllRead(name) {
+  async function markAllRead() {
     const unreadIds = notifs.filter(n => !n.is_read).map(n => n.id)
     if (unreadIds.length === 0) return
     await sb.from('notifications').update({ is_read: true }).in('id', unreadIds)
     setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
+  }
+
+  async function markOneRead(notif) {
+    if (notif.is_read) return
+    await sb.from('notifications').update({ is_read: true }).eq('id', notif.id)
+    setNotifs(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n))
   }
 
   function fmtNotifTime(d) {
@@ -174,7 +180,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
     const q = e.target.value
     setSearchQ(q)
     clearTimeout(searchTimer.current)
-    if (q.trim().length < 2) { setSearchResults({ orders: [], companies: [], leads: [], opportunities: [] }); setSearchOpen(q.length > 0); return }
+    if (q.trim().length < 2) { setSearchResults({ orders:[], companies:[], leads:[], opportunities:[], vendors:[], purchaseOrders:[], grns:[], purchaseInvoices:[] }); setSearchOpen(q.length > 0); return }
     setSearchLoading(true)
     setSearchOpen(true)
     searchTimer.current = setTimeout(() => doSearch(q.trim()), 300)
@@ -184,17 +190,26 @@ export default function Layout({ children, pageTitle, pageKey }) {
     const role = user.role
     const canCRM = ['sales', 'ops', 'admin'].includes(role)
     const canOrders = ['sales', 'ops', 'admin', 'accounts', 'fc_kaveri', 'fc_godawari'].includes(role)
-    const [ordersRes, companiesRes, leadsRes, oppsRes] = await Promise.all([
+    const canProcurement = ['ops', 'admin', 'accounts'].includes(role)
+    const [ordersRes, companiesRes, leadsRes, oppsRes, vendorsRes, poRes, grnRes, piRes] = await Promise.all([
       canOrders ? sb.from('orders').select('id,order_number,customer_name,status').or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`).eq('is_test', false).limit(5) : { data: [] },
       canCRM    ? sb.from('customers').select('id,customer_name').ilike('customer_name', `%${q}%`).limit(5) : { data: [] },
       canCRM    ? sb.from('crm_leads').select('id,contact_name_freetext,freetext_company,stage').or(`contact_name_freetext.ilike.%${q}%,freetext_company.ilike.%${q}%`).limit(5) : { data: [] },
       canCRM    ? sb.from('crm_opportunities').select('id,opportunity_name,product_notes,stage').or(`opportunity_name.ilike.%${q}%,product_notes.ilike.%${q}%`).limit(5) : { data: [] },
+      canCRM ? sb.from('vendors').select('id,vendor_code,vendor_name,status').or(`vendor_code.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
+      canProcurement ? sb.from('purchase_orders').select('id,po_number,vendor_name,status').or(`po_number.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
+      canProcurement ? sb.from('grn').select('id,grn_number,grn_type,status').ilike('grn_number', `%${q}%`).limit(5) : { data: [] },
+      canProcurement ? sb.from('purchase_invoices').select('id,invoice_number,vendor_name,status').or(`invoice_number.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
     ])
     setSearchResults({
-      orders:        ordersRes.data || [],
-      companies:     companiesRes.data || [],
-      leads:         leadsRes.data || [],
-      opportunities: oppsRes.data || [],
+      orders:           ordersRes.data || [],
+      companies:        companiesRes.data || [],
+      leads:            leadsRes.data || [],
+      opportunities:    oppsRes.data || [],
+      vendors:          vendorsRes.data || [],
+      purchaseOrders:   poRes.data || [],
+      grns:             grnRes.data || [],
+      purchaseInvoices: piRes.data || [],
     })
     setSearchLoading(false)
   }
@@ -205,7 +220,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
     navigate(path)
   }
 
-  const totalResults = searchResults.orders.length + searchResults.companies.length + searchResults.leads.length + searchResults.opportunities.length
+  const totalResults = searchResults.orders.length + searchResults.companies.length + searchResults.leads.length + searchResults.opportunities.length + searchResults.vendors.length + searchResults.purchaseOrders.length + searchResults.grns.length + searchResults.purchaseInvoices.length
 
   const STATUS_LABEL = { pending:'Pending', dispatch:'Ready to Ship', partial_dispatch:'Partially Shipped', delivery_created:'At FC', picking:'Picking', packing:'Packing', goods_issued:'Goods Issued', invoice_generated:'Invoiced', dispatched_fc:'Delivered', cancelled:'Cancelled' }
 
@@ -281,7 +296,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
                 placeholder="Search orders, customers, leads… (⌘K)"
                 style={{flex:1,border:'none',background:'none',outline:'none',fontFamily:'var(--font)',fontSize:13,color:'var(--gray-900)',padding:'8px 0'}}
               />
-              {searchQ && <button onClick={() => { setSearchQ(''); setSearchOpen(false); setSearchResults({ orders:[], companies:[], leads:[], opportunities:[] }) }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--gray-400)',padding:0,lineHeight:1}}>✕</button>}
+              {searchQ && <button onClick={() => { setSearchQ(''); setSearchOpen(false); setSearchResults({ orders:[], companies:[], leads:[], opportunities:[], vendors:[], purchaseOrders:[], grns:[], purchaseInvoices:[] }) }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--gray-400)',padding:0,lineHeight:1}}>✕</button>}
               {!searchQ && <span style={{fontSize:11,color:'var(--gray-300)',background:'var(--gray-100)',border:'1px solid var(--gray-200)',borderRadius:4,padding:'2px 5px',flexShrink:0}}>⌘K</span>}
             </div>
             {searchOpen && (
@@ -360,6 +375,74 @@ export default function Layout({ children, pageTitle, pageKey }) {
                         ))}
                       </div>
                     )}
+                    {searchResults.vendors.length > 0 && (
+                      <div>
+                        <div style={{padding:'10px 16px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)'}}>Vendor 360</div>
+                        {searchResults.vendors.map(v => (
+                          <div key={v.id} onClick={() => goToResult('/vendors/'+v.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{width:28,height:28,borderRadius:7,background:'#fef3c7',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              <svg fill="none" stroke="#d97706" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:600,color:'var(--gray-900)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v.vendor_name}</div>
+                              {v.vendor_code && <div style={{fontSize:11,color:'var(--gray-400)',fontFamily:'var(--mono)'}}>{v.vendor_code}</div>}
+                            </div>
+                            <span style={{marginLeft:'auto',fontSize:10,padding:'2px 7px',borderRadius:4,background:'#fef3c7',color:'#d97706',flexShrink:0,fontWeight:600}}>{v.status || 'Vendor'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.purchaseOrders.length > 0 && (
+                      <div>
+                        <div style={{padding:'10px 16px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)'}}>Purchase Orders</div>
+                        {searchResults.purchaseOrders.map(p => (
+                          <div key={p.id} onClick={() => goToResult('/procurement/po/'+p.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{width:28,height:28,borderRadius:7,background:'#e0e7ff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              <svg fill="none" stroke="#4f46e5" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#4f46e5'}}>{p.po_number}</div>
+                              <div style={{fontSize:11,color:'var(--gray-400)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.vendor_name}</div>
+                            </div>
+                            <span style={{marginLeft:'auto',fontSize:10,padding:'2px 7px',borderRadius:4,background:'#e0e7ff',color:'#4f46e5',flexShrink:0,fontWeight:600}}>{p.status || 'PO'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.grns.length > 0 && (
+                      <div>
+                        <div style={{padding:'10px 16px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)'}}>GRN</div>
+                        {searchResults.grns.map(g => (
+                          <div key={g.id} onClick={() => goToResult('/fc/grn/'+g.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{width:28,height:28,borderRadius:7,background:'#dcfce7',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              <svg fill="none" stroke="#16a34a" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#16a34a'}}>{g.grn_number}</div>
+                              <div style={{fontSize:11,color:'var(--gray-400)'}}>{g.grn_type || '—'}</div>
+                            </div>
+                            <span style={{marginLeft:'auto',fontSize:10,padding:'2px 7px',borderRadius:4,background:'#dcfce7',color:'#16a34a',flexShrink:0,fontWeight:600}}>{g.status || 'GRN'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.purchaseInvoices.length > 0 && (
+                      <div>
+                        <div style={{padding:'10px 16px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)'}}>Purchase Invoices</div>
+                        {searchResults.purchaseInvoices.map(pi => (
+                          <div key={pi.id} onClick={() => goToResult('/procurement/invoices/'+pi.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{width:28,height:28,borderRadius:7,background:'#fce7f3',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              <svg fill="none" stroke="#db2777" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#db2777'}}>{pi.invoice_number}</div>
+                              <div style={{fontSize:11,color:'var(--gray-400)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pi.vendor_name}</div>
+                            </div>
+                            <span style={{marginLeft:'auto',fontSize:10,padding:'2px 7px',borderRadius:4,background:'#fce7f3',color:'#db2777',flexShrink:0,fontWeight:600}}>{pi.status || 'Invoice'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -371,10 +454,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
             <div className="ly-bell-wrap" ref={bellRef}>
               <button
                 className="ly-bell-btn"
-                onClick={() => {
-                  setShowNotifs(v => !v)
-                  if (!showNotifs) markAllRead(user.name)
-                }}
+                onClick={() => setShowNotifs(v => !v)}
               >
                 <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" width="20" height="20">
                   <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -400,7 +480,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
                         <div
                           key={n.id}
                           className={'ly-notif-item' + (n.is_read ? '' : ' unread')}
-                          onClick={() => { setShowNotifs(false); if (n.order_id) navigate('/orders/' + n.order_id) }}
+                          onClick={() => { markOneRead(n); setShowNotifs(false); if (n.order_id) navigate('/orders/' + n.order_id) }}
                         >
                           <div className="ly-notif-msg">{n.message}</div>
                           <div className="ly-notif-time">{fmtNotifTime(n.created_at)}</div>

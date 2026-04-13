@@ -65,6 +65,7 @@ export default function BillingOrderDetail() {
 
   const commentInputRef = useRef(null)
   const [order, setOrder]         = useState(null)
+  const [custCode, setCustCode]   = useState('')
   const [activeBatch, setActiveBatch] = useState(null)
   const [allBatches, setAllBatches]   = useState([])
   const [user, setUser]           = useState({ name: '', role: '', avatar: '' })
@@ -118,7 +119,11 @@ export default function BillingOrderDetail() {
 
   async function loadOrder() {
     setLoading(true)
-    const { data } = await sb.from('orders').select('*, order_items(*)').eq('id', id).single()
+    const [{ data }, { data: allB }, { data: c }] = await Promise.all([
+      sb.from('orders').select('*, order_items(*)').eq('id', id).single(),
+      sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true }),
+      sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true }),
+    ])
     if (data?.order_type === 'SAMPLE') { navigate('/billing'); return }
     setCreditChoice(null)
     setInvoicePdfFile(null); setInvoicePdfError('')
@@ -126,18 +131,6 @@ export default function BillingOrderDetail() {
     setEInvoicePdfFile(null); setEInvoicePdfError('')
     setPiPdfFile(null); setPiPdfError('')
     setOrder(data)
-    // Auto-suggest next PI number when order is in pi_requested stage
-    if (data?.status === 'pi_requested') {
-      const yr = new Date().getFullYear()
-      const { data: piNums } = await sb.from('order_dispatches').select('pi_number').like('pi_number', `PI-${yr}-%`)
-      const maxNum = (piNums || []).reduce((max, r) => {
-        const n = parseInt((r.pi_number || '').split('-')[2] || '0')
-        return n > max ? n : max
-      }, 0)
-      setPiNumberInput(`PI-${yr}-${String(maxNum + 1).padStart(4, '0')}`)
-    }
-    const { data: allB } = await sb.from('order_dispatches').select('*')
-      .eq('order_id', id).order('batch_no', { ascending: true })
     setAllBatches(allB || [])
     if (dispatchId) {
       const found = (allB || []).find(b => b.id === dispatchId)
@@ -145,9 +138,22 @@ export default function BillingOrderDetail() {
     } else {
       setActiveBatch(allB?.[allB.length - 1] || null)
     }
-    setLoading(false)
-    const { data: c } = await sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true })
     setComments(c || [])
+    setLoading(false)
+    // Non-blocking: look up customer_id + auto-suggest PI number
+    if (data?.customer_name) {
+      sb.from('customers').select('customer_id').ilike('customer_name', data.customer_name).maybeSingle().then(({ data: cust }) => setCustCode(cust?.customer_id || ''))
+    }
+    if (data?.status === 'pi_requested') {
+      const yr = new Date().getFullYear()
+      sb.from('order_dispatches').select('pi_number').like('pi_number', `PI-${yr}-%`).then(({ data: piNums }) => {
+        const maxNum = (piNums || []).reduce((max, r) => {
+          const n = parseInt((r.pi_number || '').split('-')[2] || '0')
+          return n > max ? n : max
+        }, 0)
+        setPiNumberInput(`PI-${yr}-${String(maxNum + 1).padStart(4, '0')}`)
+      })
+    }
   }
 
   async function reloadComments() {
@@ -184,9 +190,23 @@ export default function BillingOrderDetail() {
   }
 
   async function notifyUsers(roles, message) {
-    const targets = profiles.filter(p => roles.includes(p.role))
-    if (!targets.length) return
-    await sb.from('notifications').insert(targets.map(t => ({
+    const ownerName = order?.account_owner || order?.engineer_name || ''
+    const seen = new Set()
+    const targets = []
+    profiles.filter(p => roles.includes(p.role) && p.role !== 'admin').forEach(p => {
+      if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
+    })
+    if (ownerName) {
+      const ownerProfile = profiles.find(p => p.name === ownerName)
+      if (ownerProfile && !seen.has(ownerProfile.id)) { seen.add(ownerProfile.id); targets.push(ownerProfile) }
+    }
+    if (order?.created_by) {
+      const creatorProfile = profiles.find(p => p.id === order.created_by)
+      if (creatorProfile && !seen.has(creatorProfile.id)) { seen.add(creatorProfile.id); targets.push(creatorProfile) }
+    }
+    const final = targets.filter(t => t.id !== user.id)
+    if (!final.length) return
+    await sb.from('notifications').insert(final.map(t => ({
       user_name: t.name, user_id: t.id, message, order_id: id,
       order_number: order?.order_number || '', from_name: user.name,
     })))
@@ -564,6 +584,7 @@ const mentionSuggestions = mentionQuery !== null
               <div className="od-card-body">
                 <div className="od-detail-grid">
                   <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a4dab',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
+                  <div className="od-detail-field"><label>Customer ID</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{custCode || '—'}</div></div>
                   <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                   <div className="od-detail-field"><label>PO / Reference No.</label><div className="val">{order.po_number || '—'}</div></div>
                   <div className="od-detail-field"><label>Order Date</label><div className="val">{fmt(order.order_date)}</div></div>

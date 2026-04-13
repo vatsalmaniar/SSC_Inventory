@@ -144,7 +144,7 @@ export default function VendorDetail() {
     setContacts(p => p.filter(c => c.id !== cid))
   }
 
-  if (loading) return <Layout pageTitle="Vendor 360" pageKey="vendor360"><div className="od-page"><div className="od-body" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:300,gap:10,color:'var(--gray-400)'}}><div className="loading-spin"/>Loading...</div></div></Layout>
+  if (loading) return <Layout pageTitle="Vendor 360" pageKey="vendor360"><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div></Layout>
   if (!vendor) return <Layout pageTitle="Vendor 360" pageKey="vendor360"><div className="od-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Vendor not found</div><div style={{fontSize:13}}>This vendor may have been deleted.</div></div></div></Layout>
 
   const totalPOValue = pos.filter(p => p.status !== 'cancelled').reduce((s,p) => s + (p.total_amount || 0), 0)

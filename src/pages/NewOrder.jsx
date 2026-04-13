@@ -59,7 +59,7 @@ export default function NewOrder() {
   }
 
   async function fetchCustomers(q) {
-    const { data } = await sb.from('customers').select('id,customer_name,gst,billing_address,credit_terms,account_owner,approval_status')
+    const { data } = await sb.from('customers').select('id,customer_id,customer_name,gst,billing_address,credit_terms,account_owner,approval_status')
       .ilike('customer_name', '%' + q + '%').limit(10)
     return data || []
   }
@@ -221,6 +221,7 @@ export default function NewOrder() {
                   <>
                     <div className="typeahead-item-main" style={{ display:'flex', alignItems:'center', gap:6 }}>
                       {c.customer_name}
+                      {c.customer_id && <span style={{ fontSize:10, fontWeight:600, color:'#6b7280', fontFamily:'var(--mono)' }}>{c.customer_id}</span>}
                       {c.approval_status === 'pending' && <span style={{ fontSize:10, fontWeight:700, background:'#fef3c7', color:'#b45309', borderRadius:4, padding:'1px 5px' }}>PENDING APPROVAL</span>}
                     </div>
                     {c.gst && <div className="typeahead-item-sub">GST: {c.gst}</div>}

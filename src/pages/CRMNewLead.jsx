@@ -65,7 +65,7 @@ export default function CRMNewLead() {
   }
 
   async function fetchCustomers(q) {
-    const { data } = await sb.from('customers').select('id,customer_name,account_owner,customer_type,gst')
+    const { data } = await sb.from('customers').select('id,customer_id,customer_name,account_owner,customer_type,gst')
       .ilike('customer_name', '%' + q + '%').limit(10)
     return data || []
   }
@@ -193,7 +193,7 @@ export default function CRMNewLead() {
                 fetchFn={fetchCustomers}
                 renderItem={c => (
                   <>
-                    <div className="typeahead-item-main">{c.customer_name}</div>
+                    <div className="typeahead-item-main" style={{display:'flex',alignItems:'center',gap:6}}>{c.customer_name}{c.customer_id && <span style={{fontSize:10,fontWeight:600,color:'#6b7280',fontFamily:'var(--mono)'}}>{c.customer_id}</span>}</div>
                     {c.gst && <div className="typeahead-item-sub">GST: {c.gst}</div>}
                   </>
                 )}

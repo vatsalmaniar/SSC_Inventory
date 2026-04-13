@@ -219,6 +219,18 @@ export default function NewCustomer() {
       // Update with file URLs
       await sb.from('customers').update({ gst_cert_url: gstUrl, msme_cert_url: msmeUrl }).eq('id', newId)
 
+      // Notify admins when non-admin creates a customer pending approval
+      if (userRole !== 'admin') {
+        const { data: admins } = await sb.from('profiles').select('id,name').eq('role', 'admin')
+        if (admins?.length) {
+          await sb.from('notifications').insert(admins.map(a => ({
+            user_id: a.id, user_name: a.name,
+            message: `New customer "${form.customer_name}" created by ${ownerName} — pending approval`,
+            order_id: null, order_number: '', from_name: ownerName,
+          })))
+        }
+      }
+
       if (userRole === 'admin') {
         navigate('/customers/' + newId)
       } else {

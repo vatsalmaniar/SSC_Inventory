@@ -226,7 +226,7 @@ export default function CRMOpportunityDetail() {
     let allCusts = []
     let from = 0
     while (true) {
-      const { data: page } = await sb.from('customers').select('id,customer_name,account_owner,customer_type').order('customer_name').range(from, from + 999)
+      const { data: page } = await sb.from('customers').select('id,customer_id,customer_name,account_owner,customer_type,gst').order('customer_name').range(from, from + 999)
       if (!page || page.length === 0) break
       allCusts = [...allCusts, ...page]
       if (page.length < 1000) break
@@ -630,12 +630,13 @@ export default function CRMOpportunityDetail() {
     const dateStr = fmt(q.created_at)
 
     // Fetch customer details for address + GST + payment terms
-    let custAddr = '', custGst = '', creditTerms = 'Against PI'
+    let custAddr = '', custGst = '', creditTerms = 'Against PI', custId = ''
     if (opp?.customer_id) {
-      const { data: cust } = await sb.from('customers').select('billing_address,gst,credit_terms').eq('id', opp.customer_id).single()
+      const { data: cust } = await sb.from('customers').select('customer_id,billing_address,gst,credit_terms').eq('id', opp.customer_id).single()
       custAddr    = cust?.billing_address || ''
       custGst     = cust?.gst || ''
       creditTerms = cust?.credit_terms || 'Against PI'
+      custId      = cust?.customer_id || ''
     }
     const isAgainstPI = creditTerms === 'Against PI'
 
@@ -714,6 +715,7 @@ export default function CRMOpportunityDetail() {
   <div>
     <div class="meta-section-label">Prepared For</div>
     <div class="meta-name">${custName}</div>
+    ${custId ? `<div style="font-size:11px;color:#475569;margin-top:2px">Customer ID: <strong style="font-family:'DM Mono',monospace">${custId}</strong></div>` : ''}
     ${custAddr ? `<div class="meta-addr">${custAddr.replace(/\n/g,'<br/>')}</div>` : ''}
     ${custGst ? `<div class="meta-gstin">GSTIN: <strong>${custGst}</strong></div>` : ''}
   </div>
@@ -887,7 +889,7 @@ export default function CRMOpportunityDetail() {
   const quoteTotal   = quoteRows.reduce((s,r) => s + (parseFloat(r.total_price) || 0), 0)
   const actText      = (actType === 'Call' || actType === 'Visit') ? actDiscussion : actNotes
 
-  if (loading) return <Layout pageTitle="Opportunity" pageKey="crm"><CRMSubNav active="opportunities"/><div className="crm-loading"><div className="loading-spin"/>Loading...</div></Layout>
+  if (loading) return <Layout pageTitle="Opportunity" pageKey="crm"><CRMSubNav active="opportunities"/><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div></Layout>
   if (!opp) return <Layout pageTitle="Opportunity" pageKey="crm"><CRMSubNav active="opportunities"/><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Opportunity not found</div><div style={{fontSize:13}}>This opportunity may have been deleted or you don't have access.</div></div></div></Layout>
 
   return (
@@ -1426,7 +1428,8 @@ export default function CRMOpportunityDetail() {
                                 setEditAcctSearch(c.customer_name); setShowEditAcctDrop(false)
                               }} style={{padding:'9px 14px',fontSize:13,cursor:'pointer',borderBottom:'1px solid #f8fafc'}}
                                 onMouseEnter={e=>e.currentTarget.style.background='#f0f4ff'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                                {c.customer_name}
+                                <div style={{fontWeight:600}}>{c.customer_name}{c.customer_id && <span style={{fontSize:10,fontWeight:600,color:'#6b7280',fontFamily:'var(--mono)',marginLeft:6}}>{c.customer_id}</span>}</div>
+                                {c.gst && <div style={{fontSize:11,color:'#94a3b8'}}>{c.gst}</div>}
                               </div>)}
                             </div>
                           })()}

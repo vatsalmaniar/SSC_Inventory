@@ -85,7 +85,7 @@ function fmtDC(d) {
   return dt.getDate().toString().padStart(2,'0') + '.' + (dt.getMonth()+1).toString().padStart(2,'0') + '.' + dt.getFullYear()
 }
 
-function printDCChallan(order, activeBatch, activeDC, isSample = false) {
+function printDCChallan(order, activeBatch, activeDC, isSample = false, custCode = '') {
   const items = activeBatch?.dispatched_items
     ? activeBatch.dispatched_items
     : (order.order_items || []).map(i => ({ item_code: i.item_code, qty: i.qty, unit_price: i.unit_price_after_disc || i.unit_price, total_price: i.total_price }))
@@ -216,6 +216,7 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false) {
   <div>
     <div class="meta-section-label">Bill To</div>
     <div class="meta-name">${order.customer_name || '—'}</div>
+    ${custCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Customer ID: <strong style="font-family:'DM Mono',monospace">${custCode}</strong></div>` : ''}
     <div class="meta-addr">${(order.dispatch_address || '').replace(/\n/g,'<br/>')}</div>
     ${order.customer_gst ? `<div class="meta-gstin">GSTIN: <strong>${order.customer_gst}</strong></div>` : ''}
   </div>
@@ -318,6 +319,7 @@ export default function FCOrderDetail() {
 
   const commentInputRef = useRef(null)
   const [order, setOrder]       = useState(null)
+  const [custCode, setCustCode] = useState('')
   const [activeBatch, setActiveBatch] = useState(null)
   const [allBatches, setAllBatches]   = useState([])
   const [user, setUser]         = useState({ name: '', role: '', avatar: '' })
@@ -365,12 +367,12 @@ export default function FCOrderDetail() {
 
   async function loadOrder() {
     setLoading(true)
-    const { data } = await sb.from('orders').select('*, order_items(*)').eq('id', id).single()
+    const [{ data }, { data: allB }, { data: c }] = await Promise.all([
+      sb.from('orders').select('*, order_items(*)').eq('id', id).single(),
+      sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true }),
+      sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true }),
+    ])
     setOrder(data)
-    // If a specific dispatch_id was passed (from DC-centric navigation), load that batch
-    // Otherwise load the most recent batch
-    const { data: allB } = await sb.from('order_dispatches').select('*')
-      .eq('order_id', id).order('batch_no', { ascending: true })
     setAllBatches(allB || [])
     if (dispatchId) {
       const found = (allB || []).find(b => b.id === dispatchId)
@@ -378,9 +380,12 @@ export default function FCOrderDetail() {
     } else {
       setActiveBatch(allB?.[allB.length - 1] || null)
     }
-    setLoading(false)
-    const { data: c } = await sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true })
     setComments(c || [])
+    setLoading(false)
+    // Non-blocking: look up customer_id
+    if (data?.customer_name) {
+      sb.from('customers').select('customer_id').ilike('customer_name', data.customer_name).maybeSingle().then(({ data: cust }) => setCustCode(cust?.customer_id || ''))
+    }
   }
 
   async function goToCustomer() {
@@ -397,9 +402,23 @@ export default function FCOrderDetail() {
   }
 
   async function notifyUsers(roles, message) {
-    const targets = profiles.filter(p => roles.includes(p.role))
-    if (!targets.length) return
-    await sb.from('notifications').insert(targets.map(t => ({
+    const ownerName = order?.account_owner || order?.engineer_name || ''
+    const seen = new Set()
+    const targets = []
+    profiles.filter(p => roles.includes(p.role) && p.role !== 'admin').forEach(p => {
+      if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
+    })
+    if (ownerName) {
+      const ownerProfile = profiles.find(p => p.name === ownerName)
+      if (ownerProfile && !seen.has(ownerProfile.id)) { seen.add(ownerProfile.id); targets.push(ownerProfile) }
+    }
+    if (order?.created_by) {
+      const creatorProfile = profiles.find(p => p.id === order.created_by)
+      if (creatorProfile && !seen.has(creatorProfile.id)) { seen.add(creatorProfile.id); targets.push(creatorProfile) }
+    }
+    const final = targets.filter(t => t.id !== user.id)
+    if (!final.length) return
+    await sb.from('notifications').insert(final.map(t => ({
       user_name: t.name, user_id: t.id, message, order_id: id,
       order_number: order?.order_number || '', from_name: user.name,
     })))
@@ -755,6 +774,7 @@ export default function FCOrderDetail() {
               <div className="od-card-body">
                 <div className="od-detail-grid">
                   <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a4dab',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
+                  <div className="od-detail-field"><label>Customer ID</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{custCode || '—'}</div></div>
                   <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                   <div className="od-detail-field"><label>PO / Reference No.</label><div className="val">{order.po_number || '—'}</div></div>
                   <div className="od-detail-field"><label>Order Date</label><div className="val">{fmt(order.order_date)}</div></div>
@@ -884,7 +904,7 @@ export default function FCOrderDetail() {
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Goods issued. Generate the Sample Challan, then enter delivery details.</p>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                         <button style={{background:'#1a4dab',padding:'10px 16px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
-                          onClick={() => printDCChallan(order, activeBatch, activeDC, true)}>
+                          onClick={() => printDCChallan(order, activeBatch, activeDC, true, custCode)}>
                           <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:16,height:16}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                           Generate Sample Challan
                         </button>
@@ -1041,7 +1061,7 @@ export default function FCOrderDetail() {
                 {!isTempDC && activeDC && <div style={{fontSize:11,color:'#166534',fontWeight:600}}>Confirmed DC</div>}
                 {!isTempDC && activeDC && (['delivery_ready','eway_generated','dispatched_fc'].includes(batchStatus) || (isSample && batchStatus === 'invoice_generated')) && (
                   <button
-                    onClick={() => printDCChallan(order, activeBatch, activeDC, isSample)}
+                    onClick={() => printDCChallan(order, activeBatch, activeDC, isSample, custCode)}
                     style={{marginTop:10,display:'inline-flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:8,border:'1px solid #1a4dab',background:'#e8f2fc',color:'#1a4dab',fontFamily:'var(--font)',fontSize:12,fontWeight:600,cursor:'pointer'}}>
                     <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                     {isSample ? 'Download Sample Challan' : 'Download DC Challan'}

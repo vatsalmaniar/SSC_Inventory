@@ -55,7 +55,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
     let allCustomers = []
     let from = 0
     while (true) {
-      const { data } = await sb.from('customers').select('id,customer_name,account_owner,customer_type,gst').order('customer_name').range(from, from + 999)
+      const { data } = await sb.from('customers').select('id,customer_id,customer_name,account_owner,customer_type,gst').order('customer_name').range(from, from + 999)
       if (!data || data.length === 0) break
       allCustomers = [...allCustomers, ...data]
       if (data.length < 1000) break
@@ -205,7 +205,8 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
                       style={{padding:'10px 14px',fontSize:13,cursor:'pointer',borderBottom:'1px solid #f8fafc'}}
                       onMouseEnter={e => e.currentTarget.style.background='#f0f4ff'}
                       onMouseLeave={e => e.currentTarget.style.background='white'}>
-                      {c.customer_name}
+                      <div style={{fontWeight:600}}>{c.customer_name}{c.customer_id && <span style={{fontSize:10,fontWeight:600,color:'#6b7280',fontFamily:'var(--mono)',marginLeft:6}}>{c.customer_id}</span>}</div>
+                      {c.gst && <div style={{fontSize:11,color:'#94a3b8'}}>{c.gst}</div>}
                     </div>
                   ))}
                 </div>

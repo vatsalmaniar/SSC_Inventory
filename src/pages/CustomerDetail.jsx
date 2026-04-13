@@ -170,9 +170,7 @@ export default function CustomerDetail() {
 
   if (loading) return (
     <Layout pageTitle="Customer 360" pageKey="customer360">
-      <div className="od-page"><div className="od-body" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:300,gap:10,color:'var(--gray-400)'}}>
-        <div className="loading-spin"/>Loading...
-      </div></div>
+      <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div>
     </Layout>
   )
   if (!customer) return <Layout pageTitle="Customer" pageKey="customer360"><div className="od-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Customer not found</div><div style={{fontSize:13}}>This customer may have been deleted or you don't have access.</div></div></div></Layout>

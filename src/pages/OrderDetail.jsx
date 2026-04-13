@@ -64,6 +64,7 @@ export default function OrderDetail() {
   const [isNextBatch, setIsNextBatch]             = useState(false)
   const [batches, setBatches]                     = useState([])
   const [linkedPO, setLinkedPO]                   = useState(null)
+  const [custCode, setCustCode]                   = useState('')
 
   // Edit confirmation
   const [showEditConfirm, setShowEditConfirm]     = useState(false)
@@ -102,14 +103,18 @@ export default function OrderDetail() {
     setBatches(batches || [])
     setComments(comments || [])
     setProfiles(profileList || [])
-    // Load linked PO for CO orders
+    setLoading(false)
+    // Non-blocking: look up customer_id + linked PO in parallel
+    const bg = []
+    if (data?.customer_name) {
+      bg.push(sb.from('customers').select('customer_id').ilike('customer_name', data.customer_name).maybeSingle().then(({ data: cust }) => setCustCode(cust?.customer_id || '')))
+    }
     if (data?.order_type === 'CO') {
-      const { data: po } = await sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery').eq('order_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle()
-      setLinkedPO(po || null)
+      bg.push(sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery').eq('order_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle().then(({ data: po }) => setLinkedPO(po || null)))
     } else {
       setLinkedPO(null)
     }
-    setLoading(false)
+    Promise.all(bg)
   }
 
   async function loadComments() {
@@ -193,7 +198,7 @@ export default function OrderDetail() {
   }
 
   async function fetchCustomers(q) {
-    const { data } = await sb.from('customers').select('customer_name,gst,billing_address,credit_terms')
+    const { data } = await sb.from('customers').select('customer_id,customer_name,gst,billing_address,credit_terms')
       .ilike('customer_name', '%' + q + '%').limit(10)
     return data || []
   }
@@ -285,9 +290,27 @@ export default function OrderDetail() {
   }
 
   async function notifyUsers(roles, message) {
-    const targets = profiles.filter(p => roles.includes(p.role))
-    if (!targets.length) return
-    await sb.from('notifications').insert(targets.map(t => ({
+    const ownerName = order?.account_owner || order?.engineer_name || ''
+    const seen = new Set()
+    const targets = []
+    // Operational roles (exclude admin from broadcast — admin only gets notified as account owner or via @tag)
+    profiles.filter(p => roles.includes(p.role) && p.role !== 'admin').forEach(p => {
+      if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
+    })
+    // Always include account owner
+    if (ownerName) {
+      const ownerProfile = profiles.find(p => p.name === ownerName)
+      if (ownerProfile && !seen.has(ownerProfile.id)) { seen.add(ownerProfile.id); targets.push(ownerProfile) }
+    }
+    // Always include order creator
+    if (order?.created_by) {
+      const creatorProfile = profiles.find(p => p.id === order.created_by)
+      if (creatorProfile && !seen.has(creatorProfile.id)) { seen.add(creatorProfile.id); targets.push(creatorProfile) }
+    }
+    // Don't notify the person performing the action
+    const final = targets.filter(t => t.id !== user.id)
+    if (!final.length) return
+    await sb.from('notifications').insert(final.map(t => ({
       user_name: t.name, user_id: t.id, message, order_id: id,
       order_number: order?.order_number || '', from_name: user.name,
     })))
@@ -680,7 +703,7 @@ if (match) {
                           onSelect={c => setEditData(p => ({ ...p, customer_name: c.customer_name, customer_gst: c.gst || p.customer_gst, dispatch_address: c.billing_address || p.dispatch_address, credit_terms: c.credit_terms || p.credit_terms }))}
                           placeholder="Search customer..."
                           fetchFn={fetchCustomers}
-                          renderItem={c => <><div className="typeahead-item-main">{c.customer_name}</div>{c.gst && <div className="typeahead-item-sub">GST: {c.gst}</div>}</>}
+                          renderItem={c => <><div className="typeahead-item-main" style={{display:'flex',alignItems:'center',gap:6}}>{c.customer_name}{c.customer_id && <span style={{fontSize:10,fontWeight:600,color:'#6b7280',fontFamily:'var(--mono)'}}>{c.customer_id}</span>}</div>{c.gst && <div className="typeahead-item-sub">GST: {c.gst}</div>}</>}
                         />
                       </div>
                       <div className="od-edit-field">
@@ -745,6 +768,7 @@ if (match) {
                   <>
                   <div className="od-detail-grid">
                     <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a4dab',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
+                    <div className="od-detail-field"><label>Customer ID</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{custCode || '—'}</div></div>
                     <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                     <div className="od-detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={order.account_owner || order.engineer_name} /></div></div>
                     <div className="od-detail-field"><label>Credit Terms</label><div className="val">{order.credit_terms || '—'}</div></div>
