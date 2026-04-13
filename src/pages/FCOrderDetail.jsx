@@ -41,6 +41,9 @@ function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-30
 
 function stageLabel(status) {
   return {
+    pi_requested:       'Awaiting Proforma Invoice',
+    pi_generated:       'PI Sent — Awaiting Payment',
+    pi_payment_pending: 'PI Payment Pending',
     delivery_created:   'Picking',
     picking:            'Packing',
     packing:            'Goods Issue',
@@ -53,6 +56,8 @@ function stageLabel(status) {
     dispatched_fc:      'Delivered',
   }[status] || status
 }
+
+const PI_STATUSES = ['pi_requested','pi_generated','pi_payment_pending']
 
 function dotClass(msg) {
   const m = msg?.toLowerCase() || ''
@@ -844,6 +849,15 @@ export default function FCOrderDetail() {
                 ? (activeBatch.status || 'delivery_created')
                 : order.status
               if (batchStatus === 'dispatched_fc') return null
+              if (PI_STATUSES.includes(batchStatus)) return (
+                <div className="od-card" style={{borderLeft:'4px solid #d97706'}}>
+                  <div className="od-card-header"><div className="od-card-title" style={{color:'#92400e'}}>⏳ Awaiting Proforma Invoice</div></div>
+                  <div className="od-card-body">
+                    <p style={{fontSize:13,color:'#92400e',margin:0}}>This order is <strong>Against PI</strong>. It cannot be picked until Accounts issues the Proforma Invoice and payment is confirmed.</p>
+                    <p style={{fontSize:12,color:'var(--gray-400)',marginTop:8,margin:'8px 0 0'}}>Current status: <strong>{stageLabel(batchStatus)}</strong></p>
+                  </div>
+                </div>
+              )
               return (
               <div className="od-card">
                 <div className="od-card-header"><div className="od-card-title">Action — {stageLabel(batchStatus)}</div></div>

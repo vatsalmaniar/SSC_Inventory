@@ -310,7 +310,7 @@ export default function BillingOrderDetail() {
     try { piPdfUrl = await uploadPdf(piPdfFile, `pi/${id}`) } catch { toast('PDF upload failed. Please try again.'); setSaving(false); return }
     if (activeBatch) {
       await sb.from('order_dispatches').update({
-        pi_number: piNumberInput.trim(), pi_pdf_url: piPdfUrl, updated_at: new Date().toISOString()
+        pi_number: piNumberInput.trim(), pi_pdf_url: piPdfUrl, status: 'pi_generated', updated_at: new Date().toISOString()
       }).eq('id', activeBatch.id)
     }
     await sb.from('orders').update({ status: 'pi_generated', updated_at: new Date().toISOString() }).eq('id', id)
@@ -321,6 +321,9 @@ export default function BillingOrderDetail() {
   // PI STEP 2: pi_generated → pi_payment_pending (mark as sent / awaiting payment)
   async function handlePIAwaitPayment() {
     setSaving(true)
+    if (activeBatch) {
+      await sb.from('order_dispatches').update({ status: 'pi_payment_pending', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+    }
     await sb.from('orders').update({ status: 'pi_payment_pending', updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`PI shared with customer — payment pending.`)
     setSaving(false); await loadOrder()
@@ -331,6 +334,7 @@ export default function BillingOrderDetail() {
     setSaving(true)
     if (activeBatch) {
       await sb.from('order_dispatches').update({
+        status: 'delivery_created',
         ...(paymentRef.trim() ? { pi_payment_ref: paymentRef.trim() } : {}),
         updated_at: new Date().toISOString()
       }).eq('id', activeBatch.id)

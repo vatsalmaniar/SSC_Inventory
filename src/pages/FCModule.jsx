@@ -11,6 +11,9 @@ const WITH_ACCOUNTS = ['goods_issued','credit_check','goods_issue_posted','deliv
 
 function statusLabel(s) {
   return {
+    pi_requested:       'Awaiting PI',
+    pi_generated:       'PI Sent',
+    pi_payment_pending: 'PI Payment Pending',
     delivery_created:   'Picking',
     picking:            'Packing',
     packing:            'Goods Issue',
@@ -63,6 +66,7 @@ export default function FCModule() {
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
     if (center) q = q.eq('fulfilment_center', center)
+    q = q.not('status', 'in', '(pi_requested,pi_generated,pi_payment_pending)')
     const { data } = await q
     setBatches(data || [])
     setLoading(false)

@@ -365,7 +365,7 @@ export default function OrderDetail() {
       p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,
     })
     if (isPIOrder && batchData?.id) {
-      await sb.from('order_dispatches').update({ pi_required: true }).eq('id', batchData.id)
+      await sb.from('order_dispatches').update({ pi_required: true, status: 'pi_requested' }).eq('id', batchData.id)
     }
     const dcNum = batchData?.dc_number || '—'
     await logActivity(isPIOrder
@@ -418,7 +418,7 @@ export default function OrderDetail() {
       p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,
     })
     if (isPIOrder && batchData?.id) {
-      await sb.from('order_dispatches').update({ pi_required: true }).eq('id', batchData.id)
+      await sb.from('order_dispatches').update({ pi_required: true, status: 'pi_requested' }).eq('id', batchData.id)
     }
     const dcNum = batchData?.dc_number || '—'
     await logActivity(isPIOrder
