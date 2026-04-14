@@ -219,7 +219,7 @@ export default function PurchaseOrderDetail() {
       Kaveri: '17(A) Ashwamegh Warehouse, Behind New Ujala Hotel,\nSarkhej Bavla Highway, Sarkhej, Ahmedabad – 382 210',
       Godawari: '31 GIDC Estate, B/h Bank Of Baroda,\nMakarpura, Vadodara – 390 010',
     }
-    const deliveryAddr = FC_ADDRESSES[po.fulfilment_center] || po.fulfilment_center || '—'
+    const deliveryAddr = po.delivery_address || FC_ADDRESSES[po.fulfilment_center] || po.fulfilment_center || '—'
     const subtotal = items.reduce((s, i) => s + (Number(i.total_price) || 0), 0)
     const grandTotal = Number(po.total_amount) || subtotal
     const poDate = fmtDC(po.po_date || po.created_at)
@@ -341,7 +341,7 @@ export default function PurchaseOrderDetail() {
       <tr><td>PO Date</td><td>${poDate}</td></tr>
       ${po.order_number ? `<tr><td>Linked Order</td><td class="mono">${esc(po.order_number)}</td></tr>` : ''}
       ${po.reference && !po.order_number ? `<tr><td>Reference</td><td>${esc(po.reference)}</td></tr>` : ''}
-      <tr><td>Fulfilment Centre</td><td>${esc(po.fulfilment_center) || '—'}</td></tr>
+      <tr><td>Deliver To</td><td>${po.fulfilment_center === 'Customer' ? esc(po.delivery_customer_name || 'Customer') : (esc(po.fulfilment_center) || '—')}</td></tr>
     </table>
   </div>
 </div>
@@ -357,7 +357,7 @@ export default function PurchaseOrderDetail() {
 <!-- Deliver To -->
 <div style="margin-bottom:20px">
   <div class="meta-section-label">Deliver To</div>
-  <div class="meta-addr">SSC Control Pvt. Ltd.<br/>${deliveryAddr.replace(/\n/g,'<br/>')}</div>
+  <div class="meta-addr">${po.fulfilment_center === 'Customer' ? esc(po.delivery_customer_name || '') : 'SSC Control Pvt. Ltd.'}<br/>${deliveryAddr.replace(/\n/g,'<br/>')}</div>
 </div>
 
 <!-- Items -->
@@ -593,6 +593,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
       vendor_name: po.vendor_name || '',
       expected_delivery: po.expected_delivery || '',
       fulfilment_center: po.fulfilment_center || '',
+      delivery_address: po.delivery_address || '',
+      delivery_customer_name: po.delivery_customer_name || '',
       notes: po.notes || '',
       ssc_notes: po.ssc_notes || '',
       payment_terms: po.payment_terms || '',
@@ -639,6 +641,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
     const { error: poErr } = await sb.from('purchase_orders').update({
       expected_delivery: editForm.expected_delivery || null,
       fulfilment_center: editForm.fulfilment_center || null,
+      delivery_address: editForm.delivery_address?.trim() || null,
+      delivery_customer_name: editForm.fulfilment_center === 'Customer' ? editForm.delivery_customer_name || null : null,
       notes: editForm.notes.trim() || null,
       ssc_notes: editForm.ssc_notes?.trim() || null,
       payment_terms: editForm.payment_terms?.trim() || null,
@@ -845,13 +849,28 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                         <input type="date" value={editForm.expected_delivery} onChange={e => setEditForm(p => ({ ...p, expected_delivery: e.target.value }))} />
                       </div>
                       <div className="od-edit-field">
-                        <label>Fulfilment Centre</label>
-                        <select value={editForm.fulfilment_center} onChange={e => setEditForm(p => ({ ...p, fulfilment_center: e.target.value }))}>
+                        <label>Delivery To</label>
+                        <select value={editForm.fulfilment_center} onChange={e => {
+                          setEditForm(p => ({ ...p, fulfilment_center: e.target.value, ...(e.target.value !== 'Customer' ? { delivery_customer_name: '', delivery_address: '' } : {}) }))
+                        }}>
                           <option value="">— Select —</option>
                           {FC_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                          <option value="Customer">Customer Address</option>
                         </select>
                       </div>
                     </div>
+                    {editForm.fulfilment_center === 'Customer' && (
+                      <div className="od-edit-row">
+                        <div className="od-edit-field">
+                          <label>Customer Name</label>
+                          <input value={editForm.delivery_customer_name} onChange={e => setEditForm(p => ({ ...p, delivery_customer_name: e.target.value }))} placeholder="Customer name for delivery" />
+                        </div>
+                        <div className="od-edit-field">
+                          <label>Delivery Address</label>
+                          <textarea value={editForm.delivery_address} onChange={e => setEditForm(p => ({ ...p, delivery_address: e.target.value }))} rows={2} placeholder="Shipping address" />
+                        </div>
+                      </div>
+                    )}
                     <div className="od-edit-row">
                       <div className="od-edit-field">
                         <label>Payment Terms</label>
@@ -905,7 +924,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     )}
                     <div className="od-detail-field"><label>PO Date</label><div className="val">{fmt(po.po_date || po.created_at)}</div></div>
                     <div className="od-detail-field"><label>Expected Delivery</label><div className="val">{po.expected_delivery ? fmt(po.expected_delivery) : '—'}</div></div>
-                    <div className="od-detail-field"><label>Fulfilment Centre</label><div className="val">{po.fulfilment_center || '—'}</div></div>
+                    <div className="od-detail-field"><label>Delivery To</label><div className="val">{po.fulfilment_center === 'Customer' ? (po.delivery_customer_name || 'Customer') : (po.fulfilment_center || '—')}</div></div>
+                    {po.delivery_address && <div className="od-detail-field" style={{ gridColumn:'1 / -1' }}><label>Delivery Address</label><div className="val" style={{ lineHeight:1.5 }}>{po.delivery_address}</div></div>}
                     {po.purchase_requisition && <div className="od-detail-field"><label>Purchase Requisition From</label><div className="val">{po.purchase_requisition}</div></div>}
                     <div className="od-detail-field"><label>Total Amount</label><div className="val" style={{ fontWeight:700, fontSize:15 }}>{fmtINR(po.total_amount)}</div></div>
                     {po.notes && <div className="od-detail-field" style={{ gridColumn:'1 / -1' }}><label>Notes (for Vendor)</label><div className="val od-notes-val">{po.notes}</div></div>}

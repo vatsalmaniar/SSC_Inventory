@@ -37,6 +37,9 @@ export default function NewPurchaseOrder() {
   const [notes, setNotes]                   = useState('')
   const [purchaseRequisition, setPurchaseRequisition] = useState('')
   const [fulfilmentCenter, setFulfilmentCenter] = useState('')
+  const [deliveryCustText, setDeliveryCustText] = useState('')
+  const [deliveryCustName, setDeliveryCustName] = useState('')
+  const [deliveryAddress, setDeliveryAddress]   = useState('')
 
   // Test mode
   const [isTest, setIsTest] = useState(false)
@@ -157,6 +160,18 @@ export default function NewPurchaseOrder() {
     setPoFileName(f.name)
   }
 
+  async function fetchCustomers(q) {
+    const { data } = await sb.from('customers').select('id,customer_id,customer_name,shipping_address,gst')
+      .ilike('customer_name', '%' + q + '%').order('customer_name').limit(20)
+    return data || []
+  }
+
+  function selectDeliveryCustomer(c) {
+    setDeliveryCustText(c.customer_name)
+    setDeliveryCustName(c.customer_name)
+    setDeliveryAddress(c.shipping_address || '')
+  }
+
   async function fetchItems(q) {
     const { data } = await sb.from('items').select('item_code')
       .ilike('item_code', '%' + q + '%').limit(10)
@@ -196,7 +211,8 @@ export default function NewPurchaseOrder() {
   async function submitPO(submitForApproval) {
     if (!vendorId)          { toast('Please select a vendor'); return }
     if (isCO && !coOrder)   { toast('Please select a Custom Order (SSC CO No.)'); return }
-    if (!fulfilmentCenter)  { toast('Please select a delivery address (FC)'); return }
+    if (!fulfilmentCenter)  { toast('Please select a delivery address'); return }
+    if (fulfilmentCenter === 'Customer' && !deliveryCustName) { toast('Please select a customer for delivery address'); return }
     if (!filledItems.length){ toast('Add at least one line item'); return }
     for (const item of filledItems) {
       if (!item.qty || parseFloat(item.qty) <= 0) { toast(`Qty is required for item: ${item.item_code}`); return }
@@ -231,7 +247,9 @@ export default function NewPurchaseOrder() {
         status:            submitForApproval ? 'pending_approval' : 'draft',
         po_date:           poDate,
         expected_delivery: expectedDelivery || null,
-        fulfilment_center: fulfilmentCenter || null,
+        fulfilment_center: fulfilmentCenter === 'Customer' ? 'Customer' : fulfilmentCenter || null,
+        delivery_address:  fulfilmentCenter === 'Customer' ? deliveryAddress.trim() || null : FC_ADDRESSES[fulfilmentCenter] || null,
+        delivery_customer_name: fulfilmentCenter === 'Customer' ? deliveryCustName || null : null,
         notes:             notes.trim() || null,
         reference:         sscCoNo.trim() || coOrder?.order_number || null,
         ssc_notes:         sscNotes.trim() || null,
@@ -330,11 +348,15 @@ export default function NewPurchaseOrder() {
               />
             </div>
             <div className="no-field">
-              <label>Delivery Address (FC) <span className="req">*</span></label>
-              <select value={fulfilmentCenter} onChange={e => setFulfilmentCenter(e.target.value)}>
-                <option value="">— Select FC —</option>
+              <label>Delivery Address <span className="req">*</span></label>
+              <select value={fulfilmentCenter} onChange={e => {
+                setFulfilmentCenter(e.target.value)
+                if (e.target.value !== 'Customer') { setDeliveryCustText(''); setDeliveryCustName(''); setDeliveryAddress('') }
+              }}>
+                <option value="">— Select —</option>
                 <option value="Kaveri">Kaveri (Ahmedabad)</option>
                 <option value="Godawari">Godawari (Vadodara)</option>
+                <option value="Customer">Customer Address</option>
               </select>
             </div>
             <div className="no-field">
@@ -343,11 +365,36 @@ export default function NewPurchaseOrder() {
             </div>
           </div>
 
+          {fulfilmentCenter === 'Customer' && (
+            <div className="no-row full" style={{ marginTop: 4 }}>
+              <div className="no-field">
+                <label>Customer Name <span className="req">*</span></label>
+                <Typeahead
+                  value={deliveryCustText}
+                  onChange={v => { setDeliveryCustText(v); if (!v.trim()) { setDeliveryCustName(''); setDeliveryAddress('') } }}
+                  onSelect={selectDeliveryCustomer}
+                  placeholder="Search customer name..."
+                  fetchFn={fetchCustomers}
+                  renderItem={c => (
+                    <div className="typeahead-item-main" style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      {c.customer_name}
+                      {c.customer_id && <span style={{ fontSize:10, color:'var(--gray-400)', fontFamily:'var(--mono)' }}>{c.customer_id}</span>}
+                      {c.gst && <span style={{ fontSize:10, color:'var(--gray-400)' }}>{c.gst}</span>}
+                    </div>
+                  )}
+                />
+              </div>
+            </div>
+          )}
+
           {fulfilmentCenter && (
             <div className="no-row full" style={{ marginTop: 4 }}>
               <div className="no-field">
                 <label>Delivery Address</label>
-                <textarea value={FC_ADDRESSES[fulfilmentCenter] || ''} readOnly rows={2} style={{ background:'var(--gray-50)', color:'var(--gray-700)', cursor:'default' }} />
+                {fulfilmentCenter === 'Customer'
+                  ? <textarea value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} rows={2} placeholder="Shipping address will auto-fill on customer select — you can edit it" />
+                  : <textarea value={FC_ADDRESSES[fulfilmentCenter] || ''} readOnly rows={2} style={{ background:'var(--gray-50)', color:'var(--gray-700)', cursor:'default' }} />
+                }
               </div>
             </div>
           )}

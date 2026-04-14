@@ -22,7 +22,7 @@ const NAV_ITEMS = [
     key: 'customer360',
     label: 'Customer 360',
     path: '/customers',
-    roles: ['sales', 'ops', 'admin'],
+    roles: ['sales', 'ops', 'admin', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><circle cx="19" cy="8" r="2.5"/><path d="M21.5 14c-.8-.9-2-1.5-3.5-1.5"/><circle cx="5" cy="8" r="2.5"/><path d="M2.5 14c.8-.9 2-1.5 3.5-1.5"/></svg>,
   },
   {
@@ -71,7 +71,7 @@ const NAV_ITEMS = [
     key: 'vendor360',
     label: 'Vendor 360',
     path: '/vendors',
-    roles: ['ops', 'admin'],
+    roles: ['ops', 'admin', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>,
   },
   {
@@ -196,10 +196,10 @@ export default function Layout({ children, pageTitle, pageKey }) {
     const canProcurement = ['ops', 'admin', 'accounts'].includes(role)
     const [ordersRes, companiesRes, leadsRes, oppsRes, vendorsRes, poRes, grnRes, piRes] = await Promise.all([
       canOrders ? sb.from('orders').select('id,order_number,customer_name,status').or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`).eq('is_test', false).limit(5) : { data: [] },
-      canCRM    ? sb.from('customers').select('id,customer_name').ilike('customer_name', `%${q}%`).limit(5) : { data: [] },
+      (canCRM || canProcurement) ? sb.from('customers').select('id,customer_name').ilike('customer_name', `%${q}%`).limit(5) : { data: [] },
       canCRM    ? sb.from('crm_leads').select('id,contact_name_freetext,freetext_company,stage').or(`contact_name_freetext.ilike.%${q}%,freetext_company.ilike.%${q}%`).limit(5) : { data: [] },
       canCRM    ? sb.from('crm_opportunities').select('id,opportunity_name,product_notes,stage').or(`opportunity_name.ilike.%${q}%,product_notes.ilike.%${q}%`).limit(5) : { data: [] },
-      canCRM ? sb.from('vendors').select('id,vendor_code,vendor_name,status').or(`vendor_code.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
+      (canCRM || canProcurement) ? sb.from('vendors').select('id,vendor_code,vendor_name,status').or(`vendor_code.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
       canProcurement ? sb.from('purchase_orders').select('id,po_number,vendor_name,status').or(`po_number.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
       canProcurement ? sb.from('grn').select('id,grn_number,grn_type,status').ilike('grn_number', `%${q}%`).limit(5) : { data: [] },
       canProcurement ? sb.from('purchase_invoices').select('id,invoice_number,vendor_name,status').or(`invoice_number.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
