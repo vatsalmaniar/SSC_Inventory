@@ -265,6 +265,7 @@ export default function BillingOrderDetail() {
     if (activeBatch) await sb.from('order_dispatches').update({ credit_override: true, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     await sb.from('orders').update({ credit_override: true, updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity('Credit Override flagged — payment pending. Awaiting approval. ⚠️')
+    toast('Credit override flagged', 'warning')
     setSaving(false); await loadOrder()
   }
   // STEP 1b: No pending payment — advance to credit_check
@@ -272,6 +273,7 @@ export default function BillingOrderDetail() {
     setSaving(true)
     if (activeBatch) await sb.from('order_dispatches').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     await logActivity('Credit Check completed — payment clear.')
+    toast('Credit check cleared', 'success')
     setSaving(false); await loadOrder()
   }
 
@@ -282,6 +284,7 @@ export default function BillingOrderDetail() {
       await sb.from('order_dispatches').update({ status: 'goods_issue_posted', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
     await logActivity('Goods Issue Posted. Invoice number will be assigned from Tally on upload.')
+    toast('Goods issue posted', 'success')
     setShowGIConfirm(false); setSaving(false); await loadOrder()
   }
 
@@ -298,6 +301,7 @@ export default function BillingOrderDetail() {
     }
     await logActivity(`Invoice Generated — ${finalInvNum}. Waiting for Fulfilment Centre to set delivery details.`)
     await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Invoice generated. Please set delivery details.`)
+    toast('Invoice generated', 'success')
     setShowInvConfirm(false); setTallyInvNumber(''); setSaving(false); await loadOrder()
   }
 
@@ -315,6 +319,7 @@ export default function BillingOrderDetail() {
     }
     await sb.from('orders').update({ status: 'pi_generated', updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`Proforma Invoice issued — ${piNumberInput.trim()}. Awaiting customer payment.`)
+    toast('Proforma Invoice issued', 'success')
     setSaving(false); await loadOrder()
   }
 
@@ -326,6 +331,7 @@ export default function BillingOrderDetail() {
     }
     await sb.from('orders').update({ status: 'pi_payment_pending', updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`PI shared with customer — payment pending.`)
+    toast('PI sent — awaiting payment', 'success')
     setSaving(false); await loadOrder()
   }
 
@@ -341,6 +347,7 @@ export default function BillingOrderDetail() {
     }
     await sb.from('orders').update({ status: 'delivery_created', updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`PI Payment confirmed${paymentRef.trim() ? ' — Ref: ' + paymentRef.trim() : ''}. Order returned to Fulfilment Centre for picking & dispatch.`)
+    toast('PI payment confirmed', 'success')
     setSaving(false); await loadOrder()
   }
 
@@ -349,6 +356,7 @@ export default function BillingOrderDetail() {
     setSaving(true)
     if (activeBatch) await sb.from('order_dispatches').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     await logActivity('PI Order — Credit check auto-passed. Payment was collected upfront via Proforma Invoice.')
+    toast('Credit check auto-passed', 'success')
     setSaving(false); await loadOrder()
   }
 
@@ -374,6 +382,7 @@ export default function BillingOrderDetail() {
     }
     await logActivity(`E-Way Bill generated — #${ewayNumber.trim()}. Handed to FC for final delivery.`)
     await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — E-Way Bill ready. Order handed back for delivery.`)
+    toast('E-Way Bill generated', 'success')
     setSaving(false); await loadOrder()
     navigate('/billing')
   }
@@ -568,6 +577,19 @@ const mentionSuggestions = mentionQuery !== null
                   <div className="od-detail-field">
                     <label>SO / CO Number</label>
                     <div className="val" style={{fontFamily:'var(--mono)',fontWeight:700,color:'var(--blue-800)'}}>{order.order_number}</div>
+                  </div>
+                  <div className="od-detail-field">
+                    <label>Customer PO / Ref No.</label>
+                    <div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>
+                      {order.po_number || '—'}
+                      {order.po_document_url && (
+                        <a href={order.po_document_url} target="_blank" rel="noreferrer"
+                          style={{marginLeft:8,fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          View PO
+                        </a>
+                      )}
+                    </div>
                   </div>
                   <div className="od-detail-field">
                     <label>Delivery Challan (DC)</label>

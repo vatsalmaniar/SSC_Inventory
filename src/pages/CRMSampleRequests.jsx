@@ -54,6 +54,7 @@ export default function CRMSampleRequests() {
     const { error } = await sb.from('crm_sample_requests').update(updateData).eq('id', srId)
     if (error) { toast('Error: ' + error.message); setUpdating(null); return }
     setSrs(prev => prev.map(s => s.id === srId ? { ...s, ...updateData } : s))
+    toast('Status updated to ' + status, 'success')
     setUpdating(null)
   }
 

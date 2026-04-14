@@ -233,6 +233,10 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
   const visibleNav = NAV_ITEMS.filter(n => n.roles.includes('all') || n.roles.includes(user.role))
 
+  // Access denied check: if user role is loaded and pageKey doesn't match any allowed nav item
+  const accessDenied = user.role && pageKey && pageKey !== 'home'
+    && !NAV_ITEMS.some(n => n.key === pageKey && (n.roles.includes('all') || n.roles.includes(user.role)))
+
   return (
     <div className="ly-wrap">
 
@@ -504,7 +508,18 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
         {/* Page content */}
         <div className="ly-content">
-          {children}
+          {accessDenied ? (
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',padding:40}}>
+              <div style={{width:56,height:56,borderRadius:'50%',background:'#fef2f2',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}>
+                <svg fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24" style={{width:28,height:28}}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              </div>
+              <div style={{fontSize:18,fontWeight:700,color:'var(--gray-800)',marginBottom:6}}>Access Restricted</div>
+              <div style={{fontSize:13,color:'var(--gray-500)',maxWidth:340,lineHeight:1.5}}>
+                You don't have permission to access this module. Please contact your administrator to request access.
+              </div>
+              <button className="od-btn" style={{marginTop:20}} onClick={() => navigate('/dashboard')}>← Back to Home</button>
+            </div>
+          ) : children}
         </div>
 
       </div>

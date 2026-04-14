@@ -487,6 +487,7 @@ export default function FCOrderDetail() {
       if (error) { toast('Error: ' + error.message); setSaving(false); return }
     }
     await logActivity(activityMsg)
+    toast('Status updated', 'success')
     setConfirm(null)
     setSaving(false)
     await loadOrder()
@@ -514,6 +515,7 @@ export default function FCOrderDetail() {
     if (order.order_type !== 'SAMPLE') {
       await notifyUsers(['accounts', 'admin'], `${order.order_number} — Goods Issued. Ready for billing.`)
     }
+    toast('Goods issued confirmed', 'success')
     setConfirm(null)
     setSaving(false)
     await loadOrder()
@@ -571,6 +573,7 @@ export default function FCOrderDetail() {
       if (error) { toast('Error: ' + error.message); setSaving(false); return }
     }
     await logActivity(`Delivery Ready — ${detail}. ${actSuffix}`)
+    toast('Delivery details saved', 'success')
     setShowDeliveryForm(false)
     setSaving(false)
     await loadOrder()
@@ -588,6 +591,7 @@ export default function FCOrderDetail() {
     const { error } = await sb.from('orders').update({ status: finalStatus, updated_at: new Date().toISOString() }).eq('id', id)
     if (error) { toast('Error: ' + error.message); setSaving(false); return }
     await logActivity(allBatchesDone ? 'Order Delivered — all batches complete.' : 'Batch Delivered — remaining batch(es) still pending.')
+    toast(allBatchesDone ? 'Order delivered' : 'Batch delivered', 'success')
     setConfirm(null)
     setSaving(false)
     await loadOrder()

@@ -144,6 +144,7 @@ export default function CRMNewLead() {
       notes: 'Opportunity created',
     })
 
+    toast('Lead created', 'success')
     navigate('/crm/opportunities/' + data.id)
   }
 

@@ -76,6 +76,7 @@ export default function CRMCompanyDetail() {
     }).eq('id', id)
     if (error) { toast('Error: ' + error.message); setSaving(false); return }
     setCompany(p => ({ ...p, ...editData }))
+    toast('Company updated', 'success')
     setEditMode(false)
     setSaving(false)
   }
@@ -86,6 +87,7 @@ export default function CRMCompanyDetail() {
     const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: id }).select().single()
     if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
     setContacts(prev => [...prev, data])
+    toast('Contact added', 'success')
     setShowContactForm(false)
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'', is_decision_maker:false, is_influencer:false, notes:'' })
     setSavingContact(false)

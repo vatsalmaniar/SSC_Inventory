@@ -136,12 +136,14 @@ export default function VendorDetail() {
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
     setShowContactModal(false)
     setSavingContact(false)
+    toast('Contact added', 'success')
   }
 
   async function deleteContact(cid) {
     if (!window.confirm('Remove this contact?')) return
     await sb.from('vendor_contacts').delete().eq('id', cid)
     setContacts(p => p.filter(c => c.id !== cid))
+    toast('Contact removed', 'success')
   }
 
   if (loading) return <Layout pageTitle="Vendor 360" pageKey="vendor360"><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div></Layout>

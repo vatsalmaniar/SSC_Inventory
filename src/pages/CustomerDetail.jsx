@@ -112,6 +112,7 @@ export default function CustomerDetail() {
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
     setShowContactModal(false)
     setSavingContact(false)
+    toast('Contact added', 'success')
   }
 
   async function approve() {
@@ -119,12 +120,14 @@ export default function CustomerDetail() {
     await sb.from('customers').update({ approval_status: 'approved' }).eq('id', id)
     setCustomer(p => ({ ...p, approval_status: 'approved' }))
     setApproving(false)
+    toast('Customer approved', 'success')
   }
 
   async function reject() {
     if (!window.confirm('Reject and delete this customer submission?')) return
     setApproving(true)
     await sb.from('customers').delete().eq('id', id)
+    toast('Customer rejected', 'success')
     navigate('/customers')
   }
 
@@ -166,6 +169,7 @@ export default function CustomerDetail() {
     setCustomer(fresh || { ...customer, ...editData })
     setEditData(fresh || { ...customer, ...editData })
     setEditMode(false); setSaving(false)
+    toast('Customer updated', 'success')
   }
 
   if (loading) return (

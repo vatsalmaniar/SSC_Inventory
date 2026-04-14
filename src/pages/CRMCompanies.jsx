@@ -54,6 +54,7 @@ export default function CRMCompanies() {
     setCompanies(prev => [data, ...prev])
     setShowForm(false)
     setForm({ company_name:'', gstin:'', city:'', address:'', customer_type:'', industry:'', status:'Active', assigned_rep_id:'' })
+    toast('Company created', 'success')
     setSaving(false)
     navigate('/crm/companies/' + data.id)
   }

@@ -186,6 +186,7 @@ export default function NewOrder() {
     )
     if (itemsError) { toast('Order created but items failed to save: ' + itemsError.message); setSubmitting(false); return }
 
+    toast('Order created — ' + order.order_number, 'success')
     setSubmitting(false)
     navigate('/orders', { state: { success: order.order_number } })
   }

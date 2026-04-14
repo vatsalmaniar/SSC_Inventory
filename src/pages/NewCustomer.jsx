@@ -231,6 +231,7 @@ export default function NewCustomer() {
         }
       }
 
+      toast('Customer created — ' + finalCustId, 'success')
       if (userRole === 'admin') {
         navigate('/customers/' + newId)
       } else {

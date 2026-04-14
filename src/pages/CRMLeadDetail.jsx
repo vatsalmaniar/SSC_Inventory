@@ -141,6 +141,7 @@ export default function CRMLeadDetail() {
       if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
       setLeadContacts(p => [...p, data])
     }
+    toast('Contact added', 'success')
     setContactForm({ name:'', designation:'', phone:'', email:'' })
     setShowContactModal(false)
     setSavingContact(false)
@@ -163,6 +164,7 @@ export default function CRMLeadDetail() {
     }).eq('id', id)
     if (error) { toast('Error: ' + error.message); setSaving(false); return }
     setLead(p => ({ ...p, ...editData }))
+    toast('Lead updated', 'success')
     setEditMode(false); setSaving(false)
   }
 
@@ -194,6 +196,7 @@ export default function CRMLeadDetail() {
     setActDiscussion(''); setActNotes(''); setActVisitType('Alone')
     const { data: c } = await sb.from('crm_activities').select('*, profiles(name)').eq('lead_id', id).order('created_at', { ascending: false })
     setActivities(c || [])
+    toast('Activity logged', 'success')
     setPostingAct(false)
   }
 
@@ -206,6 +209,7 @@ export default function CRMLeadDetail() {
     setTaskType('Call'); setTaskDueDate(''); setTaskNotes(''); setShowTaskForm(false)
     const { data: t } = await sb.from('crm_tasks').select('*, profiles(name)').eq('lead_id', id).order('due_date', { ascending: true })
     setTasks(t || [])
+    toast('Task created', 'success')
     setAddingTask(false)
   }
 
@@ -213,6 +217,7 @@ export default function CRMLeadDetail() {
     setMarkingDone(taskId)
     await sb.from('crm_tasks').update({ completed: true, completed_at: new Date().toISOString() }).eq('id', taskId)
     setTasks(prev => prev.filter(t => t.id !== taskId))
+    toast('Task completed', 'success')
     setMarkingDone(null)
   }
 
@@ -244,6 +249,7 @@ export default function CRMLeadDetail() {
     const { data: q } = await sb.from('crm_quote_items').select('*').eq('lead_id', id).order('created_at', { ascending: true })
     setQuoteItems(q || [])
     setQuoteLoaded(true)
+    toast('Quote saved', 'success')
     setSavingQuote(false)
   }
 
@@ -259,6 +265,7 @@ export default function CRMLeadDetail() {
     }).select().single()
     if (error) { toast('Error: ' + error.message); return }
     await sb.from('crm_leads').update({ status: 'Converted' }).eq('id', id)
+    toast('Lead converted to opportunity', 'success')
     navigate('/crm/opportunities/' + opp.id)
   }
 

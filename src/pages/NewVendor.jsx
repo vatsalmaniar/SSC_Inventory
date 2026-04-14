@@ -210,6 +210,7 @@ export default function NewVendor() {
       // Update with file URLs
       await sb.from('vendors').update({ gst_cert_url: gstUrl, msme_cert_url: msmeUrl }).eq('id', newId)
 
+      toast('Vendor created — ' + vendorCode, 'success')
       if (userRole === 'admin') {
         navigate('/vendors/' + newId)
       } else {

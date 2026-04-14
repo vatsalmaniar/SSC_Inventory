@@ -163,6 +163,7 @@ export default function CRMFieldVisits() {
     setVisits(fresh || [])
     setForm(emptyForm())
     setCompanyOpps([])
+    toast('Field visit logged', 'success')
     setShowModal(false)
     setSaving(false)
   }

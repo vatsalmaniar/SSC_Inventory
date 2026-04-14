@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
+import { toast } from '../lib/toast'
 
 const TARGET_TYPES = ['REVENUE','VISITS','NEW_LEADS','CONVERSIONS']
 const TARGET_LABELS = { REVENUE:'Revenue (INR)', VISITS:'Field Visits', NEW_LEADS:'New Leads', CONVERSIONS:'Conversions' }
@@ -78,6 +79,7 @@ export default function CRMTargets() {
       await sb.from('crm_targets').insert({ rep_id: repId, period, target_type: type, target_value: targetValue, achieved_value: achievedValue })
     }
     await loadTargets()
+    toast('Target saved', 'success')
     setEditingCell(null); setEditVal(''); setSaving(false)
   }
 

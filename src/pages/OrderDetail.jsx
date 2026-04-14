@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import { fmt, fmtTs } from '../lib/fmt'
+import { fmt, fmtTs, esc } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
+import '../styles/neworder.css'
 
 
 const ORDER_MODULE_STAGES = [
@@ -26,6 +27,78 @@ function OwnerChip({name}) { if(!name) return '—'; const ini=name.split(' ').m
 
 function emptyItem() {
   return { _new: true, item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '' }
+}
+
+function numToWords(n) {
+  const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen']
+  const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety']
+  function conv(n) {
+    if (n === 0) return ''
+    if (n < 20) return a[n]
+    if (n < 100) return b[Math.floor(n/10)] + (n%10 ? ' ' + a[n%10] : '')
+    if (n < 1000) return a[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' ' + conv(n%100) : '')
+    if (n < 100000) return conv(Math.floor(n/1000)) + ' Thousand' + (n%1000 ? ' ' + conv(n%1000) : '')
+    if (n < 10000000) return conv(Math.floor(n/100000)) + ' Lakh' + (n%100000 ? ' ' + conv(n%100000) : '')
+    return conv(Math.floor(n/10000000)) + ' Crore' + (n%10000000 ? ' ' + conv(n%10000000) : '')
+  }
+  const r = Math.floor(n), p = Math.round((n - r) * 100)
+  return 'Rupees ' + conv(r) + (p > 0 ? ' and ' + conv(p) + ' Paise' : '') + ' Only'
+}
+
+function fmtDC(d) {
+  if (!d) return '—'
+  const dt = new Date(d)
+  return dt.getDate().toString().padStart(2,'0') + '.' + (dt.getMonth()+1).toString().padStart(2,'0') + '.' + dt.getFullYear()
+}
+
+function printDCChallan(order, batch, dcNumber, isSample = false, custCode = '') {
+  const items = batch?.dispatched_items
+    ? batch.dispatched_items
+    : (order.order_items || []).map(i => ({ item_code: i.item_code, qty: i.qty, unit_price: i.unit_price_after_disc || i.unit_price, total_price: i.total_price }))
+  const subtotal = items.reduce((s, i) => s + (i.total_price || 0), 0)
+  const cgst = Math.round(subtotal * 0.09 * 100) / 100
+  const sgst = Math.round(subtotal * 0.09 * 100) / 100
+  const grandTotal = subtotal + cgst + sgst + (order.freight || 0)
+  const dcDate = fmtDC(batch?.created_at || new Date())
+  const poDate = fmtDC(order.order_date)
+  const batchLabel = batch ? `Batch ${batch.batch_no}` : ''
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>${isSample ? 'Sample Challan' : 'Delivery Challan'} — ${dcNumber}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:'DM Sans',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:860px;margin:0 auto;line-height:1.5}.mono{font-family:'DM Mono',monospace}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}.co-name{font-size:17px;font-weight:700;margin-bottom:2px}.co-sub{font-size:11px;color:#64748b;margin-bottom:8px}.co-addr{font-size:10.5px;color:#475569;line-height:1.6}
+.doc-title{font-size:28px;font-weight:700;text-align:right;letter-spacing:-0.5px}.doc-type-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;padding:3px 10px;border-radius:4px;margin-bottom:6px;background:${isSample?'#fef3c7':'#eff6ff'};color:${isSample?'#92400e':'#1d4ed8'}}
+.divider{border:none;border-top:1px solid #e2e8f0;margin:20px 0}.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px}.meta-section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.7px;color:#94a3b8;margin-bottom:6px}.meta-name{font-size:13px;font-weight:700;margin-bottom:3px}.meta-addr{font-size:11px;color:#475569;line-height:1.6}
+.ref-table{width:100%;border-collapse:collapse}.ref-table tr td{padding:3px 0;font-size:11px;vertical-align:top}.ref-table tr td:first-child{color:#64748b;width:45%}.ref-table tr td:last-child{font-weight:600}
+.terms{display:flex;gap:32px;font-size:11px;color:#475569;margin-bottom:20px}.terms span strong{color:#0f172a;font-weight:600}
+table.items{width:100%;border-collapse:collapse;margin-bottom:4px}table.items thead tr{border-bottom:2px solid #0f172a}table.items th{padding:8px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;text-align:left}table.items th.r{text-align:right}table.items th.c{text-align:center}table.items td{padding:9px 10px;font-size:11.5px;vertical-align:top}table.items td.r{text-align:right}table.items td.c{text-align:center}table.items td.code{font-family:'DM Mono',monospace;font-size:11px;font-weight:500}
+.totals-wrap{display:flex;justify-content:flex-end;margin-top:12px}.totals-table{width:300px;border-collapse:collapse}.totals-table td{padding:5px 0;font-size:11.5px}.totals-table td.lbl{color:#64748b}.totals-table td.val{text-align:right;font-weight:500}.totals-table tr.grand td{border-top:2px solid #0f172a;padding-top:8px;font-size:13px;font-weight:700}
+.words{font-size:11px;color:#475569;margin:16px 0 24px;padding:10px 14px;background:#f8fafc;border-left:3px solid #e2e8f0;border-radius:0 6px 6px 0}
+.sig-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:32px;padding-top:20px;border-top:1px solid #e2e8f0}.sig-cell{text-align:center;font-size:10px;color:#64748b}.sig-line{border-top:1px solid #94a3b8;margin:28px 20px 8px}.sig-name{font-weight:600;color:#0f172a;font-size:11px}
+.footer{margin-top:24px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}.footer-left{font-size:10px;color:#94a3b8;line-height:1.6}.footer-right{font-size:10px;color:#94a3b8;text-align:right}
+@media print{body{padding:0;max-width:100%}@page{size:A4;margin:16mm 14mm}}
+</style></head><body>
+<div class="header"><div><div class="co-name">SSC Control Pvt. Ltd.</div><div class="co-sub">Industrial Automation &amp; Electrification</div><div class="co-addr">E/12, Siddhivinayak Towers, B/H DCP Office<br/>Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; ${esc(order.fulfilment_center) || 'Ahmedabad'}</div></div><div style="text-align:right"><img src="${window.location.origin}/ssc-logo.svg" alt="SSC" style="height:52px;width:auto;display:block;margin-left:auto;margin-bottom:10px"/><div class="doc-type-badge">${isSample ? 'Sample' : 'Delivery'}</div><div class="doc-title">${isSample ? 'Sample Challan' : 'Delivery Challan'}</div></div></div>
+<hr class="divider"/>
+<div class="meta-grid"><div><div class="meta-section-label">Bill To</div><div class="meta-name">${esc(order.customer_name) || '—'}</div>${custCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Customer ID: <strong style="font-family:'DM Mono',monospace">${esc(custCode)}</strong></div>` : ''}<div class="meta-addr">${esc(order.dispatch_address || '').replace(/\\n/g,'<br/>')}</div>${order.customer_gst ? `<div style="font-size:11px;color:#475569;margin-top:5px">GSTIN: <strong>${esc(order.customer_gst)}</strong></div>` : ''}</div><div><div class="meta-section-label">Reference</div><table class="ref-table"><tr><td>Challan No.</td><td class="mono">${esc(dcNumber)}</td></tr><tr><td>Challan Date</td><td>${dcDate}</td></tr><tr><td>Order No.</td><td class="mono">${esc(order.order_number) || '—'}</td></tr>${order.po_number ? `<tr><td>PO No. / Date</td><td>${esc(order.po_number)} / ${poDate}</td></tr>` : ''}${(batch?.invoice_number || order.invoice_number) ? `<tr><td>Invoice No.</td><td class="mono">${esc(batch?.invoice_number || order.invoice_number)}</td></tr>` : ''}${batchLabel ? `<tr><td>Batch</td><td>${esc(batchLabel)}</td></tr>` : ''}</table></div></div>
+<hr class="divider"/>
+<div class="terms"><span>Delivery terms: <strong>${esc(order.dispatch_mode) || 'EXW Through Transport'}</strong></span><span>Payment terms: <strong>${esc(order.credit_terms) || '—'}</strong></span><span>Currency: <strong>INR</strong></span></div>
+<table class="items"><thead><tr><th style="width:40px">#</th><th>Item Code</th><th class="c" style="width:80px">Qty</th><th class="c" style="width:50px">Unit</th><th style="width:110px">Cust. Ref No</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Amount</th></tr></thead><tbody>
+${items.map((item, idx) => `<tr><td style="color:#94a3b8">${idx+1}</td><td class="code">${esc(item.item_code) || '—'}</td><td class="c" style="font-weight:700">${item.qty}</td><td class="c" style="color:#64748b">Pc</td><td style="font-size:11px;color:#475569">${esc(item.customer_ref_no) || '—'}</td><td class="r">${(item.unit_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="r" style="font-weight:600">${(item.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join('')}
+</tbody></table>
+<div class="totals-wrap"><table class="totals-table"><tr><td class="lbl">Subtotal</td><td class="val">${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr><tr><td class="lbl">CGST (9%)</td><td class="val">${cgst.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr><tr><td class="lbl">SGST (9%)</td><td class="val">${sgst.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>${order.freight ? `<tr><td class="lbl">Freight</td><td class="val">${(order.freight).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}<tr class="grand"><td class="lbl">Total Amount</td><td class="val">₹ ${grandTotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></table></div>
+<div class="words">Amount in words: <strong>${numToWords(grandTotal)}</strong></div>
+<div class="sig-row"><div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Prepared By</div>Store / Dispatch</div><div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Checked By</div>Accounts / Manager</div><div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Authorised Signatory</div>For SSC Control Pvt. Ltd.</div></div>
+<div class="footer"><div class="footer-left">SSC Control Pvt. Ltd. &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; CIN: U51909GJ2021PTC122539<br/>Ahmedabad: E/12, Siddhivinayak Towers, Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>Baroda: 31 GIDC Estate, B/h Bank Of Baroda, Makarpura, Vadodara – 390 010</div><div class="footer-right">sales@ssccontrol.com<br/>www.ssccontrol.com</div></div>
+</body></html>`
+
+  const w = window.open('', '_blank')
+  if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
+  w.document.write(html)
+  w.document.close()
+  w.onload = () => w.print()
 }
 
 export default function OrderDetail() {
@@ -238,6 +311,7 @@ export default function OrderDetail() {
     if (itemsErr) { toast('Failed to save items: ' + itemsErr.message); setSaving(false); return }
     const msg = reason.trim() ? `Order edited — ${reason.trim()}` : 'Order edited — details updated'
     await logActivity(msg)
+    toast('Order updated', 'success')
     await loadOrder()
     setEditMode(false); setSaving(false)
   }
@@ -277,6 +351,7 @@ export default function OrderDetail() {
     })
     if (error) { toast('Approval error: ' + error.message); setSaving(false); return }
     await sb.from('orders').update({ status: 'inv_check', updated_at: new Date().toISOString() }).eq('id', id)
+    toast('Order saved and approved', 'success')
     await loadOrder()
     setEditMode(false); setSaving(false)
   }
@@ -325,14 +400,17 @@ export default function OrderDetail() {
       if (error) { toast('Error: ' + error.message); setSaving(false); return }
       await sb.from('orders').update({ status: 'inv_check', updated_at: new Date().toISOString() }).eq('id', id)
       await logActivity('Order accepted — moved to Order Approved')
+      toast('Order approved', 'success')
       await loadOrder(); setSaving(false)
     } else if (order.status === 'inv_check') {
       await sb.from('orders').update({ status: 'inventory_check', updated_at: new Date().toISOString() }).eq('id', id)
       await logActivity('Approval confirmed — moved to Inventory Check')
+      toast('Moved to Inventory Check', 'success')
       await loadOrder(); setSaving(false)
     } else if (order.status === 'inventory_check') {
       await sb.from('orders').update({ status: 'dispatch', updated_at: new Date().toISOString() }).eq('id', id)
       await logActivity('Inventory confirmed — Ready to Ship')
+      toast('Ready to Ship', 'success')
       await loadOrder(); setSaving(false)
     } else if (order.status === 'dispatch') {
       setSaving(false)
@@ -372,6 +450,7 @@ export default function OrderDetail() {
       ? `Full Dispatch — ${order.credit_terms}. PI required before delivery. DC: ${dcNum}`
       : `Full Dispatch — all items sent via ${fcCenter}. Delivery Created. DC: ${dcNum}`)
     if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Dispatched to ${fcCenter}. Ready for picking.`)
+    toast('Dispatch created', 'success')
     await loadOrder(); setSaving(false)
   }
 
@@ -425,6 +504,7 @@ export default function OrderDetail() {
       ? `Partial Dispatch via ${fcCenter} — ${summary}. ${order.credit_terms} — PI required before delivery. DC: ${dcNum}`
       : `Partial Dispatch via ${fcCenter} — ${summary}. Delivery Created. DC: ${dcNum}`)
     if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Partial dispatch to ${fcCenter}. Ready for picking.`)
+    toast('Partial dispatch created', 'success')
     await loadOrder(); setSaving(false)
   }
 
@@ -498,6 +578,7 @@ if (match) {
     await sb.from('order_comments').insert({
       order_id: id, author_name: user.name, message: logMsg, tagged_users: [], is_activity: true, is_cancellation: true
     })
+    toast('Order cancelled', 'success')
     setShowCancel(false); setCancelReason(''); setCancelInitiatorType('staff'); setCancelInitiatorName(''); setCancelInitiatorFreeText('')
     await loadOrder(); setSaving(false)
   }
@@ -697,18 +778,11 @@ if (match) {
                     <div className="od-edit-row">
                       <div className="od-edit-field">
                         <label>Customer Name</label>
-                        <Typeahead
-                          value={editData.customer_name}
-                          onChange={v => setEditData(p => ({ ...p, customer_name: v }))}
-                          onSelect={c => setEditData(p => ({ ...p, customer_name: c.customer_name, customer_gst: c.gst || p.customer_gst, dispatch_address: c.billing_address || p.dispatch_address, credit_terms: c.credit_terms || p.credit_terms }))}
-                          placeholder="Search customer..."
-                          fetchFn={fetchCustomers}
-                          renderItem={c => <><div className="typeahead-item-main" style={{display:'flex',alignItems:'center',gap:6}}>{c.customer_name}{c.customer_id && <span style={{fontSize:10,fontWeight:600,color:'#6b7280',fontFamily:'var(--mono)'}}>{c.customer_id}</span>}</div>{c.gst && <div className="typeahead-item-sub">GST: {c.gst}</div>}</>}
-                        />
+                        <input value={editData.customer_name} readOnly style={{background:'var(--gray-50)',color:'var(--gray-500)',cursor:'not-allowed'}} />
                       </div>
                       <div className="od-edit-field">
                         <label>GST Number</label>
-                        <input value={editData.customer_gst} onChange={e => setEditData(p => ({ ...p, customer_gst: e.target.value }))} />
+                        <input value={editData.customer_gst} readOnly style={{background:'var(--gray-50)',color:'var(--gray-500)',cursor:'not-allowed'}} />
                       </div>
                     </div>
                     <div className="od-edit-row">
@@ -740,11 +814,7 @@ if (match) {
                     <div className="od-edit-row">
                       <div className="od-edit-field">
                         <label>Credit Terms</label>
-                        <select value={editData.credit_terms} onChange={e => setEditData(p => ({ ...p, credit_terms: e.target.value }))}>
-                          <option value="">— Select —</option>
-                          <option value="COD">COD</option><option value="15 days">15 Days</option><option value="30 days">30 Days</option>
-                          <option value="45 days">45 Days</option><option value="60 days">60 Days</option><option value="90 days">90 Days</option><option value="Advance">Advance</option>
-                        </select>
+                        <input value={editData.credit_terms || '—'} readOnly style={{background:'var(--gray-50)',color:'var(--gray-500)',cursor:'not-allowed'}} />
                       </div>
                       <div className="od-edit-field">
                         <label>Freight (₹)</label>
@@ -1119,6 +1189,13 @@ if (match) {
                           style={{fontFamily:'var(--mono)',fontSize:13,fontWeight:700,color: bDC.startsWith('Temp/') ? '#92400e' : '#166534', cursor: bDC !== '—' && !bDC.startsWith('Temp/') ? 'pointer' : 'default', textDecoration: bDC !== '—' && !bDC.startsWith('Temp/') ? 'underline' : 'none'}}
                           onClick={() => { if (bDC !== '—' && !bDC.startsWith('Temp/')) navigate('/fc/' + order.id, { state: { dispatch_id: b.id } }) }}
                         >{bDC}</div>
+                        {bDC !== '—' && !bDC.startsWith('Temp/') && (
+                          <a href="#" onClick={e => { e.preventDefault(); printDCChallan(order, b, bDC, order.order_type === 'SAMPLE', custCode) }}
+                            style={{fontSize:11,color:'#166534',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:2,textDecoration:'none',cursor:'pointer'}}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                            View DC
+                          </a>
+                        )}
                         {bINV && (
                           <div
                             style={{fontFamily:'var(--mono)',fontSize:12,color:'#166534',marginTop:2,cursor:'pointer',textDecoration:'underline'}}
@@ -1130,20 +1207,41 @@ if (match) {
                             PI: {b.pi_number}
                           </div>
                         )}
-                        {b.pi_pdf_url && (
-                          <a href={b.pi_pdf_url} target="_blank" rel="noreferrer"
-                            style={{fontSize:11,color:'#7e22ce',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
-                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            View PI PDF
-                          </a>
+                        {b.eway_bill_number && (
+                          <div style={{fontFamily:'var(--mono)',fontSize:12,color:'#0e7490',marginTop:2,fontWeight:700}}>
+                            E-Way: {b.eway_bill_number}
+                          </div>
                         )}
-                        {b.invoice_pdf_url && (
-                          <a href={b.invoice_pdf_url} target="_blank" rel="noreferrer"
-                            style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
-                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            View Invoice PDF
-                          </a>
-                        )}
+                        <div style={{display:'flex',flexWrap:'wrap',gap:'4px 10px',marginTop:4}}>
+                          {b.pi_pdf_url && (
+                            <a href={b.pi_pdf_url} target="_blank" rel="noreferrer"
+                              style={{fontSize:11,color:'#7e22ce',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              PI PDF
+                            </a>
+                          )}
+                          {b.invoice_pdf_url && (
+                            <a href={b.invoice_pdf_url} target="_blank" rel="noreferrer"
+                              style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              Invoice PDF
+                            </a>
+                          )}
+                          {b.eway_pdf_url && (
+                            <a href={b.eway_pdf_url} target="_blank" rel="noreferrer"
+                              style={{fontSize:11,color:'#0e7490',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              E-Way PDF
+                            </a>
+                          )}
+                          {b.einvoice_pdf_url && (
+                            <a href={b.einvoice_pdf_url} target="_blank" rel="noreferrer"
+                              style={{fontSize:11,color:'#b45309',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              E-Invoice PDF
+                            </a>
+                          )}
+                        </div>
                         {b.fulfilment_center && <div style={{fontSize:11,color:'var(--gray-400)',marginTop:3}}>{b.fulfilment_center}</div>}
                         {(() => {
                           const bItemIds = (b.dispatched_items || []).map(i => i.order_item_id).filter(Boolean)

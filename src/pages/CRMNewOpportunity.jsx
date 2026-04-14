@@ -137,6 +137,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
       activity_type: 'Created',
       notes: 'Opportunity created',
     })
+    toast('Opportunity created', 'success')
     onCreated(data.id)
   }
 

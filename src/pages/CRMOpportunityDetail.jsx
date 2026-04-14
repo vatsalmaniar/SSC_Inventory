@@ -268,6 +268,7 @@ export default function CRMOpportunityDetail() {
         setContacts(p => [...p, data])
       }
     }
+    toast('Contact added', 'success')
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
     setShowContactModal(false)
     setSavingContact(false)
@@ -397,6 +398,7 @@ export default function CRMOpportunityDetail() {
       }))
     )
     if (itemsErr) { toast('Order created but items failed: ' + itemsErr.message); setSubmittingSample(false); return }
+    toast('Custom Order created', 'success')
     setShowConvertModal(false)
     setSubmittingSample(false)
     navigate('/orders/' + order.id)
@@ -446,6 +448,7 @@ export default function CRMOpportunityDetail() {
       }))
     )
     if (itemsErr) { toast('Order created but items failed: ' + itemsErr.message); setSubmittingSample(false); return }
+    toast('Sample Order created', 'success')
     setShowSampleModal(false)
     setSubmittingSample(false)
     navigate('/orders/' + order.id)
@@ -477,6 +480,7 @@ export default function CRMOpportunityDetail() {
     }).eq('id', id)
     if (error) { toast('Error: ' + error.message); setSaving(false); return }
     setOpp(p => ({ ...p, ...editData }))
+    toast('Opportunity updated', 'success')
     setEditMode(false); setSaving(false)
   }
 
@@ -586,6 +590,7 @@ export default function CRMOpportunityDetail() {
     setTaskType('Call'); setTaskDueDate(''); setTaskNotes('')
     const { data: t } = await sb.from('crm_tasks').select('*, profiles(name)').eq('opportunity_id', id).order('due_date', { ascending: true })
     setTasks(t || [])
+    toast('Task created', 'success')
     setAddingTask(false)
   }
 
@@ -874,6 +879,7 @@ export default function CRMOpportunityDetail() {
     setActivities(actsRes.data || [])
     setQuoteHistory(qHistRes.data || [])
     setQuoteLoaded(true)
+    toast('Quote saved', 'success')
     setSavingQuote(false)
   }
 
