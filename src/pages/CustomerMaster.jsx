@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
+import '../styles/orders.css'
 
 const PAGE_SIZE = 50
 
