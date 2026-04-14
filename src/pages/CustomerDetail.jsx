@@ -11,7 +11,7 @@ const SALES_REPS = [
   'Aarth Joshi','Akash Devda','Ankit Dave','Bhavesh Patel','Darsh Chauhan',
   'Dimple Bhatiya','Harshadba Zala','Hiral Patel','Jay Patel','Jaypal Jadeja',
   'Jital Maniar','Kaustubh Soni','Khushbu Panchal','Mayank Maniar','Mehul Maniar',
-  'Sales Support BRD','Vatsal Maniar',
+  'Jyotsna Pal','Vatsal Maniar',
 ]
 
 const INDUSTRIES = [
