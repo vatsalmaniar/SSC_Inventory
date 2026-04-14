@@ -4,7 +4,6 @@ import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
-import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 import '../styles/orders.css'
 
@@ -72,7 +71,6 @@ export default function CRMLeads() {
 
   return (
     <Layout pageTitle="CRM — Leads" pageKey="crm">
-      <CRMSubNav active="leads" />
       <div className="crm-page">
         <div className="crm-body">
           <div className="crm-page-header">

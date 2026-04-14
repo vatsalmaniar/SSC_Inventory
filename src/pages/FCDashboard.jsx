@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
-import FCSubNav from '../components/FCSubNav'
+
 import '../styles/orders.css'
 
 function fmtCr(val) {
@@ -94,7 +94,6 @@ export default function FCDashboard() {
 
   return (
     <Layout pageTitle="Fulfilment Centre" pageKey="fc">
-      <FCSubNav active="dashboard" />
       <div className="dash-page">
         <div className="dash-body">
 

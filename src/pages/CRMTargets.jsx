@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import Layout from '../components/Layout'
-import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 import { toast } from '../lib/toast'
 
@@ -98,7 +97,6 @@ export default function CRMTargets() {
 
   return (
     <Layout pageTitle="CRM — Targets" pageKey="crm">
-      <CRMSubNav active="targets" />
       <div className="crm-page">
         <div className="crm-body">
           <div className="crm-page-header">

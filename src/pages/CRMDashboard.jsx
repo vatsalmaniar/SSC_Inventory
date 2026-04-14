@@ -4,7 +4,6 @@ import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmtShort, MO } from '../lib/fmt'
 import Layout from '../components/Layout'
-import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 import '../styles/orders.css'
 
@@ -182,7 +181,6 @@ export default function CRMDashboard() {
 
   return (
     <Layout pageTitle="CRM" pageKey="crm">
-      <CRMSubNav active="dashboard" />
       <div className="dash-page">
         <div className="dash-body">
 

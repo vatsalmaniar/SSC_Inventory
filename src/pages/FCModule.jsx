@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
-import FCSubNav from '../components/FCSubNav'
+
 import '../styles/orders.css'
 
 const WITH_ACCOUNTS = ['goods_issued','credit_check','goods_issue_posted','delivery_ready']
@@ -116,7 +116,6 @@ export default function FCModule() {
 
   return (
     <Layout pageTitle="Fulfilment Center" pageKey="fc">
-      <FCSubNav active="list" />
       <div className="od-list-page">
         <div className="od-list-body">
 

@@ -5,7 +5,6 @@ import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmtTs } from '../lib/fmt'
 import Layout from '../components/Layout'
-import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 import '../styles/orderdetail.css'
 
@@ -285,12 +284,11 @@ export default function CRMLeadDetail() {
   const today        = new Date().toISOString().slice(0,10)
   const actText      = (actType === 'Call' || actType === 'Visit') ? actDiscussion : actNotes
 
-  if (loading) return <Layout pageTitle="Lead" pageKey="crm"><CRMSubNav active="leads"/><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div></Layout>
-  if (!lead) return <Layout pageTitle="Lead" pageKey="crm"><CRMSubNav active="leads"/><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Lead not found</div><div style={{fontSize:13}}>This lead may have been deleted or you don't have access.</div></div></div></Layout>
+  if (loading) return <Layout pageTitle="Lead" pageKey="crm"><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div></Layout>
+  if (!lead) return <Layout pageTitle="Lead" pageKey="crm"><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Lead not found</div><div style={{fontSize:13}}>This lead may have been deleted or you don't have access.</div></div></div></Layout>
 
   return (
     <Layout pageTitle="CRM — Lead" pageKey="crm">
-      <CRMSubNav active="leads" />
       <div className="od-page">
         <div className="od-body">
 

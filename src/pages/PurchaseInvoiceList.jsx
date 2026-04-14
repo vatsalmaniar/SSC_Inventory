@@ -4,7 +4,6 @@ import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
-import BillingSubNav from '../components/BillingSubNav'
 import '../styles/orders.css'
 
 const STATUS_LABELS = {
@@ -96,7 +95,6 @@ export default function PurchaseInvoiceList() {
 
   return (
     <Layout pageTitle="Inward Billing" pageKey="billing">
-      <BillingSubNav active="inward" />
       <div className="od-list-page">
         <div className="od-list-body">
 

@@ -5,7 +5,6 @@ import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
-import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 
 const INDUSTRIES = ['Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal','Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG','Energy','Automobile','Power Electronics','Datacenters','Road Construction','Cement','Tyre','Petroleum','Chemical']
@@ -100,15 +99,14 @@ export default function CRMCompanyDetail() {
     setSavingContact(false)
   }
 
-  if (loading) return <Layout pageTitle="CRM — Company" pageKey="crm"><CRMSubNav active="companies" /><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div></Layout>
-  if (!company) return <Layout pageTitle="CRM — Company" pageKey="crm"><CRMSubNav active="companies"/><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Company not found</div><div style={{fontSize:13}}>This company may have been deleted or you don't have access.</div></div></div></Layout>
+  if (loading) return <Layout pageTitle="CRM — Company" pageKey="crm"><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div></Layout>
+  if (!company) return <Layout pageTitle="CRM — Company" pageKey="crm"><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Company not found</div><div style={{fontSize:13}}>This company may have been deleted or you don't have access.</div></div></div></Layout>
 
   const isDormant = company.status === 'Dormant'
   const hasRevival = opps.some(o => o.scenario_type === 'DORMANT_REVIVAL' && !['WON','LOST'].includes(o.stage))
 
   return (
     <Layout pageTitle="CRM — Company" pageKey="crm">
-      <CRMSubNav active="companies" />
       <div className="crm-page">
         <div className="crm-body">
 

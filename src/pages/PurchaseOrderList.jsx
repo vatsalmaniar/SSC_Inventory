@@ -4,7 +4,6 @@ import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
-import ProcSubNav from '../components/ProcSubNav'
 import * as XLSX from 'xlsx'
 import '../styles/orders.css'
 
@@ -179,7 +178,6 @@ export default function PurchaseOrderList() {
 
   return (
     <Layout pageTitle="Purchase Orders" pageKey="procurement">
-    <ProcSubNav active="po" />
     <div className="od-list-page">
       <div className="od-list-body">
 

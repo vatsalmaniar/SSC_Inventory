@@ -5,7 +5,6 @@ import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
-import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 
 const SR_STATUSES = ['Pending','Dispatched','Delivered']
@@ -73,7 +72,6 @@ export default function CRMSampleRequests() {
 
   return (
     <Layout pageTitle="CRM — Sample Requests" pageKey="crm">
-      <CRMSubNav active="samples" />
       <div className="crm-page">
         <div className="crm-body">
           <div className="crm-page-header">

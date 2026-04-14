@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmtShort, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
-import ProcSubNav from '../components/ProcSubNav'
 import '../styles/orderdetail.css'
 
 function fmtCr(val) {
@@ -56,7 +55,6 @@ export default function ProcurementOrders() {
 
   return (
     <Layout pageTitle="CO Orders" pageKey="procurement">
-      <ProcSubNav active="orders" />
       <div className="od-page">
         <div className="od-body">
 

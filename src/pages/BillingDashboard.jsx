@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
-import BillingSubNav from '../components/BillingSubNav'
 import '../styles/orders.css'
 
 function fmtCr(val) {
@@ -92,7 +91,6 @@ export default function BillingDashboard() {
 
   return (
     <Layout pageTitle="Billing" pageKey="billing">
-      <BillingSubNav active="dashboard" />
       <div className="dash-page">
         <div className="dash-body">
 

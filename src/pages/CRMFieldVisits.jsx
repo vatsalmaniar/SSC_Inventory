@@ -5,7 +5,6 @@ import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
-import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
 import '../styles/orders.css'
 
@@ -205,7 +204,6 @@ export default function CRMFieldVisits() {
 
   return (
     <Layout pageTitle="CRM — Field Visits" pageKey="crm">
-      <CRMSubNav active="visits" onAdd={openModal} />
       <div className="crm-page">
         <div className="crm-body">
           <div className="crm-page-header">

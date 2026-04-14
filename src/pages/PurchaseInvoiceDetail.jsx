@@ -5,7 +5,6 @@ import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmtShort, fmtDateTime } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
-import BillingSubNav from '../components/BillingSubNav'
 import '../styles/orderdetail.css'
 
 const STATUS_LABELS = {
@@ -203,14 +202,12 @@ export default function PurchaseInvoiceDetail() {
   // ── Loading / Not Found ──
   if (loading) return (
     <Layout pageTitle="Purchase Invoice" pageKey="billing">
-      <BillingSubNav active="inward" />
       <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div>
     </Layout>
   )
 
   if (!inv) return (
     <Layout pageTitle="Purchase Invoice" pageKey="billing">
-      <BillingSubNav active="inward" />
       <div className="od-page"><div className="od-body">
         <div style={{ textAlign:'center', padding:60, color:'var(--gray-400)' }}>
           <div style={{ fontSize:16, fontWeight:600, marginBottom:8 }}>Invoice not found</div>
@@ -225,7 +222,6 @@ export default function PurchaseInvoiceDetail() {
 
   return (
     <Layout pageTitle={inv.invoice_number || 'Purchase Invoice'} pageKey="billing">
-      <BillingSubNav active="inward" />
       <div className="od-page">
         <div className="od-body">
 

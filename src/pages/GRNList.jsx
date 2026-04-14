@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
-import FCSubNav from '../components/FCSubNav'
+
 import '../styles/orders.css'
 
 const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
@@ -108,7 +108,6 @@ export default function GRNList() {
 
   return (
     <Layout pageTitle="Goods Receipt Notes" pageKey="fc">
-      <FCSubNav active="grn" />
     <div className="od-list-page">
       <div className="od-list-body">
 

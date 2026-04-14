@@ -4,7 +4,6 @@ import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
-import BillingSubNav from '../components/BillingSubNav'
 import '../styles/orders.css'
 
 const BILLING_BATCH_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
@@ -113,7 +112,6 @@ export default function BillingList() {
 
   return (
     <Layout pageTitle="Billing" pageKey="billing">
-      <BillingSubNav active="dispatch" />
       <div className="od-list-page">
         <div className="od-list-body">
 

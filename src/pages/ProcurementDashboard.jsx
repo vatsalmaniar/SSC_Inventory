@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
-import ProcSubNav from '../components/ProcSubNav'
 import '../styles/orders.css'
 
 function fmtCr(val) {
@@ -96,7 +95,6 @@ export default function ProcurementDashboard() {
 
   return (
     <Layout pageTitle="Procurement" pageKey="procurement">
-      <ProcSubNav active="dashboard" />
       <div className="dash-page">
         <div className="dash-body">
 
