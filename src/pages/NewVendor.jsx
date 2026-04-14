@@ -6,7 +6,7 @@ import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
 const VENDOR_TYPES   = ['Manufacturer','Distributor','Agent']
-const CREDIT_TERMS   = ['Against PI','Advance','7 Days','15 Days','30 Days','45 Days','60 Days','75 Days','90 Days','Against Delivery']
+const CREDIT_TERMS   = ['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','75 Days','90 Days','Against Delivery']
 
 const FIELD_STYLE = { padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }
 const LABEL_STYLE = { fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }
@@ -45,7 +45,6 @@ function FileUploadField({ label, required, accept, maxKB, value, onChange, erro
 
 export default function NewVendor() {
   const navigate = useNavigate()
-  const [ownerName, setOwnerName] = useState('')
   const [userRole, setUserRole]   = useState('')
   const [saving, setSaving]       = useState(false)
   const [errors, setErrors]       = useState({})
@@ -57,8 +56,7 @@ export default function NewVendor() {
     billing_address: '', shipping_address: '',
     poc_name: '', poc_phone: '', poc_email: '',
     director_name: '', director_no: '', director_email: '',
-    credit_terms: 'Against PI', account_status: 'Active',
-    vi_shopfloor: '', vi_payment: '', vi_expected_business: '',
+    credit_terms: '30 Days', account_status: 'Active',
   })
   const [gstCertFile, setGstCertFile]   = useState(null)
   const [msmeCertFile, setMsmeCertFile] = useState(null)
@@ -71,7 +69,6 @@ export default function NewVendor() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
     if (!['ops','admin','accounts'].includes(profile?.role)) { navigate('/dashboard'); return }
-    setOwnerName(profile?.name || session.user.email.split('@')[0])
     setUserRole(profile?.role || 'ops')
   }
 
@@ -117,7 +114,6 @@ export default function NewVendor() {
     // Tax & Compliance
     if (!form.gst.trim())           newErrors.gst            = 'Required'
     else if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(form.gst.trim())) newErrors.gst = 'Invalid GST format (e.g. 24ABCDE1234F1Z5)'
-    if (!gstCertFile)               newErrors.gst_cert       = 'GST Certificate is required'
     if (fileErrors.gst_cert)        newErrors.gst_cert       = fileErrors.gst_cert
     if (fileErrors.msme_cert)       newErrors.msme_cert      = fileErrors.msme_cert
     if (!form.pan.trim())           newErrors.pan            = 'Required'
@@ -138,11 +134,6 @@ export default function NewVendor() {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.director_email.trim())) newErrors.director_email = 'Invalid email format'
     // Credit
     if (!form.credit_terms)         newErrors.credit_terms   = 'Required'
-    // Visual Inspection
-    if (!form.vi_shopfloor.trim())        newErrors.vi_shopfloor        = 'Required'
-    if (!form.vi_payment.trim())          newErrors.vi_payment          = 'Required'
-    if (!form.vi_expected_business.trim()) newErrors.vi_expected_business = 'Required'
-
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -174,25 +165,23 @@ export default function NewVendor() {
         director_email:   form.director_email.trim() || null,
         credit_terms:     form.credit_terms || null,
         account_status:   form.account_status || 'Active',
-        account_owner:    ownerName,
         approval_status:  userRole === 'admin' ? 'approved' : 'pending',
-        vi_shopfloor:     form.vi_shopfloor.trim() || null,
-        vi_payment:       form.vi_payment.trim() || null,
-        vi_expected_business: form.vi_expected_business.trim() || null,
         notes:            null,
       }).select('id').single()
 
       if (insertErr) { toast('Error creating vendor: ' + insertErr.message); setSaving(false); return }
       const newId = inserted.id
 
-      // Upload GST cert
-      let gstUrl
-      try {
-        gstUrl = await uploadDoc(gstCertFile, `gst/${newId}/${Date.now()}.pdf`)
-      } catch (uploadErr) {
-        await sb.from('vendors').delete().eq('id', newId)
-        toast('GST certificate upload failed — vendor not saved. Please try again.\n' + uploadErr.message)
-        setSaving(false); return
+      // Upload GST cert (optional)
+      let gstUrl = null
+      if (gstCertFile) {
+        try {
+          gstUrl = await uploadDoc(gstCertFile, `gst/${newId}/${Date.now()}.pdf`)
+        } catch (uploadErr) {
+          await sb.from('vendors').delete().eq('id', newId)
+          toast('GST certificate upload failed — vendor not saved. Please try again.\n' + uploadErr.message)
+          setSaving(false); return
+        }
       }
 
       // Upload MSME cert (optional)
@@ -207,8 +196,13 @@ export default function NewVendor() {
         }
       }
 
-      // Update with file URLs
-      await sb.from('vendors').update({ gst_cert_url: gstUrl, msme_cert_url: msmeUrl }).eq('id', newId)
+      // Update with file URLs (if any uploaded)
+      if (gstUrl || msmeUrl) {
+        const updates = {}
+        if (gstUrl) updates.gst_cert_url = gstUrl
+        if (msmeUrl) updates.msme_cert_url = msmeUrl
+        await sb.from('vendors').update(updates).eq('id', newId)
+      }
 
       toast('Vendor created — ' + vendorCode, 'success')
       if (userRole === 'admin') {
@@ -297,7 +291,7 @@ export default function NewVendor() {
                     {errors.gst && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.gst}</div>}
                   </Field>
                   <FileUploadField
-                    label="GST Certificate" required
+                    label="GST Certificate"
                     accept=".pdf" maxKB={100}
                     value={gstCertFile}
                     onChange={handleGstCert}
@@ -405,57 +399,6 @@ export default function NewVendor() {
                       <option>Dormant</option>
                     </select>
                   </Field>
-                </div>
-              </div>
-            </div>
-
-            {/* Visual Inspection */}
-            <div className="od-card" style={{ border:'1px solid #fde68a', background:'#fffdf5' }}>
-              <div className="od-card-header" style={{ background:'#fffbeb', borderBottom:'1px solid #fde68a' }}>
-                <div className="od-card-title" style={{ color:'#92400e' }}>
-                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:15, height:15, display:'inline', marginRight:6, verticalAlign:'middle' }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  Visual Inspection Notes
-                </div>
-              </div>
-              <div className="od-card-body">
-                <p style={{ fontSize:12, color:'#92400e', background:'#fef3c7', borderRadius:6, padding:'8px 12px', marginBottom:16, lineHeight:1.5 }}>
-                  Share your gut feeling after the visit. Be honest — these notes help the team evaluate this vendor better.
-                </p>
-                <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                  <Field label="Shopfloor Observation" required>
-                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical', borderColor: errors.vi_shopfloor ? '#e11d48' : '#fde68a' }}
-                      value={form.vi_shopfloor} onChange={e => set('vi_shopfloor', e.target.value)}
-                      placeholder="e.g. Well-organized warehouse, active production lines, quality control visible, ISO certifications displayed…" />
-                    {errors.vi_shopfloor && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.vi_shopfloor}</div>}
-                  </Field>
-                  <Field label="Payment Assessment" required>
-                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical', borderColor: errors.vi_payment ? '#e11d48' : '#fde68a' }}
-                      value={form.vi_payment} onChange={e => set('vi_payment', e.target.value)}
-                      placeholder="e.g. Payment cycle 30 days, financially stable, no delays reported from other buyers…" />
-                    {errors.vi_payment && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.vi_payment}</div>}
-                  </Field>
-                  <Field label="Expected Business" required>
-                    <textarea style={{ ...FIELD_STYLE, minHeight:72, resize:'vertical', borderColor: errors.vi_expected_business ? '#e11d48' : '#fde68a' }}
-                      value={form.vi_expected_business} onChange={e => set('vi_expected_business', e.target.value)}
-                      placeholder="e.g. Annual procurement potential ₹15–20L, primarily PLCs and drives, monthly supply capability…" />
-                    {errors.vi_expected_business && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.vi_expected_business}</div>}
-                  </Field>
-                </div>
-              </div>
-            </div>
-
-            {/* Account Owner */}
-            <div className="od-card">
-              <div className="od-card-header"><div className="od-card-title">Account Owner</div></div>
-              <div className="od-card-body">
-                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                  <div style={{ width:36, height:36, borderRadius:'50%', background:'#1a4dab', color:'white', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    {ownerName ? ownerName.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '?'}
-                  </div>
-                  <div>
-                    <div style={{ fontSize:14, fontWeight:600, color:'var(--gray-900)' }}>{ownerName}</div>
-                    <div style={{ fontSize:11, color:'var(--gray-400)' }}>Auto-set to the person filling this form</div>
-                  </div>
                 </div>
               </div>
             </div>
