@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmtShort, MO } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
@@ -100,6 +101,12 @@ export default function CRMDashboard() {
     setUser({ name: profile?.name || '', role, id: session.user.id })
     await loadData(session.user.id, role)
   }
+
+  // Realtime: live dashboard updates
+  useRealtimeSubscription('crm-dashboard', {
+    table: 'crm_opportunities', enabled: !!user.role,
+    onEvent: () => loadData(user.id, user.role),
+  })
 
   async function loadData(uid, role) {
     setLoading(true)

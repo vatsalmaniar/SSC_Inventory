@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc } from '../lib/fmt'
 import Layout from '../components/Layout'
@@ -369,6 +370,16 @@ export default function FCOrderDetail() {
     setProfiles(pList || [])
     await loadOrder()
   }
+
+  // Realtime: live batch status + comment updates
+  useRealtimeSubscription(`fc-batch-${id}`, {
+    table: 'order_dispatches', filter: `order_id=eq.${id}`,
+    enabled: !!id, onEvent: () => loadOrder(),
+  })
+  useRealtimeSubscription(`fc-comments-${id}`, {
+    table: 'order_comments', filter: `order_id=eq.${id}`,
+    enabled: !!id, onEvent: () => loadOrder(),
+  })
 
   async function loadOrder() {
     setLoading(true)

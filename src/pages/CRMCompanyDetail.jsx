@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
@@ -32,6 +33,12 @@ export default function CRMCompanyDetail() {
   const [savingContact, setSavingContact] = useState(false)
 
   useEffect(() => { init() }, [id])
+
+  // Realtime: live company detail updates
+  useRealtimeSubscription(`crm-company-${id}`, {
+    table: 'crm_companies', filter: `id=eq.${id}`, event: 'UPDATE',
+    enabled: !!id, onEvent: () => init(),
+  })
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

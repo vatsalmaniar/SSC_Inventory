@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -28,6 +29,12 @@ export default function CRMCompanies() {
   const PAGE_SIZE = 50
 
   useEffect(() => { init() }, [])
+
+  // Realtime: live company list updates
+  useRealtimeSubscription('crm-companies-list', {
+    table: 'crm_companies', enabled: !loading,
+    onEvent: () => init(),
+  })
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

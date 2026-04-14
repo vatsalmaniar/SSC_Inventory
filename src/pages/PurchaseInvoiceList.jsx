@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
 import BillingSubNav from '../components/BillingSubNav'
@@ -46,6 +47,12 @@ export default function PurchaseInvoiceList() {
     setUserRole(role)
     await loadInvoices()
   }
+
+  // Realtime: live invoice list updates
+  useRealtimeSubscription('pi-list', {
+    table: 'purchase_invoices', enabled: !loading,
+    onEvent: () => loadInvoices(),
+  })
 
   async function loadInvoices() {
     setLoading(true)

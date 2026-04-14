@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
@@ -72,6 +73,12 @@ export default function CustomerDetail() {
   const [savingContact, setSavingContact] = useState(false)
 
   useEffect(() => { init() }, [id])
+
+  // Realtime: live customer detail updates
+  useRealtimeSubscription(`customer-${id}`, {
+    table: 'customers', filter: `id=eq.${id}`, event: 'UPDATE',
+    enabled: !!id, onEvent: () => init(),
+  })
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

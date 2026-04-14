@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
 import BillingSubNav from '../components/BillingSubNav'
@@ -50,6 +51,12 @@ export default function BillingList() {
     setUser({ name, role })
     await loadBatches()
   }
+
+  // Realtime: live batch updates
+  useRealtimeSubscription('billing-dispatches', {
+    table: 'order_dispatches', enabled: !!user.role,
+    onEvent: () => loadBatches(),
+  })
 
   async function loadBatches() {
     setLoading(true)

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmtShort, fmtDateTime } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
@@ -61,6 +62,12 @@ export default function PurchaseInvoiceDetail() {
   const [sscInvoiceFile, setSscInvoiceFile]       = useState(null)
 
   useEffect(() => { init() }, [id])
+
+  // Realtime: live invoice detail updates
+  useRealtimeSubscription(`purchase-invoice-${id}`, {
+    table: 'purchase_invoices', filter: `id=eq.${id}`, event: 'UPDATE',
+    enabled: !!id, onEvent: () => init(),
+  })
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

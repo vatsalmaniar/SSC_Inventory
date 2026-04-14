@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import FCSubNav from '../components/FCSubNav'
@@ -61,6 +62,12 @@ export default function GRNList() {
     setUserRole(role)
     await loadGrns()
   }
+
+  // Realtime: live GRN list updates
+  useRealtimeSubscription('grn-list', {
+    table: 'grn', enabled: !loading,
+    onEvent: () => loadGrns(),
+  })
 
   async function loadGrns() {
     setLoading(true)

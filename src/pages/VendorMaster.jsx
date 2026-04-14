@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -56,6 +57,12 @@ export default function VendorMaster() {
     await loadVendors({ p: 1 })
     setLoading(false)
   }
+
+  // Realtime: live vendor list updates
+  useRealtimeSubscription('vendors-list', {
+    table: 'vendors', enabled: !loading,
+    onEvent: () => loadVendors(),
+  })
 
   async function loadVendors(opts = {}) {
     const p    = opts.p    ?? page

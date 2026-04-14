@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import '../styles/crm.css'
@@ -58,6 +59,12 @@ export default function CRMTargets() {
     const { data: repsData } = await sb.from('profiles').select('id,name').in('role',['sales','admin'])
     setReps(repsData || [])
   }
+
+  // Realtime: live target updates
+  useRealtimeSubscription('crm-targets', {
+    table: 'crm_targets', enabled: !loading,
+    onEvent: () => loadTargets(),
+  })
 
   async function loadTargets() {
     setLoading(true)

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
@@ -31,6 +32,12 @@ export default function CRMLeads() {
   const PAGE_SIZE = 50
 
   useEffect(() => { init() }, [])
+
+  // Realtime: live leads list updates
+  useRealtimeSubscription('crm-leads-list', {
+    table: 'crm_leads', enabled: !loading,
+    onEvent: () => init(),
+  })
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

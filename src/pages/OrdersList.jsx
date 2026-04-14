@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
@@ -183,9 +184,15 @@ export default function OrdersList() {
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    setUser({ name, avatar, role })
+    setUser({ name, avatar, role, id: session.user.id })
     await loadOrders(false, role === 'sales' ? session.user.id : null)
   }
+
+  // Realtime: live order list updates
+  useRealtimeSubscription('orders-list', {
+    table: 'orders', enabled: !!user.role,
+    onEvent: () => loadOrders(showTest, user.role === 'sales' ? user.id : null),
+  })
 
   async function loadOrders(testMode = false, salesUserId = null) {
     setLoading(true)

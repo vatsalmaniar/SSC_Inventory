@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import ProcSubNav from '../components/ProcSubNav'
@@ -116,6 +117,12 @@ export default function PurchaseOrderList() {
     setUser({ name, avatar, role })
     await loadPos(false)
   }
+
+  // Realtime: live PO list updates
+  useRealtimeSubscription('po-list', {
+    table: 'purchase_orders', enabled: !loading,
+    onEvent: () => loadPos(showTest),
+  })
 
   async function loadPos(testMode = false) {
     setLoading(true)

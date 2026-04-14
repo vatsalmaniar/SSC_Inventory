@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
@@ -83,6 +84,12 @@ export default function GRNDetail() {
     setUserName(profile?.name || '')
     await loadGRN()
   }
+
+  // Realtime: live GRN detail updates
+  useRealtimeSubscription(`grn-${id}`, {
+    table: 'grn', filter: `id=eq.${id}`, event: 'UPDATE',
+    enabled: !!id, onEvent: () => loadGRN(),
+  })
 
   async function loadGRN() {
     setLoading(true)

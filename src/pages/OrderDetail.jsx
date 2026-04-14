@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
@@ -163,6 +164,16 @@ export default function OrderDetail() {
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setUser({ name, avatar, role })
   }
+
+  // Realtime: live order status + comment updates
+  useRealtimeSubscription(`order-${id}`, {
+    table: 'orders', filter: `id=eq.${id}`, event: 'UPDATE',
+    enabled: !!id, onEvent: () => loadOrder(),
+  })
+  useRealtimeSubscription(`order-comments-${id}`, {
+    table: 'order_comments', filter: `order_id=eq.${id}`,
+    enabled: !!id, onEvent: () => loadOrder(),
+  })
 
   async function loadOrder() {
     setLoading(true)

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb, checkSessionAge } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import './layout.css'
 
 const NAV_ITEMS = [
@@ -126,6 +127,20 @@ export default function Layout({ children, pageTitle, pageKey }) {
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // Realtime: live notification updates
+  useRealtimeSubscription(`notifications-${user.id}`, {
+    table:   'notifications',
+    filter:  `user_id=eq.${user.id}`,
+    enabled: !!user.id,
+    onEvent: (payload) => {
+      if (payload.eventType === 'INSERT') {
+        setNotifs(prev => [payload.new, ...prev].slice(0, 30))
+      } else if (payload.eventType === 'UPDATE') {
+        setNotifs(prev => prev.map(n => n.id === payload.new.id ? payload.new : n))
+      }
+    },
+  })
 
   async function loadNotifs(userId) {
     const { data } = await sb.from('notifications')

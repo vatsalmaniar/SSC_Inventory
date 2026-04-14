@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmtTs } from '../lib/fmt'
 import Layout from '../components/Layout'
@@ -86,6 +87,16 @@ export default function CRMLeadDetail() {
   const [savingContact, setSavingContact]       = useState(false)
 
   useEffect(() => { init() }, [id])
+
+  // Realtime: live lead detail + activity updates
+  useRealtimeSubscription(`crm-lead-${id}`, {
+    table: 'crm_leads', filter: `id=eq.${id}`, event: 'UPDATE',
+    enabled: !!id, onEvent: () => init(),
+  })
+  useRealtimeSubscription(`crm-lead-activities-${id}`, {
+    table: 'crm_activities', filter: `lead_id=eq.${id}`,
+    enabled: !!id, onEvent: () => init(),
+  })
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

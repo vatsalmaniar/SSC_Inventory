@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
 import FCSubNav from '../components/FCSubNav'
@@ -57,6 +58,12 @@ export default function FCModule() {
     setUser({ name, avatar, role, center })
     await loadBatches(center)
   }
+
+  // Realtime: live batch updates
+  useRealtimeSubscription('fc-dispatches', {
+    table: 'order_dispatches', enabled: !!user.role,
+    onEvent: () => loadBatches(user.center, showTest),
+  })
 
   async function loadBatches(center, testMode = false) {
     setLoading(true)
