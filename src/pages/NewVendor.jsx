@@ -46,6 +46,7 @@ function FileUploadField({ label, required, accept, maxKB, value, onChange, erro
 export default function NewVendor() {
   const navigate = useNavigate()
   const [userRole, setUserRole]   = useState('')
+  const [userName, setUserName]   = useState('')
   const [saving, setSaving]       = useState(false)
   const [errors, setErrors]       = useState({})
 
@@ -70,6 +71,7 @@ export default function NewVendor() {
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
     if (!['ops','admin','accounts'].includes(profile?.role)) { navigate('/dashboard'); return }
     setUserRole(profile?.role || 'ops')
+    setUserName(profile?.name || '')
   }
 
   function set(key, val) { setForm(p => ({ ...p, [key]: val })) }
@@ -202,6 +204,18 @@ export default function NewVendor() {
         if (gstUrl) updates.gst_cert_url = gstUrl
         if (msmeUrl) updates.msme_cert_url = msmeUrl
         await sb.from('vendors').update(updates).eq('id', newId)
+      }
+
+      // Notify admins when non-admin creates a vendor pending approval
+      if (userRole !== 'admin') {
+        const { data: admins } = await sb.from('profiles').select('id,name').eq('role', 'admin')
+        if (admins?.length) {
+          await sb.from('notifications').insert(admins.map(a => ({
+            user_id: a.id, user_name: a.name,
+            message: `New vendor "${form.vendor_name.trim()}" created by ${userName} — pending approval`,
+            order_id: null, order_number: vendorCode, from_name: userName,
+          })))
+        }
       }
 
       toast('Vendor created — ' + vendorCode, 'success')

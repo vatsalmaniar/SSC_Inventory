@@ -36,6 +36,8 @@ function TypeBadge({ type }) {
 export default function VendorMaster() {
   const navigate = useNavigate()
   const [vendors, setVendors]   = useState([])
+  const [pending, setPending]   = useState([])
+  const [tab, setTab]           = useState('approved')
   const [userRole, setUserRole] = useState('')
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
@@ -54,6 +56,12 @@ export default function VendorMaster() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     setUserRole(profile?.role || 'sales')
+    // Load pending vendors for admin
+    if (profile?.role === 'admin') {
+      const { data: pend } = await sb.from('vendors').select('id,vendor_code,vendor_name,vendor_type,poc_name,created_at')
+        .eq('approval_status', 'pending').order('created_at', { ascending: false })
+      setPending(pend || [])
+    }
     await loadVendors({ p: 1 })
     setLoading(false)
   }
@@ -61,7 +69,14 @@ export default function VendorMaster() {
   // Realtime: live vendor list updates
   useRealtimeSubscription('vendors-list', {
     table: 'vendors', enabled: !loading,
-    onEvent: () => loadVendors({ silent: true }),
+    onEvent: async () => {
+      loadVendors({ silent: true })
+      if (userRole === 'admin') {
+        const { data: pend } = await sb.from('vendors').select('id,vendor_code,vendor_name,vendor_type,poc_name,created_at')
+          .eq('approval_status', 'pending').order('created_at', { ascending: false })
+        setPending(pend || [])
+      }
+    },
   })
 
   async function loadVendors(opts = {}) {
@@ -75,6 +90,7 @@ export default function VendorMaster() {
     let query = sb.from('vendors')
       .select('id,vendor_code,vendor_name,vendor_type,poc_name,poc_phone,status,account_owner,payment_terms,created_at', { count:'exact' })
       .eq('is_test', test)
+      .eq('approval_status', 'approved')
       .order('vendor_name')
 
     if (q.trim()) query = query.or(`vendor_name.ilike.%${q.trim()}%,vendor_code.ilike.%${q.trim()}%,gst.ilike.%${q.trim()}%,account_owner.ilike.%${q.trim()}%`)
@@ -129,6 +145,13 @@ export default function VendorMaster() {
                 <div className="od-header-num">{total} vendor{total !== 1 ? 's' : ''}</div>
               </div>
               <div className="od-header-actions">
+                {userRole === 'admin' && pending.length > 0 && (
+                  <button onClick={() => setTab(t => t === 'pending' ? 'approved' : 'pending')}
+                    style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid #fde68a', background: tab === 'pending' ? '#fef3c7' : 'white', color:'#92400e', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>
+                    <span style={{ background:'#f59e0b', color:'white', borderRadius:'50%', width:18, height:18, fontSize:10, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{pending.length}</span>
+                    Pending Approval
+                  </button>
+                )}
                 {userRole === 'admin' && (
                   <label style={{ display:'inline-flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12, color: testMode ? '#b45309' : 'var(--gray-500)', fontWeight: testMode ? 600 : 400, background: testMode ? '#fef3c7' : 'transparent', border: testMode ? '1px solid #fde68a' : '1px solid var(--gray-200)', borderRadius:8, padding:'6px 12px', transition:'all 0.15s' }}>
                     <input type="checkbox" checked={testMode} onChange={e => { setTestMode(e.target.checked); loadVendors({ test: e.target.checked, p: 1 }) }} style={{ accentColor:'#b45309', width:13, height:13 }} />
@@ -185,6 +208,27 @@ export default function VendorMaster() {
           {loading && !vendors.length ? (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:60, gap:10, color:'var(--gray-400)', fontSize:14 }}>
               <div className="loading-spin"/>Loading...
+            </div>
+          ) : tab === 'pending' ? (
+            <div className="od-card">
+              <div style={{ padding:'12px 16px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:13, fontWeight:600, color:'#92400e' }}>Pending Approval ({pending.length})</span>
+              </div>
+              <table className="od-items-table">
+                <thead><tr><th>Code</th><th>Vendor Name</th><th>Type</th><th>Contact</th><th>Created</th></tr></thead>
+                <tbody>
+                  {pending.map(v => (
+                    <tr key={v.id} onClick={() => navigate('/vendors/' + v.id)} style={{ cursor:'pointer' }}>
+                      <td className="mono" style={{ fontSize:12, color:'var(--gray-500)' }}>{v.vendor_code}</td>
+                      <td><span style={{ fontWeight:600, color:'var(--gray-900)' }}>{v.vendor_name}</span></td>
+                      <td><TypeBadge type={v.vendor_type}/></td>
+                      <td style={{ fontSize:13 }}>{v.poc_name || '—'}</td>
+                      <td style={{ fontSize:12, color:'var(--gray-400)' }}>{v.created_at ? new Date(v.created_at).toLocaleDateString('en-IN') : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {pending.length === 0 && <div style={{ textAlign:'center', padding:'40px 20px', color:'var(--gray-400)' }}>No pending approvals</div>}
             </div>
           ) : (
             <div className="od-card">

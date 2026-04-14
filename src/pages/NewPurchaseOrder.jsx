@@ -258,6 +258,7 @@ export default function NewPurchaseOrder() {
         total_amount:      grandTotal,
         payment_terms:     vendorPaymentTerms || null,
         created_by:        user.id,
+        created_by_name:   user.name,
         submitted_by_name: user.name,
         is_test:           isTest,
       }).select('id').single()
