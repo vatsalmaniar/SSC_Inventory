@@ -52,6 +52,7 @@ export default function CustomerMaster() {
   const location  = useLocation()
   const [customers, setCustomers] = useState([])
   const [pending, setPending]     = useState([])
+  const [creditCheck, setCreditCheck] = useState([])
   const [userRole, setUserRole]   = useState('')
   const [reps, setReps]           = useState([])
   const [loading, setLoading]     = useState(true)
@@ -89,10 +90,18 @@ export default function CustomerMaster() {
     setReps((repData || []).map(r => r.name))
 
     if (role === 'admin') {
-      const { data: pend } = await sb.from('customers')
-        .select('id,customer_id,customer_name,account_owner,gst,credit_terms,created_at')
-        .eq('approval_status', 'pending').order('created_at', { ascending: false })
-      setPending(pend || [])
+      const [pendRes, ccRes] = await Promise.all([
+        sb.from('customers')
+          .select('id,customer_id,customer_name,account_owner,gst,credit_terms,created_at')
+          .eq('approval_status', 'pending').order('created_at', { ascending: false }),
+        sb.from('customers')
+          .select('id,customer_id,customer_name,account_owner,gst,credit_terms,created_at')
+          .eq('approval_status', 'approved').eq('credit_check_status', 'pending')
+          .gte('created_at', NEW_CUSTOMER_FLOOR)
+          .order('created_at', { ascending: false }),
+      ])
+      setPending(pendRes.data || [])
+      setCreditCheck(ccRes.data || [])
     }
 
     await loadCustomers({ p:1 })
@@ -176,6 +185,13 @@ export default function CustomerMaster() {
                 <div className="od-header-num">{total} accounts</div>
               </div>
               <div className="od-header-actions">
+                {userRole === 'admin' && creditCheck.length > 0 && (
+                  <button onClick={() => setTab(t => t === 'creditcheck' ? 'approved' : 'creditcheck')}
+                    style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid #fde68a', background: tab === 'creditcheck' ? '#fef3c7' : 'white', color:'#92400e', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>
+                    <span style={{ background:'#f59e0b', color:'white', borderRadius:'50%', width:18, height:18, fontSize:10, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{creditCheck.length}</span>
+                    Credit Check Pending
+                  </button>
+                )}
                 {userRole === 'admin' && pending.length > 0 && (
                   <button onClick={() => setTab(t => t === 'pending' ? 'approved' : 'pending')}
                     style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid #fde68a', background: tab === 'pending' ? '#fef3c7' : 'white', color:'#92400e', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>
@@ -266,6 +282,34 @@ export default function CustomerMaster() {
           {loading ? (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:60, gap:10, color:'var(--gray-400)', fontSize:14 }}>
               <div className="loading-spin"/>Loading...
+            </div>
+          ) : tab === 'creditcheck' ? (
+            <div className="od-card" style={{ border:'1px solid #fde68a' }}>
+              <div style={{ padding:'10px 16px', borderBottom:'1px solid #fde68a', background:'#fffbeb', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <span style={{ fontSize:13, fontWeight:600, color:'#92400e' }}>Credit Check Pending ({creditCheck.length})</span>
+                <button onClick={() => setTab('approved')} style={{ background:'none', border:'none', fontSize:12, color:'#b45309', cursor:'pointer', fontFamily:'var(--font)' }}>← Back to directory</button>
+              </div>
+              <table className="od-items-table">
+                <thead>
+                  <tr><th>Cust ID</th><th>Customer Name</th><th>Account Owner</th><th>GST Number</th><th>Credit Terms</th><th>Created</th></tr>
+                </thead>
+                <tbody>
+                  {creditCheck.map(c => (
+                    <tr key={c.id} onClick={() => navigate('/customers/' + c.id)} style={{ cursor:'pointer' }}>
+                      <td className="mono" style={{ fontSize:12, color:'var(--gray-500)' }}>{c.customer_id || '—'}</td>
+                      <td>
+                        <div style={{ fontWeight:600, color:'var(--gray-900)' }}>{c.customer_name}</div>
+                        <span style={{ fontSize:10, fontWeight:700, background:'#fef3c7', color:'#92400e', borderRadius:4, padding:'1px 6px' }}>Credit Check Pending</span>
+                      </td>
+                      <td>{c.account_owner ? <OwnerChip name={c.account_owner}/> : <span style={{ color:'var(--gray-300)' }}>—</span>}</td>
+                      <td className="mono" style={{ fontSize:12 }}>{c.gst || '—'}</td>
+                      <td>{c.credit_terms ? <CreditTag term={c.credit_terms}/> : <span style={{ color:'var(--gray-300)' }}>—</span>}</td>
+                      <td style={{ fontSize:12, color:'var(--gray-500)' }}>{c.created_at ? new Date(c.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {creditCheck.length === 0 && <div style={{ textAlign:'center', padding:'40px 20px', color:'var(--gray-400)' }}>No credit checks pending</div>}
             </div>
           ) : tab === 'pending' ? (
             <div className="od-card" style={{ border:'1px solid #fde68a' }}>

@@ -22,6 +22,7 @@ const INDUSTRIES = [
 ]
 
 const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
+const NEW_CUSTOMER_FLOOR = '2026-04-06'
 
 function fmtINR(v) {
   if (!v && v !== 0) return '—'
@@ -60,6 +61,7 @@ export default function CustomerDetail() {
   const [customer, setCustomer] = useState(null)
   const [orders, setOrders]     = useState([])
   const [userRole, setUserRole] = useState('')
+  const [userName, setUserName] = useState('')
   const [loading, setLoading]   = useState(true)
   const [editMode, setEditMode]   = useState(false)
   const [editData, setEditData]   = useState({})
@@ -71,6 +73,9 @@ export default function CustomerDetail() {
   const [showContactModal, setShowContactModal] = useState(false)
   const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
   const [savingContact, setSavingContact] = useState(false)
+  const [showCreditCheck, setShowCreditCheck] = useState(false)
+  const [ccForm, setCcForm] = useState({ gst:'', mca:'', thirdparty:'' })
+  const [savingCC, setSavingCC] = useState(false)
 
   useEffect(() => { init() }, [id])
 
@@ -83,8 +88,9 @@ export default function CustomerDetail() {
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
-    const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
+    const { data: profile } = await sb.from('profiles').select('role,name').eq('id', session.user.id).single()
     setUserRole(profile?.role || '')
+    setUserName(profile?.name || '')
 
     const custRes = await sb.from('customers').select('*').eq('id', id).single()
     if (!custRes.data) { navigate('/customers'); return }
@@ -179,6 +185,26 @@ export default function CustomerDetail() {
     toast('Customer updated', 'success')
   }
 
+  async function saveCreditCheck() {
+    if (!ccForm.gst.trim() && !ccForm.mca.trim() && !ccForm.thirdparty.trim()) {
+      toast('Please fill at least one finding'); return
+    }
+    setSavingCC(true)
+    const { error } = await sb.from('customers').update({
+      credit_check_gst: ccForm.gst || null,
+      credit_check_mca: ccForm.mca || null,
+      credit_check_3rdparty: ccForm.thirdparty || null,
+      credit_check_by: userName,
+      credit_check_at: new Date().toISOString(),
+      credit_check_status: 'completed',
+    }).eq('id', id)
+    if (error) { toast('Error: ' + error.message); setSavingCC(false); return }
+    setCustomer(p => ({ ...p, credit_check_gst: ccForm.gst || null, credit_check_mca: ccForm.mca || null, credit_check_3rdparty: ccForm.thirdparty || null, credit_check_by: userName, credit_check_at: new Date().toISOString(), credit_check_status: 'completed' }))
+    setShowCreditCheck(false)
+    setSavingCC(false)
+    toast('Credit check saved', 'success')
+  }
+
   if (loading) return (
     <Layout pageTitle="Customer 360" pageKey="customer360">
       <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div>
@@ -211,6 +237,12 @@ export default function CustomerDetail() {
                   {customer.credit_terms && (
                     <span className="od-status-badge active">{customer.credit_terms}</span>
                   )}
+                  {userRole === 'admin' && customer.credit_check_status === 'pending' && customer.created_at >= NEW_CUSTOMER_FLOOR && (
+                    <span className="od-status-badge pending">Credit Check Pending</span>
+                  )}
+                  {customer.credit_check_status === 'completed' && customer.created_at >= NEW_CUSTOMER_FLOOR && (
+                    <span className="od-status-badge active">Credit Checked</span>
+                  )}
                 </div>
                 <div className="od-header-title">{customer.customer_name}</div>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
@@ -226,6 +258,13 @@ export default function CustomerDetail() {
                     <button className="od-btn" onClick={reject} disabled={approving} style={{ color:'#dc2626', borderColor:'#fecaca' }}>Reject</button>
                     <button className="od-btn od-btn-approve" onClick={approve} disabled={approving}>{approving ? '…' : 'Approve'}</button>
                   </>
+                )}
+                {userRole === 'admin' && customer.approval_status !== 'pending' && customer.credit_check_status === 'pending' && customer.created_at >= NEW_CUSTOMER_FLOOR && (
+                  <button onClick={() => { setCcForm({ gst: customer.credit_check_gst || '', mca: customer.credit_check_mca || '', thirdparty: customer.credit_check_3rdparty || '' }); setShowCreditCheck(true) }}
+                    style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, border:'1px solid #fde68a', background:'#fffbeb', color:'#92400e', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14 }}><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+                    Credit Check
+                  </button>
                 )}
                 {userRole === 'admin' && customer.approval_status !== 'pending' && (
                   !editMode
@@ -874,6 +913,56 @@ export default function CustomerDetail() {
                 </div>
               </div>
 
+              {/* Credit Check Findings (admin only) */}
+              {userRole === 'admin' && customer.created_at >= NEW_CUSTOMER_FLOOR && (
+                <div className="od-side-card" style={{ border: customer.credit_check_status === 'completed' ? '1px solid #bbf7d0' : '1px solid #fde68a', background: customer.credit_check_status === 'completed' ? '#f0fdf4' : '#fffdf5' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                    <div className="od-side-card-title" style={{ margin:0, color: customer.credit_check_status === 'completed' ? '#15803d' : '#92400e' }}>
+                      Credit Check
+                    </div>
+                    {customer.credit_check_status === 'completed'
+                      ? <span style={{ fontSize:10, fontWeight:700, background:'#dcfce7', color:'#15803d', borderRadius:4, padding:'2px 7px' }}>Completed</span>
+                      : <span style={{ fontSize:10, fontWeight:700, background:'#fef3c7', color:'#92400e', borderRadius:4, padding:'2px 7px' }}>Pending</span>
+                    }
+                  </div>
+                  {customer.credit_check_status === 'completed' ? (
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      {customer.credit_check_gst && (
+                        <div>
+                          <div style={{ fontSize:10, fontWeight:600, color:'#166534', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>GST Check</div>
+                          <div style={{ fontSize:12, color:'var(--gray-700)', lineHeight:1.5 }}>{customer.credit_check_gst}</div>
+                        </div>
+                      )}
+                      {customer.credit_check_mca && (
+                        <div>
+                          <div style={{ fontSize:10, fontWeight:600, color:'#166534', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>Balance Sheet & PnL (MCA)</div>
+                          <div style={{ fontSize:12, color:'var(--gray-700)', lineHeight:1.5 }}>{customer.credit_check_mca}</div>
+                        </div>
+                      )}
+                      {customer.credit_check_3rdparty && (
+                        <div>
+                          <div style={{ fontSize:10, fontWeight:600, color:'#166534', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>3rd Party Compliance</div>
+                          <div style={{ fontSize:12, color:'var(--gray-700)', lineHeight:1.5 }}>{customer.credit_check_3rdparty}</div>
+                        </div>
+                      )}
+                      <div style={{ borderTop:'1px solid #bbf7d0', paddingTop:8, marginTop:2, display:'flex', alignItems:'center', gap:6 }}>
+                        <div style={{ width:22, height:22, borderRadius:'50%', background:ownerColor(customer.credit_check_by || ''), color:'white', fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                          {(customer.credit_check_by || '').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}
+                        </div>
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:600, color:'var(--gray-700)' }}>{customer.credit_check_by}</div>
+                          <div style={{ fontSize:10, color:'var(--gray-400)' }}>{customer.credit_check_at ? new Date(customer.credit_check_at).toLocaleString('en-IN', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : ''}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize:12, color:'#92400e', textAlign:'center', padding:'8px 0' }}>
+                      Credit check has not been performed yet.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Recent orders */}
               {orders.length > 0 && (
                 <div className="od-side-card od-activity-card">
@@ -919,6 +1008,47 @@ export default function CustomerDetail() {
               <button onClick={saveContact} disabled={savingContact || !contactForm.name.trim()}
                 style={{ padding:'9px 18px', border:'none', borderRadius:8, background:'#1e3a5f', color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', opacity: contactForm.name.trim() ? 1 : 0.4 }}>
                 {savingContact ? 'Saving…' : 'Save Contact'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credit Check Modal */}
+      {showCreditCheck && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={e => { if (e.target===e.currentTarget) setShowCreditCheck(false) }}>
+          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:520, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid #fde68a', background:'#fffdf5', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:'#92400e' }}>Credit Check</div>
+                <div style={{ fontSize:12, color:'#b45309', marginTop:2 }}>{customer.customer_name}</div>
+              </div>
+              <button onClick={() => setShowCreditCheck(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+            </div>
+            <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+              <div>
+                <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.4px' }}>1. GST Check</div>
+                <textarea value={ccForm.gst} onChange={e => setCcForm(p => ({ ...p, gst: e.target.value }))} placeholder="Findings from GST verification..." rows={3}
+                  style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box', resize:'vertical' }} />
+              </div>
+              <div>
+                <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.4px' }}>2. Balance Sheet & PnL from MCA</div>
+                <div style={{ fontSize:10, color:'var(--gray-400)', marginBottom:4 }}>Applicable for Pvt. Ltd. companies</div>
+                <textarea value={ccForm.mca} onChange={e => setCcForm(p => ({ ...p, mca: e.target.value }))} placeholder="Findings from MCA records..." rows={3}
+                  style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box', resize:'vertical' }} />
+              </div>
+              <div>
+                <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.4px' }}>3. 3rd Party Compliance Check</div>
+                <textarea value={ccForm.thirdparty} onChange={e => setCcForm(p => ({ ...p, thirdparty: e.target.value }))} placeholder="Findings from third-party compliance sources..." rows={3}
+                  style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box', resize:'vertical' }} />
+              </div>
+            </div>
+            <div style={{ padding:'0 20px 18px', display:'flex', gap:8, justifyContent:'flex-end' }}>
+              <button onClick={() => setShowCreditCheck(false)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
+              <button onClick={saveCreditCheck} disabled={savingCC}
+                style={{ padding:'9px 18px', border:'none', borderRadius:8, background:'#1e3a5f', color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>
+                {savingCC ? 'Saving…' : 'Save Findings'}
               </button>
             </div>
           </div>
