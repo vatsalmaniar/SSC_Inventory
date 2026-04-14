@@ -88,7 +88,7 @@ export default function VendorMaster() {
 
     if (!opts.silent) setLoading(true)
     let query = sb.from('vendors')
-      .select('id,vendor_code,vendor_name,vendor_type,poc_name,poc_phone,status,account_owner,payment_terms,created_at', { count:'exact' })
+      .select('id,vendor_code,vendor_name,vendor_type,poc_name,poc_phone,status,account_owner,credit_terms,created_at', { count:'exact' })
       .eq('is_test', test)
       .eq('approval_status', 'approved')
       .order('vendor_name')
@@ -239,7 +239,7 @@ export default function VendorMaster() {
                     <th>Vendor Name</th>
                     <th>Type</th>
                     <th>Contact</th>
-                    <th>Payment Terms</th>
+                    <th>Credit Terms</th>
                     <th>Status</th>
                     <th>Account Owner</th>
                   </tr>
@@ -254,7 +254,7 @@ export default function VendorMaster() {
                         <div style={{ fontSize:13 }}>{v.poc_name || '—'}</div>
                         {v.poc_phone && <div style={{ fontSize:11, color:'var(--gray-400)' }}>{v.poc_phone}</div>}
                       </td>
-                      <td style={{ fontSize:12, color:'var(--gray-500)' }}>{v.payment_terms || '—'}</td>
+                      <td style={{ fontSize:12, color:'var(--gray-500)' }}>{v.credit_terms || '—'}</td>
                       <td><StatusBadge status={v.status}/></td>
                       <td><OwnerChip name={v.account_owner}/></td>
                     </tr>
