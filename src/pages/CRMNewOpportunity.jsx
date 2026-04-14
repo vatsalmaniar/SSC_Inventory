@@ -29,6 +29,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
   const [reps, setReps]             = useState([])
   const [saving, setSaving]         = useState(false)
   const [isExisting, setIsExisting] = useState(false) // true when existing customer selected
+  const [isBlacklisted, setIsBlacklisted] = useState(false)
   const [selectedBrands, setSelectedBrands] = useState([])
   const [accountSearch, setAccountSearch]   = useState('')
   const [showAccountDrop, setShowAccountDrop] = useState(false)
@@ -55,7 +56,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
     let allCustomers = []
     let from = 0
     while (true) {
-      const { data } = await sb.from('customers').select('id,customer_id,customer_name,account_owner,customer_type,gst').order('customer_name').range(from, from + 999)
+      const { data } = await sb.from('customers').select('id,customer_id,customer_name,account_owner,customer_type,gst,account_status').order('customer_name').range(from, from + 999)
       if (!data || data.length === 0) break
       allCustomers = [...allCustomers, ...data]
       if (data.length < 1000) break
@@ -77,6 +78,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
     if (!customerId) {
       setForm(p => ({ ...p, company_id: '', account_type: '', assigned_rep_id: '', assigned_rep_name: '', gstin: '' }))
       setIsExisting(false)
+      setIsBlacklisted(false)
       return
     }
     const cust = custs.find(c => c.id === customerId)
@@ -94,6 +96,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
       probability: STAGE_PROBABILITY['BOM_RECEIVED'],
     }))
     setIsExisting(true)
+    setIsBlacklisted(cust.account_status === 'Blacklisted')
   }
 
   function setStage(s) {
@@ -107,6 +110,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
   async function save() {
     if (!form.opportunity_name.trim()) { toast(isExisting ? 'Opportunity Name is required' : 'Lead Name is required'); return }
     if (!form.company_id && !accountSearch.trim()) { toast('Account Name is required'); return }
+    if (isBlacklisted) { toast('This customer is blacklisted. Opportunities cannot be created for blacklisted customers.'); return }
     if (!form.gstin.trim()) { toast('GST number is required'); return }
     setSaving(true)
     const brandNames = principals.filter(p => selectedBrands.includes(p.id)).map(p => p.name)
@@ -206,7 +210,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
                       style={{padding:'10px 14px',fontSize:13,cursor:'pointer',borderBottom:'1px solid #f8fafc'}}
                       onMouseEnter={e => e.currentTarget.style.background='#f0f4ff'}
                       onMouseLeave={e => e.currentTarget.style.background='white'}>
-                      <div style={{fontWeight:600}}>{c.customer_name}{c.customer_id && <span style={{fontSize:10,fontWeight:600,color:'#6b7280',fontFamily:'var(--mono)',marginLeft:6}}>{c.customer_id}</span>}</div>
+                      <div style={{fontWeight:600}}>{c.customer_name}{c.customer_id && <span style={{fontSize:10,fontWeight:600,color:'#6b7280',fontFamily:'var(--mono)',marginLeft:6}}>{c.customer_id}</span>}{c.account_status === 'Blacklisted' && <span style={{fontSize:10,fontWeight:700,background:'#fef2f2',color:'#dc2626',borderRadius:4,padding:'1px 5px',marginLeft:6}}>BLACKLISTED</span>}</div>
                       {c.gst && <div style={{fontSize:11,color:'#94a3b8'}}>{c.gst}</div>}
                     </div>
                   ))}
@@ -221,6 +225,16 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
               </select>
             </div>
           </div>
+
+          {/* Blacklisted warning */}
+          {isBlacklisted && (
+            <div style={{ display:'flex', alignItems:'center', gap:10, background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:'10px 14px' }}>
+              <svg fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24" style={{ width:16, height:16, flexShrink:0 }}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <div style={{ fontSize:13, color:'#991b1b' }}>
+                <strong>Customer is blacklisted.</strong> Opportunities cannot be created for blacklisted customers. Contact admin for details.
+              </div>
+            </div>
+          )}
 
           {/* Account Owner */}
           <div>

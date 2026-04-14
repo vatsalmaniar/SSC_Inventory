@@ -22,6 +22,7 @@ export default function NewOrder() {
   const [creditTerms, setCreditTerms]         = useState('')
   const [accountOwner, setAccountOwner]       = useState('')
   const [customerPending, setCustomerPending] = useState(false)
+  const [customerBlacklisted, setCustomerBlacklisted] = useState(false)
   const [customerId, setCustomerId]           = useState(null)
 
   // Order header
@@ -59,7 +60,7 @@ export default function NewOrder() {
   }
 
   async function fetchCustomers(q) {
-    const { data } = await sb.from('customers').select('id,customer_id,customer_name,gst,billing_address,credit_terms,account_owner,approval_status')
+    const { data } = await sb.from('customers').select('id,customer_id,customer_name,gst,billing_address,credit_terms,account_owner,approval_status,account_status')
       .ilike('customer_name', '%' + q + '%').limit(10)
     return data || []
   }
@@ -78,6 +79,7 @@ export default function NewOrder() {
     setAccountOwner(c.account_owner || '')
     setCustomerId(c.id)
     setCustomerPending(c.approval_status === 'pending')
+    setCustomerBlacklisted(c.account_status === 'Blacklisted')
   }
 
   function handlePoFile(e) {
@@ -125,6 +127,7 @@ export default function NewOrder() {
     const validItems = items.filter(i => i.item_code.trim())
     if (!customerInput.trim())  { toast('Customer name is required'); return }
     if (customerPending)        { toast('This customer is pending approval. Orders cannot be placed until the customer is approved in Customer 360.'); return }
+    if (customerBlacklisted)    { toast('This customer is blacklisted. Orders cannot be placed for blacklisted customers.'); return }
     if (!dispatchAddr.trim())   { toast('Dispatch address is required'); return }
     if (orderType !== 'SAMPLE' && !poNumber.trim()) { toast('PO / Reference Number is required'); return }
     if (!validItems.length)     { toast('Add at least one item'); return }
@@ -224,6 +227,7 @@ export default function NewOrder() {
                       {c.customer_name}
                       {c.customer_id && <span style={{ fontSize:10, fontWeight:600, color:'#6b7280', fontFamily:'var(--mono)' }}>{c.customer_id}</span>}
                       {c.approval_status === 'pending' && <span style={{ fontSize:10, fontWeight:700, background:'#fef3c7', color:'#b45309', borderRadius:4, padding:'1px 5px' }}>PENDING APPROVAL</span>}
+                      {c.account_status === 'Blacklisted' && <span style={{ fontSize:10, fontWeight:700, background:'#fef2f2', color:'#dc2626', borderRadius:4, padding:'1px 5px' }}>BLACKLISTED</span>}
                     </div>
                     {c.gst && <div className="typeahead-item-sub">GST: {c.gst}</div>}
                   </>
@@ -237,6 +241,15 @@ export default function NewOrder() {
               <svg fill="none" stroke="#b45309" strokeWidth="2" viewBox="0 0 24 24" style={{ width:16, height:16, flexShrink:0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <div style={{ fontSize:13, color:'#92400e' }}>
                 <strong>Customer pending approval.</strong> Orders cannot be placed until this customer is approved in <span style={{ textDecoration:'underline', cursor:'pointer' }} onClick={() => window.open('/customers/' + customerId, '_blank')}>Customer 360</span>.
+              </div>
+            </div>
+          )}
+
+          {customerBlacklisted && (
+            <div style={{ display:'flex', alignItems:'center', gap:10, background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:'10px 14px', marginTop:4 }}>
+              <svg fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24" style={{ width:16, height:16, flexShrink:0 }}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <div style={{ fontSize:13, color:'#991b1b' }}>
+                <strong>Customer is blacklisted.</strong> Orders cannot be placed for blacklisted customers. Contact admin for details.
               </div>
             </div>
           )}
