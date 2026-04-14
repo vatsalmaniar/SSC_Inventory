@@ -18,11 +18,7 @@ const STAGES = [
 ]
 const STAGE_KEYS = STAGES.map(s => s.key)
 
-const INDUSTRIES = [
-  'Automotive','Chemical','Construction','Education','Energy','FMCG','Food & Beverage',
-  'Healthcare','Infrastructure','IT / Technology','Manufacturing','Oil & Gas','Pharmaceutical',
-  'Power','Printing','Real Estate','Textile','Water Treatment','Other'
-]
+const INDUSTRIES = ['Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal','Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG','Energy','Automobile','Power Electronics','Datacenters','Road Construction','Cement','Tyre','Petroleum','Chemical']
 
 
 function stageLabel(key) { return STAGES.find(s => s.key === key)?.label || key }

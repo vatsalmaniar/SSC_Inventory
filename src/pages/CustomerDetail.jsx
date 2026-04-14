@@ -15,10 +15,10 @@ const SALES_REPS = [
 ]
 
 const INDUSTRIES = [
-  'Automotive','Pharmaceuticals','Food & Beverage','Textile','Chemical',
-  'Cement','Steel & Metal','Power & Energy','Oil & Gas','FMCG',
-  'Engineering / Manufacturing','Panel Builder','OEM','Construction',
-  'Infrastructure','Water Treatment','Mining','Other',
+  'Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal',
+  'Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG',
+  'Energy','Automobile','Power Electronics','Datacenters','Road Construction',
+  'Cement','Tyre','Petroleum','Chemical',
 ]
 
 const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']

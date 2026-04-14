@@ -5,11 +5,7 @@ import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
 
-const INDUSTRIES = [
-  'Automotive','Chemical','Construction','Education','Energy','FMCG','Food & Beverage',
-  'Healthcare','Infrastructure','IT / Technology','Manufacturing','Oil & Gas','Pharmaceutical',
-  'Power','Printing','Real Estate','Textile','Water Treatment','Other'
-]
+const INDUSTRIES = ['Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal','Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG','Energy','Automobile','Power Electronics','Datacenters','Road Construction','Cement','Tyre','Petroleum','Chemical']
 
 export default function NewLead() {
   const navigate = useNavigate()
