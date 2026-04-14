@@ -192,6 +192,8 @@ DECLARE
 BEGIN
   SELECT * INTO v_grn FROM grn WHERE id = p_grn_id;
   IF v_grn IS NULL THEN RAISE EXCEPTION 'GRN not found'; END IF;
+  -- Idempotent: silently return if already confirmed (prevents double-click issues)
+  IF v_grn.status IN ('confirmed', 'invoice_matched', 'inward_posted') THEN RETURN; END IF;
   IF v_grn.status NOT IN ('draft', 'checking') THEN
     RAISE EXCEPTION 'GRN must be in draft or checking status to confirm';
   END IF;
@@ -270,6 +272,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Vendors
 DROP POLICY IF EXISTS "auth_insert" ON vendors;
 DROP POLICY IF EXISTS "auth_update" ON vendors;
+DROP POLICY IF EXISTS "role_insert" ON vendors;
+DROP POLICY IF EXISTS "role_update" ON vendors;
 CREATE POLICY "role_insert" ON vendors FOR INSERT TO authenticated WITH CHECK (is_procurement_writer());
 CREATE POLICY "role_update" ON vendors FOR UPDATE TO authenticated USING (is_procurement_writer());
 
@@ -277,6 +281,9 @@ CREATE POLICY "role_update" ON vendors FOR UPDATE TO authenticated USING (is_pro
 DROP POLICY IF EXISTS "auth_insert" ON vendor_contacts;
 DROP POLICY IF EXISTS "auth_update" ON vendor_contacts;
 DROP POLICY IF EXISTS "auth_delete" ON vendor_contacts;
+DROP POLICY IF EXISTS "role_insert" ON vendor_contacts;
+DROP POLICY IF EXISTS "role_update" ON vendor_contacts;
+DROP POLICY IF EXISTS "role_delete" ON vendor_contacts;
 CREATE POLICY "role_insert" ON vendor_contacts FOR INSERT TO authenticated WITH CHECK (is_procurement_writer());
 CREATE POLICY "role_update" ON vendor_contacts FOR UPDATE TO authenticated USING (is_procurement_writer());
 CREATE POLICY "role_delete" ON vendor_contacts FOR DELETE TO authenticated USING (is_procurement_writer());
@@ -284,6 +291,8 @@ CREATE POLICY "role_delete" ON vendor_contacts FOR DELETE TO authenticated USING
 -- Purchase Orders
 DROP POLICY IF EXISTS "auth_insert" ON purchase_orders;
 DROP POLICY IF EXISTS "auth_update" ON purchase_orders;
+DROP POLICY IF EXISTS "role_insert" ON purchase_orders;
+DROP POLICY IF EXISTS "role_update" ON purchase_orders;
 CREATE POLICY "role_insert" ON purchase_orders FOR INSERT TO authenticated WITH CHECK (is_procurement_writer());
 CREATE POLICY "role_update" ON purchase_orders FOR UPDATE TO authenticated USING (is_procurement_writer());
 
@@ -291,29 +300,39 @@ CREATE POLICY "role_update" ON purchase_orders FOR UPDATE TO authenticated USING
 DROP POLICY IF EXISTS "auth_insert" ON po_items;
 DROP POLICY IF EXISTS "auth_update" ON po_items;
 DROP POLICY IF EXISTS "auth_delete" ON po_items;
+DROP POLICY IF EXISTS "role_insert" ON po_items;
+DROP POLICY IF EXISTS "role_update" ON po_items;
+DROP POLICY IF EXISTS "role_delete" ON po_items;
 CREATE POLICY "role_insert" ON po_items FOR INSERT TO authenticated WITH CHECK (is_procurement_writer());
 CREATE POLICY "role_update" ON po_items FOR UPDATE TO authenticated USING (is_procurement_writer());
 CREATE POLICY "role_delete" ON po_items FOR DELETE TO authenticated USING (is_procurement_writer());
 
 -- PO Delivery Dates
 DROP POLICY IF EXISTS "auth_insert" ON po_delivery_dates;
+DROP POLICY IF EXISTS "role_insert" ON po_delivery_dates;
 CREATE POLICY "role_insert" ON po_delivery_dates FOR INSERT TO authenticated WITH CHECK (is_procurement_writer());
 
 -- GRN
 DROP POLICY IF EXISTS "auth_insert" ON grn;
 DROP POLICY IF EXISTS "auth_update" ON grn;
+DROP POLICY IF EXISTS "role_insert" ON grn;
+DROP POLICY IF EXISTS "role_update" ON grn;
 CREATE POLICY "role_insert" ON grn FOR INSERT TO authenticated WITH CHECK (is_procurement_writer());
 CREATE POLICY "role_update" ON grn FOR UPDATE TO authenticated USING (is_procurement_writer());
 
 -- GRN Items
 DROP POLICY IF EXISTS "auth_insert" ON grn_items;
 DROP POLICY IF EXISTS "auth_update" ON grn_items;
+DROP POLICY IF EXISTS "role_insert" ON grn_items;
+DROP POLICY IF EXISTS "role_update" ON grn_items;
 CREATE POLICY "role_insert" ON grn_items FOR INSERT TO authenticated WITH CHECK (is_procurement_writer());
 CREATE POLICY "role_update" ON grn_items FOR UPDATE TO authenticated USING (is_procurement_writer());
 
 -- Purchase Invoices
 DROP POLICY IF EXISTS "auth_insert" ON purchase_invoices;
 DROP POLICY IF EXISTS "auth_update" ON purchase_invoices;
+DROP POLICY IF EXISTS "role_insert" ON purchase_invoices;
+DROP POLICY IF EXISTS "role_update" ON purchase_invoices;
 CREATE POLICY "role_insert" ON purchase_invoices FOR INSERT TO authenticated WITH CHECK (is_procurement_writer());
 CREATE POLICY "role_update" ON purchase_invoices FOR UPDATE TO authenticated USING (is_procurement_writer());
 

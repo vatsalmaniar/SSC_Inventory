@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import { fmt, fmtTs } from '../lib/fmt'
+import { fmt, fmtTs, esc } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/orders.css'
@@ -204,7 +204,7 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false, custCode
     <div class="co-addr">
       E/12, Siddhivinayak Towers, B/H DCP Office<br/>
       Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
-      GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; ${order.fulfilment_center || 'Ahmedabad'}
+      GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; ${esc(order.fulfilment_center) || 'Ahmedabad'}
     </div>
   </div>
   <div style="text-align:right">
@@ -220,21 +220,21 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false, custCode
 <div class="meta-grid">
   <div>
     <div class="meta-section-label">Bill To</div>
-    <div class="meta-name">${order.customer_name || '—'}</div>
-    ${custCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Customer ID: <strong style="font-family:'DM Mono',monospace">${custCode}</strong></div>` : ''}
-    <div class="meta-addr">${(order.dispatch_address || '').replace(/\n/g,'<br/>')}</div>
-    ${order.customer_gst ? `<div class="meta-gstin">GSTIN: <strong>${order.customer_gst}</strong></div>` : ''}
+    <div class="meta-name">${esc(order.customer_name) || '—'}</div>
+    ${custCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Customer ID: <strong style="font-family:'DM Mono',monospace">${esc(custCode)}</strong></div>` : ''}
+    <div class="meta-addr">${esc(order.dispatch_address || '').replace(/\n/g,'<br/>')}</div>
+    ${order.customer_gst ? `<div class="meta-gstin">GSTIN: <strong>${esc(order.customer_gst)}</strong></div>` : ''}
   </div>
   <div>
     <div class="meta-section-label">Reference</div>
     <table class="ref-table">
-      <tr><td>Challan No.</td><td class="mono">${activeDC}</td></tr>
+      <tr><td>Challan No.</td><td class="mono">${esc(activeDC)}</td></tr>
       <tr><td>Challan Date</td><td>${dcDate}</td></tr>
-      <tr><td>Order No.</td><td class="mono">${order.order_number || '—'}</td></tr>
-      ${order.po_number ? `<tr><td>PO No. / Date</td><td>${order.po_number} / ${poDate}</td></tr>` : ''}
-      ${(activeBatch?.invoice_number || order.invoice_number) ? `<tr><td>Invoice No.</td><td class="mono">${activeBatch?.invoice_number || order.invoice_number}</td></tr>` : ''}
-      ${order.vehicle_number ? `<tr><td>Vehicle No.</td><td>${order.vehicle_number}</td></tr>` : ''}
-      ${batchLabel ? `<tr><td>Batch</td><td>${batchLabel}</td></tr>` : ''}
+      <tr><td>Order No.</td><td class="mono">${esc(order.order_number) || '—'}</td></tr>
+      ${order.po_number ? `<tr><td>PO No. / Date</td><td>${esc(order.po_number)} / ${poDate}</td></tr>` : ''}
+      ${(activeBatch?.invoice_number || order.invoice_number) ? `<tr><td>Invoice No.</td><td class="mono">${esc(activeBatch?.invoice_number || order.invoice_number)}</td></tr>` : ''}
+      ${order.vehicle_number ? `<tr><td>Vehicle No.</td><td>${esc(order.vehicle_number)}</td></tr>` : ''}
+      ${batchLabel ? `<tr><td>Batch</td><td>${esc(batchLabel)}</td></tr>` : ''}
     </table>
   </div>
 </div>
@@ -243,8 +243,8 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false, custCode
 
 <!-- Terms -->
 <div class="terms">
-  <span>Delivery terms: <strong>${order.dispatch_mode || 'EXW Through Transport'}</strong></span>
-  <span>Payment terms: <strong>${order.credit_terms || '—'}</strong></span>
+  <span>Delivery terms: <strong>${esc(order.dispatch_mode) || 'EXW Through Transport'}</strong></span>
+  <span>Payment terms: <strong>${esc(order.credit_terms) || '—'}</strong></span>
   <span>Currency: <strong>INR</strong></span>
 </div>
 
@@ -265,10 +265,10 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false, custCode
     ${items.map((item, idx) => `
     <tr>
       <td style="color:#94a3b8">${idx + 1}</td>
-      <td class="code">${item.item_code || '—'}</td>
+      <td class="code">${esc(item.item_code) || '—'}</td>
       <td class="c" style="font-weight:700">${item.qty}</td>
       <td class="c" style="color:#64748b">Pc</td>
-      <td style="font-size:11px;color:#475569">${item.customer_ref_no || '—'}</td>
+      <td style="font-size:11px;color:#475569">${esc(item.customer_ref_no) || '—'}</td>
       <td class="r">${(item.unit_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td class="r" style="font-weight:600">${(item.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     </tr>`).join('')}

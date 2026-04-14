@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import { fmt, fmtNum, fmtTs } from '../lib/fmt'
+import { fmt, fmtNum, fmtTs, esc } from '../lib/fmt'
 import Layout from '../components/Layout'
 import CRMSubNav from '../components/CRMSubNav'
 import NewCustomerModal from './NewCustomerModal'
@@ -714,18 +714,18 @@ export default function CRMOpportunityDetail() {
 <div class="meta-grid">
   <div>
     <div class="meta-section-label">Prepared For</div>
-    <div class="meta-name">${custName}</div>
-    ${custId ? `<div style="font-size:11px;color:#475569;margin-top:2px">Customer ID: <strong style="font-family:'DM Mono',monospace">${custId}</strong></div>` : ''}
-    ${custAddr ? `<div class="meta-addr">${custAddr.replace(/\n/g,'<br/>')}</div>` : ''}
-    ${custGst ? `<div class="meta-gstin">GSTIN: <strong>${custGst}</strong></div>` : ''}
+    <div class="meta-name">${esc(custName)}</div>
+    ${custId ? `<div style="font-size:11px;color:#475569;margin-top:2px">Customer ID: <strong style="font-family:'DM Mono',monospace">${esc(custId)}</strong></div>` : ''}
+    ${custAddr ? `<div class="meta-addr">${esc(custAddr).replace(/\n/g,'<br/>')}</div>` : ''}
+    ${custGst ? `<div class="meta-gstin">GSTIN: <strong>${esc(custGst)}</strong></div>` : ''}
   </div>
   <div>
     <div class="meta-section-label">Reference</div>
     <table class="ref-table">
-      <tr><td>Quote Ref.</td><td class="mono">${q.full_ref}</td></tr>
+      <tr><td>Quote Ref.</td><td class="mono">${esc(q.full_ref)}</td></tr>
       <tr><td>Date</td><td>${dateStr}</td></tr>
       <tr><td>Revision</td><td>${q.revision}</td></tr>
-      ${q.profiles?.name ? `<tr><td>Prepared By</td><td>${q.profiles.name}</td></tr>` : ''}
+      ${q.profiles?.name ? `<tr><td>Prepared By</td><td>${esc(q.profiles.name)}</td></tr>` : ''}
     </table>
   </div>
 </div>
@@ -733,7 +733,7 @@ export default function CRMOpportunityDetail() {
 <hr class="divider"/>
 
 <div class="terms">
-  <span>Payment Terms: <strong>${creditTerms || '—'}</strong></span>
+  <span>Payment Terms: <strong>${esc(creditTerms) || '—'}</strong></span>
   <span>Currency: <strong>INR</strong></span>
   ${isAgainstPI ? '<span style="color:#b45309;font-weight:600">⚠ Order against Proforma Invoice</span>' : ''}
 </div>
@@ -751,7 +751,7 @@ export default function CRMOpportunityDetail() {
   <tbody>
     ${items.map((it,i) => `<tr>
       <td style="color:#94a3b8">${i+1}</td>
-      <td class="code">${it.item_code||it.description||'—'}</td>
+      <td class="code">${esc(it.item_code||it.description)||'—'}</td>
       <td class="r">${it.qty}</td>
       <td class="r">${((it.unit_price||0)*(1-(it.discount_pct||0)/100)).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
       <td class="r" style="font-weight:600">${(it.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>

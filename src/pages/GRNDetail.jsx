@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmtShort, fmtDateTime } from '../lib/fmt'
+import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
@@ -223,17 +223,17 @@ export default function GRNDetail() {
 <hr class="divider"/>
 <div class="meta-grid">
   <div>
-    ${grn.vendor_name ? `<div class="meta-section-label">Vendor</div><div class="meta-name">${grn.vendor_name}</div>` : `<div class="meta-section-label">Type</div><div class="meta-name">${typeLabel}</div>`}
-    ${grn.dispatch_mode ? `<div style="margin-top:12px"><div class="meta-section-label">Delivery</div><table class="ref-table"><tr><td>Mode</td><td>${grn.dispatch_mode}</td></tr>${grn.vehicle_number ? `<tr><td>${grn.dispatch_mode === 'Transport' ? 'LR Number' : grn.dispatch_mode === 'Courier' ? 'Tracking No.' : 'Vehicle No.'}</td><td class="mono">${grn.vehicle_number}</td></tr>` : ''}${grn.driver_name ? `<tr><td>${grn.dispatch_mode === 'Transport' ? 'Transporter' : grn.dispatch_mode === 'Courier' ? 'Courier Co.' : grn.dispatch_mode === 'By Person' || grn.dispatch_mode === 'Porter' ? 'Name' : 'Driver'}</td><td>${grn.driver_name}</td></tr>` : ''}</table></div>` : ''}
+    ${grn.vendor_name ? `<div class="meta-section-label">Vendor</div><div class="meta-name">${esc(grn.vendor_name)}</div>` : `<div class="meta-section-label">Type</div><div class="meta-name">${esc(typeLabel)}</div>`}
+    ${grn.dispatch_mode ? `<div style="margin-top:12px"><div class="meta-section-label">Delivery</div><table class="ref-table"><tr><td>Mode</td><td>${esc(grn.dispatch_mode)}</td></tr>${grn.vehicle_number ? `<tr><td>${grn.dispatch_mode === 'Transport' ? 'LR Number' : grn.dispatch_mode === 'Courier' ? 'Tracking No.' : 'Vehicle No.'}</td><td class="mono">${esc(grn.vehicle_number)}</td></tr>` : ''}${grn.driver_name ? `<tr><td>${grn.dispatch_mode === 'Transport' ? 'Transporter' : grn.dispatch_mode === 'Courier' ? 'Courier Co.' : grn.dispatch_mode === 'By Person' || grn.dispatch_mode === 'Porter' ? 'Name' : 'Driver'}</td><td>${esc(grn.driver_name)}</td></tr>` : ''}</table></div>` : ''}
   </div>
   <div>
     <div class="meta-section-label">Reference</div>
     <table class="ref-table">
-      <tr><td>GRN No.</td><td class="mono">${grn.grn_number}</td></tr>
+      <tr><td>GRN No.</td><td class="mono">${esc(grn.grn_number)}</td></tr>
       <tr><td>Received Date</td><td>${grnDate}</td></tr>
-      <tr><td>Fulfilment Centre</td><td>${grn.fulfilment_center || '—'}</td></tr>
-      <tr><td>Received By</td><td>${grn.received_by || '—'}</td></tr>
-      ${grn.invoice_number ? `<tr><td>Vendor Invoice</td><td class="mono">${grn.invoice_number}</td></tr>` : ''}
+      <tr><td>Fulfilment Centre</td><td>${esc(grn.fulfilment_center) || '—'}</td></tr>
+      <tr><td>Received By</td><td>${esc(grn.received_by) || '—'}</td></tr>
+      ${grn.invoice_number ? `<tr><td>Vendor Invoice</td><td class="mono">${esc(grn.invoice_number)}</td></tr>` : ''}
       ${grn.invoice_date ? `<tr><td>Invoice Date</td><td>${fmtDC(grn.invoice_date)}</td></tr>` : ''}
       ${grn.invoice_amount ? `<tr><td>Invoice Amount</td><td>₹ ${Number(grn.invoice_amount).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}
     </table>
@@ -246,11 +246,11 @@ export default function GRNDetail() {
   ${totalRej > 0 ? '<th class="c" style="width:80px">Rejected</th><th>Reason</th>' : ''}
 </tr></thead><tbody>
 ${grnItems.map((item, idx) => `<tr>
-  <td style="color:#94a3b8">${idx + 1}</td><td class="code">${item.item_code || '—'}</td>
+  <td style="color:#94a3b8">${idx + 1}</td><td class="code">${esc(item.item_code) || '—'}</td>
   <td class="c">${item.ordered_qty || item.expected_qty || '—'}</td>
   <td class="c" style="font-weight:700">${item.received_qty || 0}</td>
   <td class="c" style="font-weight:600;color:#15803d">${item.accepted_qty || 0}</td>
-  ${totalRej > 0 ? `<td class="c" style="font-weight:600;color:${(item.rejected_qty||0)>0?'#dc2626':'#94a3b8'}">${item.rejected_qty || 0}</td><td style="font-size:10.5px;color:#64748b">${item.rejection_reason || '—'}</td>` : ''}
+  ${totalRej > 0 ? `<td class="c" style="font-weight:600;color:${(item.rejected_qty||0)>0?'#dc2626':'#94a3b8'}">${item.rejected_qty || 0}</td><td style="font-size:10.5px;color:#64748b">${esc(item.rejection_reason) || '—'}</td>` : ''}
 </tr>`).join('')}
 </tbody></table>
 <div class="summary-wrap"><table class="summary-table">
@@ -259,9 +259,9 @@ ${grnItems.map((item, idx) => `<tr>
   <tr class="grand"><td class="lbl">Total Accepted</td><td class="val" style="color:#15803d">${totalAcc}</td></tr>
   ${totalRej > 0 ? `<tr><td class="lbl">Total Rejected</td><td class="val" style="color:#dc2626">${totalRej}</td></tr>` : ''}
 </table></div>
-${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${grn.notes}</div>` : ''}
+${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}</div>` : ''}
 <div class="sig-row">
-  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Received By</div>${grn.received_by || 'Stores'}</div>
+  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Received By</div>${esc(grn.received_by) || 'Stores'}</div>
   <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Inspected By</div>Quality</div>
   <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Authorised Signatory</div>For SSC Control Pvt. Ltd.</div>
 </div>

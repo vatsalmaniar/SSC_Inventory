@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmtShort, fmtDateTime } from '../lib/fmt'
+import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
@@ -331,17 +331,17 @@ export default function PurchaseOrderDetail() {
 <div class="meta-grid">
   <div>
     <div class="meta-section-label">Vendor</div>
-    <div class="meta-name">${po.vendor_name || '—'}</div>
-    ${vendorCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Vendor Code: <strong style="font-family:'DM Mono',monospace">${vendorCode}</strong></div>` : ''}
+    <div class="meta-name">${esc(po.vendor_name) || '—'}</div>
+    ${vendorCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Vendor Code: <strong style="font-family:'DM Mono',monospace">${esc(vendorCode)}</strong></div>` : ''}
   </div>
   <div>
     <div class="meta-section-label">Reference</div>
     <table class="ref-table">
-      <tr><td>PO No.</td><td class="mono">${poNumber}</td></tr>
+      <tr><td>PO No.</td><td class="mono">${esc(poNumber)}</td></tr>
       <tr><td>PO Date</td><td>${poDate}</td></tr>
-      ${po.order_number ? `<tr><td>Linked Order</td><td class="mono">${po.order_number}</td></tr>` : ''}
-      ${po.reference && !po.order_number ? `<tr><td>Reference</td><td>${po.reference}</td></tr>` : ''}
-      <tr><td>Fulfilment Centre</td><td>${po.fulfilment_center || '—'}</td></tr>
+      ${po.order_number ? `<tr><td>Linked Order</td><td class="mono">${esc(po.order_number)}</td></tr>` : ''}
+      ${po.reference && !po.order_number ? `<tr><td>Reference</td><td>${esc(po.reference)}</td></tr>` : ''}
+      <tr><td>Fulfilment Centre</td><td>${esc(po.fulfilment_center) || '—'}</td></tr>
     </table>
   </div>
 </div>
@@ -350,7 +350,7 @@ export default function PurchaseOrderDetail() {
 
 <!-- Terms -->
 <div class="terms">
-  <span>Payment terms: <strong>${po.payment_terms || '—'}</strong></span>
+  <span>Payment terms: <strong>${esc(po.payment_terms) || '—'}</strong></span>
   <span>Currency: <strong>INR</strong></span>
 </div>
 
@@ -378,7 +378,7 @@ export default function PurchaseOrderDetail() {
     ${items.map((item, idx) => `
     <tr>
       <td style="color:#94a3b8">${idx + 1}</td>
-      <td class="code">${item.item_code || '—'}</td>
+      <td class="code">${esc(item.item_code) || '—'}</td>
       <td class="c" style="font-weight:700">${item.qty}</td>
       <td class="r">${(Number(item.lp_unit_price)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td class="c">${item.discount_pct || 0}%</td>
@@ -399,7 +399,7 @@ export default function PurchaseOrderDetail() {
 
 <div class="words">Amount in words: <strong>${numToWords(grandTotal)}</strong></div>
 
-${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${po.notes}</div>` : ''}
+${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po.notes)}</div>` : ''}
 
 <!-- Signatures -->
 <div class="sig-row">

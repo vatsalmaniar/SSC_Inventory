@@ -42,3 +42,9 @@ export function fmtDateTime(d) {
   const h = dt.getHours(), m = dt.getMinutes()
   return dt.getDate()+' '+MO[dt.getMonth()]+' '+dt.getFullYear()+' '+(h<10?'0':'')+h+':'+(m<10?'0':'')+m
 }
+
+// HTML-escape for safe injection into document.write / innerHTML templates
+export function esc(str) {
+  if (!str && str !== 0) return ''
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+}
