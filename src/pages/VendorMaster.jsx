@@ -93,7 +93,7 @@ export default function VendorMaster() {
       .eq('approval_status', 'approved')
       .order('vendor_name')
 
-    if (q.trim()) query = query.or(`vendor_name.ilike.%${q.trim()}%,vendor_code.ilike.%${q.trim()}%,gst.ilike.%${q.trim()}%,account_owner.ilike.%${q.trim()}%`)
+    if (q.trim()) query = query.or(`vendor_name.ilike.%${q.trim()}%,vendor_code.ilike.%${q.trim()}%,gst.ilike.%${q.trim()}%`)
     if (type) query = query.eq('vendor_type', type)
     if (stat) query = query.eq('status', stat)
 
