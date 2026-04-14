@@ -55,11 +55,11 @@ export default function BillingList() {
   // Realtime: live batch updates
   useRealtimeSubscription('billing-dispatches', {
     table: 'order_dispatches', enabled: !!user.role,
-    onEvent: () => loadBatches(),
+    onEvent: () => loadBatches(true),
   })
 
-  async function loadBatches() {
-    setLoading(true)
+  async function loadBatches(silent) {
+    if (!silent) setLoading(true)
     const { data } = await sb.from('order_dispatches')
       .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, credit_terms, freight, order_items(id, qty, dispatched_qty))')
       .in('status', BILLING_BATCH_STATUSES)

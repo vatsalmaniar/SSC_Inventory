@@ -374,15 +374,15 @@ export default function FCOrderDetail() {
   // Realtime: live batch status + comment updates
   useRealtimeSubscription(`fc-batch-${id}`, {
     table: 'order_dispatches', filter: `order_id=eq.${id}`,
-    enabled: !!id, onEvent: () => loadOrder(),
+    enabled: !!id, onEvent: () => loadOrder(true),
   })
   useRealtimeSubscription(`fc-comments-${id}`, {
     table: 'order_comments', filter: `order_id=eq.${id}`,
-    enabled: !!id, onEvent: () => loadOrder(),
+    enabled: !!id, onEvent: () => loadOrder(true),
   })
 
-  async function loadOrder() {
-    setLoading(true)
+  async function loadOrder(silent) {
+    if (!silent) setLoading(true)
     const [{ data }, { data: allB }, { data: c }] = await Promise.all([
       sb.from('orders').select('*, order_items(*)').eq('id', id).single(),
       sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true }),

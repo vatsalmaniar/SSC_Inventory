@@ -96,7 +96,7 @@ export default function PurchaseOrderDetail() {
   // Realtime: live PO detail updates
   useRealtimeSubscription(`po-${id}`, {
     table: 'purchase_orders', filter: `id=eq.${id}`, event: 'UPDATE',
-    enabled: !!id, onEvent: () => init(),
+    enabled: !!id, onEvent: () => loadPO(true),
   })
 
   async function init() {
@@ -111,8 +111,8 @@ export default function PurchaseOrderDetail() {
     await loadPO()
   }
 
-  async function loadPO() {
-    setLoading(true)
+  async function loadPO(silent) {
+    if (!silent) setLoading(true)
     const poRes = await sb.from('purchase_orders').select('*').eq('id', id).single()
     if (poRes.error || !poRes.data) { setPo(null); setLoading(false); return }
     setPo(poRes.data)

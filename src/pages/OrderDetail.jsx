@@ -168,15 +168,15 @@ export default function OrderDetail() {
   // Realtime: live order status + comment updates
   useRealtimeSubscription(`order-${id}`, {
     table: 'orders', filter: `id=eq.${id}`, event: 'UPDATE',
-    enabled: !!id, onEvent: () => loadOrder(),
+    enabled: !!id, onEvent: () => loadOrder(true),
   })
   useRealtimeSubscription(`order-comments-${id}`, {
     table: 'order_comments', filter: `order_id=eq.${id}`,
-    enabled: !!id, onEvent: () => loadOrder(),
+    enabled: !!id, onEvent: () => loadOrder(true),
   })
 
-  async function loadOrder() {
-    setLoading(true)
+  async function loadOrder(silent) {
+    if (!silent) setLoading(true)
     const [{ data }, { data: batches }, { data: comments }, { data: profileList }] = await Promise.all([
       sb.from('orders').select('*, order_items(*)').eq('id', id).single(),
       sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true }),

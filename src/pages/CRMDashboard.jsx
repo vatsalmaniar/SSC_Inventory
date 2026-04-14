@@ -105,11 +105,11 @@ export default function CRMDashboard() {
   // Realtime: live dashboard updates
   useRealtimeSubscription('crm-dashboard', {
     table: 'crm_opportunities', enabled: !!user.role,
-    onEvent: () => loadData(user.id, user.role),
+    onEvent: () => loadData(user.id, user.role, true),
   })
 
-  async function loadData(uid, role) {
-    setLoading(true)
+  async function loadData(uid, role, silent) {
+    if (!silent) setLoading(true)
     const isManager = role === 'admin'
     const [oppsRes, leadsRes, tasksRes, repsRes] = await Promise.all([
       sb.from('crm_opportunities').select('id,stage,estimated_value_inr,expected_close_date,assigned_rep_id,product_notes,created_at,crm_companies(company_name)').not('stage','in','(WON,LOST)'),

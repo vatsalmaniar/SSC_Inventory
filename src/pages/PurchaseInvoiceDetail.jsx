@@ -66,7 +66,7 @@ export default function PurchaseInvoiceDetail() {
   // Realtime: live invoice detail updates
   useRealtimeSubscription(`purchase-invoice-${id}`, {
     table: 'purchase_invoices', filter: `id=eq.${id}`, event: 'UPDATE',
-    enabled: !!id, onEvent: () => init(),
+    enabled: !!id, onEvent: () => loadInvoice(true),
   })
 
   async function init() {
@@ -79,8 +79,8 @@ export default function PurchaseInvoiceDetail() {
     await loadInvoice()
   }
 
-  async function loadInvoice() {
-    setLoading(true)
+  async function loadInvoice(silent) {
+    if (!silent) setLoading(true)
     const { data, error } = await sb.from('purchase_invoices').select('*').eq('id', id).single()
     if (error || !data) { setInv(null); setLoading(false); return }
     setInv(data)

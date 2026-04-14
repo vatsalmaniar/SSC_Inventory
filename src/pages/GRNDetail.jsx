@@ -88,11 +88,11 @@ export default function GRNDetail() {
   // Realtime: live GRN detail updates
   useRealtimeSubscription(`grn-${id}`, {
     table: 'grn', filter: `id=eq.${id}`, event: 'UPDATE',
-    enabled: !!id, onEvent: () => loadGRN(),
+    enabled: !!id, onEvent: () => loadGRN(true),
   })
 
-  async function loadGRN() {
-    setLoading(true)
+  async function loadGRN(silent) {
+    if (!silent) setLoading(true)
     const [grnRes, itemsRes] = await Promise.all([
       sb.from('grn').select('*').eq('id', id).single(),
       sb.from('grn_items').select('*').eq('grn_id', id).order('id'),

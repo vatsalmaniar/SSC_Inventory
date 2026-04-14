@@ -63,11 +63,11 @@ export default function CRMTargets() {
   // Realtime: live target updates
   useRealtimeSubscription('crm-targets', {
     table: 'crm_targets', enabled: !loading,
-    onEvent: () => loadTargets(),
+    onEvent: () => loadTargets(true),
   })
 
-  async function loadTargets() {
-    setLoading(true)
+  async function loadTargets(silent) {
+    if (!silent) setLoading(true)
     const { data } = await sb.from('crm_targets').select('*').eq('period', period)
     setTargets(data || [])
     setLoading(false)

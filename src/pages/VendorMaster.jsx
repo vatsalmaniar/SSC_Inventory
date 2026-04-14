@@ -61,7 +61,7 @@ export default function VendorMaster() {
   // Realtime: live vendor list updates
   useRealtimeSubscription('vendors-list', {
     table: 'vendors', enabled: !loading,
-    onEvent: () => loadVendors(),
+    onEvent: () => loadVendors({ silent: true }),
   })
 
   async function loadVendors(opts = {}) {
@@ -71,7 +71,7 @@ export default function VendorMaster() {
     const stat = opts.stat ?? filterStatus
     const test = opts.test ?? testMode
 
-    setLoading(true)
+    if (!opts.silent) setLoading(true)
     let query = sb.from('vendors')
       .select('id,vendor_code,vendor_name,vendor_type,poc_name,poc_phone,status,account_owner,payment_terms,created_at', { count:'exact' })
       .eq('is_test', test)

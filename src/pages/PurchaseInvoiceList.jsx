@@ -51,11 +51,11 @@ export default function PurchaseInvoiceList() {
   // Realtime: live invoice list updates
   useRealtimeSubscription('pi-list', {
     table: 'purchase_invoices', enabled: !loading,
-    onEvent: () => loadInvoices(),
+    onEvent: () => loadInvoices(true),
   })
 
-  async function loadInvoices() {
-    setLoading(true)
+  async function loadInvoices(silent) {
+    if (!silent) setLoading(true)
     const { data } = await sb.from('purchase_invoices')
       .select('id, invoice_number, vendor_name, invoice_date, invoice_amount, gst_amount, total_amount, status, po_id, grn_id, created_at')
       .eq('is_test', false)

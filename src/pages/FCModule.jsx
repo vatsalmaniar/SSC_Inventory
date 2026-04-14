@@ -62,11 +62,11 @@ export default function FCModule() {
   // Realtime: live batch updates
   useRealtimeSubscription('fc-dispatches', {
     table: 'order_dispatches', enabled: !!user.role,
-    onEvent: () => loadBatches(user.center, showTest),
+    onEvent: () => loadBatches(user.center, showTest, true),
   })
 
-  async function loadBatches(center, testMode = false) {
-    setLoading(true)
+  async function loadBatches(center, testMode = false, silent) {
+    if (!silent) setLoading(true)
     let q = sb.from('order_dispatches')
       .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, freight, order_items(id, qty, dispatched_qty))')
       .eq('orders.is_test', testMode)

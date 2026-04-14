@@ -121,11 +121,11 @@ export default function PurchaseOrderList() {
   // Realtime: live PO list updates
   useRealtimeSubscription('po-list', {
     table: 'purchase_orders', enabled: !loading,
-    onEvent: () => loadPos(showTest),
+    onEvent: () => loadPos(showTest, true),
   })
 
-  async function loadPos(testMode = false) {
-    setLoading(true)
+  async function loadPos(testMode = false, silent) {
+    if (!silent) setLoading(true)
     const { data } = await sb.from('purchase_orders')
       .select('id,po_number,status,total_amount,vendor_name,vendor_id,order_number,fulfilment_center,submitted_by_name,created_at,po_date,expected_delivery,po_items(id)')
       .gte('created_at', FY_START).eq('is_test', testMode)

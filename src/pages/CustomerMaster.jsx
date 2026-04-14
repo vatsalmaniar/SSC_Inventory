@@ -101,7 +101,7 @@ export default function CustomerMaster() {
   // Realtime: live customer list updates
   useRealtimeSubscription('customers-list', {
     table: 'customers', enabled: !loading,
-    onEvent: () => loadCustomers(),
+    onEvent: () => loadCustomers({ silent: true }),
   })
 
   async function loadCustomers(opts = {}) {
@@ -112,7 +112,7 @@ export default function CustomerMaster() {
     const rep   = opts.rep   ?? filterRep
     const type  = opts.type  ?? filterType
 
-    setLoading(true)
+    if (!opts.silent) setLoading(true)
     let query = sb.from('customers')
       .select('id,customer_id,customer_name,account_owner,gst,credit_terms,customer_type,created_at', { count:'exact' })
       .eq('approval_status', 'approved')

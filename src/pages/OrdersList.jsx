@@ -191,11 +191,11 @@ export default function OrdersList() {
   // Realtime: live order list updates
   useRealtimeSubscription('orders-list', {
     table: 'orders', enabled: !!user.role,
-    onEvent: () => loadOrders(showTest, user.role === 'sales' ? user.id : null),
+    onEvent: () => loadOrders(showTest, user.role === 'sales' ? user.id : null, true),
   })
 
-  async function loadOrders(testMode = false, salesUserId = null) {
-    setLoading(true)
+  async function loadOrders(testMode = false, salesUserId = null, silent) {
+    if (!silent) setLoading(true)
     let query = sb.from('orders')
       .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,order_items(id,sr_no,item_code,qty,dispatched_qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,customer_ref_no),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
       .gte('created_at', FY_START).eq('is_test', testMode)

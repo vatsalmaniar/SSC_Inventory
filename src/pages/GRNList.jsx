@@ -66,11 +66,11 @@ export default function GRNList() {
   // Realtime: live GRN list updates
   useRealtimeSubscription('grn-list', {
     table: 'grn', enabled: !loading,
-    onEvent: () => loadGrns(),
+    onEvent: () => loadGrns(true),
   })
 
-  async function loadGrns() {
-    setLoading(true)
+  async function loadGrns(silent) {
+    if (!silent) setLoading(true)
     const { data, error } = await sb.from('grn')
       .select('*')
       .eq('is_test', false)

@@ -84,11 +84,11 @@ export default function OpsOrders() {
   // Realtime: live ops order list updates
   useRealtimeSubscription('ops-orders', {
     table: 'orders', enabled: !loading,
-    onEvent: () => loadOrders(),
+    onEvent: () => loadOrders(true),
   })
 
-  async function loadOrders() {
-    setLoading(true)
+  async function loadOrders(silent) {
+    if (!silent) setLoading(true)
     const { data } = await sb.from('orders')
       .select('id,order_number,customer_name,account_owner,engineer_name,order_date,status,freight,order_items(id,qty,dispatched_qty,total_price)')
       .gte('created_at', FY_START).eq('is_test', false)
