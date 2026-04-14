@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { FY_START, FY_LABEL } from '../lib/fmt'
 import '../styles/dashboard.css'
 
@@ -69,9 +70,12 @@ const APPS = [
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [user, setUser]       = useState({ name: '', avatar: '', role: '' })
+  const [user, setUser]       = useState({ name: '', avatar: '', role: '', id: '' })
   const [activeKey, setActiveKey] = useState('home')
   const [stats, setStats]     = useState({ active: 0, pending: 0, delivered: 0, revenue: 0 })
+  const [notifs, setNotifs]   = useState([])
+  const [showNotifs, setShowNotifs] = useState(false)
+  const bellRef = useRef(null)
 
   useEffect(() => { init() }, [])
 
@@ -89,7 +93,11 @@ export default function Dashboard() {
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    setUser({ name, avatar, role })
+    setUser({ name, avatar, role, id: session.user.id })
+    // Load notifications
+    const { data: notifsData } = await sb.from('notifications')
+      .select('*').eq('user_id', session.user.id).order('created_at', { ascending: false }).limit(30)
+    setNotifs(notifsData || [])
     if (orders) {
       const active    = orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length
       const pending   = orders.filter(o => o.status === 'pending').length
@@ -97,6 +105,38 @@ export default function Dashboard() {
       const revenue   = orders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0) + (o.freight || 0), 0)
       setStats({ active, pending, delivered, revenue })
     }
+  }
+
+  // Realtime notifications
+  useRealtimeSubscription(`dash-notifs-${user.id}`, {
+    table: 'notifications', filter: `user_id=eq.${user.id}`,
+    enabled: !!user.id,
+    onEvent: (payload) => {
+      if (payload.eventType === 'INSERT') setNotifs(prev => [payload.new, ...prev].slice(0, 30))
+      else if (payload.eventType === 'UPDATE') setNotifs(prev => prev.map(n => n.id === payload.new.id ? payload.new : n))
+    },
+  })
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e) { if (bellRef.current && !bellRef.current.contains(e.target)) setShowNotifs(false) }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  async function markAllRead() {
+    const unreadIds = notifs.filter(n => !n.is_read).map(n => n.id)
+    if (!unreadIds.length) return
+    await sb.from('notifications').update({ is_read: true }).in('id', unreadIds)
+    setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
+  }
+
+  function fmtNotifTime(ts) {
+    const d = new Date(ts), now = new Date(), diff = (now - d) / 1000
+    if (diff < 60) return 'Just now'
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago'
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago'
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
   }
 
   async function signOut() { await sb.auth.signOut(); navigate('/login') }
@@ -196,9 +236,48 @@ export default function Dashboard() {
               </button>
             ))}
           </nav>
-          <div className="hd-user-chip">
-            <div className="hd-user-avatar">{user.avatar || '?'}</div>
-            <span className="hd-user-name">{user.name || '...'}</span>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <div ref={bellRef} style={{ position:'relative' }}>
+              <button onClick={() => setShowNotifs(s => !s)}
+                style={{ background:'none', border:'none', cursor:'pointer', position:'relative', padding:6, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width:20, height:20, color:'var(--gray-500)' }}>
+                  <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
+                </svg>
+                {notifs.filter(n => !n.is_read).length > 0 && (
+                  <span style={{ position:'absolute', top:2, right:2, width:16, height:16, borderRadius:'50%', background:'#ef4444', color:'white', fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    {notifs.filter(n => !n.is_read).length}
+                  </span>
+                )}
+              </button>
+              {showNotifs && (
+                <div style={{ position:'absolute', right:0, top:'100%', marginTop:8, width:340, background:'white', borderRadius:12, boxShadow:'0 8px 30px rgba(0,0,0,0.12)', border:'1px solid var(--gray-100)', zIndex:100, overflow:'hidden' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', borderBottom:'1px solid var(--gray-100)' }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:'var(--gray-900)' }}>Notifications</span>
+                    {notifs.filter(n => !n.is_read).length > 0 && (
+                      <button onClick={markAllRead} style={{ background:'none', border:'none', color:'#1a4dab', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Mark all read</button>
+                    )}
+                  </div>
+                  {notifs.length === 0 ? (
+                    <div style={{ padding:'32px 16px', textAlign:'center', color:'var(--gray-400)', fontSize:13 }}>No notifications</div>
+                  ) : (
+                    <div style={{ maxHeight:360, overflowY:'auto' }}>
+                      {notifs.map(n => (
+                        <div key={n.id}
+                          style={{ padding:'10px 16px', borderBottom:'1px solid var(--gray-50)', cursor:'pointer', background: n.is_read ? 'white' : '#f0f7ff' }}
+                          onClick={() => { if (n.order_id) navigate('/orders/' + n.order_id); setShowNotifs(false) }}>
+                          <div style={{ fontSize:12, color:'var(--gray-800)', lineHeight:1.4 }}>{n.message}</div>
+                          <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:3 }}>{fmtNotifTime(n.created_at)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="hd-user-chip">
+              <div className="hd-user-avatar">{user.avatar || '?'}</div>
+              <span className="hd-user-name">{user.name || '...'}</span>
+            </div>
           </div>
         </header>
 
