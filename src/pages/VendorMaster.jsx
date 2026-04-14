@@ -88,7 +88,7 @@ export default function VendorMaster() {
 
     if (!opts.silent) setLoading(true)
     let query = sb.from('vendors')
-      .select('id,vendor_code,vendor_name,vendor_type,poc_name,poc_phone,status,account_owner,credit_terms,created_at', { count:'exact' })
+      .select('id,vendor_code,vendor_name,vendor_type,poc_name,poc_phone,status,credit_terms,created_at', { count:'exact' })
       .eq('is_test', test)
       .eq('approval_status', 'approved')
       .order('vendor_name')
@@ -241,7 +241,6 @@ export default function VendorMaster() {
                     <th>Contact</th>
                     <th>Credit Terms</th>
                     <th>Status</th>
-                    <th>Account Owner</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -256,7 +255,6 @@ export default function VendorMaster() {
                       </td>
                       <td style={{ fontSize:12, color:'var(--gray-500)' }}>{v.credit_terms || '—'}</td>
                       <td><StatusBadge status={v.status}/></td>
-                      <td><OwnerChip name={v.account_owner}/></td>
                     </tr>
                   ))}
                 </tbody>
