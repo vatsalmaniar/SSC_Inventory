@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { sb } from '../lib/supabase'
+import { sb, checkSessionAge } from '../lib/supabase'
 import './layout.css'
 
 const NAV_ITEMS = [
@@ -99,6 +99,9 @@ export default function Layout({ children, pageTitle, pageKey }) {
   const [searchResults, setSearchResults] = useState({ orders: [], companies: [], leads: [], opportunities: [], vendors: [], purchaseOrders: [], grns: [], purchaseInvoices: [] })
 
   useEffect(() => {
+    // Force re-login after 24 hours
+    if (!checkSessionAge()) { navigate('/login'); return }
+
     sb.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         const { data } = await sb.auth.refreshSession()
