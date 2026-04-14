@@ -65,7 +65,7 @@ export default function CRMNewLead() {
   }
 
   async function fetchCustomers(q) {
-    const { data } = await sb.from('customers').select('id,customer_id,customer_name,account_owner,customer_type,gst')
+    const { data } = await sb.from('customers').select('id,customer_id,customer_name,account_owner,customer_type,gst,account_status')
       .ilike('customer_name', '%' + q + '%').limit(10)
     return data || []
   }
@@ -111,6 +111,7 @@ export default function CRMNewLead() {
   async function save() {
     if (!form.opportunity_name.trim()) { toast(isExisting ? 'Opportunity Name is required' : 'Lead Name is required'); return }
     if (!accountInput.trim()) { toast('Account Name is required'); return }
+    if (selectedCustomer?.account_status === 'Blacklisted') { toast('This customer is blacklisted. Opportunities cannot be created for blacklisted customers.'); return }
     if (!form.gstin.trim()) { toast('GST number is required'); return }
     setSaving(true)
 
@@ -194,13 +195,22 @@ export default function CRMNewLead() {
                 fetchFn={fetchCustomers}
                 renderItem={c => (
                   <>
-                    <div className="typeahead-item-main" style={{display:'flex',alignItems:'center',gap:6}}>{c.customer_name}{c.customer_id && <span style={{fontSize:10,fontWeight:600,color:'#6b7280',fontFamily:'var(--mono)'}}>{c.customer_id}</span>}</div>
+                    <div className="typeahead-item-main" style={{display:'flex',alignItems:'center',gap:6}}>
+                      {c.customer_name}{c.customer_id && <span style={{fontSize:10,fontWeight:600,color:'#6b7280',fontFamily:'var(--mono)'}}>{c.customer_id}</span>}
+                      {c.account_status === 'Blacklisted' && <span style={{fontSize:10,fontWeight:700,background:'#fef2f2',color:'#dc2626',borderRadius:4,padding:'1px 5px'}}>BLACKLISTED</span>}
+                    </div>
                     {c.gst && <div className="typeahead-item-sub">GST: {c.gst}</div>}
                   </>
                 )}
               />
               {isExisting && (
                 <span style={{ fontSize:10, fontWeight:700, background:'#eff6ff', color:'#1d4ed8', borderRadius:4, padding:'2px 7px', marginTop:4, display:'inline-block' }}>EXISTING CUSTOMER</span>
+              )}
+              {selectedCustomer?.account_status === 'Blacklisted' && (
+                <div style={{ display:'flex', alignItems:'center', gap:8, background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:'8px 12px', marginTop:6 }}>
+                  <svg fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14, flexShrink:0 }}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                  <span style={{ fontSize:12, color:'#991b1b' }}><strong>Customer is blacklisted.</strong> Cannot create opportunity.</span>
+                </div>
               )}
             </div>
             <div className="no-field">
