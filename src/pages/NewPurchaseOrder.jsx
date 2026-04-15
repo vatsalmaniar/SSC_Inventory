@@ -252,7 +252,7 @@ export default function NewPurchaseOrder() {
     if (!filledItems.length){ toast('Add at least one line item'); return }
     for (const item of filledItems) {
       if (!item.qty || parseFloat(item.qty) <= 0) { toast(`Qty is required for item: ${item.item_code}`); return }
-      if (!item.lp_unit_price || parseFloat(item.lp_unit_price) <= 0) { toast(`LP Price is required for item: ${item.item_code}`); return }
+      if (item.lp_unit_price === '' || item.lp_unit_price === undefined || parseFloat(item.lp_unit_price) < 0) { toast(`LP Price is required for item: ${item.item_code}`); return }
       if (!item.delivery_date) { toast(`Delivery Date is required for item: ${item.item_code}`); return }
     }
 
