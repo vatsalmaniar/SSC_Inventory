@@ -63,12 +63,14 @@ export default function BillingList() {
     setLoading(false)
   }
 
+  const piStatuses      = ['pi_requested','pi_generated','pi_payment_pending']
   const actionStatuses  = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','goods_issue_posted','delivery_ready']
   const waitingStatuses = ['credit_check','invoice_generated','eway_generated']
 
   function matchFilter(b) {
     const s = effStatus(b)
     if (filter === 'action')        return actionStatuses.includes(s)
+    if (filter === 'pi')            return piStatuses.includes(s)
     if (filter === 'waiting')       return waitingStatuses.includes(s)
     if (filter === 'all')           return s !== 'dispatched_fc'
     if (filter === 'dispatched_fc') return s === 'dispatched_fc'
@@ -77,6 +79,7 @@ export default function BillingList() {
 
   const counts = {
     action:        batches.filter(b => actionStatuses.includes(effStatus(b))).length,
+    pi:            batches.filter(b => piStatuses.includes(effStatus(b))).length,
     waiting:       batches.filter(b => waitingStatuses.includes(effStatus(b))).length,
     dispatched_fc: batches.filter(b => effStatus(b) === 'dispatched_fc').length,
   }
@@ -92,6 +95,7 @@ export default function BillingList() {
 
   const FILTERS = [
     { key: 'action',        label: 'Action Required' },
+    { key: 'pi',            label: 'PI Stage'        },
     { key: 'waiting',       label: 'Waiting'         },
     { key: 'all',           label: 'All Active'      },
     { key: 'dispatched_fc', label: 'Delivered'       },
