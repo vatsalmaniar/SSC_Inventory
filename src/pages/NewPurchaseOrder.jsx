@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { FY_START } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
@@ -268,7 +269,20 @@ export default function NewPurchaseOrder() {
 
     try {
       // Temp number — real PO number assigned on approval
-      const tempNum = `Temp/${isCO ? 'PCO' : 'PO'}${Date.now().toString(36).toUpperCase()}`
+      const prefix = isCO ? 'PCO' : 'PO'
+      const fyYear = new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1
+      const fySuffix = `${String(fyYear).slice(2)}-${String(fyYear + 1).slice(2)}`
+      const { data: lastPo } = await sb.from('purchase_orders')
+        .select('po_number')
+        .ilike('po_number', `Temp/${prefix}%/${fySuffix}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      let nextSeq = 1
+      if (lastPo?.[0]?.po_number) {
+        const match = lastPo[0].po_number.match(new RegExp(`Temp/${prefix}(\\d+)/`))
+        if (match) nextSeq = parseInt(match[1], 10) + 1
+      }
+      const tempNum = `Temp/${prefix}${String(nextSeq).padStart(4, '0')}/${fySuffix}`
 
       const { data: po, error: insertErr } = await sb.from('purchase_orders').insert({
         po_number:         tempNum,
