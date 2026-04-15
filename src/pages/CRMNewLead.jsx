@@ -113,6 +113,14 @@ export default function CRMNewLead() {
     if (!accountInput.trim()) { toast('Account Name is required'); return }
     if (selectedCustomer?.account_status === 'Blacklisted') { toast('This customer is blacklisted. Opportunities cannot be created for blacklisted customers.'); return }
     if (!form.gstin.trim()) { toast('GST number is required'); return }
+    // Check if GST already exists in customers — prevent duplicates
+    if (!selectedCustomer) {
+      const { data: existing } = await sb.from('customers').select('id,customer_name').eq('gst', form.gstin.trim()).maybeSingle()
+      if (existing) {
+        toast(`Customer with this GST already exists: ${existing.customer_name}. Please select from the list.`)
+        return
+      }
+    }
     setSaving(true)
 
     const brandNames = principals.filter(p => selectedBrands.includes(p.id)).map(p => p.name)

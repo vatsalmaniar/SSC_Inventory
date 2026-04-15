@@ -156,6 +156,14 @@ export default function NewCustomer() {
       return
     }
 
+    // Check if GST already exists — prevent duplicates
+    const { data: existingCust } = await sb.from('customers').select('id,customer_name').eq('gst', form.gst.trim()).maybeSingle()
+    if (existingCust) {
+      toast(`Customer with this GST already exists: ${existingCust.customer_name}`)
+      setErrors({ gst: 'This GST is already registered' })
+      return
+    }
+
     setSaving(true)
     try {
       // Generate customer_id server-side (SECURITY DEFINER bypasses RLS)
