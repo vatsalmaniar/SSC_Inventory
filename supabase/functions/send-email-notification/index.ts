@@ -119,38 +119,8 @@ async function handleNotification(sb: any, r: any) {
 }
 
 async function handleLogin(sb: any, r: any) {
-  if (r.event_type === 'login_success') {
-    // Email all admins
-    const { data: admins } = await sb.from('profiles').select('id,username,email').eq('role', 'admin')
-    const sentEmails = new Set<string>()
-    for (const a of (admins || [])) {
-      const { data: pref } = await sb.from('email_preferences').select('login_alerts').eq('user_id', a.id).maybeSingle()
-      if (pref?.login_alerts === false) continue
-      const email = a.email || (a.username + '@ssccontrol.com')
-      if (sentEmails.has(email)) continue
-      sentEmails.add(email)
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM, to: [email],
-          subject: `[SSC] Login — ${r.user_name}`,
-          html: `<div style="font-family:-apple-system,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-            <div style="border-bottom:2px solid #1a4dab;padding-bottom:14px;margin-bottom:20px"><strong style="color:#1a4dab;font-size:16px">SSC Control</strong></div>
-            <p style="font-size:14px;color:#333"><strong>${escapeHtml(r.user_name || '')}</strong> logged in at ${new Date(r.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
-            <div style="margin-top:28px;border-top:1px solid #eee;padding-top:14px;font-size:11px;color:#aaa">SSC Control Pvt. Ltd.</div>
-          </div>`,
-        }),
-      })
-      const data = await res.json()
-      await sb.from('email_log').insert({
-        login_audit_id: r.id, recipient_email: email, email_type: 'login_success',
-        resend_id: data.id || null, status: res.ok ? 'sent' : 'failed',
-        error_message: res.ok ? null : JSON.stringify(data),
-      })
-    }
-  }
-
+  // Skip login success emails — too noisy for 28 users
+  // Only alert on suspicious failed logins
   if (r.event_type === 'login_failed') {
     // Check if 3+ failures in last 30 min for this user
     const { count } = await sb.from('login_audit').select('id', { count: 'exact' })
