@@ -276,7 +276,93 @@ async function handleNotification(sb: any, r: any) {
   return new Response(res.ok ? 'sent' : 'failed')
 }
 
+function buildLoginEmail(userName: string, loginTime: string, userAgent: string): string {
+  const time = fmtTime(loginTime)
+  const device = userAgent.includes('Mobile') ? 'Mobile' : userAgent.includes('Windows') ? 'Windows' : userAgent.includes('Mac') ? 'Mac' : 'Desktop'
+  const browser = userAgent.includes('Chrome') ? 'Chrome' : userAgent.includes('Firefox') ? 'Firefox' : userAgent.includes('Safari') ? 'Safari' : userAgent.includes('Edge') ? 'Edge' : 'Browser'
+  const firstName = userName.split(' ')[0]
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;-webkit-font-smoothing:antialiased">
+  <div style="max-width:560px;margin:0 auto;padding:40px 16px 32px">
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px"><tr>
+      <td style="font-size:20px;font-weight:700;color:#1a4dab;letter-spacing:-0.5px;padding-left:4px">SSC ERP</td>
+      <td style="text-align:right;font-size:11px;color:#94a3b8;padding-right:4px">${time}</td>
+    </tr></table>
+
+    <div style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="height:4px;background:#1a4dab"></div>
+      <div style="padding:32px 28px 28px">
+
+        <div style="font-size:20px;font-weight:700;color:#0f172a;margin-bottom:6px;line-height:1.3">
+          Welcome back, ${esc(firstName)} 👋
+        </div>
+        <div style="font-size:13px;color:#94a3b8;margin-bottom:24px">You just signed in to SSC ERP</div>
+
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 18px;margin-bottom:24px">
+          <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#475569">
+            <tr>
+              <td style="padding:4px 0;font-weight:600;color:#64748b;width:90px">Name</td>
+              <td style="padding:4px 0;font-weight:700;color:#0f172a">${esc(userName)}</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 0;font-weight:600;color:#64748b;width:90px">Time</td>
+              <td style="padding:4px 0;color:#0f172a">${time}</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 0;font-weight:600;color:#64748b;width:90px">Device</td>
+              <td style="padding:4px 0;color:#0f172a">${device} · ${browser}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="font-size:12px;color:#94a3b8;line-height:1.6">
+          If this wasn't you, please change your password immediately or contact your admin.
+        </div>
+
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:24px 0 0;font-size:11px;color:#94a3b8;line-height:1.8">
+      <div style="margin-bottom:8px">
+        <a href="${APP_URL}" style="color:#64748b;text-decoration:none;font-weight:600">Open SSC ERP</a>
+      </div>
+      SSC Control Pvt. Ltd.&nbsp;&nbsp;·&nbsp;&nbsp;Login notification
+    </div>
+
+  </div>
+</body></html>`
+}
+
 async function handleLogin(sb: any, r: any) {
+  // Send login confirmation to the user themselves
+  if (r.event_type === 'login_success' && r.user_id) {
+    const { data: profile } = await sb.from('profiles').select('username,email,name').eq('id', r.user_id).maybeSingle()
+    if (profile) {
+      const email = profile.email || (profile.username + '@ssccontrol.com')
+      const { data: pref } = await sb.from('email_preferences').select('login_alerts').eq('user_id', r.user_id).maybeSingle()
+      if (!pref || pref.login_alerts !== false) {
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: FROM, to: [email],
+            subject: `🔐 Welcome back, ${(profile.name || profile.username).split(' ')[0]}`,
+            html: buildLoginEmail(profile.name || profile.username, r.created_at, r.user_agent || ''),
+          }),
+        })
+        const data = await res.json()
+        await sb.from('email_log').insert({
+          login_audit_id: r.id, recipient_email: email, email_type: 'login_success',
+          resend_id: data.id || null, status: res.ok ? 'sent' : 'failed',
+          error_message: res.ok ? null : JSON.stringify(data),
+        })
+      }
+    }
+  }
+
   if (r.event_type === 'login_failed') {
     const { count } = await sb.from('login_audit').select('id', { count: 'exact' })
       .eq('user_name', r.user_name).eq('event_type', 'login_failed')
