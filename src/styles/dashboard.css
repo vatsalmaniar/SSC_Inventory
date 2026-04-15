@@ -231,4 +231,12 @@
 }
 @media (max-width: 520px) {
   .hd-sidebar { display: none; } .hd-main { margin-left: 0; }
+  .hd-content { padding: 16px 10px 60px; }
+  .hd-hero { margin-bottom: 16px; }
+  .hd-greeting { font-size: 22px; }
+  .hd-stats { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hd-stat { padding: 16px; }
+  .hd-stat-num { font-size: 24px; }
+  .hd-apps-grid { grid-template-columns: 1fr; }
+  .hd-app-card { padding: 14px; }
 }

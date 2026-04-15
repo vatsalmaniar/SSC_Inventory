@@ -423,3 +423,20 @@
   .crm-page-header { flex-direction: column; align-items: flex-start; }
   .crm-subnav { padding: 0 12px; }
 }
+@media (max-width: 520px) {
+  .crm-body { padding: 12px 8px 60px; }
+  .crm-page-title { font-size: 18px; }
+  .crm-summary-tile { min-width: 100%; }
+  .crm-summary-val { font-size: 22px; }
+  .crm-controls { gap: 6px; }
+  .crm-search-wrap { max-width: 100%; min-width: 0; }
+  .crm-header-actions { width: 100%; }
+  .crm-btn { padding: 7px 12px; font-size: 12px; }
+  .crm-kanban-col { min-width: 180px; max-width: 180px; }
+  .crm-card-body { padding: 12px 14px; }
+  .crm-subnav-item { padding: 8px 10px; font-size: 12px; }
+  .crm-pipeline-bar { border-radius: 6px; }
+  .crm-pipe-stage { min-width: 60px; padding: 8px 4px; font-size: 9px; }
+  .crm-form-actions { flex-direction: column; }
+  .crm-form-actions .crm-btn { width: 100%; justify-content: center; }
+}

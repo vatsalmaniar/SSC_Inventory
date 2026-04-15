@@ -347,3 +347,18 @@
   .od-detail-grid { grid-template-columns: 1fr; }
   .od-edit-row { grid-template-columns: 1fr; }
 }
+@media (max-width: 520px) {
+  .od-body { padding: 16px 10px 60px; }
+  .od-header-title { font-size: 16px; }
+  .od-header-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .od-header-actions { width: 100%; flex-wrap: wrap; }
+  .od-header-actions button { flex: 1; min-width: 0; justify-content: center; font-size: 12px; padding: 8px 10px; }
+  .od-status-bar { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .od-status-step { min-width: 60px; font-size: 9px; padding: 8px 2px; }
+  .od-card { border-radius: 10px; }
+  .od-card-header { padding: 12px 14px; }
+  .od-card-body { padding: 14px; }
+  .od-items-table th, .od-items-table td { padding: 8px 6px; font-size: 11px; }
+  .od-comment-input-row { flex-direction: column; gap: 8px; }
+  .od-comment-input-row button { width: 100%; }
+}

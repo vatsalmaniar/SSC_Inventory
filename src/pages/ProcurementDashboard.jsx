@@ -52,21 +52,30 @@ export default function ProcurementDashboard() {
     setPendingGrn(grnCountRes.count || 0)
     setPendingInward(inwardCountRes.count || 0)
 
-    // CO orders needing PO
+    // CO orders — item-level PO coverage
     const { data: coData } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,order_items(total_price)')
+      .select('id,order_number,customer_name,status,order_items(id,total_price)')
       .eq('is_test', false).eq('order_type', 'CO')
       .in('status', ['inv_check','inventory_check','dispatch'])
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
-    let coNeedingPo = coData || []
-    if (coNeedingPo.length) {
-      const coIds = coNeedingPo.map(o => o.id)
-      const { data: linkedPos } = await sb.from('purchase_orders').select('order_id').in('order_id', coIds)
-      const linkedSet = new Set((linkedPos || []).map(p => p.order_id))
-      coNeedingPo = coNeedingPo.filter(o => !linkedSet.has(o.id))
+    let coList = coData || []
+    if (coList.length) {
+      const coIds = coList.map(o => o.id)
+      const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id').in('order_id', coIds)
+      let coveredSet = new Set()
+      if (linkedPos?.length) {
+        const poIds = linkedPos.map(p => p.id)
+        const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
+        coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
+      }
+      coList = coList.map(o => {
+        const total = (o.order_items || []).length
+        const covered = (o.order_items || []).filter(oi => coveredSet.has(oi.id)).length
+        return { ...o, _totalItems: total, _coveredItems: covered }
+      }).filter(o => o._coveredItems < o._totalItems)
     }
-    setCoOrders(coNeedingPo)
+    setCoOrders(coList)
     setLoading(false)
   }
 
@@ -195,7 +204,7 @@ export default function ProcurementDashboard() {
                 </div>
                 <div className="dash-tile-value" style={{ color: coOrders.length > 0 ? '#7c3aed' : undefined }}>{coOrders.length}</div>
                 <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">custom orders without PO</span>
+                  <span className="dash-tile-sub">orders with uncovered items</span>
                   {coOrders.length > 0 && <span className="dash-tile-badge" style={{ background:'#faf5ff', color:'#7c3aed' }}>Create PO</span>}
                 </div>
                 <div className="dash-tile-chart">
@@ -310,9 +319,12 @@ export default function ProcurementDashboard() {
                   <span className="dash-badge" style={{ background:'#faf5ff', color:'#7c3aed' }}>{coOrders.length} orders</span>
                 </div>
                 {coOrders.length === 0
-                  ? <div className="dash-empty">All CO orders have POs</div>
+                  ? <div className="dash-empty">All CO orders fully covered</div>
                   : coOrders.slice(0, 6).map(o => {
                       const val = (o.order_items || []).reduce((s,i) => s + (i.total_price || 0), 0)
+                      const covered = o._coveredItems || 0
+                      const total = o._totalItems || 0
+                      const hasPartial = covered > 0
                       return (
                         <div key={o.id} className="dash-list-row" onClick={() => navigate('/procurement/po/new?order_id=' + o.id)}>
                           <div style={{ minWidth:0 }}>
@@ -320,8 +332,8 @@ export default function ProcurementDashboard() {
                             <div className="dash-row-cust">{o.customer_name}</div>
                           </div>
                           <div style={{ textAlign:'right', flexShrink:0 }}>
-                            <div style={{ fontSize:12, fontWeight:600, color:'var(--gray-700)' }}>{fmtCr(val)}</div>
-                            <span style={{ fontSize:10, fontWeight:600, padding:'2px 6px', borderRadius:4, background:'#fef3c7', color:'#92400e' }}>Create PO →</span>
+                            <div style={{ fontSize:11, fontWeight:600, color: hasPartial ? '#b45309' : 'var(--gray-500)', marginBottom:2 }}>{covered}/{total} covered</div>
+                            <span style={{ fontSize:10, fontWeight:600, padding:'2px 6px', borderRadius:4, background: hasPartial ? '#fffbeb' : '#fef3c7', color:'#92400e' }}>{hasPartial ? 'Add PO →' : 'Create PO →'}</span>
                           </div>
                         </div>
                       )

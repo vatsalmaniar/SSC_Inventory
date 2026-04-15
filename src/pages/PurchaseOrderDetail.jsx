@@ -42,7 +42,7 @@ function fmtINR(val) {
 }
 
 function emptyItem() {
-  return { _new: true, item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '' }
+  return { _new: true, item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null }
 }
 
 export default function PurchaseOrderDetail() {
@@ -672,6 +672,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
         unit_price: parseFloat(item.unit_price_after_disc) || 0,
         total_price: parseFloat(item.total_price) || 0,
         delivery_date: item.delivery_date || null,
+        order_item_id: item.order_item_id || null,
       }))
       const { error: insErr } = await sb.from('po_items').insert(rows)
       if (insErr) { toast('PO updated but items failed: ' + insErr.message); setSaving(false); await loadPO(); return }

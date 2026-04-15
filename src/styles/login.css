@@ -82,3 +82,16 @@ html, body { background: var(--blue-900); }
 .success-circle svg { width: 34px; height: 34px; color: white; }
 .success-text    { color: white; font-size: 18px; font-weight: 600; }
 .success-sub     { color: rgba(255,255,255,0.5); font-size: 13px; }
+
+@media (max-width: 480px) {
+  .top-strip { padding: 16px; }
+  .main { padding: 16px 12px 32px; }
+  .card, .selector-card { max-width: 100%; border-radius: 16px; }
+  .card-band, .selector-band { padding: 20px; }
+  .band-title { font-size: 19px; }
+  .card-body { padding: 20px; }
+  .card-footer { padding: 14px 20px; }
+  .selector-body { padding: 16px; gap: 10px; }
+  .view-btn { padding: 14px 16px; }
+  .view-btn-icon { width: 38px; height: 38px; }
+}

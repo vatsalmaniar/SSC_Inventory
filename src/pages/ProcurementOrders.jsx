@@ -32,24 +32,34 @@ export default function ProcurementOrders() {
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     if (!['ops','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
 
-    // Fetch CO orders that are approved but don't have a PO yet
+    // Fetch CO orders — show all with item-level PO coverage
     const { data: coData } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,created_at,order_items(total_price)')
+      .select('id,order_number,customer_name,status,created_at,order_items(id,total_price)')
       .eq('is_test', false)
       .eq('order_type', 'CO')
       .in('status', ['inv_check','inventory_check','dispatch'])
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
 
-    let coNeedingPo = coData || []
-    if (coNeedingPo.length) {
-      const coIds = coNeedingPo.map(o => o.id)
-      const { data: linkedPos } = await sb.from('purchase_orders').select('order_id').in('order_id', coIds)
-      const linkedSet = new Set((linkedPos || []).map(p => p.order_id))
-      coNeedingPo = coNeedingPo.filter(o => !linkedSet.has(o.id))
+    let coOrders = coData || []
+    if (coOrders.length) {
+      // Get item-level coverage from po_items
+      const coIds = coOrders.map(o => o.id)
+      const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id').in('order_id', coIds)
+      let coveredSet = new Set()
+      if (linkedPos?.length) {
+        const poIds = linkedPos.map(p => p.id)
+        const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
+        coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
+      }
+      coOrders = coOrders.map(o => {
+        const total = (o.order_items || []).length
+        const covered = (o.order_items || []).filter(oi => coveredSet.has(oi.id)).length
+        return { ...o, _totalItems: total, _coveredItems: covered }
+      }).filter(o => o._coveredItems < o._totalItems) // hide fully covered
     }
 
-    setOrders(coNeedingPo)
+    setOrders(coOrders)
     setLoading(false)
   }
 
@@ -62,8 +72,8 @@ export default function ProcurementOrders() {
             <div className="od-header-main">
               <div className="od-header-left">
                 <div className="od-header-eyebrow">Procurement</div>
-                <div className="od-header-title">Custom Orders Needing PO</div>
-                <div className="od-header-num">{orders.length} order{orders.length !== 1 ? 's' : ''} pending PO creation</div>
+                <div className="od-header-title">Custom Orders — PO Coverage</div>
+                <div className="od-header-num">{orders.length} order{orders.length !== 1 ? 's' : ''} with uncovered items</div>
               </div>
             </div>
           </div>
@@ -88,6 +98,7 @@ export default function ProcurementOrders() {
                     <th>Order Number</th>
                     <th>Customer</th>
                     <th>Status</th>
+                    <th style={{ textAlign:'center' }}>PO Coverage</th>
                     <th style={{ textAlign:'right' }}>Value</th>
                     <th>Created</th>
                     <th style={{ textAlign:'center' }}>Action</th>
@@ -97,6 +108,9 @@ export default function ProcurementOrders() {
                   {orders.map(o => {
                     const val = (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
                     const sSc = STATUS_COLORS[o.status] || STATUS_COLORS.inv_check
+                    const covered = o._coveredItems || 0
+                    const total = o._totalItems || 0
+                    const hasPartial = covered > 0 && covered < total
                     return (
                       <tr key={o.id}>
                         <td>
@@ -108,12 +122,17 @@ export default function ProcurementOrders() {
                             {STATUS_LABELS[o.status] || o.status}
                           </span>
                         </td>
+                        <td style={{ textAlign:'center' }}>
+                          <span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:6, background: hasPartial ? '#fffbeb' : '#fef2f2', color: hasPartial ? '#92400e' : '#dc2626' }}>
+                            {covered}/{total} items
+                          </span>
+                        </td>
                         <td style={{ textAlign:'right', fontWeight:600 }}>{fmtCr(val)}</td>
                         <td style={{ fontSize:12, color:'var(--gray-500)' }}>{fmtShort(o.created_at)}</td>
                         <td style={{ textAlign:'center' }}>
                           <button className="od-btn od-btn-approve" onClick={() => navigate('/procurement/po/new?order_id=' + o.id)}
                             style={{ fontSize:11, padding:'4px 12px' }}>
-                            Create PO →
+                            {hasPartial ? 'Add PO →' : 'Create PO →'}
                           </button>
                         </td>
                       </tr>

@@ -76,6 +76,16 @@ html, body { background: var(--gray-50); }
 .quick-qty.low  { color: var(--amber-text); }
 .quick-qty.zero { color: var(--red-text); }
 
+@media (max-width: 600px) {
+  .hero { padding: 20px 16px 36px; }
+  .hero-heading { font-size: 18px; }
+  .search-wrap { flex-direction: column; gap: 8px; padding: 10px; }
+  .search-btn { width: 100%; justify-content: center; }
+  .content { padding: 0 10px 40px; }
+  .card-header { flex-direction: column; gap: 6px; }
+  .card-grid { grid-template-columns: 1fr 1fr; }
+  .stats-row { grid-template-columns: 1fr 1fr; }
+}
 @media (max-width: 400px) {
   .card-grid  { grid-template-columns: 1fr; }
   .stats-row  { grid-template-columns: 1fr 1fr; }

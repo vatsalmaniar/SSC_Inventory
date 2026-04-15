@@ -116,6 +116,17 @@ export default function Layout({ children, pageTitle, pageKey }) {
   const [notifs, setNotifs]       = useState([])
   const [showNotifs, setShowNotifs] = useState(false)
   const [collapsedSubs, setCollapsedSubs] = useState({})
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return sessionStorage.getItem('ly_sidebar_collapsed') === 'true' } catch { return false }
+  })
+
+  function toggleSidebar() {
+    setSidebarCollapsed(prev => {
+      const next = !prev
+      try { sessionStorage.setItem('ly_sidebar_collapsed', String(next)) } catch {}
+      return next
+    })
+  }
   const [searchQ, setSearchQ]     = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
@@ -280,16 +291,29 @@ export default function Layout({ children, pageTitle, pageKey }) {
     <div className="ly-wrap">
 
       {/* ── Sidebar ── */}
-      <aside className="ly-sidebar">
+      <aside className={'ly-sidebar' + (sidebarCollapsed ? ' collapsed' : '')}>
 
         <div className="ly-logo-row">
-          <div className="ly-logo-icon">
-            <img src="/ssc-logo.svg" alt="SSC Control" />
-          </div>
+          {sidebarCollapsed ? (
+            <button className="ly-collapsed-logo" onClick={toggleSidebar} title="Expand sidebar">
+              <img src="/ssc-favicon.png" alt="SSC" />
+            </button>
+          ) : (
+            <>
+              <div className="ly-logo-icon">
+                <img src="/ssc-logo.svg" alt="SSC Control" />
+              </div>
+              <button className="ly-collapse-btn" onClick={toggleSidebar} title="Collapse sidebar">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:16, height:16 }}>
+                  <polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
 
         <div className="ly-nav-section">
-          <div className="ly-nav-label">Menu</div>
+          {!sidebarCollapsed && <div className="ly-nav-label">Menu</div>}
           {visibleNav.map((item, idx) => {
             const isActive = activeKey === item.key || (item.path && location.pathname.startsWith(item.path) && item.path !== '/dashboard')
               || (item.sub && item.sub.some(s => location.pathname === s.path || location.pathname.startsWith(s.path + '/')))
@@ -300,11 +324,12 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
             return (
               <div key={item.key}>
-                {showSection && <div className="ly-nav-label" style={{ marginTop: 12 }}>{item.section}</div>}
+                {showSection && !sidebarCollapsed && <div className="ly-nav-label" style={{ marginTop: 12 }}>{item.section}</div>}
                 <button
                   className={'ly-nav-item' + (isActive ? ' active' : '') + (!item.path ? ' soon' : '')}
                   onClick={() => {
                     if (!item.path) return
+                    if (sidebarCollapsed) { navigate(item.sub ? item.sub[0].path : item.path); return }
                     if (item.sub) {
                       if (isActive) {
                         setCollapsedSubs(prev => ({ ...prev, [item.key]: !prev[item.key] }))
@@ -316,16 +341,16 @@ export default function Layout({ children, pageTitle, pageKey }) {
                       navigate(item.path)
                     }
                   }}
-                  title={!item.path ? item.label + ' — Coming Soon' : ''}
+                  title={sidebarCollapsed ? item.label : (!item.path ? item.label + ' — Coming Soon' : '')}
                 >
                   <span className="ly-nav-icon">{item.icon}</span>
-                  {item.label}
-                  {!item.path && <span className="ly-soon-pill">Soon</span>}
-                  {item.sub && (
+                  {!sidebarCollapsed && item.label}
+                  {!sidebarCollapsed && !item.path && <span className="ly-soon-pill">Soon</span>}
+                  {!sidebarCollapsed && item.sub && (
                     <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14, marginLeft:'auto', transition:'transform 0.15s', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', opacity:0.4 }}><polyline points="6 9 12 15 18 9"/></svg>
                   )}
                 </button>
-                {isExpanded && (
+                {isExpanded && !sidebarCollapsed && (
                   <div style={{ display:'flex', flexDirection:'column', gap:1, paddingLeft:20, marginTop:2, marginBottom:4 }}>
                     {item.sub.map(sub => {
                       const subActive = location.pathname === sub.path || (sub.path !== item.path && location.pathname.startsWith(sub.path))
@@ -354,27 +379,39 @@ export default function Layout({ children, pageTitle, pageKey }) {
         </div>
 
         <div className="ly-nav-section ly-nav-bottom">
-          <div className="ly-nav-label">Account</div>
-          <div className="ly-nav-item ly-nav-user">
-            <div className="ly-user-dot">{user.avatar}</div>
-            <span className="ly-user-fullname">{user.name || '...'}</span>
-          </div>
-          <button className="ly-nav-item" onClick={signOut} style={{ color:'#dc2626' }}>
+          {!sidebarCollapsed && <div className="ly-nav-label">Account</div>}
+          {!sidebarCollapsed && (
+            <div className="ly-nav-item ly-nav-user">
+              <div className="ly-user-dot">{user.avatar}</div>
+              <span className="ly-user-fullname">{user.name || '...'}</span>
+            </div>
+          )}
+          {sidebarCollapsed && (
+            <div className="ly-nav-item ly-nav-user" title={user.name}>
+              <div className="ly-user-dot">{user.avatar}</div>
+            </div>
+          )}
+          <button className="ly-nav-item" onClick={signOut} style={{ color:'#dc2626' }} title={sidebarCollapsed ? 'Logout' : ''}>
             <span className="ly-nav-icon">
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </span>
-            Logout
+            {!sidebarCollapsed && 'Logout'}
           </button>
         </div>
 
       </aside>
 
       {/* ── Main ── */}
-      <div className="ly-main">
+      <div className={'ly-main' + (sidebarCollapsed ? ' ly-main-collapsed' : '')}>
 
         {/* Topbar */}
         <header className="ly-topbar">
           <div className="ly-topbar-left">
+            {sidebarCollapsed && (
+              <button className="ly-topbar-hamburger" onClick={toggleSidebar} title="Expand sidebar">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:18,height:18}}><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+              </button>
+            )}
             <span className="ly-topbar-app">SSC ERP</span>
             <span className="ly-topbar-sep">/</span>
             <span className="ly-topbar-page">{pageTitle || 'Home'}</span>

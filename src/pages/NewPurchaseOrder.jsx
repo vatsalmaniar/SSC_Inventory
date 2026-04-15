@@ -12,7 +12,7 @@ const FC_ADDRESSES = {
 }
 
 function emptyItem() {
-  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '' }
+  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null }
 }
 
 export default function NewPurchaseOrder() {
@@ -82,7 +82,7 @@ export default function NewPurchaseOrder() {
   async function fetchPendingCOs(q) {
     // Search CO orders by order_number or customer_name
     const { data: coOrders } = await sb.from('orders')
-      .select('id,order_number,customer_name')
+      .select('id,order_number,customer_name,order_items(id)')
       .eq('order_type', 'CO')
       .eq('is_test', false)
       .in('status', ['inv_check', 'inventory_check', 'dispatch', 'pending', 'confirmed'])
@@ -91,23 +91,55 @@ export default function NewPurchaseOrder() {
       .limit(20)
     if (!coOrders?.length) return []
 
-    // Filter out COs that already have a PO linked
+    // Check item-level coverage — show COs that still have uncovered items
     const coIds = coOrders.map(o => o.id)
-    const { data: linkedPos } = await sb.from('purchase_orders').select('order_id').in('order_id', coIds)
-    const linkedSet = new Set((linkedPos || []).map(p => p.order_id))
-    return coOrders.filter(o => !linkedSet.has(o.id))
+    const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id').in('order_id', coIds)
+    if (!linkedPos?.length) return coOrders
+
+    const poIds = linkedPos.map(p => p.id)
+    const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
+    const coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
+
+    return coOrders.filter(o => {
+      const totalItems = (o.order_items || []).length
+      if (!totalItems) return true
+      const coveredCount = (o.order_items || []).filter(oi => coveredSet.has(oi.id)).length
+      return coveredCount < totalItems // show if any items still uncovered
+    })
   }
 
   async function loadCOOrder(coId) {
     const { data: order } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(item_code,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date)')
+      .select('id,order_number,customer_name,order_items(id,item_code,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date)')
       .eq('id', coId).single()
     if (!order) return
-    setCOOrder(order)
+
+    // Find which CO items already have POs (item-level coverage)
+    const { data: existingPos } = await sb.from('purchase_orders').select('id').eq('order_id', coId)
+    let coveredSet = new Set()
+    if (existingPos?.length) {
+      const poIds = existingPos.map(p => p.id)
+      const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
+      coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
+    }
+
+    const allItems = order.order_items || []
+    const uncovered = allItems.filter(oi => !coveredSet.has(oi.id))
+    const coveredCount = allItems.length - uncovered.length
+
+    setCOOrder({ ...order, _coveredCount: coveredCount, _totalItems: allItems.length })
     setCOText(order.order_number + ' — ' + order.customer_name)
     setSscCoNo(order.order_number)
     setSscNotes(`Customer: ${order.customer_name}`)
-    const prefilled = (order.order_items || []).map(oi => ({
+
+    if (!uncovered.length) {
+      // All items already covered — show empty state
+      setItems([emptyItem()])
+      return
+    }
+
+    const prefilled = uncovered.map(oi => ({
+      order_item_id: oi.id,
       item_code: oi.item_code || '',
       qty: String(oi.qty || ''),
       lp_unit_price: String(oi.lp_unit_price || ''),
@@ -116,7 +148,7 @@ export default function NewPurchaseOrder() {
       total_price: String(oi.total_price || ''),
       delivery_date: oi.dispatch_date || '',
     }))
-    if (prefilled.length) setItems(prefilled)
+    setItems(prefilled)
   }
 
   function selectCO(co) {
@@ -275,6 +307,7 @@ export default function NewPurchaseOrder() {
         unit_price:       parseFloat(item.unit_price_after_disc) || parseFloat(item.lp_unit_price) || 0,
         total_price:      parseFloat(item.total_price),
         delivery_date:    item.delivery_date || null,
+        order_item_id:    item.order_item_id || null,
       }))
 
       const { error: itemsErr } = await sb.from('po_items').insert(lineItems)
@@ -298,11 +331,15 @@ export default function NewPurchaseOrder() {
 
         {/* ── CO Order Info Banner ── */}
         {isCO && coOrder && (
-          <div style={{ display:'flex', alignItems:'center', gap:10, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 16px', marginBottom:4 }}>
-            <svg fill="none" stroke="#1d4ed8" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <div style={{ display:'flex', alignItems:'center', gap:10, background: coOrder._coveredCount > 0 ? '#fffbeb' : '#eff6ff', border: coOrder._coveredCount > 0 ? '1px solid #fde68a' : '1px solid #bfdbfe', borderRadius:10, padding:'12px 16px', marginBottom:4 }}>
+            <svg fill="none" stroke={coOrder._coveredCount > 0 ? '#b45309' : '#1d4ed8'} strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <div>
-              <div style={{ fontSize:13, fontWeight:600, color:'#1e40af' }}>Against Custom Order {coOrder.order_number}</div>
-              <div style={{ fontSize:12, color:'#3b82f6' }}>Customer: {coOrder.customer_name} — Items auto-filled from order</div>
+              <div style={{ fontSize:13, fontWeight:600, color: coOrder._coveredCount > 0 ? '#92400e' : '#1e40af' }}>Against Custom Order {coOrder.order_number}</div>
+              <div style={{ fontSize:12, color: coOrder._coveredCount > 0 ? '#b45309' : '#3b82f6' }}>
+                {coOrder._coveredCount > 0
+                  ? `${coOrder._coveredCount}/${coOrder._totalItems} items already have POs — showing ${coOrder._totalItems - coOrder._coveredCount} remaining`
+                  : `Customer: ${coOrder.customer_name} — Items auto-filled from order`}
+              </div>
             </div>
           </div>
         )}

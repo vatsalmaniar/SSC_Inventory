@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START, FY_LABEL } from '../lib/fmt'
+import Layout from '../components/Layout'
 import '../styles/dashboard.css'
 
 const APPS = [
@@ -28,12 +29,6 @@ const APPS = [
     roles: ['all'],
     color: { bg: '#fffbeb', icon: '#b45309' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>,
-  },
-  {
-    key: 'people', label: 'People', desc: 'Team & permissions', path: null,
-    roles: ['all'],
-    color: { bg: '#f1f5f9', icon: '#475569' },
-    icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
   },
   {
     key: 'fc', label: 'Fulfilment Center', desc: 'Dispatch & delivery', path: '/fc',
@@ -69,12 +64,8 @@ const APPS = [
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [user, setUser]       = useState({ name: '', avatar: '', role: '', id: '' })
-  const [activeKey, setActiveKey] = useState('home')
+  const [user, setUser]       = useState({ name: '', role: '' })
   const [stats, setStats]     = useState({ active: 0, pending: 0, delivered: 0, revenue: 0 })
-  const [notifs, setNotifs]   = useState([])
-  const [showNotifs, setShowNotifs] = useState(false)
-  const bellRef = useRef(null)
 
   useEffect(() => { init() }, [])
 
@@ -91,12 +82,7 @@ export default function Dashboard() {
     ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
-    const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    setUser({ name, avatar, role, id: session.user.id })
-    // Load notifications
-    const { data: notifsData } = await sb.from('notifications')
-      .select('*').eq('user_id', session.user.id).order('created_at', { ascending: false }).limit(30)
-    setNotifs(notifsData || [])
+    setUser({ name, role })
     if (orders) {
       const active    = orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length
       const pending   = orders.filter(o => o.status === 'pending').length
@@ -105,31 +91,6 @@ export default function Dashboard() {
       setStats({ active, pending, delivered, revenue })
     }
   }
-
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClick(e) { if (bellRef.current && !bellRef.current.contains(e.target)) setShowNotifs(false) }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
-
-  async function markAllRead() {
-    const unreadIds = notifs.filter(n => !n.is_read).map(n => n.id)
-    if (!unreadIds.length) return
-    await sb.from('notifications').update({ is_read: true }).in('id', unreadIds)
-    setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
-  }
-
-  function fmtNotifTime(ts) {
-    const d = new Date(ts), now = new Date(), diff = (now - d) / 1000
-    if (diff < 60) return 'Just now'
-    if (diff < 3600) return Math.floor(diff / 60) + 'm ago'
-    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago'
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-  }
-
-  async function signOut() { await sb.auth.signOut(); navigate('/login') }
 
   function fmtVal(v) {
     if (v >= 1e7) return '₹' + (v / 1e7).toFixed(2) + ' Cr'
@@ -179,148 +140,56 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="hd-wrap">
+    <Layout pageTitle="Home" pageKey="home">
+      <div className="hd-content">
 
-      {/* ── Sidebar ── */}
-      <aside className="hd-sidebar">
-        <div className="hd-logo-row">
-          <div className="hd-logo-icon"><img src="/ssc-logo.svg" alt="SSC" /></div>
+        {/* Greeting */}
+        <div className="hd-hero">
+          <div className="hd-greeting">{greeting}, <strong>{firstName}</strong></div>
+          <div className="hd-date">{dateStr}</div>
         </div>
 
-        <div className="hd-nav-section">
-          <div className="hd-nav-label">Menu</div>
-          <button className={'hd-nav-item' + (activeKey === 'home' ? ' active' : '')} onClick={() => setActiveKey('home')}>
-            <span className="hd-nav-item-icon"><svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
-            Home
-          </button>
-          {visibleApps.map(app => (
-            <button key={app.key}
-              className={'hd-nav-item' + (activeKey === app.key ? ' active' : '') + (!app.path ? ' soon' : '')}
-              onClick={() => openApp(app)}>
-              <span className="hd-nav-item-icon">{app.icon}</span>
-              {app.label}
-              {!app.path && <span className="hd-soon-pill">Soon</span>}
-            </button>
+        {/* Stats */}
+        <div className="hd-stats">
+          {STATS.map((s, i) => (
+            <div key={i} className="hd-stat" onClick={() => navigate(s.path)}>
+              <div className="hd-stat-top">
+                <div className="hd-stat-lbl">{s.label}</div>
+                <div className="hd-stat-icon-wrap" style={{ background: s.bg, color: s.color }}>{s.icon}</div>
+              </div>
+              <div className="hd-stat-num">{s.num}</div>
+              <span className={'hd-stat-trend ' + s.trend}>{s.trendLabel}</span>
+            </div>
           ))}
         </div>
 
-        <div className="hd-nav-section" style={{ marginTop: 'auto' }}>
-          <div className="hd-nav-label">Account</div>
-          <button className="hd-nav-item" onClick={signOut} style={{ color:'#dc2626' }}>
-            <span className="hd-nav-item-icon"><svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
-            Logout
-          </button>
-        </div>
-      </aside>
-
-      {/* ── Main ── */}
-      <div className="hd-main">
-
-        <header className="hd-topbar">
-          <nav className="hd-topnav">
-            {visibleApps.filter(a => a.path).map(app => (
-              <button key={app.key}
-                className={'hd-topnav-item' + (activeKey === app.key ? ' active' : '')}
+        {/* Apps */}
+        <div className="hd-apps-section">
+          <div className="hd-section-label">Applications</div>
+          <div className="hd-apps-grid">
+            {visibleApps.map(app => (
+              <div key={app.key}
+                className={'hd-app-card' + (!app.path ? ' hd-app-soon' : '')}
                 onClick={() => openApp(app)}>
-                {app.label}
-              </button>
-            ))}
-          </nav>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <div ref={bellRef} style={{ position:'relative' }}>
-              <button onClick={() => setShowNotifs(s => !s)}
-                style={{ background:'none', border:'none', cursor:'pointer', position:'relative', padding:6, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width:20, height:20, color:'var(--gray-500)' }}>
-                  <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
-                </svg>
-                {notifs.filter(n => !n.is_read).length > 0 && (
-                  <span style={{ position:'absolute', top:2, right:2, width:16, height:16, borderRadius:'50%', background:'#ef4444', color:'white', fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    {notifs.filter(n => !n.is_read).length}
-                  </span>
-                )}
-              </button>
-              {showNotifs && (
-                <div style={{ position:'absolute', right:0, top:'100%', marginTop:8, width:340, background:'white', borderRadius:12, boxShadow:'0 8px 30px rgba(0,0,0,0.12)', border:'1px solid var(--gray-100)', zIndex:100, overflow:'hidden' }}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', borderBottom:'1px solid var(--gray-100)' }}>
-                    <span style={{ fontSize:13, fontWeight:700, color:'var(--gray-900)' }}>Notifications</span>
-                    {notifs.filter(n => !n.is_read).length > 0 && (
-                      <button onClick={markAllRead} style={{ background:'none', border:'none', color:'#1a4dab', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Mark all read</button>
-                    )}
+                <div className="hd-app-icon-box" style={{ background: app.color.bg, color: app.color.icon }}>
+                  {app.icon}
+                </div>
+                <div className="hd-app-info">
+                  <div className="hd-app-name">{app.label}</div>
+                  <div className="hd-app-desc">{app.desc}</div>
+                </div>
+                {app.path && (
+                  <div className="hd-app-arrow">
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
                   </div>
-                  {notifs.length === 0 ? (
-                    <div style={{ padding:'32px 16px', textAlign:'center', color:'var(--gray-400)', fontSize:13 }}>No notifications</div>
-                  ) : (
-                    <div style={{ maxHeight:360, overflowY:'auto' }}>
-                      {notifs.map(n => (
-                        <div key={n.id}
-                          style={{ padding:'10px 16px', borderBottom:'1px solid var(--gray-50)', cursor:'pointer', background: n.is_read ? 'white' : '#f0f7ff' }}
-                          onClick={() => { if (n.order_id) navigate('/orders/' + n.order_id); setShowNotifs(false) }}>
-                          <div style={{ fontSize:12, color:'var(--gray-800)', lineHeight:1.4 }}>{n.message}</div>
-                          <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:3 }}>{fmtNotifTime(n.created_at)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="hd-user-chip">
-              <div className="hd-user-avatar">{user.avatar || '?'}</div>
-              <span className="hd-user-name">{user.name || '...'}</span>
-            </div>
-          </div>
-        </header>
-
-        <div className="hd-content">
-
-          {/* Greeting */}
-          <div className="hd-hero">
-            <div className="hd-greeting">{greeting}, <strong>{firstName}</strong></div>
-            <div className="hd-date">{dateStr}</div>
-          </div>
-
-          {/* Stats */}
-          <div className="hd-stats">
-            {STATS.map((s, i) => (
-              <div key={i} className="hd-stat" onClick={() => navigate(s.path)}>
-                <div className="hd-stat-top">
-                  <div className="hd-stat-lbl">{s.label}</div>
-                  <div className="hd-stat-icon-wrap" style={{ background: s.bg, color: s.color }}>{s.icon}</div>
-                </div>
-                <div className="hd-stat-num">{s.num}</div>
-                <span className={'hd-stat-trend ' + s.trend}>{s.trendLabel}</span>
+                )}
+                {!app.path && <div className="hd-app-soon-badge">Soon</div>}
               </div>
             ))}
           </div>
-
-          {/* Apps */}
-          <div className="hd-apps-section">
-            <div className="hd-section-label">Applications</div>
-            <div className="hd-apps-grid">
-              {visibleApps.map(app => (
-                <div key={app.key}
-                  className={'hd-app-card' + (!app.path ? ' hd-app-soon' : '')}
-                  onClick={() => openApp(app)}>
-                  <div className="hd-app-icon-box" style={{ background: app.color.bg, color: app.color.icon }}>
-                    {app.icon}
-                  </div>
-                  <div className="hd-app-info">
-                    <div className="hd-app-name">{app.label}</div>
-                    <div className="hd-app-desc">{app.desc}</div>
-                  </div>
-                  {app.path && (
-                    <div className="hd-app-arrow">
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
-                    </div>
-                  )}
-                  {!app.path && <div className="hd-app-soon-badge">Soon</div>}
-                </div>
-              ))}
-            </div>
-          </div>
-
         </div>
+
       </div>
-    </div>
+    </Layout>
   )
 }

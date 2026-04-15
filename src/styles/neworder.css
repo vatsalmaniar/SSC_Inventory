@@ -97,12 +97,26 @@
 .typeahead-item-sub { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
 .typeahead-empty { padding: 12px 14px; font-size: 13px; color: var(--gray-400); text-align: center; }
 
+@media (max-width: 768px) {
+  .no-items-table { min-width: 700px; }
+  .col-date { width: 100px; }
+  .col-ref  { width: 90px; }
+}
 @media (max-width: 640px) {
   .no-row.three { grid-template-columns: 1fr 1fr; }
   .no-row       { grid-template-columns: 1fr; }
   .no-actions   { flex-direction: column; }
   .no-cancel-btn, .no-submit-btn { width: 100%; justify-content: center; }
   .no-totals-row { flex-direction: column; }
+  .no-body { padding: 16px 12px 60px; }
+  .no-card { padding: 16px; }
+  .no-page-title { font-size: 18px; }
+  .no-items-table { min-width: 580px; }
+  .col-code { min-width: 140px; }
+  .col-qty, .col-lp, .col-unit, .col-total { width: 80px; }
+  .col-disc { width: 60px; }
+  .col-date { width: 90px; }
+  .col-ref  { width: 80px; }
 }
 
 /* ── PO File Upload ── */
