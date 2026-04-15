@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { FY_START, FY_LABEL } from '../lib/fmt'
 import '../styles/dashboard.css'
 
@@ -107,15 +106,6 @@ export default function Dashboard() {
     }
   }
 
-  // Realtime notifications
-  useRealtimeSubscription(`dash-notifs-${user.id}`, {
-    table: 'notifications', filter: `user_id=eq.${user.id}`,
-    enabled: !!user.id,
-    onEvent: (payload) => {
-      if (payload.eventType === 'INSERT') setNotifs(prev => [payload.new, ...prev].slice(0, 30))
-      else if (payload.eventType === 'UPDATE') setNotifs(prev => prev.map(n => n.id === payload.new.id ? payload.new : n))
-    },
-  })
 
   // Close dropdown on outside click
   useEffect(() => {

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
@@ -187,12 +186,6 @@ export default function OrdersList() {
     setUser({ name, avatar, role, id: session.user.id })
     await loadOrders(false, role === 'sales' ? session.user.id : null)
   }
-
-  // Realtime: live order list updates
-  useRealtimeSubscription('orders-list', {
-    table: 'orders', enabled: !!user.role,
-    onEvent: () => loadOrders(showTest, user.role === 'sales' ? user.id : null, true),
-  })
 
   async function loadOrders(testMode = false, salesUserId = null, silent) {
     if (!silent) setLoading(true)

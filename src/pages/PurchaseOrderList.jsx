@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
@@ -116,12 +115,6 @@ export default function PurchaseOrderList() {
     setUser({ name, avatar, role })
     await loadPos(false)
   }
-
-  // Realtime: live PO list updates
-  useRealtimeSubscription('po-list', {
-    table: 'purchase_orders', enabled: !loading,
-    onEvent: () => loadPos(showTest, true),
-  })
 
   async function loadPos(testMode = false, silent) {
     if (!silent) setLoading(true)

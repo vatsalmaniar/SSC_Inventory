@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { useRealtimeSubscription } from '../hooks/useRealtime'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/orders.css'
@@ -66,19 +65,6 @@ export default function VendorMaster() {
     await loadVendors({ p: 1 })
     setLoading(false)
   }
-
-  // Realtime: live vendor list updates
-  useRealtimeSubscription('vendors-list', {
-    table: 'vendors', enabled: !loading,
-    onEvent: async () => {
-      loadVendors({ silent: true })
-      if (userRole === 'admin') {
-        const { data: pend } = await sb.from('vendors').select('id,vendor_code,vendor_name,vendor_type,poc_name,created_at')
-          .eq('approval_status', 'pending').order('created_at', { ascending: false })
-        setPending(pend || [])
-      }
-    },
-  })
 
   async function loadVendors(opts = {}) {
     const p    = opts.p    ?? page

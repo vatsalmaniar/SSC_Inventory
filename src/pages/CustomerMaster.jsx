@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { useRealtimeSubscription } from '../hooks/useRealtime'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/orders.css'
@@ -107,12 +106,6 @@ export default function CustomerMaster() {
     await loadCustomers({ p:1 })
     setLoading(false)
   }
-
-  // Realtime: live customer list updates
-  useRealtimeSubscription('customers-list', {
-    table: 'customers', enabled: !loading,
-    onEvent: () => loadCustomers({ silent: true }),
-  })
 
   async function loadCustomers(opts = {}) {
     const p     = opts.p     ?? page

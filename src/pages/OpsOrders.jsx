@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
@@ -80,12 +79,6 @@ export default function OpsOrders() {
     if (!['ops', 'admin'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, avatar, role })
   }
-
-  // Realtime: live ops order list updates
-  useRealtimeSubscription('ops-orders', {
-    table: 'orders', enabled: !loading,
-    onEvent: () => loadOrders(true),
-  })
 
   async function loadOrders(silent) {
     if (!silent) setLoading(true)
