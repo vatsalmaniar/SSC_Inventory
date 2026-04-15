@@ -155,10 +155,12 @@ export default function OrderDetail() {
       if (!data?.session) { navigate('/login'); return }
       session = data.session
     }
-    const [{ data: profile }] = await Promise.all([
+    const [{ data: profile }, { data: profileList }] = await Promise.all([
       sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
+      sb.from('profiles').select('id,name,username,role').order('name'),
       loadOrder(),
     ])
+    setProfiles(profileList || [])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
@@ -177,16 +179,14 @@ export default function OrderDetail() {
 
   async function loadOrder(silent) {
     if (!silent) setLoading(true)
-    const [{ data }, { data: batches }, { data: comments }, { data: profileList }] = await Promise.all([
+    const [{ data }, { data: batches }, { data: comments }] = await Promise.all([
       sb.from('orders').select('*, order_items(*)').eq('id', id).single(),
       sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true }),
       sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true }),
-      sb.from('profiles').select('id,name,username,role').order('name'),
     ])
     setOrder(data)
     setBatches(batches || [])
     setComments(comments || [])
-    setProfiles(profileList || [])
     setLoading(false)
     // Non-blocking: look up customer_id + linked PO in parallel
     const bg = []
@@ -1182,94 +1182,91 @@ if (match) {
 
             {/* Dispatch Batches */}
             {batches.length > 0 && (
-              <div className="od-side-card">
-                <div className="od-side-card-title">Dispatch Batches</div>
-                <div style={{padding:'0 16px 14px',display:'flex',flexDirection:'column',gap:10}}>
-                  {batches.map(b => {
+              <div className="od-side-card" style={{padding:0,overflow:'hidden'}}>
+                <div className="od-side-card-title" style={{padding:'14px 16px 0'}}>Dispatch Batches</div>
+                <div className="od-batch-list">
+                  {batches.map((b, idx) => {
                     const bDone = b.status === 'dispatched_fc'
                     const bDC   = b.dc_number || '—'
                     const bINV  = b.invoice_number || null
                     const batchLabel = b.pi_required && !b.status
-                      ? (b.pi_number ? 'With Accounts — PI Issued' : 'With Accounts — PI Pending')
-                      : ({ delivery_created:'Picking', picking:'Packing', packing:'Goods Issue', goods_issued:'With Billing', credit_check:'With Billing', goods_issue_posted:'With Billing', invoice_generated:'Delivery Ready', delivery_ready:'E-Way Pending', eway_generated:'E-Way Done', dispatched_fc:'Delivered ✓' }[b.status] || b.status)
+                      ? (b.pi_number ? 'PI Issued' : 'PI Pending')
+                      : ({ delivery_created:'Picking', picking:'Packing', packing:'Goods Issue', goods_issued:'With Billing', credit_check:'With Billing', goods_issue_posted:'With Billing', invoice_generated:'Delivery Ready', delivery_ready:'E-Way Pending', eway_generated:'E-Way Done', dispatched_fc:'Delivered' }[b.status] || b.status)
+                    const hasDC = bDC !== '—' && !bDC.startsWith('Temp/')
+                    const primaryRef = hasDC ? bDC : bINV || (bDC !== '—' ? bDC : null)
+                    const pdfs = [
+                      hasDC && { label: 'DC', icon: 'print', color: '#166534', action: () => printDCChallan(order, b, bDC, order.order_type === 'SAMPLE', custCode), isBtn: true },
+                      b.pi_pdf_url && { label: 'PI', icon: 'doc', color: '#7e22ce', href: b.pi_pdf_url },
+                      b.invoice_pdf_url && { label: 'Invoice', icon: 'doc', color: '#1a4dab', href: b.invoice_pdf_url },
+                      b.eway_pdf_url && { label: 'E-Way', icon: 'doc', color: '#0e7490', href: b.eway_pdf_url },
+                      b.einvoice_pdf_url && { label: 'E-Inv', icon: 'doc', color: '#b45309', href: b.einvoice_pdf_url },
+                    ].filter(Boolean)
+                    const bItemIds = (b.dispatched_items || []).map(i => i.order_item_id).filter(Boolean)
+                    const planDates = bItemIds.length > 0
+                      ? [...new Set((order.order_items || []).filter(i => bItemIds.includes(i.id) && i.dispatch_date).map(i => i.dispatch_date))].sort()
+                      : [...new Set((order.order_items || []).filter(i => i.dispatch_date).map(i => i.dispatch_date))].sort()
+
                     return (
-                      <div key={b.id} style={{borderRadius:8,border:'1px solid var(--gray-100)',padding:'10px 12px',background: bDone ? '#f0fdf4' : 'white'}}>
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-                          <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'0.5px'}}>Batch {b.batch_no}</span>
-                          <span style={{fontSize:11,fontWeight:600,color: bDone ? '#166534' : 'var(--gray-500)'}}>{batchLabel}</span>
+                      <div key={b.id} className={'od-batch-card' + (bDone ? ' od-batch-done' : '')}>
+                        {/* Header: label + status */}
+                        <div className="od-batch-top">
+                          <span className="od-batch-label">Batch {b.batch_no}{b.fulfilment_center ? ` · ${b.fulfilment_center}` : ''}</span>
+                          <span className={'od-batch-pill' + (bDone ? ' done' : '')}>{batchLabel}</span>
                         </div>
-                        <div
-                          style={{fontFamily:'var(--mono)',fontSize:13,fontWeight:700,color: bDC.startsWith('Temp/') ? '#92400e' : '#166534', cursor: bDC !== '—' && !bDC.startsWith('Temp/') ? 'pointer' : 'default', textDecoration: bDC !== '—' && !bDC.startsWith('Temp/') ? 'underline' : 'none'}}
-                          onClick={() => { if (bDC !== '—' && !bDC.startsWith('Temp/')) navigate('/fc/' + order.id, { state: { dispatch_id: b.id } }) }}
-                        >{bDC}</div>
-                        {bDC !== '—' && !bDC.startsWith('Temp/') && (
-                          <a href="#" onClick={e => { e.preventDefault(); printDCChallan(order, b, bDC, order.order_type === 'SAMPLE', custCode) }}
-                            style={{fontSize:11,color:'#166534',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:2,textDecoration:'none',cursor:'pointer'}}>
-                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                            View DC
-                          </a>
-                        )}
-                        {bINV && (
-                          <div
-                            style={{fontFamily:'var(--mono)',fontSize:12,color:'#166534',marginTop:2,cursor:'pointer',textDecoration:'underline'}}
-                            onClick={() => navigate('/billing/' + order.id, { state: { dispatch_id: b.id } })}
-                          >{bINV}</div>
-                        )}
-                        {b.pi_number && (
-                          <div style={{fontFamily:'var(--mono)',fontSize:12,color:'#7e22ce',marginTop:2,fontWeight:700}}>
-                            PI: {b.pi_number}
+
+                        {/* Big primary number */}
+                        {primaryRef && (
+                          <div className="od-batch-primary"
+                            style={{cursor: hasDC ? 'pointer' : bINV ? 'pointer' : 'default'}}
+                            onClick={() => {
+                              if (hasDC) navigate('/fc/' + order.id, { state: { dispatch_id: b.id } })
+                              else if (bINV) navigate('/billing/' + order.id, { state: { dispatch_id: b.id } })
+                            }}>
+                            {primaryRef}
                           </div>
                         )}
-                        {b.eway_bill_number && (
-                          <div style={{fontFamily:'var(--mono)',fontSize:12,color:'#0e7490',marginTop:2,fontWeight:700}}>
-                            E-Way: {b.eway_bill_number}
+
+                        {/* Secondary refs inline */}
+                        {(bINV && hasDC || b.pi_number || b.eway_bill_number) && (
+                          <div className="od-batch-secondary">
+                            {bINV && hasDC && <span onClick={() => navigate('/billing/' + order.id, { state: { dispatch_id: b.id } })} style={{cursor:'pointer'}}>{bINV}</span>}
+                            {b.pi_number && <span>PI: {b.pi_number}</span>}
+                            {b.eway_bill_number && <span>E-Way: {b.eway_bill_number}</span>}
                           </div>
                         )}
-                        <div style={{display:'flex',flexWrap:'wrap',gap:'4px 10px',marginTop:4}}>
-                          {b.pi_pdf_url && (
-                            <a href={b.pi_pdf_url} target="_blank" rel="noreferrer"
-                              style={{fontSize:11,color:'#7e22ce',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
-                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                              PI PDF
-                            </a>
-                          )}
-                          {b.invoice_pdf_url && (
-                            <a href={b.invoice_pdf_url} target="_blank" rel="noreferrer"
-                              style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
-                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                              Invoice PDF
-                            </a>
-                          )}
-                          {b.eway_pdf_url && (
-                            <a href={b.eway_pdf_url} target="_blank" rel="noreferrer"
-                              style={{fontSize:11,color:'#0e7490',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
-                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                              E-Way PDF
-                            </a>
-                          )}
-                          {b.einvoice_pdf_url && (
-                            <a href={b.einvoice_pdf_url} target="_blank" rel="noreferrer"
-                              style={{fontSize:11,color:'#b45309',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
-                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                              E-Invoice PDF
-                            </a>
-                          )}
-                        </div>
-                        {b.fulfilment_center && <div style={{fontSize:11,color:'var(--gray-400)',marginTop:3}}>{b.fulfilment_center}</div>}
-                        {(() => {
-                          const bItemIds = (b.dispatched_items || []).map(i => i.order_item_id).filter(Boolean)
-                          const planDates = bItemIds.length > 0
-                            ? [...new Set((order.order_items || []).filter(i => bItemIds.includes(i.id) && i.dispatch_date).map(i => i.dispatch_date))].sort()
-                            : [...new Set((order.order_items || []).filter(i => i.dispatch_date).map(i => i.dispatch_date))].sort()
-                          return planDates.length > 0 ? (
-                            <div style={{fontSize:11,color:'var(--gray-500)',marginTop:4}}>
-                              Planned: {planDates.map(d => fmt(d)).join(' – ')}
-                            </div>
-                          ) : null
-                        })()}
-                        {b.delivered_at && (
-                          <div style={{fontSize:11,color:'#166534',fontWeight:600,marginTop:2}}>
-                            ✓ Delivered: {fmt(b.delivered_at)}
+
+                        {/* Dates */}
+                        {(planDates.length > 0 || b.delivered_at) && (
+                          <div className="od-batch-dates">
+                            {planDates.length > 0 && (
+                              <span>
+                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="12" height="12"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                {planDates.map(d => fmt(d)).join(' – ')}
+                              </span>
+                            )}
+                            {b.delivered_at && (
+                              <span className="od-batch-delivered">
+                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="12" height="12"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>
+                                {fmt(b.delivered_at)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Action buttons row */}
+                        {pdfs.length > 0 && (
+                          <div className="od-batch-btns">
+                            {pdfs.map((p, i) => p.isBtn ? (
+                              <button key={i} className="od-batch-btn primary" onClick={p.action}>
+                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                                {p.label}
+                              </button>
+                            ) : (
+                              <a key={i} className="od-batch-btn" href={p.href} target="_blank" rel="noreferrer">
+                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                {p.label}
+                              </a>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -1279,75 +1276,115 @@ if (match) {
               </div>
             )}
 
-            {/* Activity + Comments */}
+            {/* Activity + Comments — Vertical Timeline */}
             <div className="od-side-card od-activity-card">
               <div className="od-side-card-title">Activity & Notes</div>
               <div className="od-activity-list">
-                <div className="od-activity-item">
-                  <div className="od-activity-dot submitted" />
-                  <div>
-                    <div className="od-activity-label">Submitted by</div>
-                    <div className="od-activity-val">{order.submitted_by_name || order.engineer_name || '—'}</div>
-                    <div className="od-activity-time">{fmtTs(order.created_at)}</div>
+
+                {/* Order created */}
+                <div className="od-tl-item">
+                  <div className="od-tl-dot created">
+                    <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  </div>
+                  <div className="od-tl-content">
+                    <div className="od-tl-header">
+                      <div className="od-tl-title">Order created</div>
+                      <div className="od-tl-time">{fmtTs(order.created_at)}</div>
+                    </div>
+                    <div className="od-tl-sub">{order.submitted_by_name || order.engineer_name || '—'}</div>
                   </div>
                 </div>
+
+                {/* Edited */}
                 {order.edited_by && (
-                  <div className="od-activity-item">
-                    <div className="od-activity-dot edited" />
-                    <div>
-                      <div className="od-activity-label">Edited by</div>
-                      <div className="od-activity-val">{order.edited_by}</div>
-                      <div className="od-activity-time">{fmtTs(order.updated_at)}</div>
+                  <div className="od-tl-item">
+                    <div className="od-tl-dot edited">
+                      <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-header">
+                        <div className="od-tl-title">Order edited</div>
+                        <div className="od-tl-time">{fmtTs(order.updated_at)}</div>
+                      </div>
+                      <div className="od-tl-sub">{order.edited_by}</div>
                     </div>
                   </div>
                 )}
+
+                {/* Approved */}
                 {order.approved_by && (
-                  <div className="od-activity-item">
-                    <div className="od-activity-dot approved" />
-                    <div>
-                      <div className="od-activity-label">Approved by</div>
-                      <div className="od-activity-val">{order.approved_by}</div>
+                  <div className="od-tl-item">
+                    <div className="od-tl-dot approved">
+                      <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-header">
+                        <div className="od-tl-title">Approved</div>
+                      </div>
+                      <div className="od-tl-sub">{order.approved_by}</div>
                     </div>
                   </div>
                 )}
+
+                {/* Cancelled */}
                 {isCancelled && (
-                  <div className="od-activity-item">
-                    <div className="od-activity-dot cancelled" />
-                    <div>
-                      <div className="od-activity-label">Cancelled</div>
-                      <div className="od-activity-time">{order.cancelled_reason}</div>
+                  <div className="od-tl-item od-tl-cancel">
+                    <div className="od-tl-dot cancel">
+                      <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-title">Order cancelled</div>
+                      <div className="od-tl-sub">{order.cancelled_reason}</div>
                     </div>
                   </div>
                 )}
+
+                {/* Comments + system logs */}
                 {comments.map(c => {
                   const isSystem = c.is_activity === true
                   const isCancelLog = c.is_cancellation === true || (c.message.includes('cancelled') || c.message.includes('Cancelled'))
-                  const dotColor = isCancelLog ? '#ef4444'
-                    : c.message.includes('Dispatch') || c.message.includes('dispatch') ? '#1a4dab'
-                    : c.message.includes('Invoice') ? '#7c3aed'
-                    : '#16a34a'
+                  const dotType = isCancelLog ? 'cancel'
+                    : c.message.includes('Dispatch') || c.message.includes('dispatch') ? 'dispatch'
+                    : c.message.includes('Invoice') || c.message.includes('invoice') ? 'invoice'
+                    : c.message.includes('Delivered') || c.message.includes('delivered') ? 'success'
+                    : isSystem ? 'system' : 'comment'
+
+                  const dotIcon = {
+                    cancel:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+                    dispatch: <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+                    invoice:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+                    success:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>,
+                    system:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+                    comment:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
+                  }[dotType]
+
                   return isSystem ? (
-                    <div key={c.id} className="od-activity-item" style={isCancelLog ? { background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 10px', marginLeft: -4 } : {}}>
-                      <div className="od-activity-dot" style={{ background: dotColor, flexShrink: 0 }} />
-                      <div>
-                        <div className="od-activity-val" style={{ fontSize: 12, fontWeight: 600, color: isCancelLog ? '#dc2626' : undefined }}>{c.message}</div>
-                        <div className="od-activity-time">{c.author_name} · {fmtTs(c.created_at)}</div>
+                    <div key={c.id} className={'od-tl-item' + (isCancelLog ? ' od-tl-cancel' : '')}>
+                      <div className={'od-tl-dot ' + dotType}>{dotIcon}</div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-title">{c.message}</div>
+                          <div className="od-tl-time">{fmtTs(c.created_at)}</div>
+                        </div>
+                        <div className="od-tl-sub">{c.author_name}</div>
                       </div>
                     </div>
                   ) : (
-                    <div key={c.id} className="od-activity-item od-comment-item">
-                      <div className="od-comment-avatar">{c.author_name?.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}</div>
-                      <div className="od-comment-body">
-                        <div className="od-comment-author">
-                          {c.author_name}
-                          {c.tagged_users?.length > 0 && (
-                            <span className="od-comment-tagged">
-                              tagged {c.tagged_users.map(u => '@' + u).join(', ')}
-                            </span>
-                          )}
+                    <div key={c.id} className="od-tl-item od-tl-comment">
+                      <div className="od-tl-dot comment">{dotIcon}</div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-comment-author">
+                            {c.author_name}
+                            {c.tagged_users?.length > 0 && (
+                              <span className="od-tl-comment-tagged">
+                                tagged {c.tagged_users.map(u => '@' + u).join(', ')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="od-tl-time">{fmtTs(c.created_at)}</div>
                         </div>
-                        <div className="od-comment-text">{renderMessage(c.message)}</div>
-                        <div className="od-activity-time">{fmtTs(c.created_at)}</div>
+                        <div className="od-tl-comment-text">{renderMessage(c.message)}</div>
                       </div>
                     </div>
                   )

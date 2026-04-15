@@ -60,13 +60,24 @@ function stageLabel(status) {
 
 const PI_STATUSES = ['pi_requested','pi_generated','pi_payment_pending']
 
-function dotClass(msg) {
+function getDotType(msg) {
   const m = msg?.toLowerCase() || ''
-  if (m.includes('cancel'))   return 'cancelled'
-  if (m.includes('approved') || m.includes('confirm') || m.includes('issued') || m.includes('delivered') || m.includes('picked') || m.includes('packed') || m.includes('dispatch')) return 'approved'
-  if (m.includes('submitted') || m.includes('created') || m.includes('accepted')) return 'submitted'
+  if (m.includes('cancel'))   return 'cancel'
+  if (m.includes('dispatch') || m.includes('picked') || m.includes('packed')) return 'dispatch'
+  if (m.includes('invoice') || m.includes('issued'))  return 'invoice'
+  if (m.includes('delivered') || m.includes('confirm') || m.includes('approved')) return 'success'
   if (m.includes('edit'))     return 'edited'
-  return 'approved'
+  return 'system'
+}
+
+const DOT_ICONS = {
+  cancel:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  dispatch: <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+  invoice:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+  success:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>,
+  edited:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  system:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+  comment:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
 }
 
 function numToWords(n) {
@@ -360,13 +371,15 @@ export default function FCOrderDetail() {
       if (!data?.session) { navigate('/login'); return }
       session = data.session
     }
-    const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
+    const [{ data: profile }, { data: pList }] = await Promise.all([
+      sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
+      sb.from('profiles').select('id,name,username,role'),
+    ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'fc_kaveri'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     if (!['fc_kaveri','fc_godawari','ops','admin'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, role, avatar })
-    const { data: pList } = await sb.from('profiles').select('id,name,username,role')
     setProfiles(pList || [])
     await loadOrder()
   }
@@ -1076,13 +1089,13 @@ export default function FCOrderDetail() {
           {/* RIGHT — sidebar */}
           <div className="od-sidebar">
 
-            {/* DC Number card */}
-            <div className="od-side-card">
-              <div className="od-side-card-title">Delivery Challan</div>
-              <div style={{padding:'0 16px 14px'}}>
-                {/* Batch switcher — only shown when multiple batches */}
+            {/* Delivery Challan card */}
+            <div className="od-side-card" style={{padding:0,overflow:'hidden'}}>
+              <div className="od-side-card-title" style={{padding:'14px 16px 0'}}>Delivery Challan</div>
+              <div className="od-batch-list">
+                {/* Batch switcher */}
                 {allBatches.length > 1 && (
-                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',padding:'0 2px'}}>
                     {allBatches.map(b => (
                       <button key={b.id} onClick={() => setActiveBatch(b)}
                         style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,border:'1px solid',cursor:'pointer',fontFamily:'var(--font)',
@@ -1095,68 +1108,60 @@ export default function FCOrderDetail() {
                     ))}
                   </div>
                 )}
-                {activeBatch && <div style={{fontSize:10,color:'var(--gray-400)',fontWeight:600,marginBottom:4}}>BATCH {activeBatch.batch_no}</div>}
-                <div style={{fontFamily:'var(--mono)',fontSize:18,fontWeight:800,color: isTempDC ? '#92400e' : '#166534',letterSpacing:'-0.5px',marginBottom:4}}>
-                  {activeDC || '—'}
-                </div>
-                {isTempDC && <div style={{fontSize:11,color:'#92400e',fontWeight:600}}>Temp — will be confirmed at Goods Issue</div>}
-                {!isTempDC && activeDC && <div style={{fontSize:11,color:'#166534',fontWeight:600}}>Confirmed DC</div>}
-                {!isTempDC && activeDC && (['delivery_ready','eway_generated','dispatched_fc'].includes(batchStatus) || (isSample && batchStatus === 'invoice_generated')) && (
-                  <button
-                    onClick={() => printDCChallan(order, activeBatch, activeDC, isSample, custCode)}
-                    style={{marginTop:10,display:'inline-flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:8,border:'1px solid #1a4dab',background:'#e8f2fc',color:'#1a4dab',fontFamily:'var(--font)',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                    {isSample ? 'Download Sample Challan' : 'Download DC Challan'}
-                  </button>
-                )}
                 {(() => {
-                  const inv    = activeBatch ? activeBatch.invoice_number    : order.invoice_number
-                  const invPdf = activeBatch ? activeBatch.invoice_pdf_url   : order.invoice_pdf_url
-                  if (!inv) return null
-                  const isTemp = inv?.startsWith('Temp/')
-                  return (
-                    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
-                      <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>Invoice</div>
-                      <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:700,color:isTemp ? '#92400e' : '#166534'}}>{inv}</div>
-                      {invPdf && (
-                        <a href={invPdf} target="_blank" rel="noreferrer"
-                          style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
-                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                          View Invoice PDF
-                        </a>
-                      )}
-                    </div>
-                  )
-                })()}
-                {(() => {
+                  const bDone = batchStatus === 'dispatched_fc'
+                  const statusLabel = { delivery_created:'Picking', picking:'Packing', packing:'Goods Issue', goods_issued:'With Billing', credit_check:'With Billing', goods_issue_posted:'With Billing', invoice_generated:'Delivery Ready', delivery_ready:'E-Way Pending', eway_generated:'E-Way Done', dispatched_fc:'Delivered' }[batchStatus] || batchStatus
+                  const inv    = activeBatch ? activeBatch.invoice_number  : order.invoice_number
+                  const invPdf = activeBatch ? activeBatch.invoice_pdf_url : order.invoice_pdf_url
                   const eway    = activeBatch ? activeBatch.eway_bill_number : order.eway_bill_number
-                  const ewayPdf = activeBatch ? activeBatch.eway_pdf_url     : order.eway_pdf_url
-                  if (!eway) return null
-                  return (
-                    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
-                      <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>E-Way Bill</div>
-                      <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:700,color:'#166534'}}>{eway}</div>
-                      {ewayPdf && (
-                        <a href={ewayPdf} target="_blank" rel="noreferrer"
-                          style={{fontSize:11,color:'#166534',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:4,textDecoration:'none'}}>
-                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                          View E-Way Bill PDF
-                        </a>
-                      )}
-                    </div>
-                  )
-                })()}
-                {(() => {
+                  const ewayPdf = activeBatch ? activeBatch.eway_pdf_url    : order.eway_pdf_url
                   const einvPdf = activeBatch ? activeBatch.einvoice_pdf_url : order.einvoice_pdf_url
-                  if (!einvPdf) return null
+                  const hasDC = activeDC && !isTempDC
+                  const canPrint = hasDC && (['delivery_ready','eway_generated','dispatched_fc'].includes(batchStatus) || (isSample && batchStatus === 'invoice_generated'))
+                  const pdfs = [
+                    canPrint && { label: 'DC', isBtn: true, action: () => printDCChallan(order, activeBatch, activeDC, isSample, custCode) },
+                    invPdf && { label: 'Invoice', href: invPdf },
+                    ewayPdf && { label: 'E-Way', href: ewayPdf },
+                    einvPdf && { label: 'E-Inv', href: einvPdf },
+                  ].filter(Boolean)
+
                   return (
-                    <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--gray-100)'}}>
-                      <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>E-Invoice</div>
-                      <a href={einvPdf} target="_blank" rel="noreferrer"
-                        style={{fontSize:11,color:'#7c3aed',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
-                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                        View E-Invoice PDF
-                      </a>
+                    <div className={'od-batch-card' + (bDone ? ' od-batch-done' : '')}>
+                      <div className="od-batch-top">
+                        <span className="od-batch-label">{activeBatch ? `Batch ${activeBatch.batch_no}` : 'DC'}{activeBatch?.fulfilment_center ? ` · ${activeBatch.fulfilment_center}` : ''}</span>
+                        <span className={'od-batch-pill' + (bDone ? ' done' : '')}>{statusLabel}</span>
+                      </div>
+                      <div className="od-batch-primary" style={{color: isTempDC ? '#92400e' : 'var(--gray-900)'}}>
+                        {activeDC || '—'}
+                      </div>
+                      {isTempDC && <div style={{fontSize:10,color:'#92400e',fontWeight:600}}>Temp — confirms at Goods Issue</div>}
+                      <div className="od-batch-secondary">
+                        {inv && <span style={{color: inv.startsWith('Temp/') ? '#92400e' : '#1a4dab'}}>{inv}</span>}
+                        {eway && <span style={{color:'#0e7490'}}>E-Way: {eway}</span>}
+                      </div>
+                      {(activeBatch?.delivered_at) && (
+                        <div className="od-batch-dates">
+                          <span className="od-batch-delivered">
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="12" height="12"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>
+                            {fmt(activeBatch.delivered_at)}
+                          </span>
+                        </div>
+                      )}
+                      {pdfs.length > 0 && (
+                        <div className="od-batch-btns">
+                          {pdfs.map((p, i) => p.isBtn ? (
+                            <button key={i} className="od-batch-btn primary" onClick={p.action}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                              {p.label}
+                            </button>
+                          ) : (
+                            <a key={i} className="od-batch-btn" href={p.href} target="_blank" rel="noreferrer">
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              {p.label}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )
                 })()}
@@ -1167,25 +1172,43 @@ export default function FCOrderDetail() {
             <div className="od-side-card od-activity-card">
               <div className="od-side-card-title">Activity & Notes</div>
               <div className="od-activity-list">
-                {comments.map(c => (
-                  <div key={c.id} className={'od-activity-item' + (c.is_activity ? '' : ' od-comment-item')}>
-                    <div className={'od-activity-dot ' + dotClass(c.message)} />
-                    <div style={{minWidth:0}}>
-                      {c.is_activity ? (
-                        <>
-                          <div className="od-activity-val">{c.message}</div>
-                          <div className="od-activity-time">{c.author_name} · {fmtTs(c.created_at)}</div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="od-activity-label">{c.author_name}</div>
-                          <div className="od-activity-val" style={{fontWeight:400}}>{renderMessage(c.message)}</div>
-                          <div className="od-activity-time">{fmtTs(c.created_at)}</div>
-                        </>
-                      )}
+                {comments.map(c => {
+                  const isSystem = c.is_activity === true
+                  const isCancelLog = c.message?.toLowerCase().includes('cancel')
+                  const dotType = isSystem ? getDotType(c.message) : 'comment'
+                  const dotIcon = DOT_ICONS[dotType] || DOT_ICONS.system
+
+                  return isSystem ? (
+                    <div key={c.id} className={'od-tl-item' + (isCancelLog ? ' od-tl-cancel' : '')}>
+                      <div className={'od-tl-dot ' + dotType}>{dotIcon}</div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-title">{c.message}</div>
+                          <div className="od-tl-time">{fmtTs(c.created_at)}</div>
+                        </div>
+                        <div className="od-tl-sub">{c.author_name}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ) : (
+                    <div key={c.id} className="od-tl-item od-tl-comment">
+                      <div className="od-tl-dot comment">{dotIcon}</div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-comment-author">
+                            {c.author_name}
+                            {c.tagged_users?.length > 0 && (
+                              <span className="od-tl-comment-tagged">
+                                tagged {c.tagged_users.map(u => '@' + u).join(', ')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="od-tl-time">{fmtTs(c.created_at)}</div>
+                        </div>
+                        <div className="od-tl-comment-text">{renderMessage(c.message)}</div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
 
               {/* Comment input */}

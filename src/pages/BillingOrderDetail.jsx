@@ -50,12 +50,24 @@ function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+
 function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7,whiteSpace:'nowrap'}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
 
 
-function dotClass(msg) {
+function getDotType(msg) {
   const m = msg?.toLowerCase() || ''
-  if (m.includes('cancel'))   return 'cancelled'
+  if (m.includes('cancel'))   return 'cancel'
+  if (m.includes('dispatch') || m.includes('picked') || m.includes('packed')) return 'dispatch'
+  if (m.includes('invoice') || m.includes('issued'))  return 'invoice'
+  if (m.includes('delivered') || m.includes('confirm') || m.includes('approved')) return 'success'
   if (m.includes('edit'))     return 'edited'
-  if (m.includes('submitted') || m.includes('created') || m.includes('accepted')) return 'submitted'
-  return 'approved'
+  return 'system'
+}
+
+const DOT_ICONS = {
+  cancel:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  dispatch: <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+  invoice:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+  success:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>,
+  edited:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  system:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+  comment:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
 }
 
 export default function BillingOrderDetail() {
@@ -107,13 +119,15 @@ export default function BillingOrderDetail() {
       if (!data?.session) { navigate('/login'); return }
       session = data.session
     }
-    const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
+    const [{ data: profile }, { data: pList }] = await Promise.all([
+      sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
+      sb.from('profiles').select('id,name,username,role'),
+    ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'accounts'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     if (!['accounts','ops','admin'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, role, avatar })
-    const { data: pList } = await sb.from('profiles').select('id,name,username,role')
     setProfiles(pList || [])
     await loadOrder()
   }
@@ -1064,106 +1078,85 @@ const mentionSuggestions = mentionQuery !== null
           {/* ── Sidebar ── */}
           <div className="od-sidebar">
 
-            {/* Numbers card */}
-            <div className="od-side-card">
-              <div className="od-side-card-title">Key Numbers</div>
-              <div style={{padding:'0 16px 16px',display:'flex',flexDirection:'column',gap:12}}>
+            {/* Key Numbers card */}
+            <div className="od-side-card" style={{padding:0,overflow:'hidden'}}>
+              <div className="od-side-card-title" style={{padding:'14px 16px 0'}}>Key Numbers</div>
+              <div className="od-batch-list">
                 {/* Batch switcher */}
                 {allBatches.length > 1 && (
-                  <div>
-                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:6}}>Batch</div>
-                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                      {allBatches.map(b => (
-                        <button key={b.id} onClick={() => setActiveBatch(b)}
-                          style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,border:'1px solid',cursor:'pointer',fontFamily:'var(--font)',
-                            background: activeBatch?.id === b.id ? '#1e3a5f' : 'white',
-                            color: activeBatch?.id === b.id ? 'white' : '#475569',
-                            borderColor: activeBatch?.id === b.id ? '#1e3a5f' : '#e2e8f0',
-                          }}>
-                          Batch {b.batch_no}
-                        </button>
-                      ))}
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',padding:'0 2px'}}>
+                    {allBatches.map(b => (
+                      <button key={b.id} onClick={() => setActiveBatch(b)}
+                        style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,border:'1px solid',cursor:'pointer',fontFamily:'var(--font)',
+                          background: activeBatch?.id === b.id ? '#1e3a5f' : 'white',
+                          color: activeBatch?.id === b.id ? 'white' : '#475569',
+                          borderColor: activeBatch?.id === b.id ? '#1e3a5f' : '#e2e8f0',
+                        }}>
+                        Batch {b.batch_no}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Batch card */}
+                {(() => {
+                  const bDone = activeBatch?.status === 'dispatched_fc'
+                  const statusLabel = { delivery_created:'Picking', picking:'Packing', packing:'Goods Issue', goods_issued:'With Billing', credit_check:'With Billing', goods_issue_posted:'With Billing', invoice_generated:'Delivery Ready', delivery_ready:'E-Way Pending', eway_generated:'E-Way Done', dispatched_fc:'Delivered' }[activeBatch?.status] || activeBatch?.status || ''
+                  const pdfs = [
+                    activePIPdf && { label: 'PI', href: activePIPdf },
+                    activeInvPdfUrl && { label: 'Invoice', href: activeInvPdfUrl },
+                    activeEwayPdfUrl && { label: 'E-Way', href: activeEwayPdfUrl },
+                    activeEInvoicePdfUrl && { label: 'E-Inv', href: activeEInvoicePdfUrl },
+                  ].filter(Boolean)
+
+                  return (
+                    <div className={'od-batch-card' + (bDone ? ' od-batch-done' : '')}>
+                      <div className="od-batch-top">
+                        <span className="od-batch-label">{activeBatch ? `Batch ${activeBatch.batch_no}` : 'Order'}</span>
+                        {statusLabel && <span className={'od-batch-pill' + (bDone ? ' done' : '')}>{statusLabel}</span>}
+                      </div>
+
+                      {/* Primary: Invoice number (billing focus) */}
+                      <div className="od-batch-primary" style={{color: isTempInv ? '#92400e' : activeINV ? 'var(--gray-900)' : 'var(--gray-300)'}}>
+                        {activeINV || '—'}
+                      </div>
+                      {isTempInv && <div style={{fontSize:10,color:'#92400e',fontWeight:600}}>Temp — confirms on invoice generation</div>}
+
+                      {/* Secondary refs */}
+                      <div className="od-batch-secondary">
+                        <span style={{color:'var(--blue-800)'}}>{order.order_number}</span>
+                        {activeDC && <span style={{color: isTempDC ? '#92400e' : '#166534'}}>{activeDC}</span>}
+                        {isPIOrder && activePINum && <span style={{color:'#7e22ce'}}>PI: {activePINum}</span>}
+                        {activeEway && <span style={{color:'#0e7490'}}>E-Way: {activeEway}</span>}
+                      </div>
+
+                      {/* Billing total */}
+                      <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid var(--gray-100)',display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                        <span style={{fontSize:11,color:'var(--gray-400)',fontWeight:500}}>Billing Total</span>
+                        <span style={{fontSize:18,fontWeight:800,color:'var(--gray-900)',letterSpacing:'-0.5px',fontFamily:'var(--mono)'}}>
+                          ₹{dispatchedTotal.toLocaleString('en-IN',{maximumFractionDigits:2})}
+                        </span>
+                      </div>
+
+                      {isCreditOverride && (
+                        <div style={{background:'#fff1f2',border:'1px solid #fecdd3',borderRadius:8,padding:'6px 10px',marginTop:4}}>
+                          <div style={{fontSize:10,color:'#be123c',fontWeight:700}}>CREDIT OVERRIDE — Payment pending</div>
+                        </div>
+                      )}
+
+                      {pdfs.length > 0 && (
+                        <div className="od-batch-btns">
+                          {pdfs.map((p, i) => (
+                            <a key={i} className="od-batch-btn" href={p.href} target="_blank" rel="noreferrer">
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              {p.label}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
-                <div>
-                  <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>SO / CO Number</div>
-                  <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:'var(--blue-800)'}}>{order.order_number}</div>
-                </div>
-                {isPIOrder && (
-                  <div>
-                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>Proforma Invoice</div>
-                    <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:activePINum?'#7e22ce':'var(--gray-400)'}}>
-                      {activePINum || '—'}
-                    </div>
-                    {!activePINum && <div style={{fontSize:10,color:'var(--gray-400)'}}>Pending issuance</div>}
-                    {activePIPdf && (
-                      <a href={activePIPdf} target="_blank" rel="noreferrer"
-                        style={{fontSize:11,color:'#7e22ce',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
-                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                        View PI PDF
-                      </a>
-                    )}
-                  </div>
-                )}
-                <div>
-                  <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>Delivery Challan</div>
-                  <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:isTempDC?'#92400e':'#166534'}}>
-                    {activeDC || '—'}
-                  </div>
-                  {isTempDC && <div style={{fontSize:10,color:'#92400e',fontWeight:600}}>Temp DC</div>}
-                </div>
-                <div>
-                  <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>Invoice Number</div>
-                  <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:isTempInv?'#92400e':activeINV?'#166534':'var(--gray-400)'}}>
-                    {activeINV || '—'}
-                  </div>
-                  {isTempInv && <div style={{fontSize:10,color:'#92400e',fontWeight:600}}>Temp — confirms on invoice generation</div>}
-                  {!isTempInv && activeINV && <div style={{fontSize:10,color:'#166534',fontWeight:600}}>Confirmed</div>}
-                  {activeInvPdfUrl && (
-                    <a href={activeInvPdfUrl} target="_blank" rel="noreferrer"
-                      style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      View Invoice PDF
-                    </a>
-                  )}
-                </div>
-                {activeEway && (
-                  <div>
-                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>E-Way Bill</div>
-                    <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,color:'#166534'}}>{activeEway}</div>
-                    {activeEwayPdfUrl && (
-                      <a href={activeEwayPdfUrl} target="_blank" rel="noreferrer"
-                        style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
-                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002 2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                        View E-Way PDF
-                      </a>
-                    )}
-                  </div>
-                )}
-                {activeEInvoicePdfUrl && (
-                  <div>
-                    <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>e-Invoice</div>
-                    <a href={activeEInvoicePdfUrl} target="_blank" rel="noreferrer"
-                      style={{fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,marginTop:3,textDecoration:'none'}}>
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      View e-Invoice PDF
-                    </a>
-                  </div>
-                )}
-                <div style={{paddingTop:12,borderTop:'1px solid var(--gray-100)'}}>
-                  <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)',fontWeight:600,marginBottom:3}}>Billing Total</div>
-                  <div style={{fontSize:20,fontWeight:800,color:'var(--gray-900)',letterSpacing:'-0.5px'}}>
-                    ₹{dispatchedTotal.toLocaleString('en-IN',{maximumFractionDigits:2})}
-                  </div>
-                  <div style={{fontSize:11,color:'var(--gray-400)',marginTop:2}}>Based on dispatched qty</div>
-                </div>
-                {isCreditOverride && (
-                  <div style={{background:'#fff1f2',border:'1px solid #fecdd3',borderRadius:8,padding:'8px 10px'}}>
-                    <div style={{fontSize:11,color:'#be123c',fontWeight:700}}>⚠️ CREDIT OVERRIDE</div>
-                    <div style={{fontSize:11,color:'#be123c',marginTop:2}}>Payment pending — approved with override</div>
-                  </div>
-                )}
+                  )
+                })()}
               </div>
             </div>
 
@@ -1172,25 +1165,43 @@ const mentionSuggestions = mentionQuery !== null
               <div className="od-side-card-title">Activity & Notes</div>
               <div className="od-activity-list">
                 {comments.length === 0 && <div style={{fontSize:12,color:'var(--gray-400)',padding:'8px 0'}}>No activity yet</div>}
-                {comments.map(c => (
-                  <div key={c.id} className={'od-activity-item' + (c.is_activity ? '' : ' od-comment-item')}>
-                    <div className={'od-activity-dot ' + dotClass(c.message)} />
-                    <div style={{minWidth:0}}>
-                      {c.is_activity ? (
-                        <>
-                          <div className="od-activity-val">{c.message}</div>
-                          <div className="od-activity-time">{c.author_name} · {fmtTs(c.created_at)}</div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="od-activity-label">{c.author_name}</div>
-                          <div className="od-activity-val" style={{fontWeight:400}}>{renderMessage(c.message)}</div>
-                          <div className="od-activity-time">{fmtTs(c.created_at)}</div>
-                        </>
-                      )}
+                {comments.map(c => {
+                  const isSystem = c.is_activity === true
+                  const isCancelLog = c.message?.toLowerCase().includes('cancel')
+                  const dotType = isSystem ? getDotType(c.message) : 'comment'
+                  const dotIcon = DOT_ICONS[dotType] || DOT_ICONS.system
+
+                  return isSystem ? (
+                    <div key={c.id} className={'od-tl-item' + (isCancelLog ? ' od-tl-cancel' : '')}>
+                      <div className={'od-tl-dot ' + dotType}>{dotIcon}</div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-title">{c.message}</div>
+                          <div className="od-tl-time">{fmtTs(c.created_at)}</div>
+                        </div>
+                        <div className="od-tl-sub">{c.author_name}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ) : (
+                    <div key={c.id} className="od-tl-item od-tl-comment">
+                      <div className="od-tl-dot comment">{dotIcon}</div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-comment-author">
+                            {c.author_name}
+                            {c.tagged_users?.length > 0 && (
+                              <span className="od-tl-comment-tagged">
+                                tagged {c.tagged_users.map(u => '@' + u).join(', ')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="od-tl-time">{fmtTs(c.created_at)}</div>
+                        </div>
+                        <div className="od-tl-comment-text">{renderMessage(c.message)}</div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
 
               {/* Comment box */}
