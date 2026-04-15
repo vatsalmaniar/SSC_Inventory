@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!
 const SB_URL = Deno.env.get('SUPABASE_URL')!
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const FROM = 'SSC Control <notifications@ssccontrol.com>'
+const FROM = 'SSC ERP <notifications@ssccontrol.com>'
 const APP_URL = 'https://ssc-inventory.vercel.app'
 
 serve(async (req) => {
@@ -67,13 +67,13 @@ function body(r: any): string {
     : ''
   return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:24px">
     <div style="border-bottom:2px solid #1a4dab;padding-bottom:14px;margin-bottom:20px">
-      <strong style="color:#1a4dab;font-size:16px">SSC Control</strong>
+      <strong style="color:#1a4dab;font-size:16px">SSC ERP</strong>
     </div>
     <p style="font-size:14px;color:#333;line-height:1.6;margin:0 0 16px">${escapeHtml(r.message || '')}</p>
     <p style="font-size:13px;color:#888;margin:0 0 20px">By: ${escapeHtml(r.from_name || 'System')} · ${new Date(r.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
     ${btn}
     <div style="margin-top:28px;padding-top:14px;border-top:1px solid #eee;font-size:11px;color:#aaa">
-      SSC Control Pvt. Ltd. · Internal notification · <a href="${APP_URL}" style="color:#aaa">Open App</a>
+      SSC ERP Pvt. Ltd. · Internal notification · <a href="${APP_URL}" style="color:#aaa">Open App</a>
     </div>
   </div>`
 }
@@ -140,9 +140,9 @@ async function handleLogin(sb: any, r: any) {
             from: FROM, to: [email],
             subject: `[SSC] Failed Login Alert — ${r.user_name}`,
             html: `<div style="font-family:-apple-system,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-              <div style="border-bottom:2px solid #be123c;padding-bottom:14px;margin-bottom:20px"><strong style="color:#be123c;font-size:16px">SSC Control — Security Alert</strong></div>
+              <div style="border-bottom:2px solid #be123c;padding-bottom:14px;margin-bottom:20px"><strong style="color:#be123c;font-size:16px">SSC ERP — Security Alert</strong></div>
               <p style="font-size:14px;color:#333"><strong>${escapeHtml(r.user_name || '')}</strong> (${escapeHtml(r.email || '')}) has 3+ failed login attempts in the last 30 minutes.</p>
-              <div style="margin-top:28px;border-top:1px solid #eee;padding-top:14px;font-size:11px;color:#aaa">SSC Control Pvt. Ltd.</div>
+              <div style="margin-top:28px;border-top:1px solid #eee;padding-top:14px;font-size:11px;color:#aaa">SSC ERP Pvt. Ltd.</div>
             </div>`,
           }),
         })
