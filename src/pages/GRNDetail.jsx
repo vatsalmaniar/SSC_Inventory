@@ -169,11 +169,11 @@ export default function GRNDetail() {
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/>
 <title>GRN — ${grn.grn_number}</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'DM Sans',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:860px;margin:0 auto;line-height:1.5}
-  .mono{font-family:'DM Mono',monospace}
+  body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:860px;margin:0 auto;line-height:1.5}
+  .mono{font-family:'Geist Mono',monospace}
   .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
   .co-name{font-size:17px;font-weight:700;color:#0f172a;margin-bottom:2px}
   .co-sub{font-size:11px;color:#64748b;margin-bottom:8px}
@@ -195,7 +195,7 @@ export default function GRNDetail() {
   table.items tbody tr{border-bottom:1px solid #f1f5f9} table.items tbody tr:last-child{border-bottom:none}
   table.items td{padding:9px 10px;font-size:11.5px;vertical-align:top;color:#0f172a}
   table.items td.r{text-align:right} table.items td.c{text-align:center}
-  table.items td.code{font-family:'DM Mono',monospace;font-size:11px;font-weight:500}
+  table.items td.code{font-family:'Geist Mono',monospace;font-size:11px;font-weight:500}
   .summary-wrap{display:flex;justify-content:flex-end;margin-top:16px}
   .summary-table{width:260px;border-collapse:collapse}
   .summary-table td{padding:5px 0;font-size:11.5px}

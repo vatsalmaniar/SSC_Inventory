@@ -53,7 +53,7 @@ const UserManagement = lazy(() => import('./pages/UserManagement'))
 export default function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'DM Sans,sans-serif',color:'#888'}}>Loading...</div>}>
+      <Suspense fallback={<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'Geist,sans-serif',color:'#888'}}>Loading...</div>}>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />

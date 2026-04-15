@@ -6,7 +6,7 @@
   display: flex;
   min-height: 100vh;
   background: #f2f4f8;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Geist', sans-serif;
 }
 
 /* ── Sidebar ── */
@@ -87,7 +87,7 @@
   border-radius: 10px;
   border: none;
   background: none;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Geist', sans-serif;
   font-size: 14px;
   font-weight: 500;
   color: #5a6480;

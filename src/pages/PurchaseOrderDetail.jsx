@@ -230,11 +230,11 @@ export default function PurchaseOrderDetail() {
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/>
 <title>Purchase Order — ${poNumber}</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'DM Sans',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:860px;margin:0 auto;line-height:1.5}
-  .mono{font-family:'DM Mono',monospace}
+  body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:860px;margin:0 auto;line-height:1.5}
+  .mono{font-family:'Geist Mono',monospace}
 
   /* Header */
   .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
@@ -274,7 +274,7 @@ export default function PurchaseOrderDetail() {
   table.items td{padding:9px 10px;font-size:11.5px;vertical-align:top;color:#0f172a}
   table.items td.r{text-align:right}
   table.items td.c{text-align:center}
-  table.items td.code{font-family:'DM Mono',monospace;font-size:11px;font-weight:500}
+  table.items td.code{font-family:'Geist Mono',monospace;font-size:11px;font-weight:500}
 
   /* Totals */
   .totals-wrap{display:flex;justify-content:flex-end;margin-top:12px}
@@ -334,7 +334,7 @@ export default function PurchaseOrderDetail() {
   <div>
     <div class="meta-section-label">Vendor</div>
     <div class="meta-name">${esc(po.vendor_name) || '—'}</div>
-    ${vendorCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Vendor Code: <strong style="font-family:'DM Mono',monospace">${esc(vendorCode)}</strong></div>` : ''}
+    ${vendorCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Vendor Code: <strong style="font-family:'Geist Mono',monospace">${esc(vendorCode)}</strong></div>` : ''}
   </div>
   <div>
     <div class="meta-section-label">Reference</div>

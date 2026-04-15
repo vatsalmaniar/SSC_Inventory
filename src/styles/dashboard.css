@@ -54,7 +54,7 @@
   padding: 9px 12px;
   border-radius: 10px; border: none;
   background: none;
-  font-family: 'Geist', sans-serif;
+  font-family: var(--font);
   font-size: 13px; font-weight: 500;
   color: #5a6a8a;
   cursor: pointer; text-align: left;
@@ -97,7 +97,7 @@
 .hd-topnav { display: flex; align-items: center; gap: 2px; }
 .hd-topnav-item {
   padding: 6px 14px; border-radius: 8px; border: none; background: none;
-  font-family: 'Geist', sans-serif; font-size: 13px; font-weight: 500;
+  font-family: var(--font); font-size: 13px; font-weight: 500;
   color: #8896b3; cursor: pointer;
   transition: color 0.12s, background 0.12s;
 }
