@@ -963,16 +963,25 @@ export default function CustomerDetail() {
                 <div className="od-side-card od-activity-card">
                   <div className="od-side-card-title" style={{ padding: '0 0 10px' }}>Recent Orders</div>
                   <div className="od-activity-list" style={{ maxHeight: 280 }}>
-                    {orders.slice(0, 8).map(o => (
-                      <div key={o.id} className="od-activity-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/orders/' + o.id)}>
-                        <div className={'od-activity-dot ' + (['cancelled'].includes(o.status) ? 'cancelled' : ['delivered','dispatched_fc'].includes(o.status) ? 'approved' : 'submitted')} />
-                        <div>
-                          <div className="od-activity-label">{o.order_type === 'SO' ? 'Standard' : o.order_type === 'CO' ? 'Custom' : 'Sample'}</div>
-                          <div className="od-activity-val" style={{ color: '#1a4dab' }}>{o.order_number}</div>
-                          <div className="od-activity-time">{statusLabel(o.status)} · {fmt(o.created_at)}</div>
+                    {orders.slice(0, 8).map(o => {
+                      const dt = ['cancelled'].includes(o.status) ? 'cancel' : ['delivered','dispatched_fc'].includes(o.status) ? 'success' : 'dispatch'
+                      return (
+                        <div key={o.id} className="od-tl-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/orders/' + o.id)}>
+                          <div className={'od-tl-dot ' + dt}>
+                            {dt === 'cancel' ? <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            : dt === 'success' ? <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                            : <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>}
+                          </div>
+                          <div className="od-tl-content">
+                            <div className="od-tl-header">
+                              <div className="od-tl-title" style={{ color:'#1a4dab', fontWeight:600 }}>{o.order_number}</div>
+                              <div className="od-tl-time">{fmt(o.created_at)}</div>
+                            </div>
+                            <div className="od-tl-sub">{o.order_type === 'SO' ? 'Standard' : o.order_type === 'CO' ? 'Custom' : 'Sample'} · {statusLabel(o.status)}</div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}

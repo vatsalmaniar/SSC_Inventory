@@ -620,29 +620,33 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
               <div className="od-side-card od-activity-card" style={{ marginTop:12 }}>
                 <div className="od-side-card-title">Timeline</div>
                 <div className="od-activity-list">
-                  <div className="od-activity-item">
-                    <div className="od-activity-dot submitted" />
-                    <div>
-                      <div className="od-activity-label">GRN Created</div>
-                      <div className="od-activity-val">{grn.received_by || '—'}</div>
-                      <div className="od-activity-time">{fmtTs(grn.created_at)}</div>
+                  <div className="od-tl-item">
+                    <div className="od-tl-dot created"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-header">
+                        <div className="od-tl-title">GRN Created</div>
+                        <div className="od-tl-time">{fmtTs(grn.created_at)}</div>
+                      </div>
+                      <div className="od-tl-sub">{grn.received_by || '—'}</div>
                     </div>
                   </div>
                   {(grn.status === 'checking' || isConfirmed) && (
-                    <div className="od-activity-item">
-                      <div className="od-activity-dot" style={{ background:'#f59e0b' }} />
-                      <div>
-                        <div className="od-activity-label">Checking Goods</div>
-                        <div className="od-activity-time">Goods being inspected</div>
+                    <div className="od-tl-item">
+                      <div className="od-tl-dot edited"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-title">Checking Goods</div>
+                        <div className="od-tl-sub">Goods being inspected</div>
                       </div>
                     </div>
                   )}
                   {isConfirmed && (
-                    <div className="od-activity-item">
-                      <div className="od-activity-dot active" />
-                      <div>
-                        <div className="od-activity-label">GRN Confirmed</div>
-                        <div className="od-activity-time">{fmtTs(grn.received_at || grn.created_at)}</div>
+                    <div className="od-tl-item">
+                      <div className="od-tl-dot success"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-title">GRN Confirmed</div>
+                          <div className="od-tl-time">{fmtTs(grn.received_at || grn.created_at)}</div>
+                        </div>
                       </div>
                     </div>
                   )}

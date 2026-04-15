@@ -798,16 +798,25 @@ export default function VendorDetail() {
                 <div className="od-side-card od-activity-card">
                   <div className="od-side-card-title" style={{ padding:'0 0 10px' }}>Recent POs</div>
                   <div className="od-activity-list" style={{ maxHeight:280 }}>
-                    {pos.slice(0, 8).map(p => (
-                      <div key={p.id} className="od-activity-item" style={{ cursor:'pointer' }} onClick={() => navigate('/procurement/po/' + p.id)}>
-                        <div className={'od-activity-dot ' + (['cancelled'].includes(p.status) ? 'cancelled' : ['received','closed'].includes(p.status) ? 'approved' : 'submitted')} />
-                        <div>
-                          <div className="od-activity-label">{poStatusLabel(p.status)}</div>
-                          <div className="od-activity-val" style={{ color:'#1a4dab' }}>{p.po_number}</div>
-                          <div className="od-activity-time">{fmtINR(p.total_amount)} · {fmt(p.po_date || p.created_at)}</div>
+                    {pos.slice(0, 8).map(p => {
+                      const dt = ['cancelled'].includes(p.status) ? 'cancel' : ['received','closed'].includes(p.status) ? 'success' : 'dispatch'
+                      return (
+                        <div key={p.id} className="od-tl-item" style={{ cursor:'pointer' }} onClick={() => navigate('/procurement/po/' + p.id)}>
+                          <div className={'od-tl-dot ' + dt}>
+                            {dt === 'cancel' ? <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            : dt === 'success' ? <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                            : <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
+                          </div>
+                          <div className="od-tl-content">
+                            <div className="od-tl-header">
+                              <div className="od-tl-title" style={{ color:'#1a4dab', fontWeight:600 }}>{p.po_number}</div>
+                              <div className="od-tl-time">{fmt(p.po_date || p.created_at)}</div>
+                            </div>
+                            <div className="od-tl-sub">{poStatusLabel(p.status)} · {fmtINR(p.total_amount)}</div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}

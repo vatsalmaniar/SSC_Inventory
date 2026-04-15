@@ -1158,84 +1158,82 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div className="od-side-card od-activity-card">
               <div className="od-side-card-title">Activity & Notes</div>
               <div className="od-activity-list">
-                <div className="od-activity-item">
-                  <div className="od-activity-dot submitted" />
-                  <div>
-                    <div className="od-activity-label">Submitted by</div>
-                    <div className="od-activity-val">{po.submitted_by_name || '—'}</div>
-                    <div className="od-activity-time">{fmtTs(po.created_at)}</div>
+                <div className="od-tl-item">
+                  <div className="od-tl-dot created"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+                  <div className="od-tl-content">
+                    <div className="od-tl-header"><div className="od-tl-title">Submitted</div><div className="od-tl-time">{fmtTs(po.created_at)}</div></div>
+                    <div className="od-tl-sub">{po.submitted_by_name || '—'}</div>
                   </div>
                 </div>
                 {po.approved_by && (
-                  <div className="od-activity-item">
-                    <div className="od-activity-dot approved" />
-                    <div>
-                      <div className="od-activity-label">Approved by</div>
-                      <div className="od-activity-val">{po.approved_by}</div>
-                      {po.approved_at && <div className="od-activity-time">{fmtTs(po.approved_at)}</div>}
+                  <div className="od-tl-item">
+                    <div className="od-tl-dot approved"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-header"><div className="od-tl-title">Approved</div>{po.approved_at && <div className="od-tl-time">{fmtTs(po.approved_at)}</div>}</div>
+                      <div className="od-tl-sub">{po.approved_by}</div>
                     </div>
                   </div>
                 )}
                 {po.placed_at && (
-                  <div className="od-activity-item">
-                    <div className="od-activity-dot" style={{ background:'#1d4ed8' }} />
-                    <div>
-                      <div className="od-activity-label">Placed with Vendor</div>
-                      <div className="od-activity-time">{fmtTs(po.placed_at)}</div>
+                  <div className="od-tl-item">
+                    <div className="od-tl-dot dispatch"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-header"><div className="od-tl-title">Placed with Vendor</div><div className="od-tl-time">{fmtTs(po.placed_at)}</div></div>
                     </div>
                   </div>
                 )}
                 {po.acknowledged_at && (
-                  <div className="od-activity-item">
-                    <div className="od-activity-dot" style={{ background:'#0d9488' }} />
-                    <div>
-                      <div className="od-activity-label">Acknowledged</div>
-                      <div className="od-activity-time">{fmtTs(po.acknowledged_at)}</div>
+                  <div className="od-tl-item">
+                    <div className="od-tl-dot" style={{background:'#ccfbf1',color:'#0d9488'}}><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-header"><div className="od-tl-title">Acknowledged</div><div className="od-tl-time">{fmtTs(po.acknowledged_at)}</div></div>
                     </div>
                   </div>
                 )}
                 {po.received_at && (
-                  <div className="od-activity-item">
-                    <div className="od-activity-dot" style={{ background:'#15803d' }} />
-                    <div>
-                      <div className="od-activity-label">Material Received</div>
-                      <div className="od-activity-time">{fmtTs(po.received_at)}</div>
+                  <div className="od-tl-item">
+                    <div className="od-tl-dot success"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-header"><div className="od-tl-title">Material Received</div><div className="od-tl-time">{fmtTs(po.received_at)}</div></div>
                     </div>
                   </div>
                 )}
                 {isCancelled && (
-                  <div className="od-activity-item">
-                    <div className="od-activity-dot cancelled" />
-                    <div>
-                      <div className="od-activity-label">Cancelled</div>
-                      <div className="od-activity-time">{po.cancelled_reason}</div>
+                  <div className="od-tl-item od-tl-cancel">
+                    <div className="od-tl-dot cancel"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-title">Cancelled</div>
+                      <div className="od-tl-sub">{po.cancelled_reason}</div>
                     </div>
                   </div>
                 )}
                 {grns.map(g => (
-                  <div key={'grn-'+g.id} className="od-activity-item">
-                    <div className="od-activity-dot" style={{ background:'#7c3aed' }} />
-                    <div>
-                      <div className="od-activity-label">GRN — {g.status === 'confirmed' ? 'Confirmed' : g.status === 'checking' ? 'Checking' : 'Created'}</div>
-                      <div onClick={() => navigate('/fc/grn/' + g.id)} style={{ fontSize:12, fontFamily:'var(--mono)', fontWeight:600, color:'#7c3aed', cursor:'pointer' }}>{g.grn_number}</div>
-                      {g.received_at && <div className="od-activity-time">{fmtTs(g.received_at)}</div>}
+                  <div key={'grn-'+g.id} className="od-tl-item">
+                    <div className="od-tl-dot invoice"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                    <div className="od-tl-content">
+                      <div className="od-tl-header">
+                        <div className="od-tl-title">GRN — {g.status === 'confirmed' ? 'Confirmed' : g.status === 'checking' ? 'Checking' : 'Created'}</div>
+                        {g.received_at && <div className="od-tl-time">{fmtTs(g.received_at)}</div>}
+                      </div>
+                      <div onClick={() => navigate('/fc/grn/' + g.id)} style={{ fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'#7c3aed', cursor:'pointer' }}>{g.grn_number}</div>
                     </div>
                   </div>
                 ))}
                 {purchaseInvoices.map(pi => {
                   const piLabel = pi.status === 'inward_complete' ? 'Inward Complete' : pi.status === 'invoice_pending' ? 'Invoice Pending' : '3-Way Check'
                   const piColor = pi.status === 'inward_complete' ? '#15803d' : pi.status === 'invoice_pending' ? '#1d4ed8' : '#b45309'
+                  const piTs = pi.inward_completed_at || pi.three_way_checked_at || pi.created_at
                   return (
-                    <div key={'pi-'+pi.id} className="od-activity-item">
-                      <div className="od-activity-dot" style={{ background: piColor }} />
-                      <div>
-                        <div className="od-activity-label">Billing — {piLabel}</div>
-                        <div onClick={() => navigate('/procurement/invoices/' + pi.id)} style={{ fontSize:12, fontFamily:'var(--mono)', fontWeight:600, color: piColor, cursor:'pointer' }}>
+                    <div key={'pi-'+pi.id} className="od-tl-item">
+                      <div className="od-tl-dot" style={{background: piColor+'20', color: piColor}}><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-title">Billing — {piLabel}</div>
+                          <div className="od-tl-time">{fmtTs(piTs)}</div>
+                        </div>
+                        <div onClick={() => navigate('/procurement/invoices/' + pi.id)} style={{ fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color: piColor, cursor:'pointer' }}>
                           {pi.invoice_number || 'Pending Invoice'}
                         </div>
-                        {pi.inward_completed_at && <div className="od-activity-time">{fmtTs(pi.inward_completed_at)}</div>}
-                        {!pi.inward_completed_at && pi.three_way_checked_at && <div className="od-activity-time">{fmtTs(pi.three_way_checked_at)}</div>}
-                        {!pi.inward_completed_at && !pi.three_way_checked_at && <div className="od-activity-time">{fmtTs(pi.created_at)}</div>}
                       </div>
                     </div>
                   )
@@ -1243,23 +1241,25 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 {comments.map(c => {
                   const isSystem = c.is_activity === true
                   return isSystem ? (
-                    <div key={c.id} className="od-activity-item">
-                      <div className="od-activity-dot" style={{ background:'#16a34a', flexShrink:0 }} />
-                      <div>
-                        <div className="od-activity-val" style={{ fontSize:12, fontWeight:600 }}>{c.message}</div>
-                        <div className="od-activity-time">{c.author_name} · {fmtTs(c.created_at)}</div>
+                    <div key={c.id} className="od-tl-item">
+                      <div className="od-tl-dot system"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header"><div className="od-tl-title">{c.message}</div><div className="od-tl-time">{fmtTs(c.created_at)}</div></div>
+                        <div className="od-tl-sub">{c.author_name}</div>
                       </div>
                     </div>
                   ) : (
-                    <div key={c.id} className="od-activity-item od-comment-item">
-                      <div className="od-comment-avatar">{c.author_name?.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}</div>
-                      <div className="od-comment-body">
-                        <div className="od-comment-author">
-                          {c.author_name}
-                          {c.tagged_users?.length > 0 && <span className="od-comment-tagged">tagged {c.tagged_users.map(u => '@' + u).join(', ')}</span>}
+                    <div key={c.id} className="od-tl-item od-tl-comment">
+                      <div className="od-tl-dot comment"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-comment-author">
+                            {c.author_name}
+                            {c.tagged_users?.length > 0 && <span className="od-tl-comment-tagged">tagged {c.tagged_users.map(u => '@' + u).join(', ')}</span>}
+                          </div>
+                          <div className="od-tl-time">{fmtTs(c.created_at)}</div>
                         </div>
-                        <div className="od-comment-text">{renderMessage(c.message)}</div>
-                        <div className="od-activity-time">{fmtTs(c.created_at)}</div>
+                        <div className="od-tl-comment-text">{renderMessage(c.message)}</div>
                       </div>
                     </div>
                   )

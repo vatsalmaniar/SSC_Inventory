@@ -1846,32 +1846,32 @@ export default function CRMOpportunityDetail() {
                       <div style={{ padding:'8px 20px', background:'#f8fafc', borderBottom:'1px solid var(--gray-100)' }}>
                         <span style={{ fontSize:11, fontWeight:700, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{g.label}</span>
                       </div>
+                      <div style={{padding:'4px 20px'}}>
                       {g.items.map(a => {
                         const expanded = expandedActs.has(a.id)
                         const clr = ACT_CLR[a.activity_type] || '#94a3b8'
-                        const dt = new Date(a.created_at)
-                        const timeStr = dt.getDate() + ' ' + dt.toLocaleDateString('en-US',{month:'short'}) + ' · ' + dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0')
                         return (
-                          <div key={a.id} style={{ borderBottom:'1px solid var(--gray-50)' }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 20px', cursor:'pointer' }}
-                              onClick={() => setExpandedActs(prev => { const s = new Set(prev); s.has(a.id) ? s.delete(a.id) : s.add(a.id); return s })}>
-                              <div style={{ width:32, height:32, borderRadius:8, background:clr+'18', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:clr }}>
-                                {ACT_ICONS[a.activity_type] || ACT_ICONS.Call}
-                              </div>
-                              <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ fontSize:13, fontWeight:700, color:'var(--gray-800)' }}>{actLabel(a)}</div>
-                                <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:1 }}>{a.profiles?.name} · {timeStr}</div>
-                              </div>
-                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14, color:'var(--gray-300)', flexShrink:0, transform: expanded?'rotate(180deg)':'none', transition:'transform 0.15s' }}><polyline points="6 9 12 15 18 9"/></svg>
+                          <div key={a.id} className="od-tl-item" style={{cursor:'pointer'}}
+                            onClick={() => setExpandedActs(prev => { const s = new Set(prev); s.has(a.id) ? s.delete(a.id) : s.add(a.id); return s })}>
+                            <div className="od-tl-dot" style={{background: clr+'20', color: clr}}>
+                              {ACT_ICONS[a.activity_type] || ACT_ICONS.Call}
                             </div>
-                            {expanded && a.notes && (
-                              <div style={{ padding:'0 20px 14px 64px', fontSize:13, color:'var(--gray-600)', lineHeight:1.7, borderTop:'1px solid var(--gray-50)', whiteSpace:'pre-wrap' }}>
-                                {a.notes}
+                            <div className="od-tl-content">
+                              <div className="od-tl-header">
+                                <div className="od-tl-title" style={{fontWeight:600}}>{actLabel(a)}</div>
+                                <div className="od-tl-time">{fmtTs(a.created_at)}</div>
                               </div>
-                            )}
+                              <div className="od-tl-sub">{a.profiles?.name}</div>
+                              {expanded && a.notes && (
+                                <div style={{fontSize:11, color:'var(--gray-600)', lineHeight:1.5, marginTop:4, whiteSpace:'pre-wrap', borderTop:'1px solid var(--gray-50)', paddingTop:4}}>
+                                  {a.notes}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )
                       })}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1884,29 +1884,20 @@ export default function CRMOpportunityDetail() {
               return (
                 <div>
                   {noteActs.length === 0 && <div style={{ padding:'32px 20px', fontSize:13, color:'var(--gray-400)', textAlign:'center' }}>No notes yet. Click "Add Note" to write one — use @ to tag a teammate.</div>}
-                  {noteActs.map(a => {
-                    const expanded = expandedActs.has(a.id)
-                    const dt = new Date(a.created_at)
-                    const timeStr = dt.getDate() + ' ' + dt.toLocaleDateString('en-US',{month:'short'}) + ' · ' + dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0')
-                    return (
-                      <div key={a.id} style={{ borderBottom:'1px solid var(--gray-50)' }}>
-                        <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'14px 20px' }}>
-                          <div style={{ width:32, height:32, borderRadius:8, background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'#64748b' }}>
-                            <CrmIcon name="Note" size={14} color="#64748b" />
-                          </div>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                              <span style={{ fontSize:12, fontWeight:700, color:'var(--gray-700)' }}>{a.profiles?.name}</span>
-                              <span style={{ fontSize:11, color:'var(--gray-400)' }}>{timeStr}</span>
-                            </div>
-                            <div style={{ fontSize:13, color:'var(--gray-700)', lineHeight:1.7, whiteSpace:'pre-wrap' }}>
-                              {renderNoteText(a.notes)}
-                            </div>
-                          </div>
+                  <div style={{padding:'8px 20px'}}>
+                  {noteActs.map(a => (
+                    <div key={a.id} className="od-tl-item od-tl-comment">
+                      <div className="od-tl-dot comment"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+                      <div className="od-tl-content">
+                        <div className="od-tl-header">
+                          <div className="od-tl-comment-author">{a.profiles?.name}</div>
+                          <div className="od-tl-time">{fmtTs(a.created_at)}</div>
                         </div>
+                        <div className="od-tl-comment-text" style={{whiteSpace:'pre-wrap'}}>{renderNoteText(a.notes)}</div>
                       </div>
-                    )
-                  })}
+                    </div>
+                  ))}
+                  </div>
                 </div>
               )
             })()}
@@ -1920,17 +1911,27 @@ export default function CRMOpportunityDetail() {
               const all = [...logActs, ...fallback].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
               const DOT_CLR = { 'Stage Change':'#d97706', 'Quotation':'#16a34a', 'Won':'#15803d', 'Lost':'#dc2626', 'Created':'#1a4dab' }
               return (
-                <div style={{ padding:'4px 0' }}>
-                  {all.length === 0 && <div style={{ padding:'32px 20px', fontSize:13, color:'var(--gray-400)', textAlign:'center' }}>No log entries yet.</div>}
-                  {all.map(a => (
-                    <div key={a.id} style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'12px 20px', borderBottom:'1px solid var(--gray-50)' }}>
-                      <div style={{ width:8, height:8, borderRadius:'50%', background: DOT_CLR[a.activity_type] || '#94a3b8', flexShrink:0, marginTop:5 }} />
-                      <div>
-                        <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-800)' }}><strong>{a.activity_type}</strong>{a.notes ? ': ' + a.notes : ''}</div>
-                        <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{a.profiles?.name || '—'} · {fmtTs(a.created_at)}</div>
+                <div style={{ padding:'8px 20px' }}>
+                  {all.length === 0 && <div style={{ padding:'32px 0', fontSize:13, color:'var(--gray-400)', textAlign:'center' }}>No log entries yet.</div>}
+                  {all.map(a => {
+                    const clr = DOT_CLR[a.activity_type] || '#94a3b8'
+                    return (
+                      <div key={a.id} className={'od-tl-item' + (a.activity_type === 'Lost' ? ' od-tl-cancel' : '')}>
+                        <div className="od-tl-dot" style={{background: clr+'20', color: clr}}>
+                          {a.activity_type === 'Won' ? <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                          : a.activity_type === 'Lost' ? <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          : <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>}
+                        </div>
+                        <div className="od-tl-content">
+                          <div className="od-tl-header">
+                            <div className="od-tl-title"><strong>{a.activity_type}</strong>{a.notes ? ': ' + a.notes : ''}</div>
+                            <div className="od-tl-time">{fmtTs(a.created_at)}</div>
+                          </div>
+                          <div className="od-tl-sub">{a.profiles?.name || '—'}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )
             })()}

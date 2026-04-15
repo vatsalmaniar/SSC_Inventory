@@ -560,15 +560,23 @@ export default function CRMLeadDetail() {
               <div className="od-side-card od-activity-card">
                 <div className="od-side-card-title">Activity Log</div>
                 <div className="od-activity-list">
-                  {activities.map(a => (
-                    <div key={a.id} className="od-activity-item">
-                      <div className="od-activity-dot" style={actDotStyle(a.activity_type, a.notes)} />
-                      <div>
-                        <div className="od-activity-val"><strong>{actLabel(a)}</strong>{a.notes ? ': ' + a.notes : ''}</div>
-                        <div className="od-activity-time">{a.profiles?.name} · {fmtTs(a.created_at)}</div>
+                  {activities.map(a => {
+                    const clr = actDotStyle(a.activity_type, a.notes).background
+                    return (
+                      <div key={a.id} className="od-tl-item">
+                        <div className="od-tl-dot" style={{ background: clr + '20', color: clr }}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        </div>
+                        <div className="od-tl-content">
+                          <div className="od-tl-header">
+                            <div className="od-tl-title"><strong>{actLabel(a)}</strong>{a.notes ? ': ' + a.notes : ''}</div>
+                            <div className="od-tl-time">{fmtTs(a.created_at)}</div>
+                          </div>
+                          <div className="od-tl-sub">{a.profiles?.name}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   {activities.length === 0 && <div style={{ fontSize:12, color:'var(--gray-400)' }}>No activities yet.</div>}
                 </div>
                 <div className="od-comment-box" style={{ flexDirection:'column', gap:8, alignItems:'stretch' }}>
