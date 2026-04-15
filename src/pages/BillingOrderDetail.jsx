@@ -360,6 +360,7 @@ export default function BillingOrderDetail() {
     }
     await sb.from('orders').update({ status: 'delivery_created', updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`PI Payment confirmed${paymentRef.trim() ? ' — Ref: ' + paymentRef.trim() : ''}. Order returned to Fulfilment Centre for picking & dispatch.`)
+    await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — PI payment confirmed. Order ready for picking & dispatch.`, 'pi_payment_confirmed')
     toast('PI payment confirmed', 'success')
     setSaving(false); await loadOrder()
   }
