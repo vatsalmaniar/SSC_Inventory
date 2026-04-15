@@ -80,11 +80,13 @@ export default function Login() {
 
     if (authErr) {
       // Log failed login attempt
-      sb.from('login_audit').insert({
-        user_id: profile.id, user_name: profile.name,
-        email: email, event_type: 'login_failed',
-        user_agent: navigator.userAgent,
-      }).then(() => {})
+      try {
+        await sb.from('login_audit').insert({
+          user_id: profile.id, user_name: profile.name,
+          email: email, event_type: 'login_failed',
+          user_agent: navigator.userAgent,
+        })
+      } catch (_) {}
       setLoading(false)
       setError('Incorrect password. Please try again.')
       setPassword('')
@@ -130,12 +132,14 @@ export default function Login() {
     if (chalErr) { setMfaError(chalErr.message); setMfaLoading(false); return }
     const { error: verErr } = await sb.auth.mfa.verify({ factorId: mfaFactorId, challengeId: challenge.id, code: totpCode })
     if (verErr) { setMfaError('Invalid code. Try again.'); setTotpCode(''); setMfaLoading(false); totpRef.current?.focus(); return }
-    // Log successful login
-    sb.from('login_audit').insert({
-      user_id: pendingProfile.id, user_name: pendingProfile.name,
-      email: pendingProfile.username ? pendingProfile.username + '@ssccontrol.com' : '',
-      event_type: 'login_success', user_agent: navigator.userAgent,
-    }).then(() => {})
+    // Log successful login (await to ensure session is settled)
+    try {
+      await sb.from('login_audit').insert({
+        user_id: pendingProfile.id, user_name: pendingProfile.name,
+        email: pendingProfile.username ? pendingProfile.username + '@ssccontrol.com' : '',
+        event_type: 'login_success', user_agent: navigator.userAgent,
+      })
+    } catch (_) {}
     setMfaLoading(false)
     await handleSession(pendingSession)
   }
@@ -147,11 +151,13 @@ export default function Login() {
     const { error: verErr } = await sb.auth.mfa.challengeAndVerify({ factorId: enrollData.id, code: totpCode })
     if (verErr) { setMfaError('Invalid code. Make sure you scanned the QR code correctly.'); setTotpCode(''); setMfaLoading(false); totpRef.current?.focus(); return }
     // Log successful login (first MFA enrollment)
-    sb.from('login_audit').insert({
-      user_id: pendingProfile.id, user_name: pendingProfile.name,
-      email: pendingProfile.username ? pendingProfile.username + '@ssccontrol.com' : '',
-      event_type: 'login_success', user_agent: navigator.userAgent,
-    }).then(() => {})
+    try {
+      await sb.from('login_audit').insert({
+        user_id: pendingProfile.id, user_name: pendingProfile.name,
+        email: pendingProfile.username ? pendingProfile.username + '@ssccontrol.com' : '',
+        event_type: 'login_success', user_agent: navigator.userAgent,
+      })
+    } catch (_) {}
     setMfaLoading(false)
     await handleSession(pendingSession)
   }
