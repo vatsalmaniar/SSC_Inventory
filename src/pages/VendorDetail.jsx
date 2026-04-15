@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { useRealtimeSubscription } from '../hooks/useRealtime'
+
 import { fmt } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
@@ -54,11 +54,6 @@ export default function VendorDetail() {
 
   useEffect(() => { init() }, [id])
 
-  // Realtime: live vendor detail updates
-  useRealtimeSubscription(`vendor-${id}`, {
-    table: 'vendors', filter: `id=eq.${id}`, event: 'UPDATE',
-    enabled: !!id, onEvent: () => init(),
-  })
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

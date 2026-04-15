@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { useRealtimeSubscription } from '../hooks/useRealtime'
+
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Typeahead from '../components/Typeahead'
@@ -93,11 +93,6 @@ export default function PurchaseOrderDetail() {
 
   useEffect(() => { init() }, [id])
 
-  // Realtime: live PO detail updates
-  useRealtimeSubscription(`po-${id}`, {
-    table: 'purchase_orders', filter: `id=eq.${id}`, event: 'UPDATE',
-    enabled: !!id, onEvent: () => loadPO(true),
-  })
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { useRealtimeSubscription } from '../hooks/useRealtime'
+
 import { toast } from '../lib/toast'
 import { fmt, fmtNum, fmtTs, esc } from '../lib/fmt'
 import Layout from '../components/Layout'
@@ -184,15 +184,6 @@ export default function CRMOpportunityDetail() {
 
   useEffect(() => { init() }, [id])
 
-  // Realtime: live opportunity + activity updates
-  useRealtimeSubscription(`crm-opp-${id}`, {
-    table: 'crm_opportunities', filter: `id=eq.${id}`, event: 'UPDATE',
-    enabled: !!id, onEvent: () => init(),
-  })
-  useRealtimeSubscription(`crm-activities-${id}`, {
-    table: 'crm_activities', filter: `opportunity_id=eq.${id}`,
-    enabled: !!id, onEvent: () => init(),
-  })
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()

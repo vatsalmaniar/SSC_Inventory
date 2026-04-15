@@ -233,10 +233,10 @@ export default function Layout({ children, pageTitle, pageKey }) {
     const q = e.target.value
     setSearchQ(q)
     clearTimeout(searchTimer.current)
-    if (q.trim().length < 2) { setSearchResults({ orders:[], companies:[], leads:[], opportunities:[], vendors:[], purchaseOrders:[], grns:[], purchaseInvoices:[] }); setSearchOpen(q.length > 0); return }
+    if (q.trim().length < 3) { setSearchResults({ orders:[], companies:[], leads:[], opportunities:[], vendors:[], purchaseOrders:[], grns:[], purchaseInvoices:[] }); setSearchOpen(q.length > 0); return }
     setSearchLoading(true)
     setSearchOpen(true)
-    searchTimer.current = setTimeout(() => doSearch(q.trim()), 300)
+    searchTimer.current = setTimeout(() => doSearch(q.trim()), 600)
   }
 
   async function doSearch(q) {
