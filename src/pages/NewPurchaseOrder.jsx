@@ -50,9 +50,8 @@ export default function NewPurchaseOrder() {
   const [coText, setCOText] = useState('')
   const [sscNotes, setSscNotes] = useState('')
 
-  // Document upload
-  const [poFile, setPoFile]       = useState(null)
-  const [poFileName, setPoFileName] = useState('')
+  // Document uploads (multiple)
+  const [poFiles, setPoFiles] = useState([])
 
   // Items
   const [items, setItems] = useState([emptyItem(), emptyItem(), emptyItem()])
@@ -181,16 +180,20 @@ export default function NewPurchaseOrder() {
     setVendorPaymentTerms(v.credit_terms || '')
   }
 
-  function handlePoFile(e) {
-    const f = e.target.files?.[0]
-    if (!f) return
-    if (f.size > 200 * 1024) {
-      toast('File is too large. Maximum file size allowed: 200 KB')
-      e.target.value = ''
-      return
+  function handlePoFiles(e) {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    const valid = []
+    for (const f of files) {
+      if (f.size > 200 * 1024) { toast(`${f.name} is too large (max 200 KB)`); continue }
+      valid.push(f)
     }
-    setPoFile(f)
-    setPoFileName(f.name)
+    if (valid.length) setPoFiles(prev => [...prev, ...valid])
+    e.target.value = ''
+  }
+
+  function removePoFile(idx) {
+    setPoFiles(prev => prev.filter((_, i) => i !== idx))
   }
 
   async function fetchCustomers(q) {
@@ -255,16 +258,20 @@ export default function NewPurchaseOrder() {
 
     setSubmitting(true)
 
-    // Upload document if provided
+    // Upload documents if provided
     let poDocUrl = null
-    if (poFile) {
-      const ext  = poFile.name.split('.').pop()
-      const path = `purchase-orders/${Date.now()}.${ext}`
-      const { error: upErr } = await sb.storage.from('po-documents').upload(path, poFile)
-      if (!upErr) {
-        const { data: { publicUrl } } = sb.storage.from('po-documents').getPublicUrl(path)
-        poDocUrl = publicUrl
+    if (poFiles.length) {
+      const urls = []
+      for (const f of poFiles) {
+        const ext  = f.name.split('.').pop()
+        const path = `purchase-orders/${Date.now()}-${Math.random().toString(36).slice(2,6)}.${ext}`
+        const { error: upErr } = await sb.storage.from('po-documents').upload(path, f)
+        if (!upErr) {
+          const { data: { publicUrl } } = sb.storage.from('po-documents').getPublicUrl(path)
+          urls.push(publicUrl)
+        }
       }
+      poDocUrl = urls.length === 1 ? urls[0] : urls.length > 1 ? JSON.stringify(urls) : null
     }
 
     try {
@@ -521,29 +528,34 @@ export default function NewPurchaseOrder() {
             </div>
           </div>
 
-          {/* Document Upload */}
+          {/* Document Upload — multiple files */}
           <div className="no-row full" style={{ marginTop: 4 }}>
             <div className="no-field">
-              <label>Supporting Document (optional)</label>
+              <label>Supporting Documents (optional)</label>
               <label className="no-file-label">
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx" onChange={handlePoFile} style={{ display: 'none' }} />
-                <div className={'no-file-box' + (poFileName ? ' has-file' : '')}>
+                <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx" onChange={handlePoFiles} style={{ display: 'none' }} />
+                <div className={'no-file-box' + (poFiles.length ? ' has-file' : '')}>
                   <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width: 20, height: 20 }}>
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                     <polyline points="17 8 12 3 7 8"/>
                     <line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  <span>{poFileName || 'Click to upload (PDF, image, Excel — e.g. special price sheet)'}</span>
-                  {poFileName && (
-                    <button
-                      type="button"
-                      onClick={e => { e.preventDefault(); setPoFile(null); setPoFileName('') }}
-                      style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', fontSize: 16 }}
-                    >×</button>
-                  )}
+                  <span>{poFiles.length ? `${poFiles.length} file${poFiles.length > 1 ? 's' : ''} selected — click to add more` : 'Click to upload (PDF, image, Excel — e.g. special price sheet)'}</span>
                 </div>
               </label>
-              <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>Maximum file size allowed: 200 KB. Upload special price approvals, quotations, etc.</div>
+              {poFiles.length > 0 && (
+                <div style={{ display:'flex', flexDirection:'column', gap:4, marginTop:6 }}>
+                  {poFiles.map((f, i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:8, background:'var(--gray-50)', border:'1px solid var(--gray-200)', borderRadius:8, padding:'6px 10px', fontSize:12 }}>
+                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14,flexShrink:0,color:'var(--gray-400)'}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      <span style={{ flex:1, color:'var(--gray-700)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</span>
+                      <span style={{ color:'var(--gray-400)', fontSize:11, flexShrink:0 }}>{(f.size / 1024).toFixed(0)} KB</span>
+                      <button type="button" onClick={() => removePoFile(i)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--gray-400)', fontSize:16, lineHeight:1, padding:0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>Max 200 KB per file. Upload price approvals, quotations, etc.</div>
             </div>
           </div>
         </div>

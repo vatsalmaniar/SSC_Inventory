@@ -950,18 +950,25 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                         </div>
                       </div>
                     )}
-                    {po.po_document_url && (
-                      <div className="od-detail-field">
-                        <label>Supporting Document</label>
-                        <div className="val">
-                          <a href={po.po_document_url} target="_blank" rel="noreferrer"
-                            style={{ fontSize:12, color:'#1a4dab', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, textDecoration:'none' }}>
-                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            View Document
-                          </a>
+                    {po.po_document_url && (() => {
+                      let urls = []
+                      try { urls = JSON.parse(po.po_document_url) } catch { urls = [po.po_document_url] }
+                      if (!Array.isArray(urls)) urls = [urls]
+                      return (
+                        <div className="od-detail-field">
+                          <label>Supporting Document{urls.length > 1 ? 's' : ''}</label>
+                          <div className="val" style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                            {urls.map((url, i) => (
+                              <a key={i} href={url} target="_blank" rel="noreferrer"
+                                style={{ fontSize:12, color:'#1a4dab', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, textDecoration:'none' }}>
+                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                {urls.length > 1 ? `Document ${i + 1}` : 'View Document'}
+                              </a>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })()}
                     {po.ack_document_url && (
                       <div className="od-detail-field">
                         <label>Vendor Acknowledgement</label>
