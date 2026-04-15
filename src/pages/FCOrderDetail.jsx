@@ -417,7 +417,7 @@ export default function FCOrderDetail() {
     setComments(c || [])
   }
 
-  async function notifyUsers(roles, message) {
+  async function notifyUsers(roles, message, emailType = null) {
     const ownerName = order?.account_owner || order?.engineer_name || ''
     const seen = new Set()
     const targets = []
@@ -437,6 +437,7 @@ export default function FCOrderDetail() {
     await sb.from('notifications').insert(final.map(t => ({
       user_name: t.name, user_id: t.id, message, order_id: id,
       order_number: order?.order_number || '', from_name: user.name,
+      email_type: emailType,
     })))
   }
 
@@ -470,7 +471,7 @@ export default function FCOrderDetail() {
     if (tagged.length > 0) {
       const notifRows = tagged.map(tname => {
         const p = profiles.find(pr => pr.name === tname)
-        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in ${order?.order_number}`, order_id: id, order_number: order?.order_number || '', from_name: user.name }
+        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in ${order?.order_number}`, order_id: id, order_number: order?.order_number || '', from_name: user.name, email_type: 'mention' }
       })
       await sb.from('notifications').insert(notifRows)
     }
@@ -524,7 +525,7 @@ export default function FCOrderDetail() {
       : `Goods Issued — DC confirmed: ${dcNum || order.dc_number || '—'}. Handed to Accounts for billing.`
     await logActivity(actMsg)
     if (order.order_type !== 'SAMPLE') {
-      await notifyUsers(['accounts', 'admin'], `${order.order_number} — Goods Issued. Ready for billing.`)
+      await notifyUsers(['accounts', 'admin'], `${order.order_number} — Goods Issued. Ready for billing.`, 'goods_issued')
     }
     toast('Goods issued confirmed', 'success')
     setConfirm(null)
@@ -602,6 +603,7 @@ export default function FCOrderDetail() {
     const { error } = await sb.from('orders').update({ status: finalStatus, updated_at: new Date().toISOString() }).eq('id', id)
     if (error) { toast('Error: ' + error.message); setSaving(false); return }
     await logActivity(allBatchesDone ? 'Order Delivered — all batches complete.' : 'Batch Delivered — remaining batch(es) still pending.')
+    if (allBatchesDone) await notifyUsers(['sales','ops','admin'], `${order.order_number} — Order delivered to customer.`, 'order_delivered')
     toast(allBatchesDone ? 'Order delivered' : 'Batch delivered', 'success')
     setConfirm(null)
     setSaving(false)

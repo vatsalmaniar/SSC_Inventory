@@ -375,7 +375,7 @@ export default function OrderDetail() {
     // silently ignore activity log failures
   }
 
-  async function notifyUsers(roles, message) {
+  async function notifyUsers(roles, message, emailType = null) {
     const ownerName = order?.account_owner || order?.engineer_name || ''
     const seen = new Set()
     const targets = []
@@ -399,6 +399,7 @@ export default function OrderDetail() {
     await sb.from('notifications').insert(final.map(t => ({
       user_name: t.name, user_id: t.id, message, order_id: id,
       order_number: order?.order_number || '', from_name: user.name,
+      email_type: emailType,
     })))
   }
 
@@ -460,7 +461,7 @@ export default function OrderDetail() {
     await logActivity(isPIOrder
       ? `Full Dispatch — ${order.credit_terms}. PI required before delivery. DC: ${dcNum}`
       : `Full Dispatch — all items sent via ${fcCenter}. Delivery Created. DC: ${dcNum}`)
-    if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Dispatched to ${fcCenter}. Ready for picking.`)
+    if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Dispatched to ${fcCenter}. Ready for picking.`, 'order_dispatched')
     toast('Dispatch created', 'success')
     await loadOrder(); setSaving(false)
   }
@@ -514,7 +515,7 @@ export default function OrderDetail() {
     await logActivity(isPIOrder
       ? `Partial Dispatch via ${fcCenter} — ${summary}. ${order.credit_terms} — PI required before delivery. DC: ${dcNum}`
       : `Partial Dispatch via ${fcCenter} — ${summary}. Delivery Created. DC: ${dcNum}`)
-    if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Partial dispatch to ${fcCenter}. Ready for picking.`)
+    if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Partial dispatch to ${fcCenter}. Ready for picking.`, 'order_dispatched')
     toast('Partial dispatch created', 'success')
     await loadOrder(); setSaving(false)
   }
@@ -563,7 +564,7 @@ if (match) {
     if (tagged.length > 0) {
       const notifRows = tagged.map(tname => {
         const p = profiles.find(pr => pr.name === tname)
-        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in ${order.order_number}`, order_id: id, order_number: order.order_number, from_name: user.name }
+        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in ${order.order_number}`, order_id: id, order_number: order.order_number, from_name: user.name, email_type: 'mention' }
       })
       await sb.from('notifications').insert(notifRows)
     }
@@ -589,6 +590,7 @@ if (match) {
     await sb.from('order_comments').insert({
       order_id: id, author_name: user.name, message: logMsg, tagged_users: [], is_activity: true, is_cancellation: true
     })
+    await notifyUsers(['fc_kaveri','fc_godawari','ops','accounts','admin'], `${order.order_number} — Order cancelled. Reason: ${cancelReason.trim()}`, 'order_cancelled')
     toast('Order cancelled', 'success')
     setShowCancel(false); setCancelReason(''); setCancelInitiatorType('staff'); setCancelInitiatorName(''); setCancelInitiatorFreeText('')
     await loadOrder(); setSaving(false)

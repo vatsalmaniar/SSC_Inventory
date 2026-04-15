@@ -214,6 +214,7 @@ export default function NewVendor() {
             user_id: a.id, user_name: a.name,
             message: `New vendor "${form.vendor_name.trim()}" created by ${userName} — pending approval`,
             order_id: null, order_number: vendorCode, from_name: userName,
+            email_type: 'new_customer_approval',
           })))
         }
       }

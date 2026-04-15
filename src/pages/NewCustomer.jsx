@@ -227,6 +227,7 @@ export default function NewCustomer() {
             user_id: a.id, user_name: a.name,
             message: `New customer "${form.customer_name}" created by ${ownerName} — pending approval`,
             order_id: null, order_number: '', from_name: ownerName,
+            email_type: 'new_customer_approval',
           })))
         }
       }

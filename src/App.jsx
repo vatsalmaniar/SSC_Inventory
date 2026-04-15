@@ -48,6 +48,7 @@ const FCOrderDetail = lazy(() => import('./pages/FCOrderDetail'))
 const BillingDashboard = lazy(() => import('./pages/BillingDashboard'))
 const BillingList = lazy(() => import('./pages/BillingList'))
 const BillingOrderDetail = lazy(() => import('./pages/BillingOrderDetail'))
+const UserManagement = lazy(() => import('./pages/UserManagement'))
 
 export default function App() {
   return (
@@ -101,6 +102,7 @@ export default function App() {
           <Route path="/billing" element={<BillingDashboard />} />
           <Route path="/billing/list" element={<BillingList />} />
           <Route path="/billing/:id" element={<BillingOrderDetail />} />
+          <Route path="/admin/users" element={<UserManagement />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

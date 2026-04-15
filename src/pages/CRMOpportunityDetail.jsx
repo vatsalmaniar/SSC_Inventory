@@ -515,6 +515,24 @@ export default function CRMOpportunityDetail() {
     setOpp(p => ({ ...p, stage: newStage, ...updateData }))
     const { data: c } = await sb.from('crm_activities').select('*, profiles(name)').eq('opportunity_id', id).order('created_at', { ascending: false })
     setActivities(c || [])
+    // Notify team on WON/LOST
+    if (newStage === 'WON' || newStage === 'LOST') {
+      const oppName = opp.opportunity_name || opp.product_notes || 'Opportunity'
+      const emailType = newStage === 'WON' ? 'opportunity_won' : 'opportunity_lost'
+      const msg = newStage === 'WON'
+        ? `Opportunity Won — ${oppName}` + (stageReason ? `. ${stageReason}` : '')
+        : `Opportunity Lost — ${oppName}` + (stageReason ? `. ${stageReason}` : '')
+      // Notify all sales/ops/admin
+      const { data: allProfiles } = await sb.from('profiles').select('id,name').in('role', ['sales','ops','admin'])
+      if (allProfiles?.length) {
+        const notifRows = allProfiles.filter(p => p.id !== user.id).map(p => ({
+          user_id: p.id, user_name: p.name, message: msg,
+          order_id: null, order_number: oppName, from_name: user.name,
+          email_type: emailType,
+        }))
+        if (notifRows.length) await sb.from('notifications').insert(notifRows)
+      }
+    }
     setPendingStage(null); setShowStageMenu(false); setStageReason(''); setStageRevisit('')
     setChangingStage(false)
   }
@@ -559,7 +577,7 @@ export default function CRMOpportunityDetail() {
     if (tagged.length > 0) {
       const notifRows = tagged.map(tname => {
         const p = reps.find(r => r.name === tname)
-        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in an opportunity note`, order_id: null, order_number: opp.opportunity_name || opp.product_notes || 'Opportunity', from_name: user.name }
+        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in an opportunity note`, order_id: null, order_number: opp.opportunity_name || opp.product_notes || 'Opportunity', from_name: user.name, email_type: 'mention' }
       })
       await sb.from('notifications').insert(notifRows)
     }

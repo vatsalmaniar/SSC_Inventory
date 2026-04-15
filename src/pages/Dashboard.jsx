@@ -60,6 +60,12 @@ const APPS = [
     color: { bg: '#e8f2fc', icon: '#1a4dab' },
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
   },
+  {
+    key: 'users', label: 'Users', desc: 'Manage users & emails', path: '/admin/users',
+    roles: ['admin'],
+    color: { bg: '#f1f5f9', icon: '#475569' },
+    icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 15a6 6 0 00-6 6h12a6 6 0 00-6-6z"/><circle cx="12" cy="8" r="4"/><path d="M20 4l-2 2m0 0l2 2m-2-2h3m-3 0h-1"/></svg>,
+  },
 ]
 
 export default function Dashboard() {
@@ -108,7 +114,6 @@ export default function Dashboard() {
 
   function openApp(app) {
     if (!app.path) return
-    setActiveKey(app.key)
     navigate(app.path)
   }
 

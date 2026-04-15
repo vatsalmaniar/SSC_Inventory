@@ -200,7 +200,7 @@ export default function BillingOrderDetail() {
     await reloadComments()
   }
 
-  async function notifyUsers(roles, message) {
+  async function notifyUsers(roles, message, emailType = null) {
     const ownerName = order?.account_owner || order?.engineer_name || ''
     const seen = new Set()
     const targets = []
@@ -220,6 +220,7 @@ export default function BillingOrderDetail() {
     await sb.from('notifications').insert(final.map(t => ({
       user_name: t.name, user_id: t.id, message, order_id: id,
       order_number: order?.order_number || '', from_name: user.name,
+      email_type: emailType,
     })))
   }
 
@@ -253,7 +254,7 @@ export default function BillingOrderDetail() {
     if (tagged.length > 0) {
       const notifRows = tagged.map(tname => {
         const p = profiles.find(pr => pr.name === tname)
-        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in ${order?.order_number}`, order_id: id, order_number: order?.order_number || '', from_name: user.name }
+        return { user_name: tname, user_id: p?.id || null, message: `${user.name} tagged you in ${order?.order_number}`, order_id: id, order_number: order?.order_number || '', from_name: user.name, email_type: 'mention' }
       })
       await sb.from('notifications').insert(notifRows)
     }
@@ -276,6 +277,7 @@ export default function BillingOrderDetail() {
     if (activeBatch) await sb.from('order_dispatches').update({ credit_override: true, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     await sb.from('orders').update({ credit_override: true, updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity('Credit Override flagged — payment pending. Awaiting approval. ⚠️')
+    await notifyUsers(['ops','admin'], `${order.order_number} — Credit Override flagged. Payment pending — needs approval.`, 'credit_override')
     toast('Credit override flagged', 'warning')
     setSaving(false); await loadOrder()
   }
@@ -311,7 +313,7 @@ export default function BillingOrderDetail() {
       await sb.from('order_dispatches').update({ status: 'invoice_generated', invoice_number: finalInvNum, invoice_pdf_url: pdfUrl, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
     await logActivity(`Invoice Generated — ${finalInvNum}. Waiting for Fulfilment Centre to set delivery details.`)
-    await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Invoice generated. Please set delivery details.`)
+    await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Invoice generated. Please set delivery details.`, 'pi_issued')
     toast('Invoice generated', 'success')
     setShowInvConfirm(false); setTallyInvNumber(''); setSaving(false); await loadOrder()
   }
@@ -392,7 +394,7 @@ export default function BillingOrderDetail() {
       }).eq('id', activeBatch.id)
     }
     await logActivity(`E-Way Bill generated — #${ewayNumber.trim()}. Handed to FC for final delivery.`)
-    await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — E-Way Bill ready. Order handed back for delivery.`)
+    await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — E-Way Bill ready. Order handed back for delivery.`, 'pi_issued')
     toast('E-Way Bill generated', 'success')
     setSaving(false); await loadOrder()
     navigate('/billing')
