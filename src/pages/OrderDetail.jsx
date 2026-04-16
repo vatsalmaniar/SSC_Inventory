@@ -470,12 +470,12 @@ export default function OrderDetail() {
     setDispatchType('full')
     setSaving(true)
     const isPIOrder = order.credit_terms === 'Against PI' || order.credit_terms === 'Advance'
-    for (const item of (order.order_items || [])) {
-      const addQty = item.qty - (item.dispatched_qty || 0)
-      if (addQty <= 0) continue
-      const { error } = await sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: addQty })
-      if (error) { toast('Failed to update item ' + item.item_code + ': ' + error.message + '. Please refresh and try again.'); setSaving(false); return }
-    }
+    const rpcCalls = (order.order_items || [])
+      .filter(item => item.qty - (item.dispatched_qty || 0) > 0)
+      .map(item => sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: item.qty - (item.dispatched_qty || 0) }))
+    const rpcResults = await Promise.all(rpcCalls)
+    const failed = rpcResults.find(r => r.error)
+    if (failed) { toast('Failed to update items: ' + failed.error.message + '. Please refresh and try again.'); setSaving(false); return }
     const { error } = await sb.from('orders').update({
       status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
     }).eq('id', id)
@@ -526,10 +526,10 @@ export default function OrderDetail() {
     setShowPartialModal(false)
     setSaving(true)
     const isPIOrder = order.credit_terms === 'Against PI' || order.credit_terms === 'Advance'
-    for (const item of selected) {
-      const { error } = await sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: parseFloat(item.dispatchQty) })
-      if (error) { toast('Failed to update item ' + item.item_code + ': ' + error.message + '. Please refresh and try again.'); setSaving(false); return }
-    }
+    const partialRpcCalls = selected.map(item => sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: parseFloat(item.dispatchQty) }))
+    const partialRpcResults = await Promise.all(partialRpcCalls)
+    const partialFailed = partialRpcResults.find(r => r.error)
+    if (partialFailed) { toast('Failed to update items: ' + partialFailed.error.message + '. Please refresh and try again.'); setSaving(false); return }
     const summary = selected.map(i => `${i.item_code}: ${i.dispatchQty} units`).join(', ')
     const { error } = await sb.from('orders').update({
       status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),

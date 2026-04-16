@@ -179,7 +179,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
   async function loadNotifs(userId) {
     const { data } = await sb.from('notifications')
-      .select('*')
+      .select('id,user_id,user_name,message,order_id,order_number,from_name,is_read,email_type,created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(30)

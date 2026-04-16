@@ -65,6 +65,7 @@ export default function FCModule() {
       .eq('orders.is_test', testMode)
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
+      .limit(500)
     if (center) q = q.eq('fulfilment_center', center)
     q = q.not('status', 'in', '(pi_requested,pi_generated,pi_payment_pending)')
     const { data } = await q

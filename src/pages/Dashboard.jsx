@@ -84,7 +84,7 @@ export default function Dashboard() {
     }
     const [{ data: profile }, { data: orders }] = await Promise.all([
       sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
-      sb.from('orders').select('status,freight,order_items(total_price)').gte('created_at', FY_START).eq('is_test', false),
+      sb.from('orders').select('status,freight,order_items(total_price)').gte('created_at', FY_START).eq('is_test', false).limit(2000),
     ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
