@@ -142,6 +142,16 @@ export default function NewVendor() {
       return
     }
 
+    // Check if GST already exists in vendors — prevent duplicates
+    if (form.gst.trim()) {
+      const { data: existingVendor } = await sb.from('vendors').select('id,vendor_name').eq('gst', form.gst.trim()).maybeSingle()
+      if (existingVendor) {
+        toast(`Vendor with this GST already exists: ${existingVendor.vendor_name}`)
+        setErrors({ gst: 'This GST is already registered' })
+        return
+      }
+    }
+
     setSaving(true)
     try {
       const { data: vendorCode, error: rpcErr } = await sb.rpc('next_vendor_code')
