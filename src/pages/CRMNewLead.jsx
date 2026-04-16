@@ -112,7 +112,18 @@ export default function CRMNewLead() {
     if (!form.opportunity_name.trim()) { toast(isExisting ? 'Opportunity Name is required' : 'Lead Name is required'); return }
     if (!accountInput.trim()) { toast('Account Name is required'); return }
     if (selectedCustomer?.account_status === 'Blacklisted') { toast('This customer is blacklisted. Opportunities cannot be created for blacklisted customers.'); return }
+    if (!form.account_type) { toast('Account Type is required'); return }
     if (!form.gstin.trim()) { toast('GST number is required'); return }
+    if (!form.lead_source) { toast('Lead Source is required'); return }
+    if (needsDetail && !form.lead_source_detail.trim()) { toast(detailLabel + ' is required'); return }
+    if (!form.close_date) { toast('Close Date is required'); return }
+    if (!form.opportunity_type) { toast('Opportunity Type is required'); return }
+    if (selectedBrands.length === 0) { toast('Select at least one Brand'); return }
+    if (!form.description.trim()) { toast('Description is required'); return }
+    if (!form.contact_name.trim()) { toast('Contact Name is required'); return }
+    if (!form.contact_designation.trim()) { toast('Designation is required'); return }
+    if (!form.contact_phone.trim()) { toast('Phone is required'); return }
+    if (!form.contact_email.trim()) { toast('Email is required'); return }
     // Check if GST already exists in customers — prevent duplicates
     if (!selectedCustomer) {
       const { data: existing } = await sb.from('customers').select('id,customer_name').eq('gst', form.gstin.trim()).maybeSingle()
@@ -222,7 +233,7 @@ export default function CRMNewLead() {
               )}
             </div>
             <div className="no-field">
-              <label>Account Type</label>
+              <label>Account Type <span className="req">*</span></label>
               <select value={form.account_type} onChange={e => set('account_type', e.target.value)}>
                 <option value="">— Select —</option>
                 <option value="OEM">OEM</option>
@@ -253,7 +264,7 @@ export default function CRMNewLead() {
               />
             </div>
             <div className="no-field">
-              <label>Lead Source</label>
+              <label>Lead Source <span className="req">*</span></label>
               <select value={form.lead_source} onChange={e => setForm(p => ({ ...p, lead_source: e.target.value, lead_source_detail:'' }))}>
                 <option value="">— Select —</option>
                 {LEAD_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -264,7 +275,7 @@ export default function CRMNewLead() {
           {needsDetail && (
             <div className="no-row full">
               <div className="no-field">
-                <label>{detailLabel}</label>
+                <label>{detailLabel} <span className="req">*</span></label>
                 <input value={form.lead_source_detail} onChange={e => set('lead_source_detail', e.target.value)}
                   placeholder={`Enter ${detailLabel.toLowerCase()}…`} />
               </div>
@@ -297,14 +308,14 @@ export default function CRMNewLead() {
                 onChange={e => set('probability', e.target.value)} placeholder="0–100" />
             </div>
             <div className="no-field">
-              <label>Close Date</label>
+              <label>Close Date <span className="req">*</span></label>
               <input type="date" value={form.close_date} onChange={e => set('close_date', e.target.value)} />
             </div>
           </div>
 
           <div className="no-row full">
             <div className="no-field">
-              <label>Opportunity Type</label>
+              <label>Opportunity Type <span className="req">*</span></label>
               <select value={form.opportunity_type} onChange={e => set('opportunity_type', e.target.value)}>
                 <option value="">— Select —</option>
                 <option value="NEW_BUSINESS">New Business</option>
@@ -316,7 +327,7 @@ export default function CRMNewLead() {
           {/* Brands — toggle buttons */}
           <div className="no-row full">
             <div className="no-field">
-              <label>Brands</label>
+              <label>Brands <span className="req">*</span></label>
               <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:2 }}>
                 {principals.map(p => {
                   const sel = selectedBrands.includes(p.id)
@@ -336,7 +347,7 @@ export default function CRMNewLead() {
 
           <div className="no-row full">
             <div className="no-field">
-              <label>Description</label>
+              <label>Description <span className="req">*</span></label>
               <textarea rows={3} value={form.description} onChange={e => set('description', e.target.value)}
                 placeholder="Any additional context, requirements, or notes…" />
             </div>
@@ -354,22 +365,22 @@ export default function CRMNewLead() {
 
           <div className="no-row">
             <div className="no-field">
-              <label>Contact Name</label>
+              <label>Contact Name <span className="req">*</span></label>
               <input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} placeholder="e.g. Ramesh Shah" />
             </div>
             <div className="no-field">
-              <label>Designation</label>
+              <label>Designation <span className="req">*</span></label>
               <input value={form.contact_designation} onChange={e => set('contact_designation', e.target.value)} placeholder="e.g. Purchase Manager" />
             </div>
           </div>
 
           <div className="no-row">
             <div className="no-field">
-              <label>Phone</label>
+              <label>Phone <span className="req">*</span></label>
               <input value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} placeholder="e.g. 9876543210" />
             </div>
             <div className="no-field">
-              <label>Email</label>
+              <label>Email <span className="req">*</span></label>
               <input type="email" value={form.contact_email} onChange={e => set('contact_email', e.target.value)} placeholder="e.g. ramesh@company.com" />
             </div>
           </div>
@@ -379,7 +390,7 @@ export default function CRMNewLead() {
         <div className="no-actions">
           <div style={{ flex:1 }} />
           <button className="no-cancel-btn" onClick={() => navigate('/crm')}>Cancel</button>
-          <button className="no-submit-btn" onClick={save} disabled={saving || !form.opportunity_name.trim() || !accountInput.trim()}>
+          <button className="no-submit-btn" onClick={save} disabled={saving}>
             {saving ? (
               <><div className="no-spinner" />Creating...</>
             ) : (

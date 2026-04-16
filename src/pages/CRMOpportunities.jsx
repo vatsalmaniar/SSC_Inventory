@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
 import '../styles/orders.css'
@@ -41,7 +42,7 @@ export default function CRMOpportunities() {
   const [reps, setReps]       = useState([])
   const [principals, setPrincipals] = useState([])
   const [loading, setLoading] = useState(true)
-  const [view, setView]       = useState('list')
+  const [view, setView]       = useState('kanban')
   const [search, setSearch]   = useState('')
   const [filterStage, setFilterStage]     = useState('')
   const [filterRep, setFilterRep]         = useState('')
@@ -73,6 +74,16 @@ export default function CRMOpportunities() {
     setReps(repsRes.data || [])
     setPrincipals(principalsRes.data || [])
     setLoading(false)
+  }
+
+  async function moveStage(oppId, newStage) {
+    const opp = opps.find(o => o.id === oppId)
+    if (!opp || opp.stage === newStage) return
+    const { error } = await sb.from('crm_opportunities').update({ stage: newStage, updated_at: new Date().toISOString() }).eq('id', oppId)
+    if (error) { toast('Failed to move: ' + error.message); return }
+    await sb.from('crm_activities').insert({ opportunity_id: oppId, rep_id: user.id, activity_type: 'Stage Change', notes: `Stage changed from ${STAGE_LABELS[opp.stage]} → ${STAGE_LABELS[newStage]}` })
+    setOpps(prev => prev.map(o => o.id === oppId ? { ...o, stage: newStage } : o))
+    toast(`Moved to ${STAGE_LABELS[newStage]}`, 'success')
   }
 
   const isManager = user.role === 'admin'
@@ -144,7 +155,7 @@ export default function CRMOpportunities() {
           {loading ? (
             <div className="crm-loading"><div className="loading-spin"/>Loading...</div>
           ) : view === 'kanban' ? (
-            <KanbanView opps={filtered} navigate={navigate} />
+            <KanbanView opps={filtered} navigate={navigate} onMoveStage={moveStage} />
           ) : (
             <>
               <ListView opps={paged} navigate={navigate} />
@@ -163,42 +174,94 @@ export default function CRMOpportunities() {
   )
 }
 
-function KanbanView({ opps, navigate }) {
+const COL_COLORS = {
+  LEAD_CAPTURED:'#6366f1', CONTACTED:'#0ea5e9', QUALIFIED:'#8b5cf6',
+  BOM_RECEIVED:'#a855f7', QUOTATION_SENT:'#1a4dab', FOLLOW_UP:'#f59e0b',
+  FINAL_NEGOTIATION:'#d97706', WON:'#22c55e', LOST:'#ef4444', ON_HOLD:'#94a3b8',
+}
+
+function KanbanView({ opps, navigate, onMoveStage }) {
+  const [dragId, setDragId] = useState(null)
+  const [overCol, setOverCol] = useState(null)
   const allCols = [...STAGES, ...TERMINAL]
+
+  function onDragStart(e, id) {
+    setDragId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+    e.currentTarget.classList.add('kb-dragging')
+  }
+  function onDragEnd(e) {
+    e.currentTarget.classList.remove('kb-dragging')
+    setDragId(null)
+    setOverCol(null)
+  }
+  function onDragOver(e, stage) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setOverCol(stage)
+  }
+  function onDragLeave(e, stage) {
+    if (!e.currentTarget.contains(e.relatedTarget)) setOverCol(null)
+  }
+  function onDrop(e, stage) {
+    e.preventDefault()
+    setOverCol(null)
+    if (dragId) onMoveStage(dragId, stage)
+  }
+
   return (
-    <div className="crm-kanban">
+    <div className="kb-board">
       {allCols.map(stage => {
         const cards = opps.filter(o => o.stage === stage)
         if (cards.length === 0 && TERMINAL.includes(stage)) return null
+        const colTotal = cards.reduce((s, o) => s + (o.estimated_value_inr || 0), 0)
+        const isOver = overCol === stage && dragId
         return (
-          <div key={stage} className="crm-kanban-col">
-            <div className="crm-kanban-col-header">
-              <div className="crm-kanban-col-label">{STAGE_LABELS[stage]}</div>
-              <div className="crm-kanban-col-count">{cards.length}</div>
-            </div>
-            {cards.map(o => {
-              const type = recordType(o.stage)
-              return (
-              <div key={o.id} className="crm-kanban-card" onClick={() => navigate('/crm/opportunities/' + o.id)}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4,marginBottom:2}}>
-                  <div className="crm-kanban-company">{o.opportunity_name || o.crm_companies?.company_name || '—'}</div>
-                  <span style={{ fontSize:9, fontWeight:700, borderRadius:4, padding:'1px 5px', flexShrink:0, background: type==='Lead'?'#fef3c7':'#eff6ff', color: type==='Lead'?'#b45309':'#1d4ed8' }}>{type}</span>
-                </div>
-                {o.crm_companies?.company_name && o.opportunity_name && <div style={{fontSize:10,color:'var(--gray-400)',marginBottom:2}}>{o.crm_companies.company_name}</div>}
-                {o.product_notes && <div className="crm-kanban-product">{o.product_notes.slice(0,60)}{o.product_notes.length > 60 ? '…' : ''}</div>}
-                <div className="crm-kanban-meta">
-                  <div style={{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}}>
-                    {o.scenario_type && <span className={'crm-scenario-pill crm-scenario-' + o.scenario_type} style={{fontSize:9}}>{scenarioLabel(o.scenario_type)}</span>}
-                    {isOverdue(o) && <span className="crm-kanban-overdue">OVERDUE</span>}
-                  </div>
-                  {o.estimated_value_inr && <div className="crm-kanban-value">{fmtINR(o.estimated_value_inr)}</div>}
-                </div>
-                {o.profiles?.name && <div style={{marginTop:6}}><OwnerChip name={o.profiles.name} /></div>}
+          <div key={stage} className={'kb-col' + (isOver ? ' kb-col-over' : '')}
+            onDragOver={e => onDragOver(e, stage)}
+            onDragLeave={e => onDragLeave(e, stage)}
+            onDrop={e => onDrop(e, stage)}>
+            <div className="kb-col-head">
+              <div className="kb-col-head-top">
+                <span className="kb-col-dot" style={{background: COL_COLORS[stage] || '#94a3b8'}} />
+                <span className="kb-col-title">{STAGE_LABELS[stage]}</span>
+                <span className="kb-col-count">{cards.length}</span>
               </div>
-            )})}
-            {cards.length === 0 && (
-              <div style={{textAlign:'center',fontSize:11,color:'var(--gray-300)',padding:'12px 0'}}>Empty</div>
-            )}
+              {colTotal > 0 && <div className="kb-col-total">{fmtINR(colTotal)}</div>}
+            </div>
+            <div className="kb-col-body">
+              {cards.map(o => (
+                <div key={o.id} className="kb-card" draggable
+                  onDragStart={e => onDragStart(e, o.id)}
+                  onDragEnd={onDragEnd}
+                  onClick={() => navigate('/crm/opportunities/' + o.id)}>
+                  <div className="kb-card-top">
+                    <div className="kb-card-title">{o.opportunity_name || '—'}</div>
+                    {o.profiles?.name && (
+                      <div className="kb-avatar" style={{background: ownerColor(o.profiles.name)}}>{o.profiles.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>
+                    )}
+                  </div>
+                  {(o.crm_companies?.company_name || o.freetext_company) && (
+                    <div className="kb-card-company">{o.crm_companies?.company_name || o.freetext_company}</div>
+                  )}
+                  {o.product_notes && o.product_notes !== o.opportunity_name && <div className="kb-card-desc">{o.product_notes.length > 50 ? o.product_notes.slice(0,50)+'…' : o.product_notes}</div>}
+                  <div className="kb-card-bottom">
+                    <div className="kb-card-bottom-left">
+                      {o.expected_close_date && (
+                        <span className="kb-card-date">
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                          {fmtDate(o.expected_close_date)}
+                        </span>
+                      )}
+                      {isOverdue(o) && <span className="kb-tag kb-tag-overdue">Overdue</span>}
+                    </div>
+                    {o.estimated_value_inr && <div className="kb-card-amount">{fmtINR(o.estimated_value_inr)}</div>}
+                  </div>
+                </div>
+              ))}
+              {cards.length === 0 && <div className="kb-empty">No items</div>}
+            </div>
           </div>
         )
       })}
@@ -206,36 +269,50 @@ function KanbanView({ opps, navigate }) {
   )
 }
 
+function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }) }
+function daysAgo(d) { if (!d) return null; const diff = Math.floor((Date.now() - new Date(d).getTime()) / 86400000); if (diff === 0) return 'Today'; if (diff === 1) return 'Yesterday'; return diff + 'd ago' }
+
 function ListView({ opps, navigate }) {
   return (
     <div className="crm-card">
       <div className="crm-table-wrap">
-        <table className="crm-table">
+        <table className="crm-table crm-deals-table">
           <thead>
             <tr>
-              <th>Opportunity</th>
-              <th>Company</th>
-              <th>Account Owner</th>
-              <th>Stage</th>
-              <th>Value</th>
+              <th style={{width:'32%'}}>Deal</th>
+              <th style={{width:'14%'}}>Principal</th>
+              <th style={{width:'12%'}}>Close Date</th>
+              <th style={{width:'12%',textAlign:'right'}}>Value</th>
+              <th style={{width:'15%'}}>Stage</th>
+              <th style={{width:'15%'}}>Owner</th>
             </tr>
           </thead>
           <tbody>
             {opps.map(o => {
-              const type = recordType(o.stage)
+              const company = o.crm_companies?.company_name || o.customers?.customer_name || o.freetext_company || ''
+              const overdue = isOverdue(o)
+              const lastAct = daysAgo(o._lastActivity)
               return (
-                <tr key={o.id} onClick={() => navigate('/crm/opportunities/' + o.id)}>
+                <tr key={o.id} onClick={() => navigate('/crm/opportunities/' + o.id)} className={overdue ? 'crm-row-overdue' : ''}>
                   <td>
-                    <div className="crm-table-name">{o.opportunity_name || '—'}</div>
-                    {isOverdue(o) && <span className="crm-overdue-badge" style={{marginTop:3,display:'inline-block'}}>Overdue</span>}
+                    <div className="crm-deal-name">{o.opportunity_name || '—'}</div>
+                    <div className="crm-deal-company">
+                      {company}
+                      {o.product_notes && <span className="crm-deal-dot">·</span>}
+                      {o.product_notes && <span className="crm-deal-product">{o.product_notes.length > 40 ? o.product_notes.slice(0,40)+'…' : o.product_notes}</span>}
+                    </div>
+                    {overdue && <span className="crm-overdue-badge" style={{marginTop:3,display:'inline-block'}}>Overdue</span>}
                   </td>
+                  <td><span className="crm-deal-principal">{o.crm_principals?.name || '—'}</span></td>
                   <td>
-                    <div style={{fontWeight:500,fontSize:13}}>{o.crm_companies?.company_name || o.customers?.customer_name || o.freetext_company || '—'}</div>
-                    {o.crm_principals?.name && <div className="crm-table-sub">{o.crm_principals.name}</div>}
+                    <div className="crm-deal-date">{fmtDate(o.expected_close_date)}</div>
+                    {lastAct && <div className="crm-deal-activity">Last: {lastAct}</div>}
                   </td>
-                  <td><OwnerChip name={o.profiles?.name} /></td>
+                  <td style={{textAlign:'right'}}>
+                    <span className="crm-deal-value">{fmtINR(o.estimated_value_inr) || '—'}</span>
+                  </td>
                   <td><StagePill stage={o.stage} /></td>
-                  <td style={{whiteSpace:'nowrap',fontWeight:600}}>{fmtINR(o.estimated_value_inr) || '—'}</td>
+                  <td><OwnerChip name={o.profiles?.name} /></td>
                 </tr>
               )
             })}
@@ -245,26 +322,27 @@ function ListView({ opps, navigate }) {
       {/* Mobile */}
       <div className="crm-card-list">
         {opps.map(o => {
-          const type = recordType(o.stage)
+          const company = o.crm_companies?.company_name || o.customers?.customer_name || o.freetext_company || ''
+          const overdue = isOverdue(o)
           return (
           <div key={o.id} className="crm-list-card" onClick={() => navigate('/crm/opportunities/' + o.id)}>
             <div className="crm-list-card-top">
-              <div>
-                <div className="crm-list-card-name">{o.opportunity_name || o.crm_companies?.company_name || '—'}</div>
-                <div className="crm-list-card-sub">{o.crm_companies?.company_name || o.customers?.customer_name || o.freetext_company || ''}{o.crm_principals?.name ? ' · ' + o.crm_principals.name : ''}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div className="crm-list-card-name">{o.opportunity_name || '—'}</div>
+                <div className="crm-list-card-sub">{company}{o.crm_principals?.name ? ' · ' + o.crm_principals.name : ''}</div>
               </div>
               <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
-                <span style={{ fontSize:9, fontWeight:700, borderRadius:4, padding:'2px 6px', background: type==='Lead'?'#fef3c7':'#eff6ff', color: type==='Lead'?'#b45309':'#1d4ed8' }}>{type}</span>
                 <StagePill stage={o.stage} />
+                {o.estimated_value_inr && <span style={{fontSize:13,fontWeight:700,fontFamily:'var(--mono)',color:'var(--gray-800)'}}>{fmtINR(o.estimated_value_inr)}</span>}
               </div>
             </div>
             <div className="crm-list-card-bottom">
-              {o.scenario_type && <span className={'crm-scenario-pill crm-scenario-' + o.scenario_type}>{scenarioLabel(o.scenario_type)}</span>}
-              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                {isOverdue(o) && <span className="crm-overdue-badge">Overdue</span>}
-                {o.estimated_value_inr && <span style={{fontSize:12,fontWeight:700,color:'var(--gray-700)'}}>{fmtINR(o.estimated_value_inr)}</span>}
+              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                {o.scenario_type && <span className={'crm-scenario-pill crm-scenario-' + o.scenario_type}>{scenarioLabel(o.scenario_type)}</span>}
+                {overdue && <span className="crm-overdue-badge">Overdue</span>}
+                {o.expected_close_date && <span style={{fontSize:10,color:'var(--gray-400)'}}>Close: {fmtDate(o.expected_close_date)}</span>}
               </div>
-              {o.profiles?.name && <div style={{marginTop:4}}><OwnerChip name={o.profiles.name} /></div>}
+              {o.profiles?.name && <OwnerChip name={o.profiles.name} />}
             </div>
           </div>
         )})}
