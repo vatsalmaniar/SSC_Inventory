@@ -735,7 +735,7 @@ if (match) {
               </div>
             )}
 
-            {order.credit_override && (
+            {order.credit_override && order.status !== 'dispatched_fc' && !isCancelled && (
               <div className="od-pending-banner" style={{background:'#fef2f2',border:'1px solid #fca5a5',color:'#991b1b'}}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
                 <div>
@@ -874,6 +874,12 @@ if (match) {
                     <div className="od-detail-field"><label>Fulfilment Centre</label><div className="val">{order.fulfilment_center || '—'}</div></div>
                     <div className="od-detail-field"><label>Freight</label><div className="val">₹{(order.freight || 0).toLocaleString('en-IN')}</div></div>
                     {order.notes && <div className="od-detail-field" style={{ gridColumn: '1/-1' }}><label>Notes</label><div className="val od-notes-val">{order.notes}</div></div>}
+                    {order.low_value_reason && (
+                      <div className="od-detail-field" style={{ gridColumn: '1/-1' }}>
+                        <label style={{color:'#dc2626'}}>Low Value Reason <span style={{fontSize:10,fontWeight:400,color:'var(--gray-400)'}}>(order &lt; ₹8,000)</span></label>
+                        <div className="val" style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,padding:'8px 12px',fontSize:13,color:'#991b1b',lineHeight:1.5}}>{order.low_value_reason}</div>
+                      </div>
+                    )}
                   </div>
                   {order.dispatch_address && (
                     <div className="od-detail-field" style={{marginTop:12}}>
