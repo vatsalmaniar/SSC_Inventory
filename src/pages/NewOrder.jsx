@@ -15,6 +15,8 @@ export default function NewOrder() {
   const [user, setUser]           = useState({ name: '', avatar: '', role: '' })
   const [submitting, setSubmitting] = useState(false)
 
+  const [lowValueReason, setLowValueReason] = useState('')
+
   // Customer
   const [customerInput, setCustomerInput]     = useState('')
   const [customerGst, setCustomerGst]         = useState('')
@@ -137,6 +139,15 @@ export default function NewOrder() {
       if (!item.dispatch_date)   { toast(`Dispatch Date is required for item: ${item.item_code}`); return }
     }
 
+    // Low-value order check
+    if (grandTotal < 8000) {
+      const words = lowValueReason.trim().split(/\s+/).filter(Boolean)
+      if (words.length < 7) {
+        toast('Order value is below ₹8,000. Please provide a reason (minimum 7 words).', 'error')
+        return
+      }
+    }
+
     setSubmitting(true)
     const { data: { session } } = await sb.auth.getSession()
 
@@ -169,6 +180,7 @@ export default function NewOrder() {
       submitted_by_name: user.name,
       created_by:        session.user.id,
       is_test:           isTest,
+      low_value_reason:  grandTotal < 8000 ? lowValueReason.trim() : null,
     }).select().single()
 
     if (error) { toast('Error: ' + error.message); setSubmitting(false); return }
@@ -479,6 +491,26 @@ export default function NewOrder() {
             </div>
           </div>
         </div>
+
+        {/* ── Low value warning ── */}
+        {grandTotal > 0 && grandTotal < 8000 && (
+          <div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'14px 16px',margin:'0 0 12px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <svg fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24" style={{width:16,height:16,flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span style={{fontSize:12,fontWeight:700,color:'#dc2626'}}>Order value is below ₹8,000 — reason required</span>
+            </div>
+            <textarea
+              value={lowValueReason}
+              onChange={e => setLowValueReason(e.target.value)}
+              placeholder="Why is this order below ₹8,000? Please explain in detail (minimum 7 words)..."
+              rows={2}
+              style={{width:'100%',border:'1px solid #fca5a5',borderRadius:8,padding:'8px 10px',fontSize:12,fontFamily:'var(--font)',color:'var(--gray-900)',resize:'none',outline:'none',boxSizing:'border-box',background:'white',lineHeight:1.5}}
+            />
+            <div style={{fontSize:10,color: lowValueReason.trim().split(/\s+/).filter(Boolean).length >= 7 ? '#16a34a' : '#dc2626',marginTop:4,fontWeight:500}}>
+              {lowValueReason.trim().split(/\s+/).filter(Boolean).length}/7 words minimum
+            </div>
+          </div>
+        )}
 
         {/* ── Actions ── */}
         <div className="no-actions">
