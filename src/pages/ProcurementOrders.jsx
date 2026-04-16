@@ -13,7 +13,7 @@ function fmtCr(val) {
 }
 
 const STATUS_LABELS = {
-  inv_check: 'Inventory Check', inventory_check: 'Inventory Check', dispatch: 'Ready to Ship',
+  inv_check: 'Order Approved', inventory_check: 'Inventory Check', dispatch: 'Ready to Ship',
 }
 const STATUS_COLORS = {
   inv_check: { bg:'#eff6ff', color:'#1d4ed8' }, inventory_check: { bg:'#eff6ff', color:'#1d4ed8' }, dispatch: { bg:'#f0fdf4', color:'#15803d' },

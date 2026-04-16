@@ -23,7 +23,7 @@ const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','pi_requested
 function statusLabel(s) {
   return {
     pending:              'Pending Review',
-    inv_check:            'Inv. Check',
+    inv_check:            'Order Approved',
     inventory_check:      'Inventory Check',
     dispatch:             'Ready to Ship',
     partial_dispatch:     'Partially Shipped',

@@ -45,7 +45,7 @@ function statusBadgeClass(s) {
 
 function statusLabel(s) {
   const map = {
-    pending: 'Pending', inv_check: 'Approved', inventory_check: 'Inv. Check',
+    pending: 'Pending', inv_check: 'Order Approved', inventory_check: 'Inventory Check',
     dispatch: 'Ready to Ship', delivery_created: 'At FC', picking: 'Picking',
     packing: 'Packing', goods_issued: 'Goods Issued', pending_billing: 'Pending Billing',
     credit_check: 'Credit Check', invoice_generated: 'Invoiced', delivery_ready: 'Delivery Ready',

@@ -13,7 +13,7 @@ function fmtCr(val) {
 function statusLabel(s) {
   return {
     pending:'Pending', dispatch:'Ready to Ship', partial_dispatch:'Partly Shipped',
-    inv_check:'Inv. Check', inventory_check:'Inv. Check',
+    inv_check:'Order Approved', inventory_check:'Inventory Check',
     delivery_created:'At FC', picking:'Picking', packing:'Packing',
     goods_issued:'Goods Issued', credit_check:'Credit Check', goods_issue_posted:'GI Posted',
     invoice_generated:'Invoiced', delivery_ready:'Delivery Ready',

@@ -15,7 +15,7 @@ function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-30
 function statusLabel(s) {
   return {
     pending:              'Pending Approval',
-    inv_check:            'Inv. Check',
+    inv_check:            'Order Approved',
     inventory_check:      'Inventory Check',
     dispatch:             'Ready to Ship',
     partial_dispatch:     'Partially Shipped',

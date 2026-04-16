@@ -8,7 +8,7 @@ import '../styles/orders.css'
 
 function statusLabel(s) {
   return {
-    pending:'Pending', inv_check:'Inv. Check', inventory_check:'Inventory Check',
+    pending:'Pending', inv_check:'Order Approved', inventory_check:'Inventory Check',
     dispatch:'Ready to Ship', partial_dispatch:'Partially Shipped',
     gen_invoice:'Delivery Created', delivery_created:'Delivery Created', picking:'Picking', packing:'Packing',
     goods_issued:'Goods Issued', pending_billing:'Pending Billing',
