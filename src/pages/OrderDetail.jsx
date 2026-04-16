@@ -140,6 +140,9 @@ export default function OrderDetail() {
   const [linkedPO, setLinkedPO]                   = useState(null)
   const [custCode, setCustCode]                   = useState('')
 
+  // Stock status (inventory check)
+  const [stockStatuses, setStockStatuses] = useState({}) // { itemId: 'in_stock' | 'out_of_stock' }
+
   // Edit confirmation
   const [showEditConfirm, setShowEditConfirm]     = useState(false)
   const [showSaveReason, setShowSaveReason]       = useState(false)
@@ -187,6 +190,12 @@ export default function OrderDetail() {
     setOrder(data)
     setBatches(batches || [])
     setComments(comments || [])
+    // Initialize stock statuses from order_items
+    const ss = {}
+    for (const item of (data?.order_items || [])) {
+      if (item.stock_status) ss[item.id] = item.stock_status
+    }
+    setStockStatuses(ss)
     setLoading(false)
     // Non-blocking: look up customer_id + linked PO in parallel
     const bg = []
@@ -403,6 +412,29 @@ export default function OrderDetail() {
     })))
   }
 
+  // ── Stock status update (inventory check stage) ──
+  async function updateStockStatus(itemId, status) {
+    const prev = stockStatuses[itemId]
+    setStockStatuses(s => ({ ...s, [itemId]: status }))
+    const { error } = await sb.from('order_items').update({ stock_status: status }).eq('id', itemId)
+    if (error) { toast('Failed to update stock status'); setStockStatuses(s => ({ ...s, [itemId]: prev })); return }
+    // Log out-of-stock only once per item
+    if (status === 'out_of_stock') {
+      const { data: existing } = await sb.from('stock_outage_log').select('id').eq('order_item_id', itemId).maybeSingle()
+      if (!existing) {
+        const item = (order.order_items || []).find(i => i.id === itemId)
+        await sb.from('stock_outage_log').insert({
+          order_id: id,
+          order_item_id: itemId,
+          item_code: item?.item_code || '',
+          order_number: order?.order_number || '',
+          reported_by: user.id,
+          reported_by_name: user.name,
+        })
+      }
+    }
+  }
+
   // ── Stage advancement ──
   async function advanceToNext() {
     if (!canAdvance) return
@@ -420,6 +452,8 @@ export default function OrderDetail() {
       toast('Moved to Inventory Check', 'success')
       await loadOrder(); setSaving(false)
     } else if (order.status === 'inventory_check') {
+      const allInStock = (order.order_items || []).every(i => stockStatuses[i.id] === 'in_stock')
+      if (!allInStock) { toast('All items must be marked "In Stock" before proceeding'); setSaving(false); return }
       await sb.from('orders').update({ status: 'dispatch', updated_at: new Date().toISOString() }).eq('id', id)
       await logActivity('Inventory confirmed — Ready to Ship')
       toast('Ready to Ship', 'success')
@@ -693,7 +727,7 @@ if (match) {
             })}
           </div>
           {isOps && !isCancelled && canAdvance && !editMode && !(order.order_type === 'SAMPLE' && isPending && user.role !== 'admin') && (
-            <button className="od-mark-complete-btn" onClick={advanceToNext} disabled={saving}>
+            <button className="od-mark-complete-btn" onClick={advanceToNext} disabled={saving || (order.status === 'inventory_check' && !(order.order_items || []).every(i => stockStatuses[i.id] === 'in_stock'))} style={order.status === 'inventory_check' && !(order.order_items || []).every(i => stockStatuses[i.id] === 'in_stock') ? { opacity: 0.5, cursor: 'not-allowed' } : {}}>
               <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
               {saving ? 'Updating...' : actionBtnLabel}
             </button>
@@ -1137,16 +1171,20 @@ if (match) {
               ) : (
                 // ── STANDARD VIEW (no dispatch yet) ──
                 <>
+                  <div style={{ overflowX: 'auto' }}>
                   <table className="od-items-table">
                     <thead>
                       <tr>
                         <th style={{ paddingLeft: 20 }}>#</th>
                         <th>Item Code</th>
                         <th>Qty</th>
-                        <th>LP Price</th><th>Disc %</th><th>Unit Price</th>
+                        {order.status !== 'inventory_check' && <><th>LP Price</th><th>Disc %</th></>}
+                        <th>Unit Price</th>
                         <th>Delivery Date</th>
-                        <th>Dispatched On</th>
+                        {order.status !== 'inventory_check' && <th>Dispatched On</th>}
                         <th>Cust. Ref No</th>
+                        {order.status === 'inventory_check' && <th style={{ textAlign: 'center' }}>Stock</th>}
+                        {order.status !== 'inventory_check' && (order.order_items || []).some(i => i.stock_status) && <th style={{ textAlign: 'center' }}>Stock</th>}
                         <th className="right" style={{ paddingRight: 20 }}>Total</th>
                       </tr>
                     </thead>
@@ -1158,18 +1196,45 @@ if (match) {
                           <td style={{ paddingLeft: 20, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
                           <td className="mono">{item.item_code}</td>
                           <td>{item.qty}</td>
-                          <td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
-                          <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td>
+                          {order.status !== 'inventory_check' && <><td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
+                          <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td></>}
                           <td>₹{item.unit_price_after_disc}</td>
                           <td>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
-                          <td style={{color: itemBatch?.delivered_at ? '#166534' : 'var(--gray-400)', fontWeight: itemBatch?.delivered_at ? 600 : 400, fontSize:12}}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>
+                          {order.status !== 'inventory_check' && <td style={{color: itemBatch?.delivered_at ? '#166534' : 'var(--gray-400)', fontWeight: itemBatch?.delivered_at ? 600 : 400, fontSize:12}}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>}
                           <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.customer_ref_no || '—'}</td>
+                          {order.status === 'inventory_check' && (
+                            <td style={{ textAlign: 'center' }}>
+                              <select
+                                value={stockStatuses[item.id] || ''}
+                                onChange={e => updateStockStatus(item.id, e.target.value)}
+                                style={{
+                                  padding: '3px 6px', fontSize: 11, borderRadius: 6,
+                                  border: '1px solid var(--gray-200)', cursor: 'pointer',
+                                  background: stockStatuses[item.id] === 'in_stock' ? '#dcfce7' : stockStatuses[item.id] === 'out_of_stock' ? '#fee2e2' : '#fff',
+                                  color: stockStatuses[item.id] === 'in_stock' ? '#166534' : stockStatuses[item.id] === 'out_of_stock' ? '#991b1b' : '#374151',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                <option value="">Select</option>
+                                <option value="in_stock">In Stock</option>
+                                <option value="out_of_stock">Out of Stock</option>
+                              </select>
+                            </td>
+                          )}
+                          {order.status !== 'inventory_check' && (order.order_items || []).some(i => i.stock_status) && (
+                            <td style={{ textAlign: 'center' }}>
+                              {item.stock_status === 'in_stock' && <span style={{ fontSize: 11, fontWeight: 600, color: '#166534', background: '#dcfce7', padding: '2px 8px', borderRadius: 20 }}>In Stock</span>}
+                              {item.stock_status === 'out_of_stock' && <span style={{ fontSize: 11, fontWeight: 600, color: '#991b1b', background: '#fee2e2', padding: '2px 8px', borderRadius: 20 }}>Out of Stock</span>}
+                              {!item.stock_status && <span style={{ color: 'var(--gray-300)', fontSize: 11 }}>—</span>}
+                            </td>
+                          )}
                           <td className="right" style={{ paddingRight: 20 }}>₹{(item.total_price || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
                         </tr>
                         )
                       })}
                     </tbody>
                   </table>
+                  </div>
                   <div className="od-totals">
                     <div className="od-totals-inner">
                       <div className="od-totals-row"><span>Subtotal</span><span>₹{subtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
