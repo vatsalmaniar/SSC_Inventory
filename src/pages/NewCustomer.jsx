@@ -86,7 +86,7 @@ export default function NewCustomer() {
   function validateFile(file, field) {
     if (!file) return null
     if (!file.name.toLowerCase().endsWith('.pdf')) return 'Only PDF files are allowed'
-    if (file.size > 100 * 1024) return `File must be under 100KB (current: ${Math.round(file.size/1024)}KB)`
+    if (file.size > 600 * 1024) return `File must be under 600KB (current: ${Math.round(file.size/1024)}KB)`
     return null
   }
 

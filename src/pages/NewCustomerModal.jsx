@@ -108,7 +108,7 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
   function validateFile(file) {
     if (!file) return null
     if (!file.name.toLowerCase().endsWith('.pdf')) return 'Only PDF files allowed'
-    if (file.size > 100 * 1024) return `Must be under 100KB (${Math.round(file.size/1024)}KB)`
+    if (file.size > 600 * 1024) return `Must be under 600KB (${Math.round(file.size/1024)}KB)`
     return null
   }
 
