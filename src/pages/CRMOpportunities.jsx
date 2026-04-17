@@ -48,6 +48,7 @@ export default function CRMOpportunities() {
   const [filterRep, setFilterRep]         = useState('')
   const [filterPrincipal, setFilterPrincipal] = useState('')
   const [filterScenario, setFilterScenario]   = useState('')
+  const [viewScope, setViewScope]             = useState('mine') // 'all' | 'mine' | 'team'
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 50
 
@@ -89,7 +90,7 @@ export default function CRMOpportunities() {
   const isManager = user.role === 'admin'
   const q = search.trim().toLowerCase()
   const filtered = opps
-    .filter(o => isManager || o.assigned_rep_id === user.id)
+    .filter(o => viewScope === 'all' ? true : viewScope === 'mine' ? o.assigned_rep_id === user.id : o.assigned_rep_id !== user.id)
     .filter(o => !q || (o.crm_companies?.company_name||o.customers?.customer_name||o.freetext_company||'').toLowerCase().includes(q) || (o.product_notes||'').toLowerCase().includes(q) || (o.crm_principals?.name||'').toLowerCase().includes(q))
     .filter(o => !filterStage || o.stage === filterStage)
     .filter(o => !filterRep || o.assigned_rep_id === filterRep)
@@ -116,6 +117,11 @@ export default function CRMOpportunities() {
               </div>
             </div>
             <div className="crm-header-actions">
+              <div style={{display:'flex',gap:0,border:'1px solid var(--gray-200)',borderRadius:8,overflow:'hidden'}}>
+                <button className={'crm-btn crm-btn-sm' + (viewScope==='mine'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none'}} onClick={() => { setViewScope('mine'); setPage(1) }}>My View</button>
+                <button className={'crm-btn crm-btn-sm' + (viewScope==='team'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => { setViewScope('team'); setPage(1) }}>Team</button>
+                <button className={'crm-btn crm-btn-sm' + (viewScope==='all'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => { setViewScope('all'); setPage(1) }}>All</button>
+              </div>
               <div style={{display:'flex',gap:0,border:'1px solid var(--gray-200)',borderRadius:8,overflow:'hidden'}}>
                 <button className={'crm-btn crm-btn-sm' + (view==='kanban'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none'}} onClick={() => setView('kanban')}>Kanban</button>
                 <button className={'crm-btn crm-btn-sm' + (view==='list'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => setView('list')}>List</button>

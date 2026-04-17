@@ -192,7 +192,7 @@ export default function CRMOpportunityDetail() {
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
     if (!['sales','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
     const [oppRes, actsRes, tasksRes, quoteRes, principalsRes, repsRes, qHistRes] = await Promise.all([
-      sb.from('crm_opportunities').select('*, crm_companies(id,company_name), crm_principals(name), crm_contacts(name,phone), profiles(name), customers(id,customer_name,account_owner)').eq('id', id).single(),
+      sb.from('crm_opportunities').select('*, crm_companies(id,company_name), crm_principals(name), crm_contacts(name,phone), profiles(name), customers(id,customer_name,account_owner,approval_status)').eq('id', id).single(),
       sb.from('crm_activities').select('*, profiles(name)').eq('opportunity_id', id).order('created_at', { ascending: false }),
       sb.from('crm_tasks').select('*, profiles(name)').eq('opportunity_id', id).order('due_date', { ascending: true }),
       sb.from('crm_quote_items').select('*').eq('opportunity_id', id).order('created_at', { ascending: true }),
@@ -399,7 +399,10 @@ export default function CRMOpportunityDetail() {
       }))
     )
     if (itemsErr) { toast('Order created but items failed: ' + itemsErr.message); setSubmittingSample(false); return }
-    toast('Custom Order created', 'success')
+    // Link SO number back to opportunity
+    await sb.from('crm_opportunities').update({ so_number: order.order_number }).eq('id', id)
+    await sb.from('crm_activities').insert({ opportunity_id: id, rep_id: user.id, activity_type: 'Note', notes: `Converted to order ${order.order_number}` })
+    toast('Order created — ' + order.order_number, 'success')
     setShowConvertModal(false)
     setSubmittingSample(false)
     navigate('/orders/' + order.id)
@@ -945,13 +948,18 @@ export default function CRMOpportunityDetail() {
                     Close Opportunity
                   </button>
                 )}
-                {opp.stage === 'WON' && (
-                  <button className="od-btn" onClick={openConvertModal}
-                    style={{ background:'#15803d', color:'white', borderColor:'#15803d', fontWeight:700 }}>
-                    🎉 Convert to Order
+                {opp.stage === 'WON' && opp.so_number && (
+                  <button className="od-btn" onClick={async () => {
+                    const { data } = await sb.from('orders').select('id').eq('order_number', opp.so_number).maybeSingle()
+                    if (data) navigate('/orders/' + data.id)
+                    else navigate('/orders?search=' + encodeURIComponent(opp.so_number))
+                  }}
+                    style={{ background:'#15803d', color:'white', borderColor:'#15803d', fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+                    {opp.so_number}
                   </button>
                 )}
-                {opp.stage === 'WON' && !opp.customer_id && (
+                {opp.stage === 'WON' && !opp.so_number && !opp.customer_id && (
                   <button className="od-btn" onClick={() => {
                     setC360Prefill({
                       customer_name: opp.freetext_company || '',
@@ -962,13 +970,25 @@ export default function CRMOpportunityDetail() {
                     setShowC360Modal(true)
                   }}
                     style={{ background:'#0369a1', color:'white', borderColor:'#0369a1', fontWeight:700 }}>
-                    👤 Add to Customer 360
+                    Add to Customer 360
+                  </button>
+                )}
+                {opp.stage === 'WON' && !opp.so_number && opp.customer_id && opp.customers?.approval_status !== 'approved' && (
+                  <span style={{ fontSize:12, fontWeight:700, color:'#b45309', background:'#fef3c7', padding:'6px 14px', borderRadius:8, display:'inline-flex', alignItems:'center', gap:6 }}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Customer Pending Approval
+                  </span>
+                )}
+                {opp.stage === 'WON' && !opp.so_number && opp.customer_id && opp.customers?.approval_status === 'approved' && (
+                  <button className="od-btn" onClick={openConvertModal}
+                    style={{ background:'#15803d', color:'white', borderColor:'#15803d', fontWeight:700 }}>
+                    Convert to Order
                   </button>
                 )}
                 {opp.stage === 'WON' && opp.customer_id && (
                   <button className="od-btn" onClick={() => navigate('/customers/' + opp.customer_id)}
                     style={{ background:'#0369a1', color:'white', borderColor:'#0369a1', fontWeight:700 }}>
-                    👤 View in Customer 360
+                    View in Customer 360
                   </button>
                 )}
               </div>

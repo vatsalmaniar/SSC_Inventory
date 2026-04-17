@@ -227,78 +227,70 @@ export default function CRMFieldVisits() {
 
           {loading ? (
             <div className="crm-loading"><div className="loading-spin"/>Loading...</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'48px 20px', color:'var(--gray-400)', fontSize:13 }}>No visits found</div>
           ) : (
-            <div className="crm-card">
-              <div className="crm-table-wrap">
-                <table className="crm-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Company</th>
-                      <th>Opportunity</th>
-                      <th>Type</th>
-                      <th>Purpose</th>
-                      <th>Outcome</th>
-                      <th>Next Action</th>
-                      <th>Rep</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.length === 0 && (
-                      <tr><td colSpan={8} style={{textAlign:'center',padding:'32px',color:'var(--gray-400)',fontSize:13}}>No visits found</td></tr>
-                    )}
-                    {filtered.map(v => {
-                      const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
-                      return (
-                        <tr key={v.id} style={{cursor:'pointer'}}
-                          onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}>
-                          <td style={{whiteSpace:'nowrap',fontWeight:600}}>{fmtNum(v.visit_date)}</td>
-                          <td><div className="crm-table-name">{v.company_freetext || '—'}</div></td>
-                          <td>
-                            {oppName
-                              ? <div style={{fontSize:12,color:'#1a4dab',fontWeight:600,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{oppName}</div>
-                              : <span style={{fontSize:11,color:'var(--gray-400)'}}>—</span>}
-                          </td>
-                          <td style={{whiteSpace:'nowrap'}}>
-                            <span style={{fontSize:10,fontWeight:700,borderRadius:4,padding:'2px 7px',whiteSpace:'nowrap',
-                              background: v.visit_type==='SOLO'?'#f1f5f9':v.visit_type==='JOINT_PRINCIPAL'?'#e8f2fc':'#f5f3ff',
-                              color: v.visit_type==='SOLO'?'#475569':v.visit_type==='JOINT_PRINCIPAL'?'#1a4dab':'#6d28d9'
-                            }}>{VISIT_TYPE_LABELS[v.visit_type]}</span>
-                            {v.visit_type==='JOINT_PRINCIPAL' && v.crm_principals?.name && <div className="crm-table-sub">{v.crm_principals.name}{v.principal_rep_name?' · '+v.principal_rep_name:''}</div>}
-                          </td>
-                          <td style={{maxWidth:180}}>{v.purpose || '—'}</td>
-                          <td style={{maxWidth:180}}>{v.outcome || '—'}</td>
-                          <td>{v.next_action ? <div><div style={{fontSize:12}}>{v.next_action}</div>{v.next_action_date && <div style={{fontSize:11,color:'var(--gray-400)'}}>{fmtNum(v.next_action_date)}</div>}</div> : '—'}</td>
-                          <td style={{whiteSpace:'nowrap'}}><OwnerChip name={v.profiles?.name} /></td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="crm-card-list">
-                {filtered.map(v => {
-                  const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
-                  return (
-                    <div key={v.id} className="crm-list-card"
-                      style={{cursor:'pointer'}}
-                      onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}>
-                      <div className="crm-list-card-top">
-                        <div>
-                          <div className="crm-list-card-name">{v.company_freetext || '—'}</div>
-                          <div className="crm-list-card-sub">{VISIT_TYPE_LABELS[v.visit_type]}{v.crm_principals?.name?' · '+v.crm_principals.name:''}</div>
-                          {oppName && <div style={{fontSize:11,color:'#1a4dab',marginTop:2}}>{oppName}</div>}
-                        </div>
-                        <span style={{fontSize:11,color:'var(--gray-500)',whiteSpace:'nowrap'}}>{fmtNum(v.visit_date)}</span>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {filtered.map(v => {
+                const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
+                const typeBg = v.visit_type==='SOLO'?'#f1f5f9':v.visit_type==='JOINT_PRINCIPAL'?'#e8f2fc':'#f5f3ff'
+                const typeColor = v.visit_type==='SOLO'?'#475569':v.visit_type==='JOINT_PRINCIPAL'?'#1a4dab':'#6d28d9'
+                return (
+                  <div key={v.id}
+                    onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}
+                    style={{ background:'white', border:'1px solid var(--gray-200)', borderRadius:12, padding:'16px 20px', cursor:'pointer', transition:'box-shadow 0.15s', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}
+                    onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'}
+                    onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)'}>
+
+                    {/* Row 1: Company + Date + Rep */}
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
+                        <div style={{ fontSize:14, fontWeight:700, color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.company_freetext || '—'}</div>
+                        <span style={{ fontSize:10, fontWeight:700, borderRadius:4, padding:'2px 8px', whiteSpace:'nowrap', background:typeBg, color:typeColor, flexShrink:0 }}>{VISIT_TYPE_LABELS[v.visit_type]}</span>
                       </div>
-                      {v.purpose && <div style={{fontSize:12,color:'var(--gray-600)',margin:'4px 0'}}>{v.purpose}</div>}
-                      {v.outcome && <div style={{fontSize:12,color:'var(--gray-600)'}}>{v.outcome}</div>}
-                      {v.next_action && <div style={{fontSize:12,color:'#1A3A8F',marginTop:4}}>Next: {v.next_action}{v.next_action_date?' · '+fmtNum(v.next_action_date):''}</div>}
-                      <div style={{marginTop:6}}><OwnerChip name={v.profiles?.name} /></div>
+                      <div style={{ display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+                        <span style={{ fontSize:12, fontWeight:600, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmtNum(v.visit_date)}</span>
+                        <OwnerChip name={v.profiles?.name} />
+                      </div>
                     </div>
-                  )
-                })}
-              </div>
+
+                    {/* Row 2: Opportunity + Principal */}
+                    {(oppName || (v.visit_type==='JOINT_PRINCIPAL' && v.crm_principals?.name)) && (
+                      <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:6, flexWrap:'wrap' }}>
+                        {oppName && <span style={{ fontSize:12, color:'#1a4dab', fontWeight:600 }}>{oppName}</span>}
+                        {v.visit_type==='JOINT_PRINCIPAL' && v.crm_principals?.name && <span style={{ fontSize:11, color:'#64748b' }}>with {v.crm_principals.name}{v.principal_rep_name ? ' · ' + v.principal_rep_name : ''}</span>}
+                      </div>
+                    )}
+
+                    {/* Row 3: Purpose + Outcome (compact) */}
+                    {(v.purpose || v.outcome) && (
+                      <div style={{ marginTop:8, display:'flex', gap:24, flexWrap:'wrap' }}>
+                        {v.purpose && (
+                          <div style={{ flex:'1 1 200px', minWidth:0 }}>
+                            <div style={{ fontSize:10, fontWeight:600, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:2 }}>Purpose</div>
+                            <div style={{ fontSize:12, color:'var(--gray-700)', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{v.purpose}</div>
+                          </div>
+                        )}
+                        {v.outcome && (
+                          <div style={{ flex:'1 1 200px', minWidth:0 }}>
+                            <div style={{ fontSize:10, fontWeight:600, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:2 }}>Outcome</div>
+                            <div style={{ fontSize:12, color:'var(--gray-700)', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{v.outcome}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Row 4: Next Action */}
+                    {v.next_action && (
+                      <div style={{ marginTop:8, padding:'6px 10px', background:'#f8fafc', borderRadius:6, display:'inline-flex', alignItems:'center', gap:6 }}>
+                        <svg fill="none" stroke="#1a4dab" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12,flexShrink:0}}><polyline points="9 18 15 12 9 6"/></svg>
+                        <span style={{ fontSize:12, color:'#1a4dab', fontWeight:600 }}>{v.next_action}</span>
+                        {v.next_action_date && <span style={{ fontSize:11, color:'#64748b' }}> · {fmtNum(v.next_action_date)}</span>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
