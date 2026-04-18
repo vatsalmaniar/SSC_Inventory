@@ -180,11 +180,11 @@ export default function CRMFieldVisits() {
   const isManager = user.role === 'admin'
   const q = search.trim().toLowerCase()
   const filtered = visits
-    .filter(v => isManager || v.rep_id === user.id || (v.ssc_team_members || []).includes(user.id))
     .filter(v => {
-      if (viewScope === 'all') return true
       const isMine = v.rep_id === user.id || (v.ssc_team_members || []).includes(user.id)
-      return viewScope === 'mine' ? isMine : !isMine
+      if (viewScope === 'mine') return isMine
+      if (viewScope === 'team') return !isMine
+      return true
     })
     .filter(v => !q || (v.company_freetext||'').toLowerCase().includes(q) || (v.purpose||'').toLowerCase().includes(q))
     .filter(v => !filterRep || v.rep_id === filterRep || (v.ssc_team_members || []).includes(filterRep))
