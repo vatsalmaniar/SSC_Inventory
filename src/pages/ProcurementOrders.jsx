@@ -13,11 +13,12 @@ function fmtCr(val) {
 }
 
 const STATUS_LABELS = {
-  inv_check: 'Order Approved', inventory_check: 'Inventory Check', dispatch: 'Ready to Ship',
+  inv_check: 'Order Approved', inventory_check: 'Inventory Check', dispatch: 'Ready to Ship', cancelled: 'Cancelled',
 }
 const STATUS_COLORS = {
-  inv_check: { bg:'#eff6ff', color:'#1d4ed8' }, inventory_check: { bg:'#eff6ff', color:'#1d4ed8' }, dispatch: { bg:'#f0fdf4', color:'#15803d' },
+  inv_check: { bg:'#eff6ff', color:'#1d4ed8' }, inventory_check: { bg:'#eff6ff', color:'#1d4ed8' }, dispatch: { bg:'#f0fdf4', color:'#15803d' }, cancelled: { bg:'#fef2f2', color:'#dc2626' },
 }
+const PRE_APPROVAL_PO_STATUSES = ['draft', 'pending_approval']
 
 export default function ProcurementOrders() {
   const navigate = useNavigate()
@@ -32,22 +33,28 @@ export default function ProcurementOrders() {
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     if (!['ops','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
 
-    // Fetch CO orders — show all with item-level PO coverage
+    // Fetch CO orders — include cancelled so procurement can react before PO is approved
     const { data: coData } = await sb.from('orders')
       .select('id,order_number,customer_name,status,created_at,order_items(id,total_price)')
       .eq('is_test', false)
       .eq('order_type', 'CO')
-      .in('status', ['inv_check','inventory_check','dispatch'])
+      .in('status', ['inv_check','inventory_check','dispatch','cancelled'])
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
 
     let coOrders = coData || []
     if (coOrders.length) {
-      // Get item-level coverage from po_items
+      // Get item-level coverage + PO status for each CO
       const coIds = coOrders.map(o => o.id)
-      const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id').in('order_id', coIds)
+      const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id,status').in('order_id', coIds)
       let coveredSet = new Set()
+      // Map order_id → array of linked PO statuses (so we know if any PO is past approval)
+      const poStatusByCo = {}
       if (linkedPos?.length) {
+        for (const p of linkedPos) {
+          if (!poStatusByCo[p.order_id]) poStatusByCo[p.order_id] = []
+          poStatusByCo[p.order_id].push(p.status)
+        }
         const poIds = linkedPos.map(p => p.id)
         const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
         coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
@@ -55,8 +62,15 @@ export default function ProcurementOrders() {
       coOrders = coOrders.map(o => {
         const total = (o.order_items || []).length
         const covered = (o.order_items || []).filter(oi => coveredSet.has(oi.id)).length
-        return { ...o, _totalItems: total, _coveredItems: covered }
-      }).filter(o => o._coveredItems < o._totalItems) // hide fully covered
+        const poStatuses = poStatusByCo[o.id] || []
+        const hasPostApprovalPO = poStatuses.some(s => !PRE_APPROVAL_PO_STATUSES.includes(s))
+        return { ...o, _totalItems: total, _coveredItems: covered, _hasPostApprovalPO: hasPostApprovalPO }
+      }).filter(o => {
+        // Cancelled COs: show only if no PO placed beyond approval (procurement can still act)
+        if (o.status === 'cancelled') return !o._hasPostApprovalPO
+        // Active COs: hide fully covered
+        return o._coveredItems < o._totalItems
+      })
     }
 
     setOrders(coOrders)
@@ -111,10 +125,11 @@ export default function ProcurementOrders() {
                     const covered = o._coveredItems || 0
                     const total = o._totalItems || 0
                     const hasPartial = covered > 0 && covered < total
+                    const isCancelled = o.status === 'cancelled'
                     return (
-                      <tr key={o.id}>
+                      <tr key={o.id} style={isCancelled ? { background:'#fef2f2' } : undefined}>
                         <td>
-                          <span onClick={() => navigate('/orders/' + o.id)} style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:600, color:'#1a4dab', cursor:'pointer' }}>{o.order_number}</span>
+                          <span onClick={() => navigate('/orders/' + o.id)} style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:600, color: isCancelled ? '#b91c1c' : '#1a4dab', cursor:'pointer', textDecoration: isCancelled ? 'line-through' : 'none' }}>{o.order_number}</span>
                         </td>
                         <td style={{ fontWeight:500, color:'var(--gray-800)' }}>{o.customer_name}</td>
                         <td>
@@ -130,10 +145,14 @@ export default function ProcurementOrders() {
                         <td style={{ textAlign:'right', fontWeight:600 }}>{fmtCr(val)}</td>
                         <td style={{ fontSize:12, color:'var(--gray-500)' }}>{fmtShort(o.created_at)}</td>
                         <td style={{ textAlign:'center' }}>
-                          <button className="od-btn od-btn-approve" onClick={() => navigate('/procurement/po/new?order_id=' + o.id)}
-                            style={{ fontSize:11, padding:'4px 12px' }}>
-                            {hasPartial ? 'Add PO →' : 'Create PO →'}
-                          </button>
+                          {isCancelled ? (
+                            <span style={{ fontSize:11, fontWeight:600, color:'#b91c1c' }}>Cancel draft PO →</span>
+                          ) : (
+                            <button className="od-btn od-btn-approve" onClick={() => navigate('/procurement/po/new?order_id=' + o.id)}
+                              style={{ fontSize:11, padding:'4px 12px' }}>
+                              {hasPartial ? 'Add PO →' : 'Create PO →'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )

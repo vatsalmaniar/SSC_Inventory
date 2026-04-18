@@ -49,6 +49,7 @@ export default function PurchaseOrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [po, setPo]               = useState(null)
+  const [sourceCOStatus, setSourceCOStatus] = useState(null)
   const [vendorCode, setVendorCode] = useState('')
   const [items, setItems]         = useState([])
   const [grns, setGrns] = useState([])
@@ -114,6 +115,12 @@ export default function PurchaseOrderDetail() {
     // Non-blocking vendor code lookup
     if (poRes.data?.vendor_id) {
       sb.from('vendors').select('vendor_code').eq('id', poRes.data.vendor_id).maybeSingle().then(({ data: v }) => setVendorCode(v?.vendor_code || ''))
+    }
+    // Non-blocking source CO status lookup (to show cancelled banner if linked CO is cancelled)
+    if (poRes.data?.order_id) {
+      sb.from('orders').select('status').eq('id', poRes.data.order_id).maybeSingle().then(({ data: o }) => setSourceCOStatus(o?.status || null))
+    } else {
+      setSourceCOStatus(null)
     }
     const [itemsRes, datesRes, commentsRes] = await Promise.all([
       sb.from('po_items').select('*').eq('po_id', id).order('sr_no'),
@@ -810,6 +817,16 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div>
               <div className="od-pending-banner-label">Awaiting Approval</div>
               <div>Submitted as {po.po_number}. Once approved, it can be placed with the vendor.</div>
+            </div>
+          </div>
+        )}
+
+        {sourceCOStatus === 'cancelled' && ['draft','pending_approval'].includes(po.status) && (
+          <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'flex-start', gap:12, fontSize:13, color:'#b91c1c', marginBottom:16 }}>
+            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <div>
+              <div style={{ fontWeight:700, marginBottom:2 }}>Source Customer Order Cancelled</div>
+              <div style={{ color:'#dc2626', fontSize:12 }}>The linked CO {po.order_number ? (<span style={{ fontFamily:'var(--mono)', fontWeight:600 }}>{po.order_number}</span>) : null} has been cancelled. Please cancel this draft PO to avoid placing an unnecessary purchase.</div>
             </div>
           </div>
         )}
