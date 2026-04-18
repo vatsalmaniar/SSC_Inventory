@@ -1,4 +1,4 @@
-.no-page { min-height: 100vh; background: var(--gray-50); }
+.no-page { min-height: 100vh; background: #fafafa; }
 
 /* ── Back button ── */
 .back-btn { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.12); border: none; color: white; font-family: var(--font); font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 8px; cursor: pointer; transition: background 0.15s; }

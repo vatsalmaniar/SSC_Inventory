@@ -218,9 +218,14 @@ export default function BillingOrderDetail() {
     const ownerName = order?.account_owner || order?.engineer_name || ''
     const seen = new Set()
     const targets = []
-    profiles.filter(p => roles.includes(p.role) && p.role !== 'admin').forEach(p => {
-      if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
-    })
+    // Caller passes the exact operational roles (e.g. a specific FC). Sales and admin are never
+    // role-broadcast — they only get notified as account owner, creator, or via @tag below.
+    const broadcastRoles = (roles || []).filter(r => r !== 'sales' && r !== 'admin')
+    if (broadcastRoles.length) {
+      profiles.filter(p => broadcastRoles.includes(p.role)).forEach(p => {
+        if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
+      })
+    }
     if (ownerName) {
       const ownerProfile = profiles.find(p => p.name === ownerName)
       if (ownerProfile && !seen.has(ownerProfile.id)) { seen.add(ownerProfile.id); targets.push(ownerProfile) }
@@ -291,7 +296,7 @@ export default function BillingOrderDetail() {
     if (activeBatch) await sb.from('order_dispatches').update({ credit_override: true, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     await sb.from('orders').update({ credit_override: true, updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity('Credit Override flagged — payment pending. Awaiting approval. ⚠️')
-    await notifyUsers(['ops','admin'], `${order.order_number} — Credit Override flagged. Payment pending — needs approval.`, 'credit_override')
+    await notifyUsers([], `${order.order_number} — Billing on hold (credit override). Payment pending — needs approval.`, 'credit_override')
     toast('Credit override flagged', 'warning')
     setSaving(false); await loadOrder()
   }
@@ -327,7 +332,8 @@ export default function BillingOrderDetail() {
       await sb.from('order_dispatches').update({ status: 'invoice_generated', invoice_number: finalInvNum, invoice_pdf_url: pdfUrl, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
     await logActivity(`Invoice Generated — ${finalInvNum}. Waiting for Fulfilment Centre to set delivery details.`)
-    await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Invoice generated. Please set delivery details.`, 'pi_issued')
+    const invFcRole = (activeBatch?.fulfilment_center === 'Godawari') ? 'fc_godawari' : 'fc_kaveri'
+    await notifyUsers([invFcRole], `${order.order_number} — Invoice generated. Please set delivery details.`, 'pi_issued')
     toast('Invoice generated', 'success')
     setShowInvConfirm(false); setTallyInvNumber(''); setSaving(false); await loadOrder()
   }
@@ -346,6 +352,7 @@ export default function BillingOrderDetail() {
     }
     await sb.from('orders').update({ status: 'pi_generated', updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`Proforma Invoice issued — ${piNumberInput.trim()}. Awaiting customer payment.`)
+    await notifyUsers([], `${order.order_number} — Proforma Invoice issued (${piNumberInput.trim()}). Awaiting customer payment.`, 'pi_issued')
     toast('Proforma Invoice issued', 'success')
     setSaving(false); await loadOrder()
   }
@@ -358,6 +365,7 @@ export default function BillingOrderDetail() {
     }
     await sb.from('orders').update({ status: 'pi_payment_pending', updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`PI shared with customer — payment pending.`)
+    await notifyUsers([], `${order.order_number} — PI shared with customer. Payment pending.`, 'payment_pending')
     toast('PI sent — awaiting payment', 'success')
     setSaving(false); await loadOrder()
   }
@@ -374,7 +382,8 @@ export default function BillingOrderDetail() {
     }
     await sb.from('orders').update({ status: 'delivery_created', updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`PI Payment confirmed${paymentRef.trim() ? ' — Ref: ' + paymentRef.trim() : ''}. Order returned to Fulfilment Centre for picking & dispatch.`)
-    await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — PI payment confirmed. Order ready for picking & dispatch.`, 'pi_payment_confirmed')
+    const piFcRole = (activeBatch?.fulfilment_center === 'Godawari') ? 'fc_godawari' : 'fc_kaveri'
+    await notifyUsers([piFcRole], `${order.order_number} — PI payment confirmed. Order ready for picking & dispatch.`, 'pi_payment_confirmed')
     toast('PI payment confirmed', 'success')
     setSaving(false); await loadOrder()
   }
@@ -409,7 +418,8 @@ export default function BillingOrderDetail() {
       }).eq('id', activeBatch.id)
     }
     await logActivity(`E-Way Bill generated — #${ewayNumber.trim()}. Handed to FC for final delivery.`)
-    await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — E-Way Bill ready. Order handed back for delivery.`, 'pi_issued')
+    const ewayFcRole = (activeBatch?.fulfilment_center === 'Godawari') ? 'fc_godawari' : 'fc_kaveri'
+    await notifyUsers([ewayFcRole], `${order.order_number} — E-Way Bill ready. Order handed back for delivery.`, 'pi_issued')
     toast('E-Way Bill generated', 'success')
     setSaving(false); await loadOrder()
     navigate('/billing')

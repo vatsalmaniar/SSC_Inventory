@@ -1,11 +1,11 @@
 /* ══════════════════════════════════════════
    ORDERS DASHBOARD  (/orders)
 ══════════════════════════════════════════ */
-.od-dash-page { min-height: 100vh; background: #f1f5f9; }
+.od-dash-page { min-height: 100vh; background: #fafafa; }
 .od-dash-body { max-width: 960px; margin: 0 auto; padding: 28px 20px 60px; }
 
 /* ── New flat dashboard ── */
-.dash-page  { min-height: 100vh; background: #f8fafc; }
+.dash-page  { min-height: 100vh; background: #fafafa; }
 .dash-body  { max-width: 1040px; margin: 0 auto; padding: 28px 20px 60px; }
 .dash-loading { background: white; border-radius: 16px; padding: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #94a3b8; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 
@@ -163,7 +163,7 @@
 /* ══════════════════════════════════════════
    ORDERS LIST  (/orders/list)
 ══════════════════════════════════════════ */
-.od-list-page { min-height: 100vh; background: var(--gray-50); }
+.od-list-page { min-height: 100vh; background: #fafafa; }
 .od-list-body { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
 
 .od-list-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }

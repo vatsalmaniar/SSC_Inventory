@@ -423,6 +423,7 @@
 .ly-content {
   flex: 1;
   overflow-y: auto;
+  background: #fafafa;
 }
 
 /* ── Mobile ── */

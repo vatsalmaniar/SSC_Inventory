@@ -133,30 +133,32 @@ export default function CRMOpportunities() {
             </div>
           </div>
 
-          <div className="crm-controls">
-            <div className="crm-search-wrap">
-              <svg className="crm-search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input className="crm-search-input" placeholder="Search company, product, principal..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
-            </div>
-            <select className="crm-filter-select" value={filterStage} onChange={e => { setFilterStage(e.target.value); setPage(1) }}>
-              <option value="">All Stages</option>
-              {[...STAGES,...TERMINAL].map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
-            </select>
-            <select className="crm-filter-select" value={filterScenario} onChange={e => { setFilterScenario(e.target.value); setPage(1) }}>
-              <option value="">All Scenarios</option>
-              {SCENARIOS.map(s => <option key={s} value={s}>{scenarioLabel(s)}</option>)}
-            </select>
-            <select className="crm-filter-select" value={filterPrincipal} onChange={e => { setFilterPrincipal(e.target.value); setPage(1) }}>
-              <option value="">All Principals</option>
-              {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            {isManager && (
-              <select className="crm-filter-select" value={filterRep} onChange={e => { setFilterRep(e.target.value); setPage(1) }}>
-                <option value="">All Reps</option>
-                {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          {view === 'list' && (
+            <div className="crm-controls">
+              <div className="crm-search-wrap">
+                <svg className="crm-search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input className="crm-search-input" placeholder="Search company, product, principal..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+              </div>
+              <select className="crm-filter-select" value={filterStage} onChange={e => { setFilterStage(e.target.value); setPage(1) }}>
+                <option value="">All Stages</option>
+                {[...STAGES,...TERMINAL].map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
               </select>
-            )}
-          </div>
+              <select className="crm-filter-select" value={filterScenario} onChange={e => { setFilterScenario(e.target.value); setPage(1) }}>
+                <option value="">All Scenarios</option>
+                {SCENARIOS.map(s => <option key={s} value={s}>{scenarioLabel(s)}</option>)}
+              </select>
+              <select className="crm-filter-select" value={filterPrincipal} onChange={e => { setFilterPrincipal(e.target.value); setPage(1) }}>
+                <option value="">All Principals</option>
+                {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              {isManager && (
+                <select className="crm-filter-select" value={filterRep} onChange={e => { setFilterRep(e.target.value); setPage(1) }}>
+                  <option value="">All Reps</option>
+                  {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              )}
+            </div>
+          )}
 
           {loading ? (
             <div className="crm-loading"><div className="loading-spin"/>Loading...</div>
@@ -180,10 +182,17 @@ export default function CRMOpportunities() {
   )
 }
 
-const COL_COLORS = {
-  LEAD_CAPTURED:'#6366f1', CONTACTED:'#0ea5e9', QUALIFIED:'#8b5cf6',
-  BOM_RECEIVED:'#a855f7', QUOTATION_SENT:'#1a4dab', FOLLOW_UP:'#f59e0b',
-  FINAL_NEGOTIATION:'#d97706', WON:'#22c55e', LOST:'#ef4444', ON_HOLD:'#94a3b8',
+const COL_STYLES = {
+  LEAD_CAPTURED:    { accent:'#6366f1', tint:'#eef2ff', border:'#e0e7ff', text:'#4338ca' },
+  CONTACTED:        { accent:'#0ea5e9', tint:'#ecfeff', border:'#cffafe', text:'#0e7490' },
+  QUALIFIED:        { accent:'#8b5cf6', tint:'#f5f3ff', border:'#ede9fe', text:'#6d28d9' },
+  BOM_RECEIVED:     { accent:'#a855f7', tint:'#faf5ff', border:'#f3e8ff', text:'#7e22ce' },
+  QUOTATION_SENT:   { accent:'#1a4dab', tint:'#eff6ff', border:'#dbeafe', text:'#1e40af' },
+  FOLLOW_UP:        { accent:'#f59e0b', tint:'#fffbeb', border:'#fef3c7', text:'#b45309' },
+  FINAL_NEGOTIATION:{ accent:'#d97706', tint:'#fef3c7', border:'#fde68a', text:'#92400e' },
+  WON:              { accent:'#22c55e', tint:'#f0fdf4', border:'#dcfce7', text:'#15803d' },
+  LOST:             { accent:'#ef4444', tint:'#fef2f2', border:'#fecaca', text:'#b91c1c' },
+  ON_HOLD:          { accent:'#94a3b8', tint:'#f8fafc', border:'#e2e8f0', text:'#475569' },
 }
 
 function KanbanView({ opps, navigate, onMoveStage }) {
@@ -220,52 +229,55 @@ function KanbanView({ opps, navigate, onMoveStage }) {
     <div className="kb-board">
       {allCols.map(stage => {
         const cards = opps.filter(o => o.stage === stage)
-        if (cards.length === 0 && TERMINAL.includes(stage)) return null
         const colTotal = cards.reduce((s, o) => s + (o.estimated_value_inr || 0), 0)
         const isOver = overCol === stage && dragId
+        const sty = COL_STYLES[stage] || COL_STYLES.ON_HOLD
+        const colStyle = { '--col-accent': sty.accent, '--col-tint': sty.tint, '--col-border': sty.border, '--col-text': sty.text }
         return (
-          <div key={stage} className={'kb-col' + (isOver ? ' kb-col-over' : '')}
+          <div key={stage} className={'kb-col' + (isOver ? ' kb-col-over' : '')} style={colStyle}
             onDragOver={e => onDragOver(e, stage)}
             onDragLeave={e => onDragLeave(e, stage)}
             onDrop={e => onDrop(e, stage)}>
             <div className="kb-col-head">
               <div className="kb-col-head-top">
-                <span className="kb-col-dot" style={{background: COL_COLORS[stage] || '#94a3b8'}} />
+                <span className="kb-col-dot" />
                 <span className="kb-col-title">{STAGE_LABELS[stage]}</span>
                 <span className="kb-col-count">{cards.length}</span>
               </div>
               {colTotal > 0 && <div className="kb-col-total">{fmtINR(colTotal)}</div>}
             </div>
             <div className="kb-col-body">
-              {cards.map(o => (
-                <div key={o.id} className="kb-card" draggable
-                  onDragStart={e => onDragStart(e, o.id)}
-                  onDragEnd={onDragEnd}
-                  onClick={() => navigate('/crm/opportunities/' + o.id)}>
-                  <div className="kb-card-top">
-                    <div className="kb-card-title">{o.opportunity_name || '—'}</div>
+              {cards.map(o => {
+                const company = o.crm_companies?.company_name || o.customers?.customer_name || o.freetext_company || ''
+                const title = o.opportunity_name || ''
+                return (
+                  <div key={o.id} className="kb-card" draggable
+                    onDragStart={e => onDragStart(e, o.id)}
+                    onDragEnd={onDragEnd}
+                    onClick={() => navigate('/crm/opportunities/' + o.id)}>
+                    {company && <div className="kb-card-company">{company}</div>}
+                    {title && title !== company && <div className="kb-card-title">{title}</div>}
+                    <div className="kb-card-bottom">
+                      <div className="kb-card-bottom-left">
+                        {o.estimated_value_inr ? <span className="kb-card-amount">{fmtINR(o.estimated_value_inr)}</span> : null}
+                        {isOverdue(o) && <span className="kb-tag kb-tag-overdue">Overdue</span>}
+                        {o.expected_close_date && (
+                          <span className="kb-card-date">
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:10,height:10}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            {fmtDate(o.expected_close_date)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     {o.profiles?.name && (
-                      <div className="kb-avatar" style={{background: ownerColor(o.profiles.name)}}>{o.profiles.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>
+                      <div className="kb-card-owner">
+                        <div className="kb-avatar" style={{background: ownerColor(o.profiles.name)}}>{o.profiles.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>
+                        <span className="kb-card-owner-name">{o.profiles.name}</span>
+                      </div>
                     )}
                   </div>
-                  {(o.crm_companies?.company_name || o.freetext_company) && (
-                    <div className="kb-card-company">{o.crm_companies?.company_name || o.freetext_company}</div>
-                  )}
-                  {o.product_notes && o.product_notes !== o.opportunity_name && <div className="kb-card-desc">{o.product_notes.length > 50 ? o.product_notes.slice(0,50)+'…' : o.product_notes}</div>}
-                  <div className="kb-card-bottom">
-                    <div className="kb-card-bottom-left">
-                      {o.expected_close_date && (
-                        <span className="kb-card-date">
-                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                          {fmtDate(o.expected_close_date)}
-                        </span>
-                      )}
-                      {isOverdue(o) && <span className="kb-tag kb-tag-overdue">Overdue</span>}
-                    </div>
-                    {o.estimated_value_inr && <div className="kb-card-amount">{fmtINR(o.estimated_value_inr)}</div>}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
               {cards.length === 0 && <div className="kb-empty">No items</div>}
             </div>
           </div>

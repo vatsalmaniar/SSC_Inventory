@@ -127,6 +127,18 @@ export default function CustomerDetail() {
     setApproving(true)
     await sb.from('customers').update({ approval_status: 'approved' }).eq('id', id)
     setCustomer(p => ({ ...p, approval_status: 'approved' }))
+    // Notify the account owner that their new customer was approved
+    if (customer?.account_owner && customer.account_owner !== userName) {
+      const { data: ownerProfile } = await sb.from('profiles').select('id,name').eq('name', customer.account_owner).maybeSingle()
+      if (ownerProfile?.id) {
+        await sb.from('notifications').insert({
+          user_id: ownerProfile.id, user_name: ownerProfile.name,
+          message: `Customer "${customer.customer_name}" approved by ${userName || 'Admin'}.`,
+          order_id: null, order_number: '', from_name: userName || 'Admin',
+          email_type: 'new_customer_approved',
+        })
+      }
+    }
     setApproving(false)
     toast('Customer approved', 'success')
   }

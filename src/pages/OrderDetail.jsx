@@ -331,6 +331,7 @@ export default function OrderDetail() {
     if (itemsErr) { toast('Failed to save items: ' + itemsErr.message); setSaving(false); return }
     const msg = reason.trim() ? `Order edited — ${reason.trim()}` : 'Order edited — details updated'
     await logActivity(msg)
+    await notifyUsers([], `${order.order_number} — Order edited by ${user.name}.${reason.trim() ? ` Reason: ${reason.trim()}` : ''}`, 'order_edited')
     toast('Order updated', 'success')
     await loadOrder()
     setEditMode(false); setSaving(false)
@@ -388,10 +389,14 @@ export default function OrderDetail() {
     const ownerName = order?.account_owner || order?.engineer_name || ''
     const seen = new Set()
     const targets = []
-    // Operational roles (exclude admin from broadcast — admin only gets notified as account owner or via @tag)
-    profiles.filter(p => roles.includes(p.role) && p.role !== 'admin').forEach(p => {
-      if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
-    })
+    // Caller passes the exact operational roles (e.g. a specific FC). Sales and admin are never
+    // role-broadcast — they only get notified as account owner, creator, or via @tag below.
+    const broadcastRoles = (roles || []).filter(r => r !== 'sales' && r !== 'admin')
+    if (broadcastRoles.length) {
+      profiles.filter(p => broadcastRoles.includes(p.role)).forEach(p => {
+        if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
+      })
+    }
     // Always include account owner
     if (ownerName) {
       const ownerProfile = profiles.find(p => p.name === ownerName)
@@ -495,7 +500,10 @@ export default function OrderDetail() {
     await logActivity(isPIOrder
       ? `Full Dispatch — ${order.credit_terms}. PI required before delivery. DC: ${dcNum}`
       : `Full Dispatch — all items sent via ${fcCenter}. Delivery Created. DC: ${dcNum}`)
-    if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Dispatched to ${fcCenter}. Ready for picking.`, 'order_dispatched')
+    if (!isPIOrder) {
+      const fcRole = fcCenter === 'Godawari' ? 'fc_godawari' : 'fc_kaveri'
+      await notifyUsers([fcRole], `${order.order_number} — Dispatched to ${fcCenter}. Ready for picking.`, 'order_dispatched')
+    }
     toast('Dispatch created', 'success')
     await loadOrder(); setSaving(false)
   }
@@ -549,7 +557,10 @@ export default function OrderDetail() {
     await logActivity(isPIOrder
       ? `Partial Dispatch via ${fcCenter} — ${summary}. ${order.credit_terms} — PI required before delivery. DC: ${dcNum}`
       : `Partial Dispatch via ${fcCenter} — ${summary}. Delivery Created. DC: ${dcNum}`)
-    if (!isPIOrder) await notifyUsers(['fc_kaveri','fc_godawari','ops','admin'], `${order.order_number} — Partial dispatch to ${fcCenter}. Ready for picking.`, 'order_dispatched')
+    if (!isPIOrder) {
+      const fcRole = fcCenter === 'Godawari' ? 'fc_godawari' : 'fc_kaveri'
+      await notifyUsers([fcRole], `${order.order_number} — Partial dispatch to ${fcCenter}. Ready for picking.`, 'order_dispatched')
+    }
     toast('Partial dispatch created', 'success')
     await loadOrder(); setSaving(false)
   }
@@ -624,7 +635,7 @@ if (match) {
     await sb.from('order_comments').insert({
       order_id: id, author_name: user.name, message: logMsg, tagged_users: [], is_activity: true, is_cancellation: true
     })
-    await notifyUsers(['fc_kaveri','fc_godawari','ops','accounts','admin'], `${order.order_number} — Order cancelled. Reason: ${cancelReason.trim()}`, 'order_cancelled')
+    await notifyUsers([], `${order.order_number} — Order cancelled. Reason: ${cancelReason.trim()}`, 'order_cancelled')
     toast('Order cancelled', 'success')
     setShowCancel(false); setCancelReason(''); setCancelInitiatorType('staff'); setCancelInitiatorName(''); setCancelInitiatorFreeText('')
     await loadOrder(); setSaving(false)

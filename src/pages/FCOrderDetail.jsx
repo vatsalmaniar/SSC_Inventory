@@ -434,9 +434,14 @@ export default function FCOrderDetail() {
     const ownerName = order?.account_owner || order?.engineer_name || ''
     const seen = new Set()
     const targets = []
-    profiles.filter(p => roles.includes(p.role) && p.role !== 'admin').forEach(p => {
-      if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
-    })
+    // Caller passes the exact operational roles (e.g. a specific FC). Sales and admin are never
+    // role-broadcast — they only get notified as account owner, creator, or via @tag below.
+    const broadcastRoles = (roles || []).filter(r => r !== 'sales' && r !== 'admin')
+    if (broadcastRoles.length) {
+      profiles.filter(p => broadcastRoles.includes(p.role)).forEach(p => {
+        if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
+      })
+    }
     if (ownerName) {
       const ownerProfile = profiles.find(p => p.name === ownerName)
       if (ownerProfile && !seen.has(ownerProfile.id)) { seen.add(ownerProfile.id); targets.push(ownerProfile) }
@@ -538,7 +543,7 @@ export default function FCOrderDetail() {
       : `Goods Issued — DC confirmed: ${dcNum || order.dc_number || '—'}. Handed to Accounts for billing.`
     await logActivity(actMsg)
     if (order.order_type !== 'SAMPLE') {
-      await notifyUsers(['accounts', 'admin'], `${order.order_number} — Goods Issued. Ready for billing.`, 'goods_issued')
+      await notifyUsers(['accounts'], `${order.order_number} — Goods Issued. Ready for billing.`, 'goods_issued')
     }
     toast('Goods issued confirmed', 'success')
     setConfirm(null)
@@ -616,7 +621,7 @@ export default function FCOrderDetail() {
     const { error } = await sb.from('orders').update({ status: finalStatus, updated_at: new Date().toISOString() }).eq('id', id)
     if (error) { toast('Error: ' + error.message); setSaving(false); return }
     await logActivity(allBatchesDone ? 'Order Delivered — all batches complete.' : 'Batch Delivered — remaining batch(es) still pending.')
-    if (allBatchesDone) await notifyUsers(['sales','ops','admin'], `${order.order_number} — Order delivered to customer.`, 'order_delivered')
+    if (allBatchesDone) await notifyUsers([], `${order.order_number} — Order delivered to customer.`, 'order_delivered')
     toast(allBatchesDone ? 'Order delivered' : 'Batch delivered', 'success')
     setConfirm(null)
     setSaving(false)

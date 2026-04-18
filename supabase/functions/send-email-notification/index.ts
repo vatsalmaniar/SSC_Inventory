@@ -236,10 +236,6 @@ function buildSecurityAlert(adminName: string, userName: string, userEmail: stri
 async function handleNotification(sb: any, r: any) {
   if (!r.email_type) return new Response('no email_type, skipped')
 
-  // Skip high-volume email types to stay within Resend free tier (100/day)
-  const SKIP_TYPES = ['opportunity_won', 'opportunity_lost']
-  if (SKIP_TYPES.includes(r.email_type)) return new Response('skipped: volume optimization')
-
   const { data: profile } = await sb.from('profiles').select('username,email,name').eq('id', r.user_id).single()
   if (!profile?.username) return new Response('no profile')
   const email = profile.email || (profile.username + '@ssccontrol.com')
@@ -264,24 +260,90 @@ async function handleNotification(sb: any, r: any) {
     if (dispatch?.dc_number) extra.dc = dispatch.dc_number
   }
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [email], subject: subject(r), html: buildEmail(recipientName, r, extra) }),
-  })
-  const data = await res.json()
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM, to: [email], subject: subject(r), html: buildEmail(recipientName, r, extra) }),
+    })
+    const data = await res.json()
 
-  await sb.from('email_log').insert({
-    notification_id: r.id, recipient_email: email, email_type: r.email_type,
-    resend_id: data.id || null, status: res.ok ? 'sent' : 'failed',
-    error_message: res.ok ? null : JSON.stringify(data),
-  })
+    await sb.from('email_log').insert({
+      notification_id: r.id, recipient_email: email, email_type: r.email_type,
+      resend_id: data.id || null, status: res.ok ? 'sent' : 'failed',
+      error_message: res.ok ? null : JSON.stringify(data),
+    }).catch(() => {})
 
-  return new Response(res.ok ? 'sent' : 'failed')
+    return new Response(res.ok ? 'sent' : 'failed')
+  } catch (e) {
+    await sb.from('email_log').insert({
+      notification_id: r.id, recipient_email: email, email_type: r.email_type,
+      status: 'failed', error_message: (e as Error).message,
+    }).catch(() => {})
+    return new Response('email_failed_gracefully')
+  }
+}
+
+function buildLoginEmail(userName: string, recipientName: string, loginTime: string, device: string): string {
+  const time = fmtTime(loginTime)
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;-webkit-font-smoothing:antialiased">
+  <div style="max-width:560px;margin:0 auto;padding:40px 16px 32px">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px"><tr>
+      <td style="font-size:20px;font-weight:700;color:#1a4dab;letter-spacing:-0.5px;padding-left:4px">SSC ERP</td>
+      <td style="text-align:right;font-size:11px;color:#94a3b8;padding-right:4px">${time}</td>
+    </tr></table>
+    <div style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="height:4px;background:#1a4dab"></div>
+      <div style="padding:32px 28px 28px">
+        <div style="font-size:17px;font-weight:700;color:#0f172a;margin-bottom:24px;line-height:1.3">
+          ${esc(greeting(recipientName))} 👋
+        </div>
+        <div style="margin-bottom:18px">
+          <span style="display:inline-block;padding:6px 14px;border-radius:24px;font-size:12px;font-weight:600;color:#1a4dab;background:#eff6ff">
+            🔐&nbsp;&nbsp;Welcome back
+          </span>
+        </div>
+        <div style="font-size:14px;color:#334155;line-height:1.7;margin-bottom:20px">
+          You just signed in to SSC ERP.
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 18px;margin-bottom:20px">
+          <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#475569">
+            <tr><td style="padding:4px 0;font-weight:600;color:#64748b;width:80px">User</td><td style="padding:4px 0;font-weight:700;color:#0f172a">${esc(userName)}</td></tr>
+            <tr><td style="padding:4px 0;font-weight:600;color:#64748b;width:80px">Time</td><td style="padding:4px 0;color:#0f172a">${time}</td></tr>
+            <tr><td style="padding:4px 0;font-weight:600;color:#64748b;width:80px">Device</td><td style="padding:4px 0;color:#475569">${esc(device || 'Unknown')}</td></tr>
+          </table>
+        </div>
+        <div style="font-size:12px;color:#94a3b8;line-height:1.6">
+          If this wasn't you, please contact your admin immediately.
+        </div>
+      </div>
+    </div>
+    <div style="text-align:center;padding:24px 0 0;font-size:11px;color:#94a3b8;line-height:1.8">
+      SSC Control Pvt. Ltd.&nbsp;&nbsp;·&nbsp;&nbsp;Login notification
+    </div>
+  </div>
+</body></html>`
 }
 
 async function handleLogin(sb: any, r: any) {
-  // Self-login emails removed to stay within Resend free tier (100/day)
+  // Self-login email — each user gets their own "Welcome back" email
+  if (r.event_type === 'login_success' && r.email) {
+    try {
+      const name = r.user_name || r.email.split('@')[0]
+      const device = r.user_agent ? (r.user_agent.includes('Mobile') ? 'Mobile' : 'Desktop') : 'Unknown'
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: FROM, to: [r.email],
+          subject: `🔐 Welcome back, ${name.split(' ')[0]}`,
+          html: buildLoginEmail(name, name, r.created_at || new Date().toISOString(), device),
+        }),
+      })
+    } catch (_) { /* login must not be blocked by email failure */ }
+  }
 
   if (r.event_type === 'login_failed') {
     const { count } = await sb.from('login_audit').select('id', { count: 'exact' })
@@ -294,15 +356,17 @@ async function handleLogin(sb: any, r: any) {
         const email = a.email || (a.username + '@ssccontrol.com')
         if (sentFailed.has(email)) continue
         sentFailed.add(email)
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: FROM, to: [email],
-            subject: `🚨 Failed Login Alert — ${r.user_name}`,
-            html: buildSecurityAlert(a.name || a.username, r.user_name || '', r.email || ''),
-          }),
-        })
+        try {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: FROM, to: [email],
+              subject: `🚨 Failed Login Alert — ${r.user_name}`,
+              html: buildSecurityAlert(a.name || a.username, r.user_name || '', r.email || ''),
+            }),
+          })
+        } catch (_) { /* email failure must not block login flow */ }
       }
     }
   }

@@ -516,8 +516,8 @@ export default function CRMOpportunityDetail() {
       const msg = newStage === 'WON'
         ? `Opportunity Won — ${oppName}` + (stageReason ? `. ${stageReason}` : '')
         : `Opportunity Lost — ${oppName}` + (stageReason ? `. ${stageReason}` : '')
-      // Notify all sales/ops/admin
-      const { data: allProfiles } = await sb.from('profiles').select('id,name').in('role', ['sales','ops','admin'])
+      // Notify sales + admin only (ops/accounts/fc excluded from CRM notifications)
+      const { data: allProfiles } = await sb.from('profiles').select('id,name').in('role', ['sales','admin'])
       if (allProfiles?.length) {
         const notifRows = allProfiles.filter(p => p.id !== user.id).map(p => ({
           user_id: p.id, user_name: p.name, message: msg,
