@@ -194,7 +194,7 @@ export default function VendorMaster() {
 
           {loading && !vendors.length ? (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:60, gap:10, color:'var(--gray-400)', fontSize:14 }}>
-              <div className="loading-spin"/>Loading...
+              <div className="loading-spin"/>
             </div>
           ) : tab === 'pending' ? (
             <div className="od-card">

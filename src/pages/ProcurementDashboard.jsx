@@ -129,7 +129,7 @@ export default function ProcurementDashboard() {
           </div>
 
           {loading ? (
-            <div className="dash-loading"><div className="loading-spin"/>Loading...</div>
+            <div className="dash-loading"><div className="loading-spin"/></div>
           ) : (<>
 
             {/* Stat tiles */}

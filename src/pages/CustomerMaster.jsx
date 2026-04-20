@@ -274,7 +274,7 @@ export default function CustomerMaster() {
 
           {loading ? (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:60, gap:10, color:'var(--gray-400)', fontSize:14 }}>
-              <div className="loading-spin"/>Loading...
+              <div className="loading-spin"/>
             </div>
           ) : tab === 'creditcheck' ? (
             <div className="od-card" style={{ border:'1px solid #fde68a' }}>

@@ -105,7 +105,7 @@ export default function CRMLeads() {
           </div>
 
           {loading ? (
-            <div className="crm-loading"><div className="loading-spin"/>Loading...</div>
+            <div className="crm-loading"><div className="loading-spin"/></div>
           ) : (
             <div className="crm-card">
               <div className="crm-table-wrap">

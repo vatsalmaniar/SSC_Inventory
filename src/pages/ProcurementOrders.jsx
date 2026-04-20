@@ -94,7 +94,7 @@ export default function ProcurementOrders() {
 
           {loading ? (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:60, gap:10, color:'var(--gray-400)', fontSize:14 }}>
-              <div className="loading-spin"/>Loading...
+              <div className="loading-spin"/>
             </div>
           ) : !orders.length ? (
             <div className="od-card" style={{ textAlign:'center', padding:'60px 20px', color:'var(--gray-400)' }}>

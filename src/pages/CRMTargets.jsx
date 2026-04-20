@@ -105,7 +105,7 @@ export default function CRMTargets() {
           </div>
 
           {loading ? (
-            <div className="crm-loading"><div className="loading-spin"/>Loading...</div>
+            <div className="crm-loading"><div className="loading-spin"/></div>
           ) : isManager ? (
             // Manager view: table of all reps
             <div className="crm-card">

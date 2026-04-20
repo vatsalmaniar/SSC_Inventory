@@ -134,7 +134,7 @@ export default function OpsOrders() {
         </div>
 
         {loading ? (
-          <div className="loading-state"><div className="loading-spin" />Loading...</div>
+          <div className="loading-state"><div className="loading-spin" /></div>
         ) : filtered.length === 0 ? (
           <div className="orders-empty">
             <div className="orders-empty-icon">

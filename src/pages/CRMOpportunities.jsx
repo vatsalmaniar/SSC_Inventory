@@ -174,7 +174,7 @@ export default function CRMOpportunities() {
           </div>
 
           {loading ? (
-            <div className="crm-loading"><div className="loading-spin"/>Loading...</div>
+            <div className="crm-loading"><div className="loading-spin"/></div>
           ) : view === 'kanban' ? (
             <KanbanView opps={filtered} navigate={navigate} onMoveStage={moveStage} />
           ) : (

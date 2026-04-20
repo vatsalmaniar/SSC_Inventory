@@ -280,7 +280,7 @@ export default function Orders() {
           {successMsg && <div className="orders-success-banner" style={{ marginBottom:16 }}>✓ {successMsg}</div>}
 
           {loading ? (
-            <div className="dash-loading"><div className="loading-spin"/>Loading...</div>
+            <div className="dash-loading"><div className="loading-spin"/></div>
           ) : (<>
 
             {/* Stat tiles */}

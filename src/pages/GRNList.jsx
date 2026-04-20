@@ -211,7 +211,7 @@ export default function GRNList() {
         {/* Table */}
         <div className="od-table-card">
           {loading ? (
-            <div className="loading-state" style={{ padding:40 }}><div className="loading-spin"/>Loading...</div>
+            <div className="loading-state" style={{ padding:40 }}><div className="loading-spin"/></div>
           ) : filtered.length === 0 ? (
             <div className="orders-empty" style={{ border:'none' }}>
               <div className="orders-empty-icon">

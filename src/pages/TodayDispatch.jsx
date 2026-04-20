@@ -98,7 +98,7 @@ export default function TodayDispatch() {
           </div>
 
           {loading ? (
-            <div className="loading-state" style={{ padding: 40 }}><div className="loading-spin" />Loading...</div>
+            <div className="loading-state" style={{ padding: 40 }}><div className="loading-spin" /></div>
           ) : orders.length === 0 ? (
             <div className="orders-empty" style={{ background: 'white', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)' }}>
               <div className="orders-empty-icon">

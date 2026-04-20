@@ -197,7 +197,7 @@ export default function PurchaseInvoiceDetail() {
   // ── Loading / Not Found ──
   if (loading) return (
     <Layout pageTitle="Purchase Invoice" pageKey="billing">
-      <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div>
+      <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
     </Layout>
   )
 

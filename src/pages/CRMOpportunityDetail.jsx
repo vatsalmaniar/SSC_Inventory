@@ -917,7 +917,7 @@ export default function CRMOpportunityDetail() {
   const quoteTotal   = quoteRows.reduce((s,r) => s + (parseFloat(r.total_price) || 0), 0)
   const actText      = (actType === 'Call' || actType === 'Visit') ? actDiscussion : actNotes
 
-  if (loading) return <Layout pageTitle="Opportunity" pageKey="crm"><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div></Layout>
+  if (loading) return <Layout pageTitle="Opportunity" pageKey="crm"><div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div></Layout>
   if (!opp) return <Layout pageTitle="Opportunity" pageKey="crm"><div className="crm-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Opportunity not found</div><div style={{fontSize:13}}>This opportunity may have been deleted or you don't have access.</div></div></div></Layout>
 
   return (

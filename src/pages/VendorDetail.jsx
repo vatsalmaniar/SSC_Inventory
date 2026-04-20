@@ -148,7 +148,7 @@ export default function VendorDetail() {
 
   if (loading) return (
     <Layout pageTitle="Vendor 360" pageKey="vendor360">
-      <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/>Loading...</div></div>
+      <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
     </Layout>
   )
   if (!vendor) return (

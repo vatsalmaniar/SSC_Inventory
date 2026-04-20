@@ -237,7 +237,7 @@ export default function CRMFieldVisits() {
           </div>
 
           {loading ? (
-            <div className="crm-loading"><div className="loading-spin"/>Loading...</div>
+            <div className="crm-loading"><div className="loading-spin"/></div>
           ) : filtered.length === 0 ? (
             <div className="crm-empty"><div className="crm-empty-title">No visits found</div></div>
           ) : (
