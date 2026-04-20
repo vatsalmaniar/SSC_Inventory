@@ -1,0 +1,359 @@
+/* ── Customer 360 Detail Page ── */
+
+.c360-page { background: #fafafa; min-height: 100vh; }
+.c360-body { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+
+/* ── Hero Header ── */
+.c360-hero {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid var(--gray-200);
+  padding: 22px 24px 18px;
+  margin-bottom: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.c360-hero-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.c360-hero-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  color: white;
+  font-size: 20px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: -0.5px;
+}
+.c360-hero-info { flex: 1; min-width: 0; }
+.c360-hero-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--gray-900);
+  line-height: 1.2;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.c360-hero-badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.c360-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.c360-badge-blue   { background: #e8f2fc; color: #1a4dab; }
+.c360-badge-green  { background: #d4f5e2; color: #14653a; }
+.c360-badge-amber  { background: #fef3c7; color: #7a4b00; }
+.c360-badge-red    { background: #fee2e2; color: #9b1c1c; }
+.c360-badge-gray   { background: var(--gray-100); color: var(--gray-600); }
+
+.c360-hero-actions { display: flex; gap: 8px; align-items: flex-start; flex-shrink: 0; }
+
+/* ── Stat chips row ── */
+.c360-stats {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gray-100);
+  flex-wrap: wrap;
+}
+.c360-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 16px;
+  background: var(--gray-50);
+  border-radius: 10px;
+  min-width: 100px;
+}
+.c360-stat-label { font-size: 10px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.5px; }
+.c360-stat-value { font-size: 16px; font-weight: 800; color: var(--gray-900); }
+.c360-stat-value.accent { color: #1a4dab; }
+.c360-stat-value.green  { color: #14653a; }
+
+/* ── Tab navigation ── */
+.c360-tabs {
+  display: flex;
+  gap: 0;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+  margin: 12px 0;
+  padding: 0 8px;
+  overflow-x: auto;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.c360-tab {
+  padding: 13px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-500);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: var(--font);
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+.c360-tab:hover { color: var(--gray-800); }
+.c360-tab.active { color: #1a4dab; border-bottom-color: #1a4dab; }
+.c360-tab-count {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--gray-100);
+  color: var(--gray-500);
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+.c360-tab.active .c360-tab-count { background: #e8f2fc; color: #1a4dab; }
+
+/* ── Tab content ── */
+.c360-content { animation: fadeIn 0.15s ease; }
+
+/* ── Summary 2-column ── */
+.c360-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .c360-summary-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Cards ── */
+.c360-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.c360-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--gray-100);
+}
+.c360-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-800);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.c360-card-body { padding: 16px 18px; }
+
+/* ── Field grid ── */
+.c360-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+  margin-bottom: 16px;
+}
+.c360-field label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+}
+.c360-field .val {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-800);
+  line-height: 1.4;
+}
+
+/* ── Section label inside card body ── */
+.c360-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  margin: 16px 0 10px;
+}
+.c360-section-label:first-child { margin-top: 0; }
+
+/* ── Contact cards ── */
+.c360-contact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 16px 18px;
+}
+.c360-contact-card {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-100);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.c360-contact-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.c360-contact-name  { font-size: 13px; font-weight: 700; color: var(--gray-900); }
+.c360-contact-title { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+.c360-contact-phone { font-size: 12px; color: #1a4dab; margin-top: 4px; font-weight: 500; text-decoration: none; display: block; }
+.c360-contact-email { font-size: 11px; color: var(--gray-500); margin-top: 1px; display: block; }
+
+/* ── VI card ── */
+.c360-vi-card {
+  background: #fffdf5;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 14px;
+}
+.c360-vi-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #b45309;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+}
+.c360-vi-text { font-size: 13px; color: var(--gray-700); line-height: 1.6; }
+
+/* ── Side column cards ── */
+.c360-side-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.c360-side-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 12px;
+}
+
+/* ── Owner chip in side ── */
+.c360-owner-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.c360-owner-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.c360-owner-name { font-size: 14px; font-weight: 700; color: var(--gray-900); }
+.c360-owner-sub  { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
+
+/* ── Visits table ── */
+.c360-table { width: 100%; border-collapse: collapse; }
+.c360-table th {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 10px 18px;
+  text-align: left;
+  border-bottom: 1px solid var(--gray-100);
+  background: var(--gray-50);
+}
+.c360-table td {
+  padding: 12px 18px;
+  font-size: 13px;
+  color: var(--gray-700);
+  border-bottom: 1px solid var(--gray-50);
+  vertical-align: top;
+}
+.c360-table tr:last-child td { border-bottom: none; }
+.c360-table tr:hover td { background: var(--gray-50); }
+.c360-table .mono { font-family: var(--mono); font-size: 12px; }
+
+/* ── Empty state ── */
+.c360-empty {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--gray-400);
+  font-size: 13px;
+}
+.c360-empty-icon { font-size: 28px; margin-bottom: 8px; opacity: 0.4; }
+
+/* ── Action buttons (reuse od-btn feel) ── */
+.c360-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  border: 1px solid var(--gray-200);
+  background: white;
+  color: var(--gray-700);
+  transition: background 0.15s;
+}
+.c360-btn:hover { background: var(--gray-50); }
+.c360-btn-primary { background: #1a4dab; color: white; border-color: #1a4dab; }
+.c360-btn-primary:hover { background: #0e2d6a; }
+.c360-btn-approve { background: #0e2d6a; color: white; border-color: #0e2d6a; }
+.c360-btn-danger  { color: #dc2626; border-color: #fecaca; }
+.c360-btn-danger:hover { background: #fef2f2; }
+.c360-btn-amber { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+
+/* ── Quotation stage badge ── */
+.c360-quot-stage {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* ── Visit type badge ── */
+.c360-visit-type {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #e8f2fc;
+  color: #1a4dab;
+  white-space: nowrap;
+}
