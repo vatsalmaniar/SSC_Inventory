@@ -199,6 +199,34 @@ export default function Layout({ children, pageTitle, pageKey }) {
     setNotifs(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n))
   }
 
+  const CRM_EMAIL_TYPES = ['opportunity_won','opportunity_lost','overdue_followup']
+  async function handleNotifClick(n) {
+    markOneRead(n)
+    setShowNotifs(false)
+    // CRM notifications — look up opportunity by name (stored in order_number)
+    if (CRM_EMAIL_TYPES.includes(n.email_type) || (n.email_type === 'mention' && !n.order_id)) {
+      const oppName = n.order_number
+      if (oppName) {
+        const { data } = await sb.from('crm_opportunities').select('id').or(`opportunity_name.eq.${oppName},product_notes.eq.${oppName}`).limit(1).maybeSingle()
+        if (data?.id) { navigate('/crm/opportunities/' + data.id); return }
+      }
+      navigate('/crm/opportunities')
+      return
+    }
+    // New customer approval/onboarding notifications
+    if (n.email_type === 'new_customer_approval' || n.email_type === 'new_customer_approved') {
+      navigate('/customers')
+      return
+    }
+    // New vendor approval
+    if (n.email_type === 'new_vendor_approval') {
+      navigate('/procurement/vendors')
+      return
+    }
+    // Order-linked notifications
+    if (n.order_id) navigate('/orders/' + n.order_id)
+  }
+
   function fmtNotifTime(d) {
     if (!d) return ''
     const dt = new Date(d)
@@ -612,7 +640,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
                         <div
                           key={n.id}
                           className={'ly-notif-item' + (n.is_read ? '' : ' unread')}
-                          onClick={() => { markOneRead(n); setShowNotifs(false); if (n.order_id) navigate('/orders/' + n.order_id) }}
+                          onClick={() => handleNotifClick(n)}
                         >
                           <div className="ly-notif-msg">{n.message}</div>
                           <div className="ly-notif-time">{fmtNotifTime(n.created_at)}</div>

@@ -107,6 +107,7 @@ export default function CRMOpportunities() {
     <Layout pageTitle="CRM — Opportunities" pageKey="crm">
       <div className="crm-page">
         <div className="crm-body">
+          {/* Row 1 — title + primary action */}
           <div className="crm-page-header">
             <div>
               <div className="crm-page-title">Opportunities</div>
@@ -117,15 +118,6 @@ export default function CRMOpportunities() {
               </div>
             </div>
             <div className="crm-header-actions">
-              <div style={{display:'flex',gap:0,border:'1px solid var(--gray-200)',borderRadius:8,overflow:'hidden'}}>
-                <button className={'crm-btn crm-btn-sm' + (viewScope==='mine'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none'}} onClick={() => { setViewScope('mine'); setPage(1) }}>My View</button>
-                <button className={'crm-btn crm-btn-sm' + (viewScope==='team'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => { setViewScope('team'); setPage(1) }}>Team</button>
-                <button className={'crm-btn crm-btn-sm' + (viewScope==='all'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => { setViewScope('all'); setPage(1) }}>All</button>
-              </div>
-              <div style={{display:'flex',gap:0,border:'1px solid var(--gray-200)',borderRadius:8,overflow:'hidden'}}>
-                <button className={'crm-btn crm-btn-sm' + (view==='kanban'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none'}} onClick={() => setView('kanban')}>Kanban</button>
-                <button className={'crm-btn crm-btn-sm' + (view==='list'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => setView('list')}>List</button>
-              </div>
               <button className="new-order-btn" onClick={() => navigate('/crm/leads/new')}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 New Lead
@@ -133,32 +125,53 @@ export default function CRMOpportunities() {
             </div>
           </div>
 
-          {view === 'list' && (
-            <div className="crm-controls">
-              <div className="crm-search-wrap">
-                <svg className="crm-search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                <input className="crm-search-input" placeholder="Search company, product, principal..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
-              </div>
-              <select className="crm-filter-select" value={filterStage} onChange={e => { setFilterStage(e.target.value); setPage(1) }}>
-                <option value="">All Stages</option>
-                {[...STAGES,...TERMINAL].map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
-              </select>
-              <select className="crm-filter-select" value={filterScenario} onChange={e => { setFilterScenario(e.target.value); setPage(1) }}>
-                <option value="">All Scenarios</option>
-                {SCENARIOS.map(s => <option key={s} value={s}>{scenarioLabel(s)}</option>)}
-              </select>
-              <select className="crm-filter-select" value={filterPrincipal} onChange={e => { setFilterPrincipal(e.target.value); setPage(1) }}>
-                <option value="">All Principals</option>
-                {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              {isManager && (
-                <select className="crm-filter-select" value={filterRep} onChange={e => { setFilterRep(e.target.value); setPage(1) }}>
-                  <option value="">All Reps</option>
-                  {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
-              )}
+          {/* Row 2 — view tabs */}
+          <div className="crm-tabs-row">
+            <div className="crm-tabs">
+              <button className={'crm-tab' + (view==='kanban'?' active':'')} onClick={() => setView('kanban')}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>
+                Board
+              </button>
+              <button className={'crm-tab' + (view==='list'?' active':'')} onClick={() => setView('list')}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                List
+              </button>
             </div>
-          )}
+            <div className="crm-scope-tabs">
+              <button className={'crm-scope-tab' + (viewScope==='mine'?' active':'')} onClick={() => { setViewScope('mine'); setPage(1) }}>My View</button>
+              <button className={'crm-scope-tab' + (viewScope==='team'?' active':'')} onClick={() => { setViewScope('team'); setPage(1) }}>Team</button>
+              <button className={'crm-scope-tab' + (viewScope==='all'?' active':'')} onClick={() => { setViewScope('all'); setPage(1) }}>All</button>
+            </div>
+          </div>
+
+          {/* Row 3 — filter strip (always visible) */}
+          <div className="crm-filter-strip">
+            <div className="crm-search-wrap crm-search-inline">
+              <svg className="crm-search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input className="crm-search-input" placeholder="Search..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+            </div>
+            <select className="crm-filter-chip" value={filterStage} onChange={e => { setFilterStage(e.target.value); setPage(1) }}>
+              <option value="">Stage: All</option>
+              {[...STAGES,...TERMINAL].map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
+            </select>
+            <select className="crm-filter-chip" value={filterScenario} onChange={e => { setFilterScenario(e.target.value); setPage(1) }}>
+              <option value="">Scenario: All</option>
+              {SCENARIOS.map(s => <option key={s} value={s}>{scenarioLabel(s)}</option>)}
+            </select>
+            <select className="crm-filter-chip" value={filterPrincipal} onChange={e => { setFilterPrincipal(e.target.value); setPage(1) }}>
+              <option value="">Principal: All</option>
+              {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {isManager && (
+              <select className="crm-filter-chip" value={filterRep} onChange={e => { setFilterRep(e.target.value); setPage(1) }}>
+                <option value="">Rep: All</option>
+                {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            )}
+            {(search || filterStage || filterScenario || filterPrincipal || filterRep) && (
+              <button className="crm-filter-clear" onClick={() => { setSearch(''); setFilterStage(''); setFilterScenario(''); setFilterPrincipal(''); setFilterRep(''); setPage(1) }}>Clear</button>
+            )}
+          </div>
 
           {loading ? (
             <div className="crm-loading"><div className="loading-spin"/>Loading...</div>
@@ -249,32 +262,45 @@ function KanbanView({ opps, navigate, onMoveStage }) {
             <div className="kb-col-body">
               {cards.map(o => {
                 const company = o.crm_companies?.company_name || o.customers?.customer_name || o.freetext_company || ''
-                const title = o.opportunity_name || ''
+                const title = o.opportunity_name || o.product_notes || 'Untitled'
+                const principal = o.crm_principals?.name
                 return (
                   <div key={o.id} className="kb-card" draggable
                     onDragStart={e => onDragStart(e, o.id)}
                     onDragEnd={onDragEnd}
                     onClick={() => navigate('/crm/opportunities/' + o.id)}>
-                    {company && <div className="kb-card-company">{company}</div>}
-                    {title && title !== company && <div className="kb-card-title">{title}</div>}
-                    <div className="kb-card-bottom">
-                      <div className="kb-card-bottom-left">
-                        {o.estimated_value_inr ? <span className="kb-card-amount">{fmtINR(o.estimated_value_inr)}</span> : null}
-                        {isOverdue(o) && <span className="kb-tag kb-tag-overdue">Overdue</span>}
-                        {o.expected_close_date && (
-                          <span className="kb-card-date">
-                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:10,height:10}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                            {fmtDate(o.expected_close_date)}
-                          </span>
-                        )}
-                      </div>
+                    {/* Top pill row */}
+                    <div className="kb-card-tags">
+                      {principal && <span className="kb-pill kb-pill-principal">{principal}</span>}
+                      {o.scenario_type && <span className={'kb-pill kb-pill-scenario kb-scen-' + o.scenario_type}>{scenarioLabel(o.scenario_type)}</span>}
+                      {isOverdue(o) && <span className="kb-pill kb-pill-overdue">Overdue</span>}
                     </div>
-                    {o.profiles?.name && (
-                      <div className="kb-card-owner">
-                        <div className="kb-avatar" style={{background: ownerColor(o.profiles.name)}}>{o.profiles.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>
-                        <span className="kb-card-owner-name">{o.profiles.name}</span>
+                    {/* Title */}
+                    <div className="kb-card-title-big">{title}</div>
+                    {/* Sub-line: ↳ Company */}
+                    {company && (
+                      <div className="kb-card-sub">
+                        <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:11,height:11,flexShrink:0}}><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 004 4h12"/></svg>
+                        <span>{company}</span>
                       </div>
                     )}
+                    {/* Bottom row: owner · value · date */}
+                    <div className="kb-card-foot">
+                      <div className="kb-card-foot-left">
+                        {o.profiles?.name && (
+                          <div className="kb-avatar" title={o.profiles.name} style={{background: ownerColor(o.profiles.name)}}>
+                            {o.profiles.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}
+                          </div>
+                        )}
+                        {o.estimated_value_inr ? <span className="kb-card-amount">{fmtINR(o.estimated_value_inr)}</span> : null}
+                      </div>
+                      {o.expected_close_date && (
+                        <span className="kb-card-date">
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                          {fmtDate(o.expected_close_date)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )
               })}
