@@ -237,7 +237,7 @@ export default function CustomerDetail() {
 
   if (loading) return (
     <Layout pageTitle="Customer 360" pageKey="customer360">
-      <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
+      <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/><span>Data is Legen... wait for it... dary "Legendary"</span></div></div>
     </Layout>
   )
   if (!customer) return (
