@@ -91,3 +91,20 @@ html, body { min-height: 100%; font-family: var(--font); color: var(--gray-900);
   animation: spin 0.75s linear infinite;
   flex-shrink: 0;
 }
+.loading-state::after,
+.crm-loading::after,
+.dash-loading::after {
+  content: 'Data is Legen... wait for it... dary "Legendary"';
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray-400);
+  font-family: var(--font);
+}
+.crm-loading, .dash-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  gap: 14px;
+}
