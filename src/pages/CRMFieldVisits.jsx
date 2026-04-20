@@ -114,7 +114,6 @@ export default function CRMFieldVisits() {
   async function saveVisit() {
     const companyName = form.company_freetext.trim() || acctSearch.trim()
     if (!companyName) { toast('Account / Company is required'); return }
-    setForm(p => ({ ...p, company_freetext: companyName }))
     if (!form.visit_date) { toast('Visit date is required'); return }
     if (form.visit_type === 'JOINT_PRINCIPAL' && !form.principal_id) { toast('Principal is required'); return }
     setSaving(true)
@@ -127,7 +126,7 @@ export default function CRMFieldVisits() {
       rep_id: user.id,
       visit_date: form.visit_date,
       visit_type: visitType,
-      company_freetext: form.company_freetext.trim(),
+      company_freetext: companyName,
       company_id: null,
       opportunity_id: form.opportunity_id || null,
       purpose: form.purpose.trim() || null,
