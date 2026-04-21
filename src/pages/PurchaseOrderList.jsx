@@ -333,8 +333,8 @@ export default function PurchaseOrderList() {
           ) : (
             <>
               {/* Desktop table */}
-              <div className="orders-table-wrap" style={{ border: 'none', borderRadius: 0 }}>
-                <table className="orders-table">
+              <div className="orders-table-wrap" style={{ border: 'none', borderRadius: 0, overflowX: 'auto' }}>
+                <table className="orders-table" style={{ minWidth: 860 }}>
                   <thead>
                     <tr>
                       <th>PO #</th>
