@@ -50,6 +50,8 @@ export default function VendorDetail() {
   const [showContactModal, setShowContactModal] = useState(false)
   const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
   const [savingContact, setSavingContact] = useState(false)
+  const [showPdfModal, setShowPdfModal]   = useState(false)
+  const [pdfInclude, setPdfInclude]       = useState({ pos: true, grns: true })
 
   useEffect(() => { init() }, [id])
 
@@ -146,6 +148,120 @@ export default function VendorDetail() {
     toast('Contact removed', 'success')
   }
 
+  async function downloadVendorPDF(include) {
+    toast('Preparing report…')
+    const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const fmtD = s => s ? new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—'
+    const fmtMoney = v => (v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})
+    const totalPOValue = pos.reduce((s,p)=>s+(p.total_amount||0),0)
+    const openPOs = pos.filter(p=>!['closed','cancelled','received'].includes(p.status))
+
+    const posHTML = pos.map((p,i) => `<tr>
+      <td class="mono">${esc(p.po_number)}</td>
+      <td style="font-size:11px;color:#64748b">${esc(p.order_number||'—')}</td>
+      <td><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#eff6ff;color:#1d4ed8">${esc(poStatusLabel(p.status))}</span></td>
+      <td style="text-align:right">${fmtD(p.po_date)}</td>
+      <td style="text-align:right">${fmtD(p.expected_delivery)}</td>
+      <td style="text-align:right;font-weight:600">₹${fmtMoney(p.total_amount)}</td>
+    </tr>`).join('')
+
+    const grnsHTML = grns.map((g,i) => `<tr>
+      <td class="mono">${esc(g.grn_number)}</td>
+      <td>${esc(g.grn_type||'—')}</td>
+      <td><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#f0fdf4;color:#15803d">${esc(g.status||'—')}</span></td>
+      <td style="text-align:right">${fmtD(g.received_at)}</td>
+      <td style="text-align:right;font-size:11px">${esc(g.invoice_number||'—')}</td>
+      <td style="text-align:right;font-weight:600">${g.invoice_amount ? '₹'+fmtMoney(g.invoice_amount) : '—'}</td>
+    </tr>`).join('')
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>Vendor Report — ${esc(vendor.vendor_name)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:900px;margin:0 auto;line-height:1.5}
+.mono{font-family:'Geist Mono',monospace}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #0f172a}
+.co-name{font-size:16px;font-weight:700;margin-bottom:2px}.co-sub{font-size:11px;color:#64748b;margin-bottom:6px}.co-addr{font-size:10px;color:#475569;line-height:1.6}
+.doc-title{font-size:24px;font-weight:700;text-align:right;letter-spacing:-0.5px;color:#1a4dab}
+.doc-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;padding:3px 10px;border-radius:4px;background:#eff6ff;color:#1a4dab;margin-bottom:6px}
+.vendor-block{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;padding:16px 20px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0}
+.vendor-name{font-size:18px;font-weight:700;margin-bottom:4px}.vendor-code{font-size:11px;color:#64748b;font-family:'Geist Mono',monospace;margin-bottom:8px}
+.field-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:3px}
+.field-val{font-size:12px;font-weight:500;margin-bottom:10px}
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:28px}
+.stat{background:#fff;padding:12px 16px}.stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:4px}
+.stat-val{font-size:16px;font-weight:700;color:#0f172a}.stat-val.blue{color:#1a4dab}
+.section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0f172a;margin-bottom:12px;margin-top:28px;padding-bottom:6px;border-bottom:2px solid #e2e8f0}
+.items-table{width:100%;border-collapse:collapse;font-size:11px}
+.items-table thead tr{border-bottom:1px solid #e2e8f0;background:#f8fafc}
+.items-table th{padding:7px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:#64748b;text-align:left}
+.items-table td{padding:7px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+.items-table tr:last-child td{border-bottom:none}
+.footer{margin-top:32px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+@media print{body{padding:0;max-width:100%}@page{size:A4;margin:14mm 12mm}}
+</style></head><body>
+<div class="header">
+  <div>
+    <div class="co-name">SSC Control Pvt. Ltd.</div>
+    <div class="co-sub">Industrial Automation &amp; Electrification</div>
+    <div class="co-addr">E/12, Siddhivinayak Towers, Off. SG Highway, Makarba, Ahmedabad – 380 051</div>
+  </div>
+  <div style="text-align:right">
+    <img src="${window.location.origin}/ssc-logo.svg" alt="SSC" style="height:48px;width:auto;display:block;margin-left:auto;margin-bottom:8px"/>
+    <div class="doc-badge">Vendor Report</div>
+    <div class="doc-title">Vendor 360</div>
+    <div style="font-size:11px;color:#64748b;margin-top:4px">Generated: ${fmtD(new Date().toISOString())}</div>
+  </div>
+</div>
+<div class="vendor-block">
+  <div>
+    <div class="vendor-name">${esc(vendor.vendor_name)}</div>
+    <div class="vendor-code">${esc(vendor.vendor_code||'')}</div>
+    <div class="field-label">GST</div><div class="field-val mono">${esc(vendor.gst||'—')}</div>
+    <div class="field-label">Type</div><div class="field-val">${esc(vendor.vendor_type||'—')}</div>
+    <div class="field-label">City</div><div class="field-val">${esc(vendor.city||'—')}</div>
+  </div>
+  <div>
+    <div class="field-label">Credit Terms</div><div class="field-val">${esc(vendor.credit_terms||'—')}</div>
+    <div class="field-label">Account Owner</div><div class="field-val">${esc(vendor.account_owner||'—')}</div>
+    <div class="field-label">POC</div><div class="field-val">${esc(vendor.poc_name||'—')}${vendor.poc_no?` · ${esc(vendor.poc_no)}`:''}</div>
+    <div class="field-label">Address</div><div class="field-val">${esc(vendor.address||'—')}</div>
+  </div>
+</div>
+<div class="stats-bar">
+  <div class="stat"><div class="stat-label">Total POs</div><div class="stat-val">${pos.length}</div></div>
+  <div class="stat"><div class="stat-label">Open POs</div><div class="stat-val blue">${openPOs.length}</div></div>
+  <div class="stat"><div class="stat-label">Total PO Value</div><div class="stat-val">₹${fmtMoney(totalPOValue)}</div></div>
+  <div class="stat"><div class="stat-label">GRNs</div><div class="stat-val">${grns.length}</div></div>
+</div>
+${include.pos ? `
+<div class="section-title">Purchase Orders (${pos.length})</div>
+${pos.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:italic">No purchase orders</div>' : `
+<table class="items-table">
+  <thead><tr><th>PO #</th><th>Linked Order</th><th>Status</th><th style="text-align:right">PO Date</th><th style="text-align:right">Expected Delivery</th><th style="text-align:right">Value (₹)</th></tr></thead>
+  <tbody>${posHTML}</tbody>
+</table>`}` : ''}
+${include.grns ? `
+<div class="section-title">GRNs (${grns.length})</div>
+${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:italic">No GRNs</div>' : `
+<table class="items-table">
+  <thead><tr><th>GRN #</th><th>Type</th><th>Status</th><th style="text-align:right">Received</th><th style="text-align:right">Invoice #</th><th style="text-align:right">Invoice Amount</th></tr></thead>
+  <tbody>${grnsHTML}</tbody>
+</table>`}` : ''}
+<div class="footer">
+  <div>SSC Control Pvt. Ltd. &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE</div>
+  <div>sales@ssccontrol.com &nbsp;|&nbsp; www.ssccontrol.com</div>
+</div>
+</body></html>`
+
+    const w = window.open('', '_blank')
+    if (!w) { toast('Popup blocked — allow popups and try again'); return }
+    w.document.write(html)
+    w.document.close()
+    w.onload = () => w.print()
+  }
+
   if (loading) return (
     <Layout pageTitle="Vendor 360" pageKey="vendor360">
       <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
@@ -193,6 +309,10 @@ export default function VendorDetail() {
               </div>
               <div className="c360-hero-actions">
                 <button className="c360-btn" onClick={() => navigate('/vendors')}>← Back</button>
+                <button className="c360-btn" onClick={() => setShowPdfModal(true)} style={{ gap:5, display:'flex', alignItems:'center' }}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14 }}><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                  Download Report
+                </button>
                 {userRole === 'admin' && vendor.approval_status === 'pending' && (
                   <>
                     <button className="c360-btn c360-btn-danger" onClick={reject} disabled={approving}>Reject</button>
@@ -553,6 +673,36 @@ export default function VendorDetail() {
           </div>
         </div>
       </div>
+
+      {/* Download PDF Modal */}
+      {showPdfModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={() => setShowPdfModal(false)}>
+          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:360, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Download Vendor Report</div>
+              <button onClick={() => setShowPdfModal(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+            </div>
+            <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:10 }}>
+              <div style={{ fontSize:12, color:'#64748b', marginBottom:4 }}>Select sections to include:</div>
+              {[['pos','Purchase Orders'],['grns','GRNs']].map(([key,label]) => (
+                <label key={key} style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', padding:'10px 14px', borderRadius:8, border:'1px solid', borderColor: pdfInclude[key] ? '#1a4dab' : '#e2e8f0', background: pdfInclude[key] ? '#eff6ff' : '#f8fafc' }}>
+                  <input type="checkbox" checked={pdfInclude[key]} onChange={e => setPdfInclude(p => ({ ...p, [key]: e.target.checked }))} style={{ accentColor:'#1a4dab', width:15, height:15 }} />
+                  <span style={{ fontSize:13, fontWeight:600, color: pdfInclude[key] ? '#1a4dab' : '#475569' }}>{label}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ padding:'0 20px 18px', display:'flex', gap:8, justifyContent:'flex-end' }}>
+              <button onClick={() => setShowPdfModal(false)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
+              <button onClick={() => { setShowPdfModal(false); downloadVendorPDF(pdfInclude) }} disabled={!pdfInclude.pos && !pdfInclude.grns}
+                style={{ padding:'9px 18px', border:'none', borderRadius:8, background:'#1e3a5f', color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', opacity:(!pdfInclude.pos&&!pdfInclude.grns)?0.4:1 }}>
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Contact Modal */}
       {showContactModal && (
