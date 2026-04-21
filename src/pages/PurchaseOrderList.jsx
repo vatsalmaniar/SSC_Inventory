@@ -176,12 +176,8 @@ export default function PurchaseOrderList() {
 
         {/* Header */}
         <div className="od-list-header">
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <div>
             <div className="od-list-title">Purchase Orders</div>
-            <div style={{ display:'flex', borderRadius:8, border:'1px solid var(--gray-200)', overflow:'hidden', background:'#f9fafb', flexShrink:0 }}>
-              <button onClick={() => {}} style={{ padding:'6px 14px', fontSize:12, fontWeight:700, border:'none', cursor:'pointer', background:'#1a4dab', color:'white' }}>PO</button>
-              <button onClick={() => navigate('/procurement/orders')} style={{ padding:'6px 14px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer', background:'transparent', color:'var(--gray-500)' }}>CPO</button>
-            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {user.role === 'admin' && (
@@ -307,6 +303,10 @@ export default function PurchaseOrderList() {
           </div>
           </div>
           <div className="filter-bar" style={{ margin: 0, padding: 0 }}>
+            <div style={{ display:'flex', borderRadius:8, border:'1px solid var(--gray-200)', overflow:'hidden', background:'#f9fafb', flexShrink:0, marginRight:6 }}>
+              <button onClick={() => {}} style={{ padding:'5px 14px', fontSize:12, fontWeight:700, border:'none', cursor:'default', background:'#1a4dab', color:'white' }}>PO</button>
+              <button onClick={() => navigate('/procurement/orders')} style={{ padding:'5px 14px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer', background:'transparent', color:'var(--gray-500)', fontFamily:'var(--font)' }}>CPO</button>
+            </div>
             {FILTERS.map(({ key, label }) => (
               <button
                 key={key}

@@ -85,13 +85,7 @@ export default function ProcurementOrders() {
           <div className="od-header">
             <div className="od-header-main">
               <div className="od-header-left">
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
-                  <div className="od-header-eyebrow">Procurement</div>
-                  <div style={{ display:'flex', borderRadius:8, border:'1px solid var(--gray-200)', overflow:'hidden', background:'#f9fafb', flexShrink:0 }}>
-                    <button onClick={() => navigate('/procurement/po')} style={{ padding:'6px 14px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer', background:'transparent', color:'var(--gray-500)' }}>PO</button>
-                    <button onClick={() => {}} style={{ padding:'6px 14px', fontSize:12, fontWeight:700, border:'none', cursor:'pointer', background:'#1a4dab', color:'white' }}>CPO</button>
-                  </div>
-                </div>
+                <div className="od-header-eyebrow">Procurement</div>
                 <div className="od-header-title">Custom Orders — PO Coverage</div>
                 <div className="od-header-num">{orders.length} order{orders.length !== 1 ? 's' : ''} with uncovered items</div>
               </div>
@@ -112,6 +106,12 @@ export default function ProcurementOrders() {
             </div>
           ) : (
             <div className="od-card">
+              <div style={{ padding:'12px 16px 0', display:'flex', gap:6 }}>
+                <div style={{ display:'flex', borderRadius:8, border:'1px solid var(--gray-200)', overflow:'hidden', background:'#f9fafb' }}>
+                  <button onClick={() => navigate('/procurement/po')} style={{ padding:'5px 14px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer', background:'transparent', color:'var(--gray-500)', fontFamily:'var(--font)' }}>PO</button>
+                  <button onClick={() => {}} style={{ padding:'5px 14px', fontSize:12, fontWeight:700, border:'none', cursor:'default', background:'#1a4dab', color:'white' }}>CPO</button>
+                </div>
+              </div>
               <table className="od-items-table">
                 <thead>
                   <tr>
