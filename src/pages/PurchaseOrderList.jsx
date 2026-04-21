@@ -176,8 +176,12 @@ export default function PurchaseOrderList() {
 
         {/* Header */}
         <div className="od-list-header">
-          <div>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <div className="od-list-title">Purchase Orders</div>
+            <div style={{ display:'flex', borderRadius:8, border:'1px solid var(--gray-200)', overflow:'hidden', background:'#f9fafb', flexShrink:0 }}>
+              <button onClick={() => {}} style={{ padding:'6px 14px', fontSize:12, fontWeight:700, border:'none', cursor:'pointer', background:'#1a4dab', color:'white' }}>PO</button>
+              <button onClick={() => navigate('/procurement/orders')} style={{ padding:'6px 14px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer', background:'transparent', color:'var(--gray-500)' }}>CPO</button>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {user.role === 'admin' && (
@@ -333,15 +337,13 @@ export default function PurchaseOrderList() {
           ) : (
             <>
               {/* Desktop table */}
-              <div className="orders-table-wrap" style={{ border: 'none', borderRadius: 0, overflowX: 'auto' }}>
-                <table className="orders-table" style={{ minWidth: 860 }}>
+              <div className="orders-table-wrap" style={{ border: 'none', borderRadius: 0 }}>
+                <table className="orders-table">
                   <thead>
                     <tr>
                       <th>PO #</th>
                       <th>Vendor</th>
-                      <th>Linked Order</th>
                       <th>PO Date</th>
-                      <th>Expected Delivery</th>
                       <th>Submitted By</th>
                       <th>Items</th>
                       <th style={{ textAlign: 'right' }}>Value (₹)</th>
@@ -353,11 +355,15 @@ export default function PurchaseOrderList() {
                       const ps = pillStatus(po)
                       return (
                         <tr key={po.id} onClick={() => navigate('/procurement/po/' + po.id)}>
-                          <td className="order-num-cell">{po.po_number}</td>
+                          <td className="order-num-cell">
+                            {po.po_number}
+                            {po.order_number && <div style={{ fontSize:11, color:'var(--gray-400)', fontFamily:'var(--mono)', marginTop:2 }}>{po.order_number}</div>}
+                          </td>
                           <td className="customer-cell">{po.vendor_name || '—'}</td>
-                          <td style={{ fontFamily:'var(--mono)', fontSize:12, color:'var(--gray-500)' }}>{po.order_number || '—'}</td>
-                          <td>{fmt(po.po_date)}</td>
-                          <td>{po.expected_delivery ? fmt(po.expected_delivery) : '—'}</td>
+                          <td>
+                            {fmt(po.po_date)}
+                            {po.expected_delivery && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>Exp: {fmt(po.expected_delivery)}</div>}
+                          </td>
                           <td><OwnerChip name={po.submitted_by_name} /></td>
                           <td>{(po.po_items || []).length}</td>
                           <td className="amount-cell">{poValue(po).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
