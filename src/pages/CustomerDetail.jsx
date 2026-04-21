@@ -98,6 +98,8 @@ export default function CustomerDetail() {
   const [showCreditCheck, setShowCreditCheck] = useState(false)
   const [ccForm, setCcForm]           = useState({ gst:'', mca:'', thirdparty:'' })
   const [savingCC, setSavingCC]       = useState(false)
+  const [showPdfModal, setShowPdfModal] = useState(false)
+  const [pdfInclude, setPdfInclude]   = useState({ orders: true, opportunities: true })
 
   useEffect(() => { init() }, [id])
 
@@ -235,6 +237,181 @@ export default function CustomerDetail() {
     toast('Credit check saved', 'success')
   }
 
+  async function downloadCustomerPDF(include) {
+    toast('Preparing report…')
+    const orderIds = orders.map(o => o.id)
+    let itemsByOrder = {}
+    if (include.orders && orderIds.length > 0) {
+      const { data: items } = await sb.from('order_items')
+        .select('order_id,item_code,qty,unit_price_after_disc,total_price,customer_ref_no')
+        .in('order_id', orderIds)
+      ;(items || []).forEach(i => {
+        if (!itemsByOrder[i.order_id]) itemsByOrder[i.order_id] = []
+        itemsByOrder[i.order_id].push(i)
+      })
+    }
+
+    const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const fmtD = s => s ? new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—'
+    const fmtMoney = v => (v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})
+
+    const ordersHTML = orders.map((o, idx) => {
+      const items = itemsByOrder[o.id] || []
+      const orderTotal = items.reduce((s,i) => s + (i.total_price||0), 0)
+      const statusStyle = ['delivered','dispatched_fc'].includes(o.status)
+        ? 'background:#f0fdf4;color:#15803d'
+        : o.status === 'cancelled' ? 'background:#fef2f2;color:#dc2626'
+        : 'background:#eff6ff;color:#1d4ed8'
+      return `
+        <div class="order-block">
+          <div class="order-header">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="order-num">${esc(o.order_number)}</span>
+              <span class="status-chip" style="${statusStyle}">${esc(statusLabel(o.status))}</span>
+              ${o.order_type === 'SAMPLE' ? '<span class="status-chip" style="background:#fffbeb;color:#b45309">Sample</span>' : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:20px;font-size:11px;color:#64748b">
+              ${o.po_number ? `<span>PO: <strong style="color:#0f172a">${esc(o.po_number)}</strong></span>` : ''}
+              <span>Date: <strong style="color:#0f172a">${fmtD(o.created_at)}</strong></span>
+              <span style="font-size:12px;font-weight:700;color:#0f172a">₹${fmtMoney(orderTotal)}</span>
+            </div>
+          </div>
+          ${items.length > 0 ? `
+          <table class="items-table">
+            <thead><tr>
+              <th style="width:32px">#</th>
+              <th>Item Code</th>
+              <th style="width:50px;text-align:right">Qty</th>
+              <th style="width:120px;text-align:right">Unit Price (₹)</th>
+              <th style="width:120px;text-align:right">Total (₹)</th>
+            </tr></thead>
+            <tbody>
+              ${items.map((it,i) => `<tr>
+                <td style="color:#94a3b8">${i+1}</td>
+                <td class="mono">${esc(it.item_code)||'—'}</td>
+                <td style="text-align:right;font-weight:600">${it.qty||0}</td>
+                <td style="text-align:right">${fmtMoney(it.unit_price_after_disc)}</td>
+                <td style="text-align:right;font-weight:600">₹${fmtMoney(it.total_price)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : '<div style="padding:8px 0;font-size:11px;color:#94a3b8;font-style:italic">No items recorded</div>'}
+        </div>`
+    }).join('')
+
+    const oppsHTML = opps.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:italic">No opportunities</div>' : `
+      <table class="items-table">
+        <thead><tr>
+          <th>Opportunity</th>
+          <th style="width:110px">Stage</th>
+          <th style="width:110px">Principal</th>
+          <th style="width:110px;text-align:right">Est. Value (₹)</th>
+          <th style="width:110px;text-align:right">Quote Value (₹)</th>
+          <th style="width:80px">Rep</th>
+        </tr></thead>
+        <tbody>
+          ${opps.map(o => `<tr>
+            <td style="font-weight:600">${esc(o.opportunity_name)}${o.quotation_ref ? `<div class="mono" style="font-size:10px;color:#64748b;font-weight:400">${esc(o.quotation_ref)}</div>` : ''}</td>
+            <td>${esc(STAGE_LABELS[o.stage]||o.stage)}</td>
+            <td style="font-size:11px">${esc(o.crm_principals?.name||o.brands||'—')}</td>
+            <td style="text-align:right">${o.estimated_value_inr ? '₹'+fmtMoney(o.estimated_value_inr) : '—'}</td>
+            <td style="text-align:right">${o.quotation_value_inr ? '₹'+fmtMoney(o.quotation_value_inr) : '—'}</td>
+            <td style="font-size:11px">${esc(o.profiles?.name||'—')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`
+
+    const totalPending = activeOrders.reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t+(i.total_price||0),0), 0)
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>Customer Report — ${esc(customer.customer_name)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:900px;margin:0 auto;line-height:1.5}
+.mono{font-family:'Geist Mono',monospace}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #0f172a}
+.co-name{font-size:16px;font-weight:700;margin-bottom:2px}.co-sub{font-size:11px;color:#64748b;margin-bottom:6px}.co-addr{font-size:10px;color:#475569;line-height:1.6}
+.doc-title{font-size:24px;font-weight:700;text-align:right;letter-spacing:-0.5px;color:#1a4dab}
+.doc-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;padding:3px 10px;border-radius:4px;background:#eff6ff;color:#1a4dab;margin-bottom:6px}
+.cust-block{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;padding:16px 20px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0}
+.cust-name{font-size:18px;font-weight:700;margin-bottom:4px}.cust-id{font-size:11px;color:#64748b;font-family:'Geist Mono',monospace;margin-bottom:8px}
+.field-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:3px}
+.field-val{font-size:12px;font-weight:500;margin-bottom:10px}
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:28px}
+.stat{background:#fff;padding:12px 16px}.stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:4px}
+.stat-val{font-size:16px;font-weight:700;color:#0f172a}.stat-val.green{color:#15803d}.stat-val.blue{color:#1a4dab}
+.section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0f172a;margin-bottom:12px;margin-top:28px;padding-bottom:6px;border-bottom:2px solid #e2e8f0}
+.order-block{margin-bottom:16px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
+.order-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+.order-num{font-family:'Geist Mono',monospace;font-size:12px;font-weight:700}
+.status-chip{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px}
+.items-table{width:100%;border-collapse:collapse;font-size:11px}
+.items-table thead tr{border-bottom:1px solid #e2e8f0;background:#f8fafc}
+.items-table th{padding:7px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:#64748b;text-align:left}
+.items-table td{padding:7px 10px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+.items-table tr:last-child td{border-bottom:none}
+.footer{margin-top:32px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}
+@media print{body{padding:0;max-width:100%}@page{size:A4;margin:14mm 12mm}}
+</style></head><body>
+<div class="header">
+  <div>
+    <div class="co-name">SSC Control Pvt. Ltd.</div>
+    <div class="co-sub">Industrial Automation &amp; Electrification</div>
+    <div class="co-addr">E/12, Siddhivinayak Towers, B/H DCP Office, Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>GSTIN: 24ABGCS0605M1ZE</div>
+  </div>
+  <div style="text-align:right">
+    <img src="${window.location.origin}/ssc-logo.svg" alt="SSC" style="height:48px;width:auto;display:block;margin-left:auto;margin-bottom:8px"/>
+    <div class="doc-badge">Customer Report</div>
+    <div class="doc-title">Customer 360</div>
+    <div style="font-size:11px;color:#64748b;margin-top:4px">Generated: ${fmtD(new Date().toISOString())}</div>
+  </div>
+</div>
+
+<div class="cust-block">
+  <div>
+    <div class="cust-name">${esc(customer.customer_name)}</div>
+    <div class="cust-id">${esc(customer.customer_id||'')}</div>
+    <div class="field-label">GST</div><div class="field-val mono">${esc(customer.gst||'—')}</div>
+    <div class="field-label">Industry</div><div class="field-val">${esc(customer.industry||'—')}</div>
+    <div class="field-label">Type</div><div class="field-val">${esc(customer.customer_type||'—')}</div>
+  </div>
+  <div>
+    <div class="field-label">Account Owner</div><div class="field-val">${esc(customer.account_owner||'—')}</div>
+    <div class="field-label">Credit Terms</div><div class="field-val">${esc(customer.credit_terms||'—')}</div>
+    <div class="field-label">POC</div><div class="field-val">${esc(customer.poc_name||'—')}${customer.poc_no ? ` · ${esc(customer.poc_no)}` : ''}</div>
+    <div class="field-label">Billing Address</div><div class="field-val">${esc(customer.billing_address||'—')}</div>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat"><div class="stat-label">Total Orders</div><div class="stat-val">${orders.length}</div></div>
+  <div class="stat"><div class="stat-label">Active Orders</div><div class="stat-val blue">${activeOrders.length}</div></div>
+  <div class="stat"><div class="stat-label">Pending Value</div><div class="stat-val blue">₹${fmtMoney(totalPending)}</div></div>
+  <div class="stat"><div class="stat-label">Lifetime Revenue</div><div class="stat-val green">₹${fmtMoney(totalRevenue)}</div></div>
+</div>
+
+${include.orders ? `
+<div class="section-title">Orders (${orders.length})</div>
+${orders.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:italic">No orders</div>' : ordersHTML}
+` : ''}
+${include.opportunities ? `
+<div class="section-title">Opportunities (${opps.length})</div>
+${oppsHTML}
+` : ''}
+
+<div class="footer">
+  <div>SSC Control Pvt. Ltd. &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; CIN: U51909GJ2021PTC122539</div>
+  <div>sales@ssccontrol.com &nbsp;|&nbsp; www.ssccontrol.com</div>
+</div>
+</body></html>`
+
+    const w = window.open('', '_blank')
+    if (!w) { toast('Popup blocked — allow popups and try again'); return }
+    w.document.write(html)
+    w.document.close()
+    w.onload = () => w.print()
+  }
+
   if (loading) return (
     <Layout pageTitle="Customer 360" pageKey="customer360">
       <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
@@ -295,6 +472,10 @@ export default function CustomerDetail() {
               </div>
               <div className="c360-hero-actions">
                 <button className="c360-btn" onClick={() => navigate('/customers')}>← Back</button>
+                <button className="c360-btn" onClick={() => setShowPdfModal(true)} style={{ gap:5, display:'flex', alignItems:'center' }}>
+                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  Download Report
+                </button>
                 {userRole === 'admin' && customer.approval_status === 'pending' && (
                   <>
                     <button className="c360-btn c360-btn-danger" onClick={reject} disabled={approving}>Reject</button>
@@ -834,6 +1015,38 @@ export default function CustomerDetail() {
       )}
 
       {/* ── Credit Check Modal ── */}
+      {showPdfModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={() => setShowPdfModal(false)}>
+          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:360, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Download Report</div>
+              <button onClick={() => setShowPdfModal(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+            </div>
+            <div style={{ padding:'16px 20px' }}>
+              <div style={{ fontSize:12, color:'#64748b', marginBottom:14 }}>Select what to include in the PDF:</div>
+              <label style={{ display:'flex', alignItems:'center', gap:10, fontSize:13, fontWeight:500, cursor:'pointer', marginBottom:12 }}>
+                <input type="checkbox" checked={pdfInclude.orders} onChange={e => setPdfInclude(p => ({ ...p, orders: e.target.checked }))} style={{ width:16, height:16 }} />
+                Orders <span style={{ fontSize:11, color:'#94a3b8', fontWeight:400 }}>({orders.length} orders with all items)</span>
+              </label>
+              <label style={{ display:'flex', alignItems:'center', gap:10, fontSize:13, fontWeight:500, cursor:'pointer', marginBottom:20 }}>
+                <input type="checkbox" checked={pdfInclude.opportunities} onChange={e => setPdfInclude(p => ({ ...p, opportunities: e.target.checked }))} style={{ width:16, height:16 }} />
+                Opportunities <span style={{ fontSize:11, color:'#94a3b8', fontWeight:400 }}>({opps.length} opportunities)</span>
+              </label>
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                <button className="c360-btn" onClick={() => setShowPdfModal(false)}>Cancel</button>
+                <button className="c360-btn c360-btn-primary"
+                  disabled={!pdfInclude.orders && !pdfInclude.opportunities}
+                  onClick={() => { setShowPdfModal(false); downloadCustomerPDF(pdfInclude) }}>
+                  Download PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCreditCheck && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
           onClick={e => { if (e.target===e.currentTarget) setShowCreditCheck(false) }}>

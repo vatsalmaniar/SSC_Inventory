@@ -778,7 +778,7 @@ export default function CRMOpportunityDetail() {
   <tbody>
     ${items.map((it,i) => `<tr>
       <td style="color:#94a3b8">${i+1}</td>
-      <td class="code">${esc(it.item_code||it.description)||'—'}</td>
+      <td class="code">${esc(it.item_code)||'—'}${it.description ? `<div style="font-family:sans-serif;font-size:11px;color:#475569;font-weight:400;margin-top:2px">${esc(it.description)}</div>` : ''}</td>
       <td class="r">${it.qty}</td>
       <td class="r">${((it.unit_price||0)*(1-(it.discount_pct||0)/100)).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
       <td class="r" style="font-weight:600">${(it.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
@@ -1618,6 +1618,12 @@ export default function CRMOpportunityDetail() {
                               placeholder="Search or type..."
                               fetchFn={fetchItems}
                               renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>}
+                            />
+                            <input
+                              value={row.description || ''}
+                              onChange={e => updateQuoteRow(idx, 'description', e.target.value)}
+                              placeholder="Description (optional)"
+                              style={{ marginTop:4, fontSize:11, color:'var(--gray-600)', fontStyle: row.description ? 'normal' : 'italic' }}
                             />
                           </td>
                           <td><input type="number" value={row.qty} onChange={e=>updateQuoteRow(idx,'qty',e.target.value)} placeholder="0" min="0" /></td>
