@@ -115,7 +115,7 @@ export default function CustomerDetail() {
 
     const [ordersRes, contactsRes, oppsRes, visitsRes] = await Promise.all([
       sb.from('orders')
-        .select('id,order_number,customer_name,status,order_type,order_items(total_price),created_at,po_number')
+        .select('id,order_number,customer_name,status,order_type,order_items(total_price),created_at,po_number,order_dispatches(delivered_at)')
         .eq('is_test', false)
         .ilike('customer_name', custRes.data.customer_name)
         .order('created_at', { ascending: false }),
@@ -258,6 +258,7 @@ export default function CustomerDetail() {
     const ordersHTML = orders.map((o, idx) => {
       const items = itemsByOrder[o.id] || []
       const orderTotal = items.reduce((s,i) => s + (i.total_price||0), 0)
+      const deliveredAt = (o.order_dispatches||[]).map(d=>d.delivered_at).filter(Boolean).sort().pop()
       const statusStyle = ['delivered','dispatched_fc'].includes(o.status)
         ? 'background:#f0fdf4;color:#15803d'
         : o.status === 'cancelled' ? 'background:#fef2f2;color:#dc2626'
@@ -272,7 +273,8 @@ export default function CustomerDetail() {
             </div>
             <div style="display:flex;align-items:center;gap:20px;font-size:11px;color:#64748b">
               ${o.po_number ? `<span>PO: <strong style="color:#0f172a">${esc(o.po_number)}</strong></span>` : ''}
-              <span>Date: <strong style="color:#0f172a">${fmtD(o.created_at)}</strong></span>
+              <span>Order Date: <strong style="color:#0f172a">${fmtD(o.created_at)}</strong></span>
+              ${deliveredAt ? `<span>Delivered: <strong style="color:#15803d">${fmtD(deliveredAt)}</strong></span>` : ''}
               <span style="font-size:12px;font-weight:700;color:#0f172a">₹${fmtMoney(orderTotal)}</span>
             </div>
           </div>
@@ -855,12 +857,15 @@ ${oppsHTML}
                         <th>Type</th>
                         <th>PO Ref</th>
                         <th>Status</th>
-                        <th>Date</th>
+                        <th>Order Date</th>
+                        <th>Delivery Date</th>
                         <th style={{ textAlign:'right' }}>Value</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {orders.map(o => (
+                      {orders.map(o => {
+                        const deliveredAt = (o.order_dispatches||[]).map(d=>d.delivered_at).filter(Boolean).sort().pop()
+                        return (
                         <tr key={o.id} onClick={() => navigate('/orders/'+o.id)} style={{ cursor:'pointer' }}>
                           <td className="mono">{o.order_number}</td>
                           <td>{o.order_type==='SO'?'Standard':o.order_type==='CO'?'Custom':'Sample'}</td>
@@ -869,9 +874,11 @@ ${oppsHTML}
                             <span className={'od-status-badge '+statusBadgeClass(o.status)} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
                           </td>
                           <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmt(o.created_at)}</td>
+                          <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{deliveredAt ? fmt(deliveredAt) : '—'}</td>
                           <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR((o.order_items||[]).reduce((t,i)=>t+(i.total_price||0),0))}</td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 )}
