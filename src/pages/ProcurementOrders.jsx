@@ -33,12 +33,13 @@ export default function ProcurementOrders() {
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     if (!['ops','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
 
-    // Fetch CO orders — include cancelled so procurement can react before PO is approved
+    // Fetch CO orders — include any state where uncovered items might still need POs.
+    // Excluded: 'pending' (not yet approved), 'dispatched_fc' (fully delivered).
     const { data: coData } = await sb.from('orders')
       .select('id,order_number,customer_name,status,created_at,order_items(id,total_price)')
       .eq('is_test', false)
       .eq('order_type', 'CO')
-      .in('status', ['inv_check','inventory_check','dispatch','cancelled'])
+      .not('status', 'in', '("pending","dispatched_fc")')
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
 
