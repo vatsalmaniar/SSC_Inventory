@@ -23,7 +23,9 @@ function pillStatus(po) { return po.status }
 function poValue(po) { return po.total_amount || 0 }
 
 const FILTERS = [
-  { key: 'all',        label: 'All POs' },
+  { key: 'all',        label: 'All' },
+  { key: 'po',         label: 'PO' },
+  { key: 'cpo',        label: 'CPO' },
   { key: 'open',       label: 'Open' },
   { key: 'approval',   label: 'Pending Approval' },
   { key: 'placed',     label: 'Order Placed' },
@@ -42,8 +44,12 @@ const TIMELINES = [
   { key: 'custom', label: 'Custom' },
 ]
 
+function isCPO(po) { return !!(po.order_number && po.order_number.includes('/CO')) }
+
 function matchFilter(po, f) {
   if (f === 'all')        return true
+  if (f === 'po')         return !isCPO(po)
+  if (f === 'cpo')        return isCPO(po)
   if (f === 'open')       return !['material_received','closed','cancelled'].includes(po.status)
   if (f === 'approval')   return po.status === 'pending_approval'
   if (f === 'placed')     return ['approved','placed','acknowledged'].includes(po.status)
@@ -95,9 +101,6 @@ export default function PurchaseOrderList() {
   const [search, setSearch]     = useState('')
   const [page, setPage]         = useState(1)
   const [showTest, setShowTest] = useState(false)
-  const [mode, setMode]         = useState('po')
-  const [cpoOrders, setCpoOrders] = useState([])
-  const [cpoLoading, setCpoLoading] = useState(false)
 
   const PAGE_SIZE = 50
 
@@ -117,39 +120,6 @@ export default function PurchaseOrderList() {
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setUser({ name, avatar, role })
     await loadPos(false)
-  }
-
-  async function loadCpo() {
-    setCpoLoading(true)
-    const { data: coData } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,created_at,order_items(id,total_price)')
-      .eq('is_test', false).eq('order_type', 'CO')
-      .in('status', ['inv_check','inventory_check','dispatch','cancelled'])
-      .gte('created_at', FY_START).order('created_at', { ascending: false })
-    let orders = coData || []
-    if (orders.length) {
-      const ids = orders.map(o => o.id)
-      const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id,status').in('order_id', ids)
-      let coveredSet = new Set()
-      const poStatusByCo = {}
-      if (linkedPos?.length) {
-        for (const p of linkedPos) {
-          if (!poStatusByCo[p.order_id]) poStatusByCo[p.order_id] = []
-          poStatusByCo[p.order_id].push(p.status)
-        }
-        const poIds = linkedPos.map(p => p.id)
-        const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id','is',null)
-        coveredSet = new Set((poItems||[]).map(pi => pi.order_item_id))
-      }
-      orders = orders.map(o => {
-        const total = (o.order_items||[]).length
-        const covered = (o.order_items||[]).filter(oi => coveredSet.has(oi.id)).length
-        const hasPostApprovalPO = (poStatusByCo[o.id]||[]).some(s => !['draft','pending_approval'].includes(s))
-        return { ...o, _total: total, _covered: covered, _hasPostApprovalPO: hasPostApprovalPO }
-      })
-    }
-    setCpoOrders(orders)
-    setCpoLoading(false)
   }
 
   async function loadPos(testMode = false, silent) {
@@ -239,7 +209,6 @@ export default function PurchaseOrderList() {
           </div>
         </div>
 
-        {mode === 'po' && /* Summary */true &&
         <div className="od-stat-grid">
           <div className="od-stat-card od-stat-blue">
             <div className="od-stat-card-top">
@@ -283,9 +252,9 @@ export default function PurchaseOrderList() {
             <div className="od-stat-val">{counts.delivery}</div>
             <div className="od-stat-sub">awaiting delivery</div>
           </div>
-        </div>}
+        </div>
 
-        {mode === 'po' && <div className="od-timeline-bar">
+        <div className="od-timeline-bar">
           {TIMELINES.map(({ key, label }) => (
             <button
               key={key}
@@ -306,7 +275,7 @@ export default function PurchaseOrderList() {
               )}
             </div>
           )}
-        </div>}
+        </div>
 
         {/* Search + Filter bar */}
         <div className="od-list-controls">
@@ -339,10 +308,6 @@ export default function PurchaseOrderList() {
           </div>
           </div>
           <div className="filter-bar" style={{ margin: 0, padding: 0 }}>
-            <div style={{ display:'flex', borderRadius:8, border:'1px solid var(--gray-200)', overflow:'hidden', background:'#f9fafb', flexShrink:0, marginRight:6 }}>
-              <button onClick={() => setMode('po')} style={{ padding:'5px 14px', fontSize:12, fontWeight:700, border:'none', cursor:'pointer', background: mode==='po' ? '#1a4dab' : 'transparent', color: mode==='po' ? 'white' : 'var(--gray-500)', fontFamily:'var(--font)' }}>PO</button>
-              <button onClick={() => { setMode('cpo'); if (!cpoOrders.length) loadCpo() }} style={{ padding:'5px 14px', fontSize:12, fontWeight:700, border:'none', cursor:'pointer', background: mode==='cpo' ? '#1a4dab' : 'transparent', color: mode==='cpo' ? 'white' : 'var(--gray-500)', fontFamily:'var(--font)' }}>CPO</button>
-            </div>
             {FILTERS.map(({ key, label }) => (
               <button
                 key={key}
@@ -357,55 +322,7 @@ export default function PurchaseOrderList() {
 
         {/* Table */}
         <div className="od-table-card">
-          {mode === 'cpo' ? (
-            cpoLoading ? (
-              <div className="loading-state" style={{ padding: 40 }}><div className="loading-spin" /></div>
-            ) : cpoOrders.length === 0 ? (
-              <div className="orders-empty" style={{ border:'none' }}>
-                <div style={{ fontSize:14, color:'var(--gray-400)', textAlign:'center', padding:40 }}>All Custom Orders have linked Purchase Orders.</div>
-              </div>
-            ) : (
-              <div className="orders-table-wrap" style={{ border:'none', borderRadius:0 }}>
-                <table className="orders-table">
-                  <thead>
-                    <tr>
-                      <th>Order #</th>
-                      <th>Customer</th>
-                      <th>Status</th>
-                      <th>PO Coverage</th>
-                      <th style={{ textAlign:'right' }}>Value (₹)</th>
-                      <th>Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cpoOrders.map(o => {
-                      const val = (o.order_items||[]).reduce((s,i)=>s+(i.total_price||0),0)
-                      const pct = o._total > 0 ? Math.round((o._covered/o._total)*100) : 0
-                      const statusMap = { inv_check:'Order Approved', inventory_check:'Inventory Check', dispatch:'Ready to Ship', cancelled:'Cancelled' }
-                      const statusStyle = o.status==='dispatch' ? 'background:#f0fdf4;color:#15803d' : o.status==='cancelled' ? 'background:#fef2f2;color:#dc2626' : 'background:#eff6ff;color:#1d4ed8'
-                      return (
-                        <tr key={o.id} onClick={() => navigate('/orders/'+o.id)} style={{ cursor:'pointer' }}>
-                          <td className="order-num-cell">{o.order_number}</td>
-                          <td className="customer-cell">{o.customer_name}</td>
-                          <td><span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:4, ...Object.fromEntries(statusStyle.split(';').map(s=>s.split(':').map(x=>x.trim())).filter(([k])=>k)) }}>{statusMap[o.status]||o.status}</span></td>
-                          <td>
-                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                              <div style={{ flex:1, height:5, background:'var(--gray-100)', borderRadius:3, overflow:'hidden', maxWidth:80 }}>
-                                <div style={{ width:pct+'%', height:'100%', background: pct===100?'#15803d':'#1a4dab', borderRadius:3 }}/>
-                              </div>
-                              <span style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{o._covered}/{o._total}</span>
-                            </div>
-                          </td>
-                          <td className="amount-cell">{val.toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
-                          <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmt(o.created_at)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )
-          ) : loading ? (
+          {loading ? (
             <div className="loading-state" style={{ padding: 40 }}><div className="loading-spin" /></div>
           ) : filtered.length === 0 ? (
             <div className="orders-empty" style={{ border: 'none' }}>
