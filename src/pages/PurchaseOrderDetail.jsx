@@ -97,16 +97,31 @@ export default function PurchaseOrderDetail() {
   const [confirmingRelink,   setConfirmingRelink]   = useState(false)
   const [relinking,          setRelinking]          = useState(false)
 
+  // Send PO to Vendor
+  const [showEmailModal, setShowEmailModal]   = useState(false)
+  const [vendorContacts, setVendorContacts]   = useState([])
+  const [vendorDetail,   setVendorDetail]     = useState(null)
+  const [senderEmail,    setSenderEmail]      = useState('')
+  const [recipientSel,   setRecipientSel]     = useState({})   // { email: true }
+  const [oneOffEmail,    setOneOffEmail]      = useState('')
+  const [emailSubject,   setEmailSubject]     = useState('')
+  const [emailMessage,   setEmailMessage]     = useState('')
+  const [extraFiles,     setExtraFiles]       = useState([])   // [{ url, filename }]
+  const [uploadingFile,  setUploadingFile]    = useState(false)
+  const [sendingEmail,   setSendingEmail]     = useState(false)
+  const [lastEmailed,    setLastEmailed]      = useState(null)
+
   useEffect(() => { init() }, [id])
 
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
-    const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
+    const { data: profile } = await sb.from('profiles').select('name,role,username,email').eq('id', session.user.id).single()
     if (!['ops','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
     setUserRole(profile?.role || '')
     setUserName(profile?.name || '')
+    setSenderEmail(profile?.email || (profile?.username ? profile.username + '@ssccontrol.com' : ''))
     const { data: users } = await sb.from('profiles').select('id,name,username')
     setAllUsers(users || [])
     await loadPO()
@@ -117,9 +132,15 @@ export default function PurchaseOrderDetail() {
     const poRes = await sb.from('purchase_orders').select('*').eq('id', id).single()
     if (poRes.error || !poRes.data) { setPo(null); setLoading(false); return }
     setPo(poRes.data)
-    // Non-blocking vendor code lookup
+    // Non-blocking vendor code + full vendor details + contacts lookup
     if (poRes.data?.vendor_id) {
-      sb.from('vendors').select('vendor_code').eq('id', poRes.data.vendor_id).maybeSingle().then(({ data: v }) => setVendorCode(v?.vendor_code || ''))
+      sb.from('vendors').select('*').eq('id', poRes.data.vendor_id).maybeSingle().then(({ data: v }) => {
+        setVendorCode(v?.vendor_code || '')
+        setVendorDetail(v || null)
+      })
+      sb.from('vendor_contacts').select('*').eq('vendor_id', poRes.data.vendor_id).order('name').then(({ data: vc }) => {
+        setVendorContacts(vc || [])
+      })
     }
     // Non-blocking source CO status lookup (to show cancelled banner if linked CO is cancelled)
     if (poRes.data?.order_id) {
@@ -147,6 +168,10 @@ export default function PurchaseOrderDetail() {
     setItems(itemsRes.data || [])
     setDeliveryDates(datesRes.data || [])
     setComments(commentsRes.data || [])
+
+    // Detect most recent "PO emailed" activity
+    const emailActivity = (commentsRes.data || []).filter(c => c.is_activity && (c.message || '').includes('📧 PO emailed')).pop()
+    setLastEmailed(emailActivity?.created_at || null)
 
     // Fetch GRNs linked to this PO via grn_items
     try {
@@ -218,6 +243,145 @@ export default function PurchaseOrderDetail() {
     setRelinking(false)
     await loadPO()
   }
+
+  // ── Send PO to Vendor ──
+  function openSendEmailModal() {
+    // Default recipient: primary contact (first vendor_contacts row with email) checked, others unchecked.
+    const sel = {}
+    const primaryContact = vendorContacts.find(c => c.email)
+    if (primaryContact?.email) sel[primaryContact.email.toLowerCase()] = true
+    setRecipientSel(sel)
+    setOneOffEmail('')
+    setExtraFiles([])
+
+    // Pre-fill subject + body
+    setEmailSubject(`Purchase Order ${po.po_number} — SSC Control Pvt. Ltd.`)
+    const primaryName  = primaryContact?.name || ''
+    const pocFirstName = primaryName.split(' ')[0] || 'Sir/Madam'
+    setEmailMessage(
+`Dear ${pocFirstName},
+
+Please find attached our Purchase Order ${po.po_number} dated ${fmtDC(po.po_date || po.created_at)}.
+
+Kindly acknowledge receipt of this PO and confirm the expected dispatch date at your earliest.
+
+For any clarification, reply to this email — it will reach our Procurement team directly.
+
+Thank you.
+
+Regards,
+${userName}
+Procurement Team
+SSC Control Pvt. Ltd.`
+    )
+
+    setShowEmailModal(true)
+  }
+
+  function toggleRecipient(email) {
+    const key = email.toLowerCase()
+    setRecipientSel(p => ({ ...p, [key]: !p[key] }))
+  }
+
+  async function uploadExtraFile(file) {
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) { toast('File must be under 10 MB'); return }
+    setUploadingFile(true)
+    const ext = file.name.split('.').pop()
+    const path = `po-email/${id}/${Date.now()}-${file.name}`
+    const { error } = await sb.storage.from('po-documents').upload(path, file, { upsert: true })
+    if (error) { toast('Upload failed: ' + error.message); setUploadingFile(false); return }
+    const { data: { publicUrl } } = sb.storage.from('po-documents').getPublicUrl(path)
+    setExtraFiles(p => [...p, { filename: file.name, url: publicUrl }])
+    setUploadingFile(false)
+  }
+
+  async function sendEmailToVendor() {
+    // Gather selected recipients
+    const toEmails = Object.entries(recipientSel).filter(([_, v]) => v).map(([k]) => k)
+    if (oneOffEmail.trim()) toEmails.push(oneOffEmail.trim().toLowerCase())
+    if (!toEmails.length) { toast('Select at least one recipient.'); return }
+    if (!emailSubject.trim()) { toast('Subject is required.'); return }
+
+    // Build HTML body from message + PO summary card
+    const htmlBody = buildPOEmailHTML()
+
+    // Gather attachments
+    const attachments = []
+    if (po.po_pdf_url) attachments.push({ url: po.po_pdf_url, filename: `${po.po_number.replace(/\//g,'-')}.html` })
+    if (po.po_document_url) {
+      let urls = []
+      try { urls = JSON.parse(po.po_document_url) } catch { urls = [po.po_document_url] }
+      if (!Array.isArray(urls)) urls = [urls]
+      urls.forEach((u, i) => attachments.push({ url: u, filename: `Supporting-Document-${i + 1}` }))
+    }
+    extraFiles.forEach(f => attachments.push({ url: f.url, filename: f.filename }))
+
+    setSendingEmail(true)
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL || 'https://kvjihrlbntxcdadogmhn.supabase.co'}/functions/v1/send-po-to-vendor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          po_id: id,
+          to_emails: toEmails,
+          sender_name: userName,
+          sender_email: senderEmail,
+          subject: emailSubject,
+          html_body: htmlBody,
+          attachments,
+        }),
+      })
+      const data = await res.json()
+      if (!data.ok) { toast('Send failed: ' + (data.error || 'Unknown')); setSendingEmail(false); return }
+      toast(`PO emailed to ${toEmails.length} recipient${toEmails.length > 1 ? 's' : ''}`, 'success')
+      setShowEmailModal(false)
+      setSendingEmail(false)
+      await loadPO()
+    } catch (e) {
+      toast('Send failed: ' + e.message)
+      setSendingEmail(false)
+    }
+  }
+
+  function buildPOEmailHTML() {
+    const msgHTML = (emailMessage || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')
+    const fc = po.fulfilment_center === 'Customer' ? (po.delivery_customer_name || 'Customer') : (po.fulfilment_center || '—')
+    return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;-webkit-font-smoothing:antialiased">
+<div style="max-width:600px;margin:0 auto;padding:32px 16px">
+  <div style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+    <div style="height:4px;background:#1a4dab"></div>
+    <div style="padding:28px 28px 24px;text-align:center;border-bottom:1px solid #f1f5f9">
+      <img src="https://app.ssccontrol.com/logo/ssc-60-years.png" alt="SSC Control — 60 Years" style="height:80px;width:auto;margin-bottom:10px"/>
+      <div style="font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-0.2px">SSC Control Pvt. Ltd.</div>
+      <div style="font-size:11px;color:#64748b;margin-top:2px">Engineering Industry. Powering Progress.</div>
+    </div>
+    <div style="padding:24px 28px 16px;font-size:14px;color:#334155;line-height:1.7">${msgHTML}</div>
+    <div style="padding:0 28px 20px">
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:10px">Purchase Order Summary</div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:#475569">
+          <tr><td style="padding:4px 0;color:#64748b;width:140px">PO Number</td><td style="padding:4px 0;font-weight:700;color:#0f172a;font-family:'Courier New',monospace">${esc(po.po_number || '')}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">PO Date</td><td style="padding:4px 0;color:#0f172a">${fmtDC(po.po_date || po.created_at)}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Vendor</td><td style="padding:4px 0;color:#0f172a">${esc(vendorDetail?.vendor_name || po.vendor_name || '')}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Total Value</td><td style="padding:4px 0;font-weight:700;color:#0f172a">₹${Number(po.total_amount || 0).toLocaleString('en-IN')}</td></tr>
+          ${po.expected_delivery ? `<tr><td style="padding:4px 0;color:#64748b">Expected Delivery</td><td style="padding:4px 0;color:#0f172a">${fmtDC(po.expected_delivery)}</td></tr>` : ''}
+          <tr><td style="padding:4px 0;color:#64748b">Delivery To</td><td style="padding:4px 0;color:#0f172a">${esc(fc)}</td></tr>
+          ${po.payment_terms ? `<tr><td style="padding:4px 0;color:#64748b">Payment Terms</td><td style="padding:4px 0;color:#0f172a">${esc(po.payment_terms)}</td></tr>` : ''}
+        </table>
+      </div>
+    </div>
+  </div>
+  <div style="text-align:center;padding:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.8">
+    SSC Control Pvt. Ltd. · 60 Years of Excellence · 1966 – 2026
+  </div>
+</div>
+</body></html>`
+  }
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
 
   // ── Stage 2: PO Approved — generate PO number + PDF ──
   async function handleApprove() {
@@ -816,6 +980,16 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                   <button className="od-btn" onClick={() => setEditMode(false)} disabled={saving}>Discard</button>
                   <button className="od-btn od-btn-edit" onClick={saveEdit} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
                 </>
+              )}
+              {!editMode && ['placed','acknowledged','delivery_confirmation','partially_received'].includes(po.status) && (
+                <button className="od-btn" onClick={openSendEmailModal}
+                  style={{ background: lastEmailed ? '#f0fdf4' : '#1a4dab', color: lastEmailed ? '#15803d' : 'white', borderColor: lastEmailed ? '#bbf7d0' : '#1a4dab', gap:6 }}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}>
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                    <polyline points="22,6 12,13 2,6"/>
+                  </svg>
+                  {lastEmailed ? `✓ Sent ${fmt(lastEmailed)} · Resend` : 'Send PO to Vendor'}
+                </button>
               )}
               {!editMode && !isCancelled && !isDone && userRole === 'admin' && (
                 <button className="od-btn od-btn-danger" onClick={() => setShowCancelModal(true)}>
@@ -1539,6 +1713,123 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
         </div>
       </div>
     )}
+
+    {/* Send PO to Vendor Modal */}
+    {showEmailModal && (() => {
+      // Source: vendor_contacts only (same as Vendor 360 Contacts section). First row = Primary Contact.
+      const allContactEmails = []
+      vendorContacts.forEach((c, i) => {
+        if (c.email && !allContactEmails.find(x => x.email.toLowerCase() === c.email.toLowerCase())) {
+          allContactEmails.push({ email: c.email, name: c.name, role: i === 0 ? 'Primary' : (c.designation || 'Contact') })
+        }
+      })
+      const selectedCount = Object.values(recipientSel).filter(Boolean).length + (oneOffEmail.trim() ? 1 : 0)
+      return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={() => !sendingEmail && setShowEmailModal(false)}>
+          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:640, maxHeight:'92vh', overflow:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
+            onClick={e => e.stopPropagation()}>
+
+            <div style={{ padding:'18px 24px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'white', zIndex:2 }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Send PO to Vendor</div>
+                <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Email the PO to the vendor with attachments</div>
+              </div>
+              <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#94a3b8', padding:0, width:28, height:28 }}>✕</button>
+            </div>
+
+            {/* Meta info */}
+            <div style={{ padding:'16px 24px 0' }}>
+              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 14px', fontSize:11, color:'#475569', lineHeight:1.7 }}>
+                <div><strong style={{ color:'#0f172a' }}>From:</strong> SSC Procurement &lt;no-reply@ssccontrol.com&gt;</div>
+                <div><strong style={{ color:'#0f172a' }}>Reply-To:</strong> {senderEmail || '—'}</div>
+                <div><strong style={{ color:'#0f172a' }}>Cc (auto):</strong> purchase@, purchase.brd@, ankit.dave@, hiral.patel@ + sender (dedup)</div>
+              </div>
+            </div>
+
+            {/* Recipients */}
+            <div style={{ padding:'16px 24px 0' }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>To (select recipients)</div>
+              {allContactEmails.length === 0 && (
+                <div style={{ padding:'10px 14px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, fontSize:12, color:'#92400e' }}>
+                  No contacts with email found for this vendor. Add them in <button onClick={() => vendorDetail?.id && navigate('/procurement/vendors/' + vendorDetail.id)} style={{ background:'none', border:'none', color:'#92400e', fontWeight:700, cursor:'pointer', textDecoration:'underline', fontFamily:'var(--font)', fontSize:12, padding:0 }}>Vendor 360 → Contacts</button>, or use the one-off email below.
+                </div>
+              )}
+              {allContactEmails.map(c => {
+                const key = c.email.toLowerCase()
+                const checked = !!recipientSel[key]
+                return (
+                  <label key={key} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:8, border:'1px solid', borderColor: checked ? '#1a4dab' : '#e2e8f0', background: checked ? '#eff6ff' : 'white', cursor:'pointer', marginBottom:6 }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleRecipient(c.email)} style={{ accentColor:'#1a4dab', width:15, height:15 }} />
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:'#0f172a' }}>{c.name} <span style={{ fontSize:10, fontWeight:600, padding:'1px 6px', borderRadius:10, background:'#f1f5f9', color:'#64748b', marginLeft:4 }}>{c.role}</span></div>
+                      <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{c.email}</div>
+                    </div>
+                  </label>
+                )
+              })}
+              <div style={{ marginTop:8 }}>
+                <input value={oneOffEmail} onChange={e => setOneOffEmail(e.target.value)}
+                  placeholder="+ Add another email (one-off)"
+                  style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'9px 12px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
+              </div>
+            </div>
+
+            {/* Subject */}
+            <div style={{ padding:'16px 24px 0' }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>Subject</div>
+              <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
+                style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'9px 12px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
+            </div>
+
+            {/* Message */}
+            <div style={{ padding:'16px 24px 0' }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>Message</div>
+              <textarea value={emailMessage} onChange={e => setEmailMessage(e.target.value)}
+                rows={9}
+                style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 12px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box', resize:'vertical', lineHeight:1.6 }} />
+              <div style={{ fontSize:10, color:'#94a3b8', marginTop:4 }}>The email will include a PO summary card + this message + attachments.</div>
+            </div>
+
+            {/* Attachments */}
+            <div style={{ padding:'16px 24px 0' }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>Attachments</div>
+              <div style={{ fontSize:12, color:'#475569', lineHeight:1.7 }}>
+                {po.po_pdf_url && <div>✓ Purchase Order ({po.po_number}.html)</div>}
+                {po.po_document_url && (() => {
+                  let urls = []
+                  try { urls = JSON.parse(po.po_document_url) } catch { urls = [po.po_document_url] }
+                  if (!Array.isArray(urls)) urls = [urls]
+                  return urls.map((_, i) => <div key={i}>✓ Supporting Document {i + 1}</div>)
+                })()}
+                {extraFiles.map((f, i) => <div key={i}>✓ {f.filename} <button onClick={() => setExtraFiles(p => p.filter((_,j) => j !== i))} style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:11, marginLeft:6 }}>remove</button></div>)}
+                {!po.po_pdf_url && !po.po_document_url && !extraFiles.length && <div style={{ fontStyle:'italic', color:'#94a3b8' }}>No attachments yet.</div>}
+              </div>
+              <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:10, padding:'7px 12px', border:'1px dashed #cbd5e1', borderRadius:8, background:'#f8fafc', fontSize:12, cursor:'pointer', color:'#475569', fontWeight:600 }}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                {uploadingFile ? 'Uploading…' : '+ Add file'}
+                <input type="file" style={{ display:'none' }} onChange={e => { uploadExtraFile(e.target.files?.[0]); e.target.value = '' }} disabled={uploadingFile} />
+              </label>
+            </div>
+
+            {/* Actions */}
+            <div style={{ padding:'18px 24px 20px', display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', borderTop:'1px solid #f1f5f9', marginTop:18, position:'sticky', bottom:0, background:'white' }}>
+              <div style={{ fontSize:12, color:'#64748b' }}>
+                {selectedCount === 0 ? 'No recipients selected' : `${selectedCount} recipient${selectedCount !== 1 ? 's' : ''} selected`}
+              </div>
+              <div style={{ display:'flex', gap:10 }}>
+                <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail}
+                  style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
+                <button onClick={sendEmailToVendor} disabled={sendingEmail || selectedCount === 0}
+                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a4dab', color:'white', fontSize:13, fontWeight:700, cursor: sendingEmail || selectedCount === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: sendingEmail || selectedCount === 0 ? 0.5 : 1 }}>
+                  {sendingEmail ? 'Sending…' : 'Send Email'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    })()}
 
     </Layout>
   )
