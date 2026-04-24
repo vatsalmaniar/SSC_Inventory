@@ -92,6 +92,11 @@ export default function PurchaseOrderDetail() {
   const [mentionPos, setMentionPos]   = useState({ top:0, left:0, width:200 })
   const commentInputRef = useRef(null)
 
+  const [activeCOsForRelink, setActiveCOsForRelink] = useState([])
+  const [selectedRelinkCoId, setSelectedRelinkCoId] = useState('')
+  const [confirmingRelink,   setConfirmingRelink]   = useState(false)
+  const [relinking,          setRelinking]          = useState(false)
+
   useEffect(() => { init() }, [id])
 
 
@@ -118,7 +123,19 @@ export default function PurchaseOrderDetail() {
     }
     // Non-blocking source CO status lookup (to show cancelled banner if linked CO is cancelled)
     if (poRes.data?.order_id) {
-      sb.from('orders').select('status').eq('id', poRes.data.order_id).maybeSingle().then(({ data: o }) => setSourceCOStatus(o?.status || null))
+      sb.from('orders').select('status,customer_name').eq('id', poRes.data.order_id).maybeSingle().then(async ({ data: o }) => {
+        setSourceCOStatus(o?.status || null)
+        // If linked CO is cancelled AND this PO is post-approval (with vendor), fetch active COs for relink
+        if (o?.status === 'cancelled' && o?.customer_name) {
+          const { data: activeCOs } = await sb.from('orders')
+            .select('id,order_number,customer_name,status,created_at,order_items(id,total_price)')
+            .ilike('customer_name', o.customer_name.trim())
+            .eq('order_type', 'CO').eq('is_test', false)
+            .neq('status', 'cancelled')
+            .order('created_at', { ascending: false })
+          setActiveCOsForRelink(activeCOs || [])
+        }
+      })
     } else {
       setSourceCOStatus(null)
     }
@@ -178,6 +195,28 @@ export default function PurchaseOrderDetail() {
 
   async function logActivity(message) {
     try { await sb.from('po_comments').insert({ po_id: id, author_name: userName, message, is_activity: true }) } catch(e) { console.error('logActivity:', e) }
+  }
+
+  async function relinkPO() {
+    const newCo = activeCOsForRelink.find(c => c.id === selectedRelinkCoId)
+    if (!newCo) return
+    setRelinking(true)
+    const oldOrderId     = po.order_id
+    const oldOrderNumber = po.order_number
+    const { error } = await sb.from('purchase_orders').update({
+      order_id: newCo.id, order_number: newCo.order_number, updated_at: new Date().toISOString(),
+    }).eq('id', id)
+    if (error) { toast('Relink failed: ' + error.message); setRelinking(false); return }
+    await logActivity(`PO relinked from ${oldOrderNumber} (cancelled) to ${newCo.order_number}`)
+    try {
+      if (oldOrderId) await sb.from('order_comments').insert({ order_id: oldOrderId, author_name: userName, message: `PO ${po.po_number} was relinked away from this cancelled CO to ${newCo.order_number}.`, is_activity: true })
+      await sb.from('order_comments').insert({ order_id: newCo.id, author_name: userName, message: `PO ${po.po_number} was relinked to this CO (originally against cancelled ${oldOrderNumber}).`, is_activity: true })
+    } catch(_) {}
+    toast('PO relinked to ' + newCo.order_number, 'success')
+    setConfirmingRelink(false)
+    setSelectedRelinkCoId('')
+    setRelinking(false)
+    await loadPO()
   }
 
   // ── Stage 2: PO Approved — generate PO number + PDF ──
@@ -828,6 +867,53 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div>
               <div style={{ fontWeight:700, marginBottom:2 }}>Source Customer Order Cancelled</div>
               <div style={{ color:'#dc2626', fontSize:12 }}>The linked CO {po.order_number ? (<span style={{ fontFamily:'var(--mono)', fontWeight:600 }}>{po.order_number}</span>) : null} has been cancelled. Please cancel this draft PO to avoid placing an unnecessary purchase.</div>
+            </div>
+          </div>
+        )}
+
+        {sourceCOStatus === 'cancelled' && ['approved','placed','acknowledged','delivery_confirmation','partially_received'].includes(po.status) && (
+          <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderLeft:'4px solid #ea580c', borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'flex-start', gap:12, marginBottom:16 }}>
+            <div style={{ width:28, height:28, borderRadius:'50%', background:'#ffedd5', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <svg fill="none" stroke="#ea580c" strokeWidth="2.2" viewBox="0 0 24 24" style={{ width:16, height:16 }}>
+                <path d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/>
+              </svg>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:'#9a3412', marginBottom:3 }}>Linked CO is cancelled</div>
+              <div style={{ fontSize:12, color:'#7c2d12', lineHeight:1.5, marginBottom:10 }}>
+                This PO was placed against <span style={{ fontFamily:'var(--mono)', fontWeight:600, textDecoration:'line-through' }}>{po.order_number}</span> which has been cancelled. Relink this PO to a new active CO to continue.
+              </div>
+              {!confirmingRelink ? (
+                <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                  <select value={selectedRelinkCoId} onChange={e => setSelectedRelinkCoId(e.target.value)}
+                    style={{ padding:'7px 12px', border:'1px solid #fed7aa', borderRadius:7, fontSize:12, fontFamily:'var(--font)', background:'white', minWidth:280, cursor:'pointer' }}>
+                    <option value="">— Select new CO (same customer) —</option>
+                    {activeCOsForRelink.map(co => {
+                      const v = (co.order_items||[]).reduce((s,i) => s + (i.total_price || 0), 0)
+                      return <option key={co.id} value={co.id}>{co.order_number} · {(co.order_items||[]).length} items · {fmtINR(v)} · {co.status}</option>
+                    })}
+                  </select>
+                  <button disabled={!selectedRelinkCoId} onClick={() => setConfirmingRelink(true)}
+                    style={{ padding:'7px 16px', fontSize:12, fontWeight:600, border:'none', borderRadius:7, background: selectedRelinkCoId ? '#ea580c' : '#fed7aa', color:'white', cursor: selectedRelinkCoId ? 'pointer':'not-allowed', fontFamily:'var(--font)' }}>
+                    Relink PO →
+                  </button>
+                  {activeCOsForRelink.length === 0 && <span style={{ fontSize:11, color:'#9a3412', fontStyle:'italic' }}>No active COs found for this customer.</span>}
+                </div>
+              ) : (
+                <div style={{ background:'white', border:'1px solid #fed7aa', borderRadius:8, padding:'10px 14px', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                  <div style={{ flex:1, minWidth:200, fontSize:12, color:'#7c2d12' }}>
+                    Relink <span style={{ fontFamily:'var(--mono)', fontWeight:700 }}>{po.po_number}</span> → <span style={{ fontFamily:'var(--mono)', fontWeight:700 }}>{activeCOsForRelink.find(c => c.id === selectedRelinkCoId)?.order_number}</span>?
+                  </div>
+                  <button onClick={() => setConfirmingRelink(false)} disabled={relinking}
+                    style={{ padding:'5px 12px', fontSize:11, fontWeight:600, border:'1px solid #e2e8f0', borderRadius:6, background:'white', color:'var(--gray-700)', cursor:'pointer', fontFamily:'var(--font)' }}>
+                    Cancel
+                  </button>
+                  <button onClick={relinkPO} disabled={relinking}
+                    style={{ padding:'5px 14px', fontSize:11, fontWeight:700, border:'none', borderRadius:6, background:'#ea580c', color:'white', cursor:'pointer', fontFamily:'var(--font)', opacity: relinking ? 0.6 : 1 }}>
+                    {relinking ? 'Relinking…' : 'Confirm Relink'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

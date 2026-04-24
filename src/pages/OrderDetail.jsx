@@ -636,9 +636,44 @@ if (match) {
       order_id: id, author_name: user.name, message: logMsg, tagged_users: [], is_activity: true, is_cancellation: true
     })
     await notifyUsers([], `${order.order_number} — Order cancelled. Reason: ${cancelReason.trim()}`, 'order_cancelled')
+    await notifyOpsForLinkedPOs()
     toast('Order cancelled', 'success')
     setShowCancel(false); setCancelReason(''); setCancelInitiatorType('staff'); setCancelInitiatorName(''); setCancelInitiatorFreeText('')
     await loadOrder(); setSaving(false)
+  }
+
+  // ── Notify ops/admin about linked POs when a CO is cancelled ──
+  async function notifyOpsForLinkedPOs() {
+    try {
+      const { data: linkedPos } = await sb.from('purchase_orders').select('id,po_number,status').eq('order_id', id)
+      if (!linkedPos?.length) return
+
+      const PRE_APPROVAL  = ['draft','pending_approval']
+      const POST_APPROVAL = ['approved','placed','acknowledged','delivery_confirmation','partially_received']
+      const targets = profiles.filter(p => ['ops','admin'].includes(p.role) && p.id !== user.id)
+      if (!targets.length) return
+
+      const rows = []
+      for (const po of linkedPos) {
+        let msg = null
+        if (PRE_APPROVAL.includes(po.status)) {
+          msg = `${order.order_number} cancelled — cancel draft PO ${po.po_number} (${po.status})`
+        } else if (POST_APPROVAL.includes(po.status)) {
+          msg = `${order.order_number} cancelled — relink PO ${po.po_number} (${po.status}) to a new CO`
+        }
+        if (!msg) continue
+        for (const t of targets) {
+          rows.push({
+            user_name: t.name, user_id: t.id, message: msg,
+            order_id: po.id,                  // repurposed: stores PO UUID for click-through
+            order_number: po.po_number,
+            from_name: user.name,
+            email_type: 'po_linked_co_cancelled',
+          })
+        }
+      }
+      if (rows.length) await sb.from('notifications').insert(rows)
+    } catch (e) { console.error('notifyOpsForLinkedPOs:', e) }
   }
 
   if (loading) return (

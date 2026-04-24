@@ -25,6 +25,7 @@ const PREF_MAP: Record<string, string> = {
   order_delivered: 'status_changes', order_cancelled: 'status_changes',
   pi_issued: 'status_changes', pi_payment_confirmed: 'status_changes',
   new_customer_approval: 'status_changes', credit_override: 'status_changes',
+  po_linked_co_cancelled: 'status_changes',
   mention: 'mentions',
   opportunity_won: 'crm_alerts', opportunity_lost: 'crm_alerts',
   overdue_followup: 'crm_alerts', assignment: 'crm_alerts',
@@ -40,6 +41,7 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string; bg: string; la
   new_customer_approval:{ emoji: '🏢', color: '#b45309', bg: '#fffbeb', label: 'Approval Required' },
   credit_override:      { emoji: '⚠️', color: '#dc2626', bg: '#fef2f2', label: 'Credit Override' },
   mention:              { emoji: '💬', color: '#1d4ed8', bg: '#eff6ff', label: 'You were mentioned' },
+  po_linked_co_cancelled: { emoji: '⚠️', color: '#ea580c', bg: '#fff7ed', label: 'PO needs action — CO cancelled' },
   opportunity_won:      { emoji: '🎉', color: '#15803d', bg: '#f0fdf4', label: 'Opportunity Won' },
   opportunity_lost:     { emoji: '📉', color: '#dc2626', bg: '#fef2f2', label: 'Opportunity Lost' },
   overdue_followup:     { emoji: '⏰', color: '#b45309', bg: '#fffbeb', label: 'Overdue Follow-Up' },
@@ -75,7 +77,9 @@ function esc(s: string): string {
 
 function buildEmail(recipientName: string, r: any, extra: { customer?: string; dc?: string; fc?: string } = {}): string {
   const cfg = TYPE_CONFIG[r.email_type] || { emoji: '🔔', color: '#1a4dab', bg: '#eff6ff', label: 'Notification' }
-  const link = r.order_id ? `${APP_URL}/orders/${r.order_id}` : ''
+  const link = r.order_id
+    ? (r.email_type === 'po_linked_co_cancelled' ? `${APP_URL}/procurement/po/${r.order_id}` : `${APP_URL}/orders/${r.order_id}`)
+    : ''
   const time = fmtTime(r.created_at)
 
   return `<!DOCTYPE html>
@@ -349,7 +353,7 @@ async function handleLogin(sb: any, r: any) {
     const { count } = await sb.from('login_audit').select('id', { count: 'exact' })
       .eq('user_name', r.user_name).eq('event_type', 'login_failed')
       .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
-    if ((count || 0) >= 3) {
+    if ((count || 0) === 3) {
       const { data: admins } = await sb.from('profiles').select('username,email,name').eq('role', 'admin')
       const sentFailed = new Set<string>()
       for (const a of (admins || [])) {
