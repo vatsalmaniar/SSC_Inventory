@@ -304,9 +304,19 @@ export default function BillingOrderDetail() {
   async function handleCreditCheckClear() {
     setSaving(true)
     if (activeBatch) await sb.from('order_dispatches').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+    await clearOrderCreditOverrideIfAllBatchesCleared()
     await logActivity('Credit Check completed — payment clear.')
     toast('Credit check cleared', 'success')
     setSaving(false); await loadOrder()
+  }
+
+  // Clear orders.credit_override only if no remaining batch still has it true
+  async function clearOrderCreditOverrideIfAllBatchesCleared() {
+    const { data: batches } = await sb.from('order_dispatches').select('credit_override').eq('order_id', id)
+    const anyStillOverride = (batches || []).some(b => b.credit_override === true)
+    if (!anyStillOverride) {
+      await sb.from('orders').update({ credit_override: false, updated_at: new Date().toISOString() }).eq('id', id)
+    }
   }
 
   // STEP 2: credit_check → goods_issue_posted (no auto invoice number — Tally number entered at upload)
@@ -392,6 +402,7 @@ export default function BillingOrderDetail() {
   async function handlePICreditAutoPass() {
     setSaving(true)
     if (activeBatch) await sb.from('order_dispatches').update({ status: 'credit_check', credit_override: false, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+    await clearOrderCreditOverrideIfAllBatchesCleared()
     await logActivity('PI Order — Credit check auto-passed. Payment was collected upfront via Proforma Invoice.')
     toast('Credit check auto-passed', 'success')
     setSaving(false); await loadOrder()
