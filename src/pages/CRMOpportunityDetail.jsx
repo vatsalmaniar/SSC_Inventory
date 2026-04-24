@@ -722,7 +722,8 @@ export default function CRMOpportunityDetail() {
 <div class="header">
   <div>
     <div class="co-name">SSC Control Pvt. Ltd.</div>
-    <div class="co-sub">Industrial Automation &amp; Electrification</div>
+    <div class="co-sub">Engineering Industry. Powering Progress.</div>
+    <div style="font-size:10px;color:#64748b;margin-bottom:8px;letter-spacing:0.2px">Industrial Automation &nbsp;|&nbsp; Product Distribution &nbsp;|&nbsp; Safety Solutions &nbsp;|&nbsp; Robotics</div>
     <div class="co-addr">
       E/12, Siddhivinayak Towers, B/H DCP Office<br/>
       Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
@@ -730,7 +731,7 @@ export default function CRMOpportunityDetail() {
     </div>
   </div>
   <div style="text-align:right">
-    <img src="${window.location.origin}/ssc-logo.svg" alt="SSC" style="height:52px;width:auto;display:block;margin-left:auto;margin-bottom:10px"/>
+    <img src="${window.location.origin}/logo/ssc-60-years.png" alt="SSC 60 Years" style="height:95px;width:auto;display:block;margin-left:auto;margin-bottom:10px"/>
     <div class="doc-type-badge">Quotation</div>
     <div class="doc-title">Quotation</div>
   </div>

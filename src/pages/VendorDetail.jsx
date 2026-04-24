@@ -204,11 +204,12 @@ body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff
 <div class="header">
   <div>
     <div class="co-name">SSC Control Pvt. Ltd.</div>
-    <div class="co-sub">Industrial Automation &amp; Electrification</div>
+    <div class="co-sub">Engineering Industry. Powering Progress.</div>
+    <div style="font-size:10px;color:#64748b;margin-bottom:8px;letter-spacing:0.2px">Industrial Automation &nbsp;|&nbsp; Product Distribution &nbsp;|&nbsp; Safety Solutions &nbsp;|&nbsp; Robotics</div>
     <div class="co-addr">E/12, Siddhivinayak Towers, Off. SG Highway, Makarba, Ahmedabad – 380 051</div>
   </div>
   <div style="text-align:right">
-    <img src="${window.location.origin}/ssc-logo.svg" alt="SSC" style="height:48px;width:auto;display:block;margin-left:auto;margin-bottom:8px"/>
+    <img src="${window.location.origin}/logo/ssc-60-years.png" alt="SSC 60 Years" style="height:80px;width:auto;display:block;margin-left:auto;margin-bottom:8px"/>
     <div class="doc-badge">Vendor Report</div>
     <div class="doc-title">Vendor 360</div>
     <div style="font-size:11px;color:#64748b;margin-top:4px">Generated: ${fmtD(new Date().toISOString())}</div>
