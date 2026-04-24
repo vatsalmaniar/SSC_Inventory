@@ -310,10 +310,12 @@ export default function BillingOrderDetail() {
     setSaving(false); await loadOrder()
   }
 
-  // Clear orders.credit_override only if no remaining batch still has it true
+  // Clear orders.credit_override only if no remaining batch still has it true.
+  // Guarded: if query errors OR returns nothing, leave the order flag untouched.
   async function clearOrderCreditOverrideIfAllBatchesCleared() {
-    const { data: batches } = await sb.from('order_dispatches').select('credit_override').eq('order_id', id)
-    const anyStillOverride = (batches || []).some(b => b.credit_override === true)
+    const { data: batches, error } = await sb.from('order_dispatches').select('credit_override').eq('order_id', id)
+    if (error || !Array.isArray(batches) || batches.length === 0) return
+    const anyStillOverride = batches.some(b => b.credit_override === true)
     if (!anyStillOverride) {
       await sb.from('orders').update({ credit_override: false, updated_at: new Date().toISOString() }).eq('id', id)
     }
