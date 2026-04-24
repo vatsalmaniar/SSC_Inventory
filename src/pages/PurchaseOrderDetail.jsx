@@ -750,7 +750,11 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   const pipeIdx = PIPELINE.indexOf(po.status)
   const isCancelled = po.status === 'cancelled'
   const isDone = po.status === 'material_received'
-  const canEdit = ['draft','pending_approval'].includes(po.status) && !editMode
+  const isPostApproval  = !['draft','pending_approval'].includes(po.status)
+  const canAmendPostApproval = userRole === 'admin' || userName === 'Ankit Dave'
+  const canEdit = !['material_received','received','closed','cancelled'].includes(po.status)
+    && !editMode
+    && (!isPostApproval || canAmendPostApproval)
   const isPending = po.status === 'pending_approval'
   const grandTotal = items.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0)
 

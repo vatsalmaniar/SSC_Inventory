@@ -25,7 +25,7 @@ function poValue(po) { return po.total_amount || 0 }
 const FILTERS = [
   { key: 'all',        label: 'All' },
   { key: 'po',         label: 'PO' },
-  { key: 'cpo',        label: 'CPO' },
+  { key: 'cpo',        label: 'PCO' },
   { key: 'open',       label: 'Open' },
   { key: 'approval',   label: 'Pending Approval' },
   { key: 'placed',     label: 'Order Placed' },
