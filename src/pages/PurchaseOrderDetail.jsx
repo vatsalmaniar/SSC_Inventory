@@ -321,7 +321,42 @@ SSC Control Pvt. Ltd.`
 
     // Gather attachments (respect user-removed items)
     const attachments = []
-    if (po.po_pdf_url && !excludePoPdf) attachments.push({ url: po.po_pdf_url, filename: `${po.po_number.replace(/\//g,'-')}.html` })
+
+    setSendingEmail(true)
+    try {
+      // Generate PO PDF in-browser from the existing HTML template
+      if (!excludePoPdf) {
+        const html2pdfMod = await import('html2pdf.js')
+        const html2pdf = html2pdfMod.default || html2pdfMod
+        const html = buildPoHtml(po.po_number)
+        const wrapper = document.createElement('div')
+        wrapper.style.cssText = 'position:fixed;left:-99999px;top:0;width:860px'
+        wrapper.innerHTML = html
+        document.body.appendChild(wrapper)
+        await new Promise(r => setTimeout(r, 350)) // let fonts/CSS settle
+        const blob = await html2pdf().set({
+          margin:    [8, 10, 10, 10],
+          filename:  `${po.po_number.replace(/\//g,'-')}.pdf`,
+          image:     { type: 'jpeg', quality: 0.96 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860 },
+          jsPDF:     { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+        }).from(wrapper).outputPdf('blob')
+        document.body.removeChild(wrapper)
+        const buf = await blob.arrayBuffer()
+        let bin = ''; const bytes = new Uint8Array(buf)
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+        const b64 = btoa(bin)
+        attachments.push({ filename: `${po.po_number.replace(/\//g,'-')}.pdf`, content: b64 })
+      }
+    } catch (err) {
+      console.error('PDF generation failed:', err)
+      toast('PDF generation failed: ' + err.message)
+      setSendingEmail(false)
+      return
+    }
+
+    // Supporting docs + extra files — sent as URLs (edge function fetches and base64s)
     if (po.po_document_url) {
       let urls = []
       try { urls = JSON.parse(po.po_document_url) } catch { urls = [po.po_document_url] }
@@ -331,8 +366,6 @@ SSC Control Pvt. Ltd.`
       })
     }
     extraFiles.forEach(f => attachments.push({ url: f.url, filename: f.filename }))
-
-    setSendingEmail(true)
     try {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL || 'https://kvjihrlbntxcdadogmhn.supabase.co'}/functions/v1/send-po-to-vendor`, {
         method: 'POST',
@@ -1817,7 +1850,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>Attachments</div>
               <div style={{ fontSize:12, color:'#475569', lineHeight:1.7 }}>
                 {po.po_pdf_url && (
-                  <AttachmentRow label={`Purchase Order (${po.po_number}.html)`} excluded={excludePoPdf}
+                  <AttachmentRow label={`Purchase Order (${po.po_number.replace(/\//g,'-')}.pdf)`} excluded={excludePoPdf}
                     onToggle={() => setExcludePoPdf(p => !p)} />
                 )}
                 {po.po_document_url && (() => {

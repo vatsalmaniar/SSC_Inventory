@@ -39,10 +39,15 @@ serve(async (req) => {
     }
     const cc = [...ccSet]
 
-    // Build attachments — fetch each URL and convert to base64 (more reliable than letting Resend fetch)
+    // Build attachments — accept either inline base64 (content) or URL (fetch + base64)
     const atts: any[] = []
     const failedAtts: string[] = []
     for (const a of (attachments || [])) {
+      if (a.content) {
+        atts.push({ filename: a.filename, content: a.content })
+        continue
+      }
+      if (!a.url) { failedAtts.push(a.filename); continue }
       try {
         const fileRes = await fetch(a.url)
         if (!fileRes.ok) { failedAtts.push(a.filename); continue }
