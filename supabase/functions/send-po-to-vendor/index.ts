@@ -81,9 +81,11 @@ serve(async (req) => {
     const ccCount = cc.length
     const attCount = atts.length
     const msg = `📧 PO emailed to ${to_emails.join(', ')}${ccCount ? ` (+${ccCount} Cc)` : ''} by ${sender_name || 'Unknown'}${attCount ? ` — ${attCount} attachment${attCount !== 1 ? 's' : ''}` : ''}`
-    await sb.from('po_comments').insert({
-      po_id, author_name: sender_name || 'System', message: msg, is_activity: true,
-    }).catch(() => {})
+    try {
+      await sb.from('po_comments').insert({
+        po_id, author_name: sender_name || 'System', message: msg, is_activity: true,
+      })
+    } catch (_) { /* don't fail the email if activity log insert fails */ }
 
     return new Response(JSON.stringify({ ok: true, resend_id: data?.id, to: to_emails, cc, attachments: attCount }), {
       status: 200, headers: JSON_HEADERS,
