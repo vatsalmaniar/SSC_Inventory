@@ -39,31 +39,42 @@ serve(async (req) => {
     }
     const cc = [...ccSet]
 
-    // Build attachments from URLs — Resend fetches them via path
-    const atts = (attachments || []).map((a: any) => ({
-      filename: a.filename,
-      path:     a.url,
-    }))
+    // Build attachments — fetch each URL and convert to base64 (more reliable than letting Resend fetch)
+    const atts: any[] = []
+    const failedAtts: string[] = []
+    for (const a of (attachments || [])) {
+      try {
+        const fileRes = await fetch(a.url)
+        if (!fileRes.ok) { failedAtts.push(a.filename); continue }
+        const buf  = await fileRes.arrayBuffer()
+        const b64  = btoa(String.fromCharCode(...new Uint8Array(buf)))
+        atts.push({ filename: a.filename, content: b64 })
+      } catch (_) {
+        failedAtts.push(a.filename)
+      }
+    }
 
     // Send via Resend
+    const payload = {
+      from: FROM,
+      to: to_emails,
+      cc,
+      reply_to: sender_email || 'purchase@ssccontrol.com',
+      subject,
+      html: html_body,
+      ...(atts.length ? { attachments: atts } : {}),
+    }
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: FROM,
-        to: to_emails,
-        cc,
-        reply_to: sender_email || 'purchase@ssccontrol.com',
-        subject,
-        html: html_body,
-        ...(atts.length ? { attachments: atts } : {}),
-      }),
+      body: JSON.stringify(payload),
     })
 
     const data = await res.json().catch(() => ({}))
 
     if (!res.ok) {
-      return new Response(JSON.stringify({ ok: false, error: data?.message || 'Resend error', detail: data }), { status: 200, headers: JSON_HEADERS })
+      const errMsg = data?.message || data?.error || JSON.stringify(data) || `Resend ${res.status}`
+      return new Response(JSON.stringify({ ok: false, error: errMsg, status: res.status, detail: data, failed_attachments: failedAtts }), { status: 200, headers: JSON_HEADERS })
     }
 
     // Log activity on PO

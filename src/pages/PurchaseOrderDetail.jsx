@@ -256,10 +256,11 @@ export default function PurchaseOrderDetail() {
       setVendorContacts(contactsList)
     }
 
-    // Default recipient: primary contact (first row with email) checked, others unchecked.
+    // Default recipient: vendor_contacts[0].email if present, else vendor.poc_email, else nothing.
     const sel = {}
     const primaryContact = contactsList.find(c => c.email)
     if (primaryContact?.email) sel[primaryContact.email.toLowerCase()] = true
+    else if (vendorDetail?.poc_email) sel[vendorDetail.poc_email.toLowerCase()] = true
     setRecipientSel(sel)
     setOneOffEmail('')
     setExtraFiles([])
@@ -268,7 +269,7 @@ export default function PurchaseOrderDetail() {
 
     // Pre-fill subject + body
     setEmailSubject(`Purchase Order ${po.po_number} — SSC Control Pvt. Ltd.`)
-    const primaryName  = primaryContact?.name || ''
+    const primaryName  = primaryContact?.name || vendorDetail?.poc_name || ''
     const pocFirstName = primaryName.split(' ')[0] || 'Sir/Madam'
     setEmailMessage(
 `Dear ${pocFirstName},
@@ -1730,13 +1731,19 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
     {/* Send PO to Vendor Modal */}
     {showEmailModal && (() => {
-      // Source: vendor_contacts only (same as Vendor 360 Contacts section). First row = Primary Contact.
+      // Match Vendor 360 logic: vendor_contacts first; fall back to vendors.poc_email / director_email if contacts table is empty for this vendor.
       const allContactEmails = []
       vendorContacts.forEach((c, i) => {
         if (c.email && !allContactEmails.find(x => x.email.toLowerCase() === c.email.toLowerCase())) {
           allContactEmails.push({ email: c.email, name: c.name, role: i === 0 ? 'Primary' : (c.designation || 'Contact') })
         }
       })
+      if (vendorDetail?.poc_email && !allContactEmails.find(x => x.email.toLowerCase() === vendorDetail.poc_email.toLowerCase())) {
+        allContactEmails.push({ email: vendorDetail.poc_email, name: vendorDetail.poc_name || 'Primary Contact', role: allContactEmails.length === 0 ? 'Primary' : 'POC' })
+      }
+      if (vendorDetail?.director_email && !allContactEmails.find(x => x.email.toLowerCase() === vendorDetail.director_email.toLowerCase())) {
+        allContactEmails.push({ email: vendorDetail.director_email, name: vendorDetail.director_name || 'Director', role: 'Director' })
+      }
       const selectedCount = Object.values(recipientSel).filter(Boolean).length + (oneOffEmail.trim() ? 1 : 0)
       return (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
