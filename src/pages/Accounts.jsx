@@ -32,6 +32,9 @@ export default function Accounts() {
   const [dragOver, setDragOver]         = useState(false)
   const [locRows, setLocRows]           = useState([])
   const fileInputRef = useRef(null)
+  const [showConfirm, setShowConfirm]   = useState(false)
+  const [diffSummary, setDiffSummary]   = useState(null)   // { newCount, updateCount, zeroOutCodes }
+  const [computingDiff, setComputingDiff] = useState(false)
 
   useEffect(() => { init() }, [])
 
@@ -94,14 +97,39 @@ export default function Accounts() {
     reader.readAsBinaryString(file)
   }
 
-  async function pushToSupabase() {
+  // Step 1: compute diff against existing inventory and show confirmation modal.
+  // If the diff query fails for any reason, fall back to old behavior (no auto-zero) so upload is never blocked.
+  async function startPush() {
+    setSuccess(null); setErrorMsg(''); setComputingDiff(true)
+    const newCodes = new Set(parsedRows.map(r => r.product_code))
+    let existing = []
+    try {
+      const { data, error } = await sb.from('inventory')
+        .select('product_code,quantity').eq('location', location)
+      if (!error && Array.isArray(data)) existing = data
+    } catch (_) { /* fall back: no auto-zero */ }
+    const existingCodes = new Set(existing.map(e => e.product_code))
+    const zeroOutCodes  = existing
+      .filter(e => !newCodes.has(e.product_code) && e.quantity > 0)
+      .map(e => e.product_code)
+    const newCount    = parsedRows.filter(r => !existingCodes.has(r.product_code)).length
+    const updateCount = parsedRows.length - newCount
+    setDiffSummary({ newCount, updateCount, zeroOutCodes })
+    setComputingDiff(false)
+    setShowConfirm(true)
+  }
+
+  // Step 2: actually push (after user confirms)
+  async function confirmAndPush() {
+    setShowConfirm(false)
     setSuccess(null); setErrorMsg(''); setPushing(true); setShowProgress(true)
     setProgress({ pct: 0, label: 'Uploading...' })
-    const now  = new Date().toISOString()
-    const rows = parsedRows.map(r => ({ product_code: r.product_code, quantity: r.quantity, location, updated_at: now }))
+    const now   = new Date().toISOString()
+    const rows  = parsedRows.map(r => ({ product_code: r.product_code, quantity: r.quantity, location, updated_at: now }))
     const total = rows.length
     const BATCH = 100
     let done = 0
+    // (a) Upsert items from XLS
     for (let i = 0; i < total; i += BATCH) {
       const batch = rows.slice(i, i + BATCH)
       const { error } = await sb.from('inventory').upsert(batch, { onConflict: 'product_code,location' })
@@ -109,9 +137,22 @@ export default function Accounts() {
       done += batch.length
       setProgress({ pct: Math.round((done/total)*100), label: done+' of '+total+' products uploaded...' })
     }
+    // (b) Zero out items that were in DB but missing from this XLS
+    const zeroOutCodes = diffSummary?.zeroOutCodes || []
+    if (zeroOutCodes.length) {
+      setProgress(p => ({ ...p, label: `Marking ${zeroOutCodes.length} items as Out of Stock...` }))
+      const ZBATCH = 200
+      for (let i = 0; i < zeroOutCodes.length; i += ZBATCH) {
+        const codes = zeroOutCodes.slice(i, i + ZBATCH)
+        const { error } = await sb.from('inventory').update({ quantity: 0, updated_at: now })
+          .eq('location', location).in('product_code', codes)
+        if (error) { setErrorMsg('Zero-out failed: ' + error.message); setPushing(false); return }
+      }
+    }
     setPushing(false)
-    setSuccess({ text: total+' products updated in live inventory', sub: 'Location: '+location+' · Sales team can search stock now' })
-    setProgress(p => ({ ...p, label: 'Done — '+total+' products uploaded successfully.' }))
+    const oosTxt = zeroOutCodes.length ? ` · ${zeroOutCodes.length} marked Out of Stock` : ''
+    setSuccess({ text: total + ' products updated in live inventory', sub: 'Location: ' + location + oosTxt + ' · Sales team can search stock now' })
+    setProgress(p => ({ ...p, label: 'Done — ' + total + ' products uploaded successfully.' }))
     setShowReset(true)
     loadStatus()
   }
@@ -291,8 +332,8 @@ export default function Accounts() {
         {/* Push Section */}
         {showPush && (
           <div>
-            <button className="acc-push-btn" onClick={pushToSupabase} disabled={pushing}>
-              {pushing ? <div className="acc-push-spinner" /> : (
+            <button className="acc-push-btn" onClick={startPush} disabled={pushing || computingDiff}>
+              {pushing || computingDiff ? <div className="acc-push-spinner" /> : (
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                   <polyline points="17 8 12 3 7 8"/>
@@ -339,6 +380,57 @@ export default function Accounts() {
         )}
       </div>
       </div>
+
+      {/* Confirm Upload Modal */}
+      {showConfirm && diffSummary && (() => {
+        const totalExisting = diffSummary.newCount + diffSummary.updateCount + diffSummary.zeroOutCodes.length
+        const dangerThreshold = totalExisting > 0 && diffSummary.zeroOutCodes.length > totalExisting * 0.5
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+            onClick={() => setShowConfirm(false)}>
+            <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:440, boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ padding:'18px 24px 14px', borderBottom:'1px solid #f1f5f9' }}>
+                <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Confirm Upload — {location}</div>
+                <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Review what will change before pushing to live inventory.</div>
+              </div>
+              <div style={{ padding:'18px 24px', display:'flex', flexDirection:'column', gap:10 }}>
+                <SummaryRow icon="📥" label="New items to add"            count={diffSummary.newCount}    color="#1d4ed8" />
+                <SummaryRow icon="🔄" label="Items to update"              count={diffSummary.updateCount} color="#0d9488" />
+                <SummaryRow icon="📦" label="Items to mark Out of Stock"   count={diffSummary.zeroOutCodes.length} color="#b45309"
+                  sub="not in this file (sold out / not tracked)" />
+              </div>
+              {dangerThreshold && (
+                <div style={{ margin:'0 24px 16px', padding:'10px 14px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, fontSize:12, color:'#b91c1c', lineHeight:1.5 }}>
+                  ⚠ This will mark <strong>more than half</strong> of the existing stock at this location as Out of Stock. Make sure the file is correct before continuing.
+                </div>
+              )}
+              <div style={{ padding:'0 24px 20px', display:'flex', gap:10, justifyContent:'flex-end' }}>
+                <button onClick={() => setShowConfirm(false)}
+                  style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
+                <button onClick={confirmAndPush}
+                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background: dangerThreshold ? '#dc2626' : '#1a4dab', color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)' }}>
+                  Confirm Upload
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
     </Layout>
+  )
+}
+
+function SummaryRow({ icon, label, count, color, sub }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8 }}>
+      <div style={{ fontSize:18 }}>{icon}</div>
+      <div style={{ flex:1 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#0f172a' }}>{label}</div>
+        {sub && <div style={{ fontSize:11, color:'#64748b', marginTop:1 }}>{sub}</div>}
+      </div>
+      <div style={{ fontSize:18, fontWeight:700, color }}>{count}</div>
+    </div>
   )
 }
