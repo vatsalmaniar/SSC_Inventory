@@ -110,6 +110,8 @@ export default function PurchaseOrderDetail() {
   const [uploadingFile,  setUploadingFile]    = useState(false)
   const [sendingEmail,   setSendingEmail]     = useState(false)
   const [lastEmailed,    setLastEmailed]      = useState(null)
+  const [excludePoPdf,        setExcludePoPdf]        = useState(false)
+  const [excludeSupportingIdx,setExcludeSupportingIdx]= useState(new Set())
 
   useEffect(() => { init() }, [id])
 
@@ -245,14 +247,24 @@ export default function PurchaseOrderDetail() {
   }
 
   // ── Send PO to Vendor ──
-  function openSendEmailModal() {
-    // Default recipient: primary contact (first vendor_contacts row with email) checked, others unchecked.
+  async function openSendEmailModal() {
+    // Always refetch vendor contacts before opening — guarantees latest data from Vendor 360
+    let contactsList = vendorContacts
+    if (po.vendor_id) {
+      const { data: vc } = await sb.from('vendor_contacts').select('*').eq('vendor_id', po.vendor_id).order('name')
+      contactsList = vc || []
+      setVendorContacts(contactsList)
+    }
+
+    // Default recipient: primary contact (first row with email) checked, others unchecked.
     const sel = {}
-    const primaryContact = vendorContacts.find(c => c.email)
+    const primaryContact = contactsList.find(c => c.email)
     if (primaryContact?.email) sel[primaryContact.email.toLowerCase()] = true
     setRecipientSel(sel)
     setOneOffEmail('')
     setExtraFiles([])
+    setExcludePoPdf(false)
+    setExcludeSupportingIdx(new Set())
 
     // Pre-fill subject + body
     setEmailSubject(`Purchase Order ${po.po_number} — SSC Control Pvt. Ltd.`)
@@ -306,14 +318,16 @@ SSC Control Pvt. Ltd.`
     // Build HTML body from message + PO summary card
     const htmlBody = buildPOEmailHTML()
 
-    // Gather attachments
+    // Gather attachments (respect user-removed items)
     const attachments = []
-    if (po.po_pdf_url) attachments.push({ url: po.po_pdf_url, filename: `${po.po_number.replace(/\//g,'-')}.html` })
+    if (po.po_pdf_url && !excludePoPdf) attachments.push({ url: po.po_pdf_url, filename: `${po.po_number.replace(/\//g,'-')}.html` })
     if (po.po_document_url) {
       let urls = []
       try { urls = JSON.parse(po.po_document_url) } catch { urls = [po.po_document_url] }
       if (!Array.isArray(urls)) urls = [urls]
-      urls.forEach((u, i) => attachments.push({ url: u, filename: `Supporting-Document-${i + 1}` }))
+      urls.forEach((u, i) => {
+        if (!excludeSupportingIdx.has(i)) attachments.push({ url: u, filename: `Supporting-Document-${i + 1}` })
+      })
     }
     extraFiles.forEach(f => attachments.push({ url: f.url, filename: f.filename }))
 
@@ -1795,14 +1809,32 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div style={{ padding:'16px 24px 0' }}>
               <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>Attachments</div>
               <div style={{ fontSize:12, color:'#475569', lineHeight:1.7 }}>
-                {po.po_pdf_url && <div>✓ Purchase Order ({po.po_number}.html)</div>}
+                {po.po_pdf_url && (
+                  <AttachmentRow label={`Purchase Order (${po.po_number}.html)`} excluded={excludePoPdf}
+                    onToggle={() => setExcludePoPdf(p => !p)} />
+                )}
                 {po.po_document_url && (() => {
                   let urls = []
                   try { urls = JSON.parse(po.po_document_url) } catch { urls = [po.po_document_url] }
                   if (!Array.isArray(urls)) urls = [urls]
-                  return urls.map((_, i) => <div key={i}>✓ Supporting Document {i + 1}</div>)
+                  return urls.map((_, i) => {
+                    const excluded = excludeSupportingIdx.has(i)
+                    return (
+                      <AttachmentRow key={i} label={`Supporting Document ${i + 1}`} excluded={excluded}
+                        onToggle={() => setExcludeSupportingIdx(p => {
+                          const next = new Set(p); excluded ? next.delete(i) : next.add(i); return next
+                        })} />
+                    )
+                  })
                 })()}
-                {extraFiles.map((f, i) => <div key={i}>✓ {f.filename} <button onClick={() => setExtraFiles(p => p.filter((_,j) => j !== i))} style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:11, marginLeft:6 }}>remove</button></div>)}
+                {extraFiles.map((f, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={{ color:'#15803d' }}>✓</span>
+                    <span style={{ flex:1 }}>{f.filename}</span>
+                    <button onClick={() => setExtraFiles(p => p.filter((_,j) => j !== i))}
+                      title="Remove" style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:14, padding:'2px 6px', borderRadius:4 }}>✕</button>
+                  </div>
+                ))}
                 {!po.po_pdf_url && !po.po_document_url && !extraFiles.length && <div style={{ fontStyle:'italic', color:'#94a3b8' }}>No attachments yet.</div>}
               </div>
               <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:10, padding:'7px 12px', border:'1px dashed #cbd5e1', borderRadius:8, background:'#f8fafc', fontSize:12, cursor:'pointer', color:'#475569', fontWeight:600 }}>
@@ -1832,5 +1864,19 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
     })()}
 
     </Layout>
+  )
+}
+
+function AttachmentRow({ label, excluded, onToggle }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:6, opacity: excluded ? 0.5 : 1 }}>
+      <span style={{ color: excluded ? '#94a3b8' : '#15803d' }}>{excluded ? '✕' : '✓'}</span>
+      <span style={{ flex:1, textDecoration: excluded ? 'line-through' : 'none' }}>{label}</span>
+      <button onClick={onToggle}
+        title={excluded ? 'Include' : 'Remove'}
+        style={{ background:'none', border:'none', color: excluded ? '#15803d' : '#dc2626', cursor:'pointer', fontSize:14, padding:'2px 6px', borderRadius:4 }}>
+        {excluded ? '↶' : '✕'}
+      </button>
+    </div>
   )
 }

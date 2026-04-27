@@ -7,12 +7,21 @@ const SB_KEY     = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const FROM       = 'SSC Procurement <no-reply@ssccontrol.com>'
 const FIXED_CC   = ['purchase@ssccontrol.com', 'purchase.brd@ssccontrol.com', 'ankit.dave@ssccontrol.com', 'hiral.patel@ssccontrol.com']
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+const JSON_HEADERS = { 'Content-Type': 'application/json', ...CORS_HEADERS }
+
 serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 200, headers: CORS_HEADERS })
+
   try {
     const body = await req.json()
     const { po_id, to_emails, sender_name, sender_email, subject, html_body, attachments } = body
     if (!po_id || !Array.isArray(to_emails) || !to_emails.length) {
-      return new Response(JSON.stringify({ ok: false, error: 'Missing required fields' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ ok: false, error: 'Missing required fields' }), { status: 200, headers: JSON_HEADERS })
     }
 
     const sb = createClient(SB_URL, SB_KEY)
@@ -54,7 +63,7 @@ serve(async (req) => {
     const data = await res.json().catch(() => ({}))
 
     if (!res.ok) {
-      return new Response(JSON.stringify({ ok: false, error: data?.message || 'Resend error', detail: data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ ok: false, error: data?.message || 'Resend error', detail: data }), { status: 200, headers: JSON_HEADERS })
     }
 
     // Log activity on PO
@@ -66,9 +75,9 @@ serve(async (req) => {
     }).catch(() => {})
 
     return new Response(JSON.stringify({ ok: true, resend_id: data?.id, to: to_emails, cc, attachments: attCount }), {
-      status: 200, headers: { 'Content-Type': 'application/json' },
+      status: 200, headers: JSON_HEADERS,
     })
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), { status: 200, headers: JSON_HEADERS })
   }
 })
