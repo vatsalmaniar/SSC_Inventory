@@ -39,13 +39,13 @@ export default function ProcurementOrders() {
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     if (!['ops','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
 
-    // ── Query A: Pending tab — active CO flow this FY (excludes 'pending' and 'dispatched_fc')
+    // ── Query A: Pending tab — every approved CO this FY. Coverage filter (below) hides fully covered/done.
     // ── Query B: Orphan tab — every post-approval PO (any date) whose linked CO is cancelled
     const [coDataRes, orphanPosRes] = await Promise.all([
       sb.from('orders')
         .select('id,order_number,customer_name,status,created_at,order_items(id,total_price)')
         .eq('is_test', false).eq('order_type', 'CO')
-        .not('status', 'in', '("pending","dispatched_fc")')
+        .neq('status', 'pending')
         .gte('created_at', FY_START)
         .order('created_at', { ascending: false }),
       sb.from('purchase_orders')
