@@ -664,8 +664,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
 <!-- Signatures -->
 <div class="sig-row">
-  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Prepared By</div>Procurement</div>
-  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Approved By</div>Management</div>
+  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">${esc(po.submitted_by_name || 'Procurement')}</div>Prepared By</div>
+  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">${esc(po.approved_by || 'Management')}</div>Approved By</div>
   <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Authorised Signatory</div>For SSC Control Pvt. Ltd.</div>
 </div>
 
@@ -810,12 +810,13 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
     setCommentText(v)
     const cursor = e.target.selectionStart
     const before = v.slice(0, cursor)
-    const atMatch = before.match(/@(\w*)$/)
+    const atMatch = before.match(/@([\w.]*)$/)
     if (atMatch) {
       const q = atMatch[1].toLowerCase()
+      const rect = e.target.getBoundingClientRect()
       setMentionQuery(q)
       setMentionSuggestions(allUsers.filter(u => u.name.toLowerCase().includes(q) || (u.username && u.username.toLowerCase().includes(q))).slice(0, 5))
-      setMentionPos({ top: 'auto', left: 0, width: 220 })
+      setMentionPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
     } else {
       setMentionQuery(null); setMentionSuggestions([])
     }
