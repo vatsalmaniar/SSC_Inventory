@@ -102,13 +102,14 @@ export default function Accounts() {
   async function startPush() {
     setSuccess(null); setErrorMsg(''); setComputingDiff(true)
     const newCodes = new Set(parsedRows.map(r => r.product_code))
-    // Supabase defaults to 1000 rows/request — paginate to read entire location inventory (~5K rows)
+    // Supabase defaults to 1000 rows/request — paginate (with stable ORDER BY) to read entire location inventory (~5K rows)
     let existing = []
     try {
       const PAGE = 1000
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await sb.from('inventory')
           .select('product_code,quantity').eq('location', location)
+          .order('product_code', { ascending: true })
           .range(from, from + PAGE - 1)
         if (error) { existing = []; break }
         if (!Array.isArray(data) || data.length === 0) break
