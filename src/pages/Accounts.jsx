@@ -102,12 +102,20 @@ export default function Accounts() {
   async function startPush() {
     setSuccess(null); setErrorMsg(''); setComputingDiff(true)
     const newCodes = new Set(parsedRows.map(r => r.product_code))
+    // Supabase defaults to 1000 rows/request — paginate to read entire location inventory (~5K rows)
     let existing = []
     try {
-      const { data, error } = await sb.from('inventory')
-        .select('product_code,quantity').eq('location', location)
-      if (!error && Array.isArray(data)) existing = data
-    } catch (_) { /* fall back: no auto-zero */ }
+      const PAGE = 1000
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await sb.from('inventory')
+          .select('product_code,quantity').eq('location', location)
+          .range(from, from + PAGE - 1)
+        if (error) { existing = []; break }
+        if (!Array.isArray(data) || data.length === 0) break
+        existing.push(...data)
+        if (data.length < PAGE) break
+      }
+    } catch (_) { /* fall back: no auto-zero */ existing = [] }
     const existingCodes = new Set(existing.map(e => e.product_code))
     const zeroOutCodes  = existing
       .filter(e => !newCodes.has(e.product_code) && e.quantity > 0)
