@@ -97,33 +97,26 @@ export default function Accounts() {
     reader.readAsBinaryString(file)
   }
 
-  // Step 1: compute diff against existing inventory and show confirmation modal.
-  // If the diff query fails for any reason, fall back to old behavior (no auto-zero) so upload is never blocked.
+  // Step 1: compute summary stats and show confirmation modal.
+  // Uses count-only queries — no pagination, no row caps to worry about.
   async function startPush() {
     setSuccess(null); setErrorMsg(''); setComputingDiff(true)
-    const newCodes = new Set(parsedRows.map(r => r.product_code))
-    // Supabase defaults to 1000 rows/request — paginate (with stable ORDER BY) to read entire location inventory (~5K rows)
-    let existing = []
+    let totalAtLocation = 0, totalWithStock = 0
     try {
-      const PAGE = 1000
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await sb.from('inventory')
-          .select('product_code,quantity').eq('location', location)
-          .order('product_code', { ascending: true })
-          .range(from, from + PAGE - 1)
-        if (error) { existing = []; break }
-        if (!Array.isArray(data) || data.length === 0) break
-        existing.push(...data)
-        if (data.length < PAGE) break
-      }
-    } catch (_) { /* fall back: no auto-zero */ existing = [] }
-    const existingCodes = new Set(existing.map(e => e.product_code))
-    const zeroOutCodes  = existing
-      .filter(e => !newCodes.has(e.product_code) && e.quantity > 0)
-      .map(e => e.product_code)
-    const newCount    = parsedRows.filter(r => !existingCodes.has(r.product_code)).length
-    const updateCount = parsedRows.length - newCount
-    setDiffSummary({ newCount, updateCount, zeroOutCodes })
+      const r1 = await sb.from('inventory').select('id', { count: 'exact', head: true }).eq('location', location)
+      totalAtLocation = r1.count || 0
+      const r2 = await sb.from('inventory').select('id', { count: 'exact', head: true }).eq('location', location).gt('quantity', 0)
+      totalWithStock = r2.count || 0
+    } catch (_) { /* fall back to safe defaults — upload still works */ }
+    // Best-effort estimate: items in this XLS with qty > 0 won't be zeroed; remaining stocked items will.
+    const newRowsWithStock = parsedRows.filter(r => r.quantity > 0).length
+    const oosEstimate = Math.max(0, totalWithStock - newRowsWithStock)
+    setDiffSummary({
+      totalAtLocation,
+      totalWithStock,
+      uploadCount: parsedRows.length,
+      oosEstimate,
+    })
     setComputingDiff(false)
     setShowConfirm(true)
   }
@@ -146,20 +139,20 @@ export default function Accounts() {
       done += batch.length
       setProgress({ pct: Math.round((done/total)*100), label: done+' of '+total+' products uploaded...' })
     }
-    // (b) Zero out items that were in DB but missing from this XLS
-    const zeroOutCodes = diffSummary?.zeroOutCodes || []
-    if (zeroOutCodes.length) {
-      setProgress(p => ({ ...p, label: `Marking ${zeroOutCodes.length} items as Out of Stock...` }))
-      const ZBATCH = 200
-      for (let i = 0; i < zeroOutCodes.length; i += ZBATCH) {
-        const codes = zeroOutCodes.slice(i, i + ZBATCH)
-        const { error } = await sb.from('inventory').update({ quantity: 0, updated_at: now })
-          .eq('location', location).in('product_code', codes)
-        if (error) { setErrorMsg('Zero-out failed: ' + error.message); setPushing(false); return }
-      }
-    }
+    // (b) Zero out items at this location that weren't touched by this upload (their updated_at < now)
+    // Single server-side UPDATE — no pagination, no URL length issues, no client-side row caps.
+    setProgress(p => ({ ...p, label: 'Marking missing items as Out of Stock...' }))
+    let oosCount = 0
+    const { count: zeroedCount, error: zErr } = await sb.from('inventory')
+      .update({ quantity: 0, updated_at: now }, { count: 'exact' })
+      .eq('location', location)
+      .lt('updated_at', now)
+      .gt('quantity', 0)
+    if (zErr) { setErrorMsg('Out-of-stock update failed: ' + zErr.message); setPushing(false); return }
+    oosCount = zeroedCount || 0
+
     setPushing(false)
-    const oosTxt = zeroOutCodes.length ? ` · ${zeroOutCodes.length} marked Out of Stock` : ''
+    const oosTxt = oosCount ? ` · ${oosCount} marked Out of Stock` : ''
     setSuccess({ text: total + ' products updated in live inventory', sub: 'Location: ' + location + oosTxt + ' · Sales team can search stock now' })
     setProgress(p => ({ ...p, label: 'Done — ' + total + ' products uploaded successfully.' }))
     setShowReset(true)
@@ -392,8 +385,7 @@ export default function Accounts() {
 
       {/* Confirm Upload Modal */}
       {showConfirm && diffSummary && (() => {
-        const totalExisting = diffSummary.newCount + diffSummary.updateCount + diffSummary.zeroOutCodes.length
-        const dangerThreshold = totalExisting > 0 && diffSummary.zeroOutCodes.length > totalExisting * 0.5
+        const dangerThreshold = diffSummary.totalWithStock > 0 && diffSummary.oosEstimate > diffSummary.totalWithStock * 0.5
         return (
           <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
             onClick={() => setShowConfirm(false)}>
@@ -401,13 +393,14 @@ export default function Accounts() {
               onClick={e => e.stopPropagation()}>
               <div style={{ padding:'18px 24px 14px', borderBottom:'1px solid #f1f5f9' }}>
                 <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Confirm Upload — {location}</div>
-                <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Review what will change before pushing to live inventory.</div>
+                <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Review before pushing to live inventory.</div>
               </div>
               <div style={{ padding:'18px 24px', display:'flex', flexDirection:'column', gap:10 }}>
-                <SummaryRow icon="📥" label="New items to add"            count={diffSummary.newCount}    color="#1d4ed8" />
-                <SummaryRow icon="🔄" label="Items to update"              count={diffSummary.updateCount} color="#0d9488" />
-                <SummaryRow icon="📦" label="Items to mark Out of Stock"   count={diffSummary.zeroOutCodes.length} color="#b45309"
-                  sub="not in this file (sold out / not tracked)" />
+                <SummaryRow icon="📤" label="Items in this file"           count={diffSummary.uploadCount} color="#1d4ed8" />
+                <SummaryRow icon="📊" label="Items currently with stock"   count={diffSummary.totalWithStock} color="#0d9488"
+                  sub={`of ${diffSummary.totalAtLocation} total at this location`} />
+                <SummaryRow icon="📦" label="Approx. items to mark Out of Stock" count={diffSummary.oosEstimate} color="#b45309"
+                  sub="anything in DB with stock but missing from this file" />
               </div>
               {dangerThreshold && (
                 <div style={{ margin:'0 24px 16px', padding:'10px 14px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, fontSize:12, color:'#b91c1c', lineHeight:1.5 }}>
