@@ -336,18 +336,18 @@ SSC Control Pvt. Ltd.`
         await new Promise(r => setTimeout(r, 350)) // let fonts/CSS settle
         const blob = await html2pdf().set({
           margin:    [8, 10, 10, 10],
-          filename:  `${po.po_number.replace(/\//g,'-')}.pdf`,
+          filename:  `${po.po_number.split('/')[1] || po.po_number}.pdf`,
           image:     { type: 'jpeg', quality: 0.96 },
           html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860 },
           jsPDF:     { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+          pagebreak: { mode: ['css', 'legacy'] }, // default — splits long POs cleanly across pages
         }).from(wrapper).outputPdf('blob')
         document.body.removeChild(wrapper)
         const buf = await blob.arrayBuffer()
         let bin = ''; const bytes = new Uint8Array(buf)
         for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
         const b64 = btoa(bin)
-        attachments.push({ filename: `${po.po_number.replace(/\//g,'-')}.pdf`, content: b64 })
+        attachments.push({ filename: `${po.po_number.split('/')[1] || po.po_number}.pdf`, content: b64 })
       }
     } catch (err) {
       console.error('PDF generation failed:', err)
@@ -843,6 +843,26 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
     setPostingComment(true)
     const taggedUsers = [...commentText.matchAll(/@([\w\s]+?)(?=\s@|\s[^@]|$)/g)].map(m => m[1].trim())
     await sb.from('po_comments').insert({ po_id: id, author_name: userName, message: commentText.trim(), tagged_users: taggedUsers.length ? taggedUsers : null, is_activity: false })
+
+    // Notify tagged users (in-app + email via po_mention type)
+    if (taggedUsers.length) {
+      const targets = allUsers.filter(u => taggedUsers.includes(u.name) && u.id !== po?.created_by_id).slice()
+      // Don't notify the author themselves
+      const final = targets.filter(t => t.name !== userName)
+      if (final.length) {
+        const msg = `${userName} tagged you in PO ${po.po_number}: ${commentText.trim().slice(0, 120)}${commentText.trim().length > 120 ? '…' : ''}`
+        try {
+          await sb.from('notifications').insert(final.map(t => ({
+            user_name: t.name, user_id: t.id, message: msg,
+            order_id: id,                         // repurposed — stores PO UUID for click-through
+            order_number: po.po_number,
+            from_name: userName,
+            email_type: 'po_mention',
+          })))
+        } catch (_) {}
+      }
+    }
+
     setCommentText('')
     setPostingComment(false)
     await loadPO()
@@ -1850,7 +1870,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>Attachments</div>
               <div style={{ fontSize:12, color:'#475569', lineHeight:1.7 }}>
                 {po.po_pdf_url && (
-                  <AttachmentRow label={`Purchase Order (${po.po_number.replace(/\//g,'-')}.pdf)`} excluded={excludePoPdf}
+                  <AttachmentRow label={`Purchase Order (${po.po_number.split('/')[1] || po.po_number}.pdf)`} excluded={excludePoPdf}
                     onToggle={() => setExcludePoPdf(p => !p)} />
                 )}
                 {po.po_document_url && (() => {

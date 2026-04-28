@@ -224,7 +224,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
       return
     }
     // PO-linked: CO was cancelled — navigate to the PO detail page (order_id stores PO UUID here)
-    if (n.email_type === 'po_linked_co_cancelled') {
+    if (n.email_type === 'po_linked_co_cancelled' || n.email_type === 'po_mention') {
       if (n.order_id) navigate('/procurement/po/' + n.order_id)
       return
     }
