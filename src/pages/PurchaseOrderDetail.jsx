@@ -824,34 +824,35 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
   function insertMention(name) {
     const cursor = commentInputRef.current?.selectionStart || commentText.length
-    const before = commentText.slice(0, cursor)
-    const after  = commentText.slice(cursor)
-    const newBefore = before.replace(/@(\w*)$/, `@${name} `)
-    setCommentText(newBefore + after)
+    const slug = name.replace(/\s+/g, '_')
+    const before = commentText.slice(0, cursor).replace(/@[\w.]*$/, '@' + slug + ' ')
+    setCommentText(before + commentText.slice(cursor))
     setMentionQuery(null); setMentionSuggestions([])
-    setTimeout(() => { if (commentInputRef.current) { commentInputRef.current.focus(); commentInputRef.current.selectionStart = commentInputRef.current.selectionEnd = newBefore.length } }, 0)
+    setTimeout(() => commentInputRef.current?.focus(), 0)
   }
 
   function renderMessage(msg) {
     if (!msg) return msg
-    return msg.split(/(@[\w\s]+?)(?=\s@|\s[^@]|$)/g).map((part, i) =>
-      part.startsWith('@') ? <span key={i} style={{ color:'#1d4ed8', fontWeight:600 }}>{part}</span> : part
+    return msg.split(/(@[\w.]+)/g).map((part, i) =>
+      part.startsWith('@')
+        ? <span key={i} style={{ color:'#1d4ed8', fontWeight:600 }}>{part.replace(/_/g, ' ')}</span>
+        : part
     )
   }
 
   async function submitComment() {
     if (!commentText.trim()) return
     setPostingComment(true)
-    const taggedUsers = [...commentText.matchAll(/@([\w\s]+?)(?=\s@|\s[^@]|$)/g)].map(m => m[1].trim())
-    await sb.from('po_comments').insert({ po_id: id, author_name: userName, message: commentText.trim(), tagged_users: taggedUsers.length ? taggedUsers : null, is_activity: false })
+    const text = commentText.trim()
+    // Stored as @First_Last (underscores) — convert back to spaces
+    const tagged = [...text.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
+    await sb.from('po_comments').insert({ po_id: id, author_name: userName, message: text, tagged_users: tagged.length ? tagged : null, is_activity: false })
 
     // Notify tagged users (in-app + email via po_mention type)
-    if (taggedUsers.length) {
-      const targets = allUsers.filter(u => taggedUsers.includes(u.name) && u.id !== po?.created_by_id).slice()
-      // Don't notify the author themselves
-      const final = targets.filter(t => t.name !== userName)
+    if (tagged.length) {
+      const final = allUsers.filter(u => tagged.includes(u.name) && u.name !== userName)
       if (final.length) {
-        const msg = `${userName} tagged you in PO ${po.po_number}: ${commentText.trim().slice(0, 120)}${commentText.trim().length > 120 ? '…' : ''}`
+        const msg = `${userName} tagged you in PO ${po.po_number}: ${text.slice(0, 120)}${text.length > 120 ? '…' : ''}`
         try {
           await sb.from('notifications').insert(final.map(t => ({
             user_name: t.name, user_id: t.id, message: msg,

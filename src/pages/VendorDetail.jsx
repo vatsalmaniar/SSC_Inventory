@@ -499,23 +499,6 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
 
                 {/* Right */}
                 <div>
-                  {/* Account Owner */}
-                  <div className="c360-side-card">
-                    <div className="c360-side-title">Account Owner</div>
-                    {vendor.account_owner
-                      ? <div className="c360-owner-chip">
-                          <div className="c360-owner-avatar" style={{ background: ownerColor(vendor.account_owner) }}>
-                            {vendor.account_owner.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}
-                          </div>
-                          <div>
-                            <div className="c360-owner-name">{vendor.account_owner}</div>
-                            <div className="c360-owner-sub">Account Rep</div>
-                          </div>
-                        </div>
-                      : <div style={{ fontSize:13, color:'var(--gray-400)' }}>Unassigned</div>
-                    }
-                  </div>
-
                   {/* Primary Contact */}
                   {(vendor.poc_name || contacts.length > 0) && (
                     <div className="c360-side-card">
@@ -777,13 +760,6 @@ function VendorEditForm({ editData, setEditData }) {
       <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.7px', marginBottom:8 }}>Vendor Info</div>
       <div className="od-edit-row">{inp('Vendor Name','vendor_name')}{sel('Account Status','account_status',['Active','Dormant'])}</div>
       <div className="od-edit-row">
-        <div className="od-edit-field">
-          <label>Account Owner</label>
-          <select value={editData.account_owner||''} onChange={e => set('account_owner', e.target.value)} style={{ padding:'7px 10px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:13, fontFamily:'var(--font)', background:'white' }}>
-            <option value="">— Unassigned —</option>
-            {['Aarth Joshi','Akash Devda','Ankit Dave','Bhavesh Patel','Darsh Chauhan','Dimple Bhatiya','Harshadba Zala','Hiral Patel','Jay Patel','Jaypal Jadeja','Jital Maniar','Kaustubh Soni','Khushbu Panchal','Mayank Maniar','Mehul Maniar','Jyotsna Pal','Vatsal Maniar'].map(r => <option key={r}>{r}</option>)}
-          </select>
-        </div>
         {sel('Vendor Type','vendor_type',['Manufacturer','Distributor','Agent'])}
       </div>
       <div className="od-edit-row">

@@ -121,7 +121,7 @@ export default function VendorMaster() {
   return (
     <Layout pageTitle="Vendor 360" pageKey="vendor360">
       <div className="od-page">
-        <div className="od-body">
+        <div className="od-list-body">
 
           {/* Header */}
           <div className="od-header">

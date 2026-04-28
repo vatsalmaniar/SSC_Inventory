@@ -9,7 +9,17 @@ import '../styles/orders.css'
 
 const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
-function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7,whiteSpace:'nowrap'}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
+function OwnerChip({name, avatarOnly, firstNameOnly}) {
+  if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>
+  const ini = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
+  const display = firstNameOnly ? name.split(' ')[0] : name
+  return (
+    <div title={name} style={{display:'flex',alignItems:'center',gap:7,whiteSpace:'nowrap'}}>
+      <div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div>
+      {!avatarOnly && <span style={{fontSize:12,fontWeight:500}}>{display}</span>}
+    </div>
+  )
+}
 
 
 function statusLabel(s) {
@@ -227,7 +237,8 @@ export default function OrdersList() {
   const safePage   = Math.min(page, totalPages)
   const paginated  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  const sumTotal = filtered.filter(o => o.status !== 'cancelled').reduce((s, o) => s + displayValue(o, filter), 0)
+  const sumTotal = filtered.filter(o => o.status !== 'cancelled').reduce((s, o) => s + totalValue(o), 0)
+  const sumPending = filtered.filter(o => o.status !== 'cancelled').reduce((s, o) => s + pendingValue(o), 0)
 
   const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'Orders'
   const timelineLabel = timeline === 'custom'
@@ -257,70 +268,161 @@ export default function OrdersList() {
     XLSX.writeFile(wb, fileName + '_Summary.xlsx')
   }
 
-  function downloadDetailed() {
-    const rows = []
+  async function downloadDetailed() {
+    const ExcelJS = (await import('exceljs')).default
+
+    // Lookup customer IDs from customers table (one-time bulk fetch by name)
+    const uniqueNames = [...new Set(filtered.map(o => o.customer_name).filter(Boolean))]
+    const custIdMap = {}
+    if (uniqueNames.length) {
+      const { data } = await sb.from('customers').select('customer_id,customer_name').in('customer_name', uniqueNames)
+      ;(data || []).forEach(c => { custIdMap[c.customer_name] = c.customer_id || '' })
+    }
+
+    const wb = new ExcelJS.Workbook()
+    wb.creator = 'SSC ERP'
+    wb.created = new Date()
+    const ws = wb.addWorksheet('Orders Detailed', { views: [{ state: 'frozen', ySplit: 1 }] })
+
+    // Columns the user asked for, in order. Order info repeats per row → filters work.
+    const cols = [
+      { header: 'Sr No',          key: 'sr_no',           width: 6  },
+      { header: 'Order Date',     key: 'order_date',      width: 12 },
+      { header: 'Order No',       key: 'order_number',    width: 22 },
+      { header: 'Cust ID',        key: 'cust_id',         width: 10 },
+      { header: 'Customer Name',  key: 'customer_name',   width: 32 },
+      { header: 'Owner',          key: 'owner',           width: 18 },
+      { header: 'Item',           key: 'item_code',       width: 26 },
+      { header: 'Total Qty',      key: 'total_qty',       width: 10 },
+      { header: 'Pending Qty',    key: 'pending_qty',     width: 11 },
+      { header: 'Total Value',    key: 'total_value',     width: 14, style: { numFmt: '₹#,##,##0.00' } },
+      { header: 'Pending Value',  key: 'pending_value',   width: 14, style: { numFmt: '₹#,##,##0.00' } },
+      { header: 'Delivery Date',  key: 'delivery_date',   width: 13 },
+      { header: 'Delivered Date', key: 'delivered_date',  width: 13 },
+      { header: 'Status',         key: 'status',          width: 18 },
+    ]
+    ws.columns = cols
+
+    // Status colors matched with app pill CSS — { bg, fg } argb
+    const statusStyle = (s) => {
+      switch (s) {
+        case 'pending':           return { bg: 'FFFEF9C3', fg: 'FF854D0E' }
+        case 'pending_approval':  return { bg: 'FFFEF9C3', fg: 'FF854D0E' }
+        case 'partial_dispatch':  return { bg: 'FFFFF7ED', fg: 'FFC2410C' }
+        case 'inv_check':
+        case 'inventory_check':
+        case 'dispatch':          return { bg: 'FFDBEAFE', fg: 'FF1E40AF' }
+        case 'delivery_created':  return { bg: 'FFDCFCE7', fg: 'FF166534' }
+        case 'picking':
+        case 'packing':           return { bg: 'FFE0E7FF', fg: 'FF3730A3' }
+        case 'goods_issued':
+        case 'credit_check':
+        case 'goods_issue_posted':
+        case 'invoice_generated':
+        case 'pending_billing':   return { bg: 'FFFEF3C7', fg: 'FF92400E' }
+        case 'delivery_ready':    return { bg: 'FFD1FAE5', fg: 'FF065F46' }
+        case 'eway_pending':
+        case 'eway_generated':    return { bg: 'FFD1FAE5', fg: 'FF065F46' }
+        case 'dispatched_fc':     return { bg: 'FFBBF7D0', fg: 'FF14532D' }
+        case 'cancelled':         return { bg: 'FFFEE2E2', fg: 'FFB91C1C' }
+        case 'partially_received':return { bg: 'FFFFFBEB', fg: 'FFB45309' }
+        default:                  return { bg: 'FFF1F5F9', fg: 'FF334155' }
+      }
+    }
+
     filtered.forEach(o => {
       const items      = o.order_items || []
       const dispatches = o.order_dispatches || []
-      const dcNums     = dispatches.map(d => d.dc_number).filter(Boolean).join(', ')
-      const invNums    = dispatches.map(d => d.invoice_number).filter(Boolean).join(', ')
-      const ewayNums   = dispatches.map(d => d.eway_bill_number).filter(Boolean).join(', ')
       const deliveredAt= dispatches.find(d => d.delivered_at)?.delivered_at
-      const orderStatus= statusLabel(pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status)
+      const psKey      = pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status
+      const statusTxt  = statusLabel(psKey)
+      const sStyle     = statusStyle(psKey)
 
       const baseRow = {
-        'Order #':          o.order_number,
-        'Order Type':       o.order_type || '',
-        'Customer':         o.customer_name,
-        'GST Number':       o.customer_gst || '',
-        'Order Date':       fmt(o.order_date),
-        'Account Owner':    o.engineer_name || '',
-        'PO Number':        o.po_number || '',
-        'Credit Terms':     o.credit_terms || '',
-        'Received Via':     o.received_via || '',
-        'Dispatch Address': o.dispatch_address || '',
-        'Notes':            o.notes || '',
-        'Status':           orderStatus,
-        'DC Number(s)':     dcNums,
-        'Invoice No(s)':    invNums,
-        'E-Way Bill(s)':    ewayNums,
-        'Delivered On':     deliveredAt ? fmt(deliveredAt) : '',
+        order_date:    o.order_date ? fmt(o.order_date) : '',
+        order_number:  o.order_number,
+        cust_id:       custIdMap[o.customer_name] || '',
+        customer_name: o.customer_name,
+        owner:         o.engineer_name || o.account_owner || '',
+        delivered_date: deliveredAt ? fmt(deliveredAt) : '',
+        status:        statusTxt,
+      }
+
+      const pushRow = (data) => {
+        const row = ws.addRow(data)
+        // Status pill colour (matches app)
+        const sCell = row.getCell('status')
+        sCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sStyle.bg } }
+        sCell.font = { bold: true, color: { argb: sStyle.fg } }
+        sCell.alignment = { horizontal: 'center', vertical: 'middle' }
+        // Pending qty + value highlight
+        if ((data.pending_qty || 0) > 0) {
+          const pq = row.getCell('pending_qty')
+          pq.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
+          pq.font = { bold: true, color: { argb: 'FF92400E' } }
+          const pv = row.getCell('pending_value')
+          pv.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
+          pv.font = { bold: true, color: { argb: 'FF92400E' } }
+        }
       }
 
       if (items.length === 0) {
-        rows.push({
-          ...baseRow,
-          'Sr No': '', 'Item Code': '', 'Total Qty': '', 'Dispatched Qty': '',
-          'Pending Qty': '', 'LP Price': '', 'Disc %': '', 'Unit Price': '',
-          'Total Price': '', 'Dispatch Date': '', 'Cust. Ref No': '',
-          'Freight (₹)': o.freight || 0, 'Order Total (₹)': totalValue(o),
-        })
+        pushRow({ ...baseRow, sr_no: '', item_code: '', total_qty: '', pending_qty: '', total_value: '', pending_value: '', delivery_date: '' })
       } else {
-        items.forEach((item, idx) => {
-          const pending = Math.max(0, item.qty - (item.dispatched_qty || 0))
-          rows.push({
-            ...(idx === 0 ? baseRow : Object.fromEntries(Object.keys(baseRow).map(k => [k, '']))),
-            'Sr No':          item.sr_no,
-            'Item Code':      item.item_code,
-            'Total Qty':      item.qty,
-            'Dispatched Qty': item.dispatched_qty || 0,
-            'Pending Qty':    pending,
-            'LP Price':       item.lp_unit_price || 0,
-            'Disc %':         item.discount_pct || 0,
-            'Unit Price':     item.unit_price_after_disc || 0,
-            'Total Price':    item.total_price || 0,
-            'Dispatch Date':  item.dispatch_date ? fmt(item.dispatch_date) : '',
-            'Cust. Ref No':   item.customer_ref_no || '',
-            'Freight (₹)':    idx === items.length - 1 ? (o.freight || 0) : '',
-            'Order Total (₹)':idx === items.length - 1 ? totalValue(o) : '',
+        items.forEach(item => {
+          const pendingQty   = Math.max(0, item.qty - (item.dispatched_qty || 0))
+          const pendingValue = pendingQty * (item.unit_price_after_disc || 0)
+          pushRow({
+            ...baseRow,
+            sr_no:         item.sr_no,
+            item_code:     item.item_code,
+            total_qty:     item.qty,
+            pending_qty:   pendingQty,
+            total_value:   item.total_price || 0,
+            pending_value: pendingValue,
+            delivery_date: item.dispatch_date ? fmt(item.dispatch_date) : '',
           })
         })
       }
     })
-    const ws = XLSX.utils.json_to_sheet(rows)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Orders Detailed')
-    XLSX.writeFile(wb, fileName + '_Detailed.xlsx')
+
+    // Header styling — SSC blue background, white bold text
+    const header = ws.getRow(1)
+    header.height = 24
+    header.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A4DAB' } }
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+      cell.alignment = { vertical: 'middle', horizontal: 'left' }
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FF0E2D6A' } } }
+    })
+
+    // Subtle borders + alternating row tint for body
+    const lastRow = ws.rowCount
+    for (let r = 2; r <= lastRow; r++) {
+      const row = ws.getRow(r)
+      row.eachCell({ includeEmpty: true }, cell => {
+        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } }
+      })
+      if (r % 2 === 0) {
+        row.eachCell({ includeEmpty: true }, cell => {
+          if (!cell.fill || cell.fill.type !== 'pattern' || cell.fill.fgColor?.argb === 'FFFFFFFF') {
+            // skip cells that already got a status/pending tint
+            const isTinted = cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor?.argb !== 'FFFFFFFF'
+            if (!isTinted) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
+          }
+        })
+      }
+    }
+
+    // Auto-filter on the header row across all columns
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } }
+
+    // Save
+    const buf  = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a'); a.href = url; a.download = fileName + '_Detailed.xlsx'
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
   }
 
   return (
@@ -508,17 +610,19 @@ export default function OrdersList() {
                       <th>{['dispatched','partial'].includes(filter) ? 'Delivered On' : 'Delivery Date'}</th>
                       <th>Account Owner</th>
                       <th>Items</th>
-                      <th style={{ textAlign: 'right' }}>Value (₹)</th>
+                      <th style={{ textAlign: 'right' }}>Order Value (₹)</th>
+                      <th style={{ textAlign: 'right' }}>Pending Value (₹)</th>
                       <th style={{ textAlign: 'right' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginated.map(o => {
-                      const partial    = isPartiallyDispatched(o)
-                      const pendingQty = (o.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.dispatched_qty || 0)), 0)
-                      const val        = displayValue(o, filter)
-                      const ps         = pillStatus(o)
-                      const dates      = (o.order_items || []).map(i => i.dispatch_date).filter(Boolean).sort()
+                      const partial      = isPartiallyDispatched(o)
+                      const pendingQty   = (o.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.dispatched_qty || 0)), 0)
+                      const orderTotal   = totalValue(o)
+                      const pendingVal   = pendingValue(o)
+                      const ps           = pillStatus(o)
+                      const dates        = (o.order_items || []).map(i => i.dispatch_date).filter(Boolean).sort()
                       const deliveryDate = dates.length > 0 ? dates[0] : null
                       const multiDate    = dates.length > 1 && dates[dates.length - 1] !== dates[0]
                       const deliveredBatches = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc' && b.delivered_at)
@@ -539,9 +643,12 @@ export default function OrdersList() {
                               : deliveryDate ? fmt(deliveryDate) : '—'}
                             {!latestDeliveredAt && multiDate && <span style={{ display:'block', fontSize:10, color:'var(--gray-400)' }}>to {fmt(dates[dates.length - 1])}</span>}
                           </td>
-                          <td><OwnerChip name={o.account_owner || o.engineer_name} /></td>
+                          <td><OwnerChip name={o.account_owner || o.engineer_name} firstNameOnly /></td>
                           <td>{(o.order_items || []).length}</td>
-                          <td className="amount-cell">{val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                          <td className="amount-cell">{orderTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                          <td className="amount-cell" style={{ color: pendingVal > 0 ? '#b45309' : 'var(--gray-400)', fontWeight: pendingVal > 0 ? 600 : 400 }}>
+                            {pendingVal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                          </td>
                           <td className="status-cell">
                             <span className={'pill pill-' + ps}>{statusLabel(ps === 'partial' ? 'partial_dispatch' : o.status)}</span>
                           </td>
@@ -556,7 +663,8 @@ export default function OrdersList() {
                 {paginated.map((o, i) => {
                   const partial    = isPartiallyDispatched(o)
                   const pendingQty = (o.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.dispatched_qty || 0)), 0)
-                  const val        = displayValue(o, filter)
+                  const orderTotal = totalValue(o)
+                  const pendingVal = pendingValue(o)
                   const ps         = pillStatus(o)
                   const mdates     = (o.order_items || []).map(i => i.dispatch_date).filter(Boolean).sort()
                   const mDelivery     = mdates.length > 0 ? fmt(mdates[0]) : null
@@ -578,7 +686,10 @@ export default function OrdersList() {
                         <span className="order-items-count">
                           {(o.order_items || []).length} item{(o.order_items || []).length !== 1 ? 's' : ''}
                         </span>
-                        <span className="order-total">₹{val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                        <span className="order-total">
+                          ₹{orderTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                          {pendingVal > 0 && <span style={{ marginLeft:6, fontSize:11, color:'#b45309', fontWeight:600 }}>· Pending ₹{pendingVal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                        </span>
                       </div>
                     </div>
                   )
