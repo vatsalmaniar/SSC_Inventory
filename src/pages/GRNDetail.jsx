@@ -55,6 +55,7 @@ export default function GRNDetail() {
   const navigate = useNavigate()
   const [grn, setGrn]           = useState(null)
   const [grnItems, setGrnItems] = useState([])
+  const [linkedPos, setLinkedPos] = useState([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
   const [userRole, setUserRole] = useState('')
@@ -95,6 +96,19 @@ export default function GRNDetail() {
     if (grnRes.error || !grnRes.data) { setGrn(null); setLoading(false); return }
     setGrn(grnRes.data)
     setGrnItems(itemsRes.data || [])
+
+    // Collect unique po_ids from grn_items (+ grn-level po_id if set)
+    const poIdSet = new Set()
+    if (grnRes.data?.po_id) poIdSet.add(grnRes.data.po_id)
+    for (const it of (itemsRes.data || [])) { if (it.po_id) poIdSet.add(it.po_id) }
+    if (poIdSet.size) {
+      const { data: pos } = await sb.from('purchase_orders')
+        .select('id,po_number,status,total_amount,vendor_name,po_date,order_number')
+        .in('id', [...poIdSet])
+      setLinkedPos(pos || [])
+    } else {
+      setLinkedPos([])
+    }
     setLoading(false)
   }
 
@@ -399,11 +413,25 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                         </div>
                       </div>
                     )}
-                    {grn.po_id && (
-                      <div className="od-detail-field">
-                        <label>Linked PO</label>
-                        <div className="val">
-                          <span onClick={() => navigate('/procurement/po/' + grn.po_id)} style={{ color:'#2563eb', cursor:'pointer', fontFamily:'var(--mono)' }}>View PO →</span>
+                    {linkedPos.length > 0 && (
+                      <div className="od-detail-field" style={{ gridColumn:'1 / -1' }}>
+                        <label>Linked Purchase Order{linkedPos.length > 1 ? 's' : ''} ({linkedPos.length})</label>
+                        <div className="val" style={{ display:'flex', flexDirection:'column', gap:6, marginTop:4 }}>
+                          {linkedPos.map(p => (
+                            <div key={p.id}
+                              onClick={() => navigate('/procurement/po/' + p.id)}
+                              style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, padding:'8px 10px', border:'1px solid var(--gray-100)', borderRadius:6, cursor:'pointer', background:'#f9fafb' }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:180 }}>
+                                <span style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:700, color:'#1a4dab' }}>{p.po_number}</span>
+                                <span style={{ fontSize:11, color:'var(--gray-500)' }}>· {p.vendor_name || '—'}</span>
+                              </div>
+                              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                {p.total_amount > 0 && <span style={{ fontSize:11, color:'var(--gray-700)', fontWeight:600 }}>₹{Number(p.total_amount).toLocaleString('en-IN', { maximumFractionDigits:0 })}</span>}
+                                <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:10, background:'#eff6ff', color:'#1d4ed8', textTransform:'capitalize' }}>{(p.status || '').replace(/_/g, ' ')}</span>
+                                <span style={{ fontSize:11, color:'#1a4dab' }}>→</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
