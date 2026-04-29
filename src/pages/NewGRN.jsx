@@ -58,7 +58,7 @@ export default function NewGRN() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
-    if (!['ops', 'admin', 'fc_kaveri', 'fc_godawari'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['ops', 'admin', 'management', 'fc_kaveri', 'fc_godawari'].includes(profile?.role)) { navigate('/dashboard'); return }
     setUserName(profile?.name || '')
     setUserRole(profile?.role || '')
 
