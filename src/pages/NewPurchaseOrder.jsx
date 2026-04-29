@@ -210,8 +210,11 @@ export default function NewPurchaseOrder() {
   }
 
   async function fetchItems(q) {
-    const { data } = await sb.from('items').select('item_code')
-      .ilike('item_code', '%' + q + '%').limit(10)
+    const { data } = await sb.from('items')
+      .select('item_code,brand,category')
+      .or(`item_code.ilike.%${q}%,brand.ilike.%${q}%`)
+      .order('item_code')
+      .limit(15)
     return data || []
   }
 
@@ -596,10 +599,14 @@ export default function NewPurchaseOrder() {
                         value={item.item_code}
                         onChange={v => updateItem(idx, 'item_code', v)}
                         onSelect={it => selectItemCode(idx, it)}
-                        placeholder="Search or type..."
+                        placeholder="Search item code or brand…"
                         fetchFn={fetchItems}
+                        strictSelect
                         renderItem={it => (
-                          <div className="typeahead-item-main" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{it.item_code}</div>
+                          <div>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{it.item_code}</div>
+                            {(it.brand || it.category) && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 1 }}>{[it.brand, it.category].filter(Boolean).join(' · ')}</div>}
+                          </div>
                         )}
                       />
                     </td>

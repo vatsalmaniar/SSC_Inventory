@@ -87,6 +87,13 @@ const NAV_ITEMS = [
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><circle cx="19" cy="8" r="2.5"/><path d="M21.5 14c-.8-.9-2-1.5-3.5-1.5"/><circle cx="5" cy="8" r="2.5"/><path d="M2.5 14c.8-.9 2-1.5 3.5-1.5"/></svg>,
   },
   {
+    key: 'item360',
+    label: 'Item 360',
+    path: '/items',
+    roles: ['sales', 'ops', 'admin', 'accounts'],
+    icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+  },
+  {
     key: 'vendor360',
     label: 'Vendor 360',
     path: '/vendors',

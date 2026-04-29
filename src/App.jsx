@@ -29,6 +29,8 @@ const CRMNewOpportunity = lazy(() => import('./pages/CRMNewOpportunity'))
 const CRMFieldVisits = lazy(() => import('./pages/CRMFieldVisits'))
 const CRMSampleRequests = lazy(() => import('./pages/CRMSampleRequests'))
 const CRMTargets = lazy(() => import('./pages/CRMTargets'))
+const ItemMaster = lazy(() => import('./pages/ItemMaster'))
+const ItemDetail = lazy(() => import('./pages/ItemDetail'))
 const VendorMaster = lazy(() => import('./pages/VendorMaster'))
 const NewVendor = lazy(() => import('./pages/NewVendor'))
 const VendorDetail = lazy(() => import('./pages/VendorDetail'))
@@ -81,6 +83,8 @@ export default function App() {
           <Route path="/crm/visits" element={<CRMFieldVisits />} />
           <Route path="/crm/samples" element={<CRMSampleRequests />} />
           <Route path="/crm/targets" element={<CRMTargets />} />
+          <Route path="/items" element={<ItemMaster />} />
+          <Route path="/items/:id" element={<ItemDetail />} />
           <Route path="/vendors" element={<VendorMaster />} />
           <Route path="/vendors/new" element={<NewVendor />} />
           <Route path="/vendors/:id" element={<VendorDetail />} />
