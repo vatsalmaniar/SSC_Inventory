@@ -3,3 +3,9 @@ dist
 .env
 .env.local
 .vercel
+
+# Local data files — never commit to public repo
+*.xlsx
+*.xls
+*.csv
+supabase/.temp/
