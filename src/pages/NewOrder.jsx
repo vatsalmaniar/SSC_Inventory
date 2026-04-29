@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -15,6 +15,7 @@ export default function NewOrder() {
   const navigate = useNavigate()
   const [user, setUser]           = useState({ name: '', avatar: '', role: '' })
   const [submitting, setSubmitting] = useState(false)
+  const submitGuard = useRef(false)
 
   const [lowValueReason, setLowValueReason] = useState('')
 
@@ -131,6 +132,7 @@ export default function NewOrder() {
   const grandTotal = subtotal + (parseFloat(freight) || 0)
 
   async function submitOrder(bypassTypeCheck = false) {
+    if (submitGuard.current) return
     const validItems = items.filter(i => i.item_code.trim())
 
     let effectiveOrderType = orderType
@@ -176,6 +178,7 @@ export default function NewOrder() {
       }
     }
 
+    submitGuard.current = true
     setSubmitting(true)
     const { data: { session } } = await sb.auth.getSession()
 
@@ -211,7 +214,7 @@ export default function NewOrder() {
       low_value_reason:  grandTotal < 8000 ? lowValueReason.trim() : null,
     }).select().single()
 
-    if (error) { toast(friendlyError(error)); setSubmitting(false); return }
+    if (error) { toast(friendlyError(error)); submitGuard.current = false; setSubmitting(false); return }
 
     const { error: itemsError } = await sb.from('order_items').insert(
       validItems.map((item, i) => ({
@@ -228,9 +231,10 @@ export default function NewOrder() {
         description:           item.description?.trim() || null,
       }))
     )
-    if (itemsError) { toast('Order created but items failed to save: ' + itemsError.message); setSubmitting(false); return }
+    if (itemsError) { toast('Order created but items failed to save: ' + itemsError.message); submitGuard.current = false; setSubmitting(false); return }
 
     toast('Order created — ' + order.order_number, 'success')
+    submitGuard.current = false
     setSubmitting(false)
     navigate('/orders', { state: { success: order.order_number } })
   }
