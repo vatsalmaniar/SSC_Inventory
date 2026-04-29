@@ -92,6 +92,7 @@ export default function PurchaseOrderDetail() {
   const [mentionSuggestions, setMentionSuggestions] = useState([])
   const [mentionPos, setMentionPos]   = useState({ top:0, left:0, width:200 })
   const commentInputRef = useRef(null)
+  const saveGuard = useRef(false)
 
   const [activeCOsForRelink, setActiveCOsForRelink] = useState([])
   const [selectedRelinkCoId, setSelectedRelinkCoId] = useState('')
@@ -917,8 +918,10 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   }
 
   async function saveEdit() {
+    if (saveGuard.current) return
+    saveGuard.current = true
     const filled = editItems.filter(i => i.item_code?.trim())
-    if (!filled.length) { toast('Add at least one line item'); return }
+    if (!filled.length) { saveGuard.current = false; toast('Add at least one line item'); return }
     setSaving(true)
     const total = filled.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0)
 
@@ -935,10 +938,10 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
       updated_at: new Date().toISOString(),
     }).eq('id', id)
 
-    if (poErr) { toast(friendlyError(poErr, "Save failed. Please try again.")); setSaving(false); return }
+    if (poErr) { toast(friendlyError(poErr, "Save failed. Please try again.")); setSaving(false); saveGuard.current = false; return }
 
     const { error: delErr } = await sb.from('po_items').delete().eq('po_id', id)
-    if (delErr) { toast('Failed to update items: ' + delErr.message); setSaving(false); return }
+    if (delErr) { toast('Failed to update items: ' + delErr.message); setSaving(false); saveGuard.current = false; return }
     if (filled.length) {
       const rows = filled.map((item, idx) => ({
         po_id: id, sr_no: idx + 1,
@@ -952,12 +955,12 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
         order_item_id: item.order_item_id || null,
       }))
       const { error: insErr } = await sb.from('po_items').insert(rows)
-      if (insErr) { toast(friendlyError(insErr, "PO updated but items failed. Please try again.")); setSaving(false); await loadPO(); return }
+      if (insErr) { toast(friendlyError(insErr, "PO updated but items failed. Please try again.")); setSaving(false); saveGuard.current = false; await loadPO(); return }
     }
 
     await logActivity('Purchase Order edited')
     toast('Purchase Order updated', 'success')
-    setEditMode(false); setSaving(false)
+    setEditMode(false); setSaving(false); saveGuard.current = false
     await loadPO()
   }
 
