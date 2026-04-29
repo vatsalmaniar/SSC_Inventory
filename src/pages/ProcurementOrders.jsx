@@ -37,7 +37,7 @@ export default function ProcurementOrders() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
-    if (!['ops','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['ops','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
 
     // ── Query A: Pending tab — every approved CO this FY. Coverage filter (below) hides fully covered/done.
     // ── Query B: Orphan tab — every post-approval PO (any date) whose linked CO is cancelled

@@ -110,7 +110,7 @@ export default function CRMDashboard() {
     return '/crm'
   }
 
-  const isManager = user.role === 'admin'
+  const isManager = ['admin','management'].includes(user.role)
 
   // Scope filtering
   const scoped = useMemo(() => {

@@ -53,7 +53,7 @@ export default function FCModule() {
     const role   = profile?.role || 'fc_kaveri'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     const center = role === 'fc_godawari' ? 'Godawari' : role === 'fc_kaveri' ? 'Kaveri' : null
-    if (!['fc_kaveri','fc_godawari','ops','admin'].includes(role)) { navigate('/dashboard'); return }
+    if (!['fc_kaveri','fc_godawari','ops','admin','management'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, avatar, role, center })
     await loadBatches(center)
   }

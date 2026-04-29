@@ -85,7 +85,7 @@ export default function CustomerMaster() {
     const role = profile?.role || 'sales'
     setUserRole(role)
 
-    const { data: repData } = await sb.from('profiles').select('name').in('role',['sales','ops','admin']).order('name')
+    const { data: repData } = await sb.from('profiles').select('name').in('role',['sales','ops','admin','management']).order('name')
     setReps((repData || []).map(r => r.name))
 
     if (role === 'admin') {

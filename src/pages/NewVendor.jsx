@@ -70,7 +70,7 @@ export default function NewVendor() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
-    if (!['ops','admin','accounts'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['ops','admin','management','accounts'].includes(profile?.role)) { navigate('/dashboard'); return }
     setUserRole(profile?.role || 'ops')
     setUserName(profile?.name || '')
   }

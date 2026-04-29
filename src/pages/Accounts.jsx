@@ -42,7 +42,7 @@ export default function Accounts() {
     const { data: { session } } = await sb.auth.getSession()
     if (!session) { navigate('/login'); return }
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
-    if (!profile || (profile.role !== 'accounts' && profile.role !== 'admin')) {
+    if (!profile || (!['accounts','admin','management'].includes(profile.role))) {
       navigate('/login'); return
     }
     loadStatus()

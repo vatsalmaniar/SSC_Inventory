@@ -380,7 +380,7 @@ export default function FCOrderDetail() {
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'fc_kaveri'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    if (!['fc_kaveri','fc_godawari','ops','admin'].includes(role)) { navigate('/dashboard'); return }
+    if (!['fc_kaveri','fc_godawari','ops','admin','management'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, role, avatar })
     setProfiles(pList || [])
     await loadOrder()

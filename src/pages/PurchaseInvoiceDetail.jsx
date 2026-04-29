@@ -68,7 +68,7 @@ export default function PurchaseInvoiceDetail() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
-    if (!['accounts','ops','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['accounts','ops','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
     setUserRole(profile?.role || '')
     setUserName(profile?.name || '')
     await loadInvoice()

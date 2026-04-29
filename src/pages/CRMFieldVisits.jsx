@@ -67,7 +67,7 @@ export default function CRMFieldVisits() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
-    if (!['sales','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['sales','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
 
     const [visitsRes, repsRes, principalsRes] = await Promise.all([
       sb.from('crm_field_visits')
@@ -176,7 +176,7 @@ export default function CRMFieldVisits() {
     loadCustomers()
   }
 
-  const isManager = user.role === 'admin'
+  const isManager = ['admin','management'].includes(user.role)
   const q = search.trim().toLowerCase()
   const filtered = visits
     .filter(v => {

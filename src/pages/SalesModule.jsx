@@ -48,7 +48,7 @@ export default function SalesModule() {
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'accounts'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    if (!['accounts','ops','admin'].includes(role)) { navigate('/dashboard'); return }
+    if (!['accounts','ops','admin','management'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, avatar, role })
   }
 

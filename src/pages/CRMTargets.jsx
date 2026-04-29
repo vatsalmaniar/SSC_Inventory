@@ -53,7 +53,7 @@ export default function CRMTargets() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
-    if (!['sales','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['sales','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
     const { data: repsData } = await sb.from('profiles').select('id,name').in('role',['sales','admin'])
     setReps(repsData || [])
   }
@@ -82,7 +82,7 @@ export default function CRMTargets() {
     setEditingCell(null); setEditVal(''); setSaving(false)
   }
 
-  const isManager = user.role === 'admin'
+  const isManager = ['admin','management'].includes(user.role)
 
   const displayReps = isManager
     ? reps

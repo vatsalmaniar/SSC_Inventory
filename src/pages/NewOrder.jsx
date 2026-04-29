@@ -8,7 +8,7 @@ import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
 
 function emptyItem() {
-  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '' }
+  return { item_code: '', item_type: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '', description: '' }
 }
 
 export default function NewOrder() {
@@ -32,6 +32,7 @@ export default function NewOrder() {
   const [poNumber, setPoNumber]       = useState('')
   const [orderDate, setOrderDate]     = useState(new Date().toISOString().slice(0, 10))
   const [orderType, setOrderType]     = useState('SO')
+  const [showCOConfirm, setShowCOConfirm] = useState(false)
   const [receivedVia, setReceivedVia] = useState('Mobile')
   const [freight, setFreight]         = useState('0')
   const [notes, setNotes]             = useState('')
@@ -70,7 +71,7 @@ export default function NewOrder() {
 
   async function fetchItems(q) {
     const { data } = await sb.from('items')
-      .select('item_code,brand,category')
+      .select('item_code,brand,category,type')
       .or(`item_code.ilike.%${q}%,brand.ilike.%${q}%`)
       .order('item_code')
       .limit(15)
@@ -118,7 +119,7 @@ export default function NewOrder() {
   function selectItemCode(idx, item) {
     setItems(prev => {
       const next = [...prev]
-      next[idx] = { ...next[idx], item_code: item.item_code }
+      next[idx] = { ...next[idx], item_code: item.item_code, item_type: item.type || '' }
       return next
     })
   }
@@ -129,13 +130,35 @@ export default function NewOrder() {
   const subtotal   = items.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0)
   const grandTotal = subtotal + (parseFloat(freight) || 0)
 
-  async function submitOrder() {
+  async function submitOrder(bypassTypeCheck = false) {
     const validItems = items.filter(i => i.item_code.trim())
+
+    let effectiveOrderType = orderType
+
+    if (!bypassTypeCheck) {
+      const hasCI = validItems.some(i => i.item_type === 'CI')
+      const allSI = validItems.length > 0 && validItems.every(i => i.item_type === 'SI')
+
+      // SO with CI items → auto-switch to CO silently and continue submitting
+      if (effectiveOrderType === 'SO' && hasCI) {
+        effectiveOrderType = 'CO'
+        setOrderType('CO')
+        toast('Order type changed to CO — this order contains CI (Customised) items.')
+      }
+
+      // CO with all-SI items → ask for confirmation before proceeding
+      if (effectiveOrderType === 'CO' && allSI && !showCOConfirm) {
+        setShowCOConfirm(true)
+        return
+      }
+    }
+
+    setShowCOConfirm(false)
     if (!customerInput.trim())  { toast('Customer name is required'); return }
     if (customerPending)        { toast('This customer is pending approval. Orders cannot be placed until the customer is approved in Customer 360.'); return }
     if (customerBlacklisted)    { toast('This customer is blacklisted. Orders cannot be placed for blacklisted customers.'); return }
     if (!dispatchAddr.trim())   { toast('Dispatch address is required'); return }
-    if (orderType !== 'SAMPLE' && !poNumber.trim()) { toast('PO / Reference Number is required'); return }
+    if (effectiveOrderType !== 'SAMPLE' && !poNumber.trim()) { toast('PO / Reference Number is required'); return }
     if (!validItems.length)     { toast('Add at least one item'); return }
     for (const item of validItems) {
       if (!item.qty)             { toast(`Qty is required for item: ${item.item_code}`); return }
@@ -173,7 +196,7 @@ export default function NewOrder() {
       dispatch_address:  dispatchAddr.trim(),
       po_number:         poNumber.trim(),
       order_date:        orderDate,
-      order_type:        orderType,
+      order_type:        effectiveOrderType,
       engineer_name:     user.name,
       received_via:      receivedVia,
       freight:           parseFloat(freight) || 0,
@@ -201,6 +224,7 @@ export default function NewOrder() {
         total_price:           parseFloat(item.total_price) || 0,
         dispatch_date:         item.dispatch_date || null,
         customer_ref_no:       item.customer_ref_no?.trim() || null,
+        description:           item.description?.trim() || null,
       }))
     )
     if (itemsError) { toast('Order created but items failed to save: ' + itemsError.message); setSubmitting(false); return }
@@ -412,7 +436,8 @@ export default function NewOrder() {
               </thead>
               <tbody>
                 {items.map((item, idx) => (
-                  <tr key={idx} className={item.item_code ? 'row-filled' : ''}>
+                  <>
+                  <tr key={idx} className={item.item_code ? 'row-filled' : ''} style={{ borderBottom: item.item_code ? 'none' : undefined }}>
                     <td className="col-sr">{idx + 1}</td>
                     <td className="col-code">
                       <Typeahead
@@ -463,6 +488,20 @@ export default function NewOrder() {
                       )}
                     </td>
                   </tr>
+                  {item.item_code && (
+                    <tr key={`desc-${idx}`} style={{ borderTop: 'none' }}>
+                      <td></td>
+                      <td colSpan={9} style={{ paddingTop: 2, paddingBottom: 8 }}>
+                        <input
+                          value={item.description}
+                          onChange={e => updateItem(idx, 'description', e.target.value)}
+                          placeholder="Description (optional)"
+                          style={{ width: '100%', fontSize: 11, color: 'var(--gray-500)', fontStyle: item.description ? 'normal' : 'italic' }}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </>
                 ))}
               </tbody>
             </table>
@@ -530,7 +569,7 @@ export default function NewOrder() {
           )}
           <div style={{ flex: 1 }} />
           <button className="no-cancel-btn" onClick={() => navigate('/orders')}>Cancel</button>
-          <button className="no-submit-btn" onClick={submitOrder} disabled={submitting}>
+          <button className="no-submit-btn" onClick={() => submitOrder(false)} disabled={submitting}>
             {submitting ? (
               <><div className="no-spinner" />Submitting...</>
             ) : (
@@ -540,6 +579,25 @@ export default function NewOrder() {
         </div>
       </div>
     </div>
+
+    {/* CO confirmation modal — all items are SI but booking as CO */}
+    {showCOConfirm && (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ background:'white', borderRadius:16, padding:32, maxWidth:420, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ width:44, height:44, borderRadius:12, background:'#fff7ed', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:16 }}>
+            <svg fill="none" stroke="#c2410c" strokeWidth="2" viewBox="0 0 24 24" style={{ width:22, height:22 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div style={{ fontSize:16, fontWeight:700, color:'var(--gray-900)', marginBottom:8 }}>All items are SI — booking as CO?</div>
+          <div style={{ fontSize:13, color:'var(--gray-500)', lineHeight:1.6, marginBottom:24 }}>
+            All items in this order are <strong>SI (Standard)</strong>, but you're booking it as a <strong>Customised Order (CO)</strong>. Do you want to proceed?
+          </div>
+          <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+            <button onClick={() => setShowCOConfirm(false)} style={{ padding:'9px 18px', borderRadius:8, border:'1px solid var(--gray-200)', background:'white', fontSize:13, cursor:'pointer', fontFamily:'var(--font)', color:'var(--gray-600)' }}>Cancel</button>
+            <button onClick={() => submitOrder(true)} style={{ padding:'9px 18px', borderRadius:8, border:'none', background:'#c2410c', color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Yes, Book as CO</button>
+          </div>
+        </div>
+      </div>
+    )}
     </Layout>
   )
 }

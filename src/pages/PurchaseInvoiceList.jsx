@@ -41,7 +41,7 @@ export default function PurchaseInvoiceList() {
     }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
     const role = profile?.role || 'sales'
-    if (!['accounts','ops','admin'].includes(role)) { navigate('/dashboard'); return }
+    if (!['accounts','ops','admin','management'].includes(role)) { navigate('/dashboard'); return }
     setUserRole(role)
     await loadInvoices()
   }

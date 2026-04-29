@@ -266,7 +266,36 @@ CREATE POLICY "auth_update" ON profiles FOR UPDATE TO authenticated USING (true)
 
 
 -- ═══════════════════════════════════════════════
--- (Section F removed — leads/lead_activities tables do not exist in database)
+-- SECTION F: PROCUREMENT MODULE (2 tables)
+-- ═══════════════════════════════════════════════
+-- po_comments: user-facing comments on purchase orders (mirrors order_comments)
+-- order_number_counters: internal counter, written by a BEFORE INSERT trigger on orders
+
+ALTER TABLE order_number_counters ENABLE ROW LEVEL SECURITY;
+
+-- order_number_counters is written by a trigger on the orders table that runs
+-- as the calling user (not SECURITY DEFINER), so authenticated users need
+-- insert/update/select access. The table only stores {fy_suffix, counter} rows
+-- — no sensitive data. RLS stays enabled to satisfy Security Advisor.
+DROP POLICY IF EXISTS "auth_read"   ON order_number_counters;
+DROP POLICY IF EXISTS "auth_write"  ON order_number_counters;
+DROP POLICY IF EXISTS "auth_update" ON order_number_counters;
+
+CREATE POLICY "auth_read"   ON order_number_counters FOR SELECT TO authenticated USING (true);
+CREATE POLICY "auth_write"  ON order_number_counters FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "auth_update" ON order_number_counters FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE po_comments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "auth_read"   ON po_comments;
+DROP POLICY IF EXISTS "auth_insert" ON po_comments;
+DROP POLICY IF EXISTS "auth_update" ON po_comments;
+
+CREATE POLICY "auth_read"   ON po_comments FOR SELECT TO authenticated USING (true);
+CREATE POLICY "auth_insert" ON po_comments FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "auth_update" ON po_comments FOR UPDATE TO authenticated USING (true);
+
+
 -- ═══════════════════════════════════════════════
 -- SECTION G: STATUS TRANSITION TRIGGERS (orders + dispatches)
 -- ═══════════════════════════════════════════════
@@ -302,10 +331,13 @@ BEGIN
   -- Admin and ops: full access (includes OpsOrders manage page)
   IF v_role IN ('admin', 'ops') THEN RETURN NEW; END IF;
 
-  -- Only admin can cancel orders (HIGH severity finding)
+  -- Only admin can cancel orders
   IF NEW.status = 'cancelled' THEN
     RAISE EXCEPTION 'Only admin can cancel orders';
   END IF;
+
+  -- Management: same as ops for status transitions, but cancel is already blocked above
+  IF v_role = 'management' THEN RETURN NEW; END IF;
 
   -- Accounts: billing + PI transitions on orders table
   -- (BillingOrderDetail sets: pi_generated, pi_payment_pending, delivery_created)
@@ -375,6 +407,9 @@ BEGIN
   IF NEW.status = 'cancelled' THEN
     RAISE EXCEPTION 'Only admin can cancel dispatches';
   END IF;
+
+  -- Management: same as ops for dispatch status transitions, cancel already blocked above
+  IF v_role = 'management' THEN RETURN NEW; END IF;
 
   -- Accounts: billing + PI transitions on dispatches
   IF v_role = 'accounts' THEN

@@ -77,7 +77,7 @@ export default function NewCustomer() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
-    if (!['sales','ops','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['sales','ops','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
     setOwnerName(profile?.name || session.user.email.split('@')[0])
     setUserRole(profile?.role || 'sales')
   }

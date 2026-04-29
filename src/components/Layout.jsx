@@ -9,14 +9,14 @@ const NAV_ITEMS = [
     key: 'home',
     label: 'Home',
     path: '/dashboard',
-    roles: ['sales', 'ops', 'admin', 'accounts', 'fc_kaveri', 'fc_godawari'],
+    roles: ['sales', 'ops', 'admin', 'management', 'accounts', 'fc_kaveri', 'fc_godawari'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   },
   {
     key: 'crm',
     label: 'CRM',
     path: '/crm',
-    roles: ['sales', 'ops', 'admin'],
+    roles: ['sales', 'ops', 'admin', 'management'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
     sub: [
       { key: 'crm-dash',  label: 'Dashboard',     path: '/crm' },
@@ -28,7 +28,7 @@ const NAV_ITEMS = [
     key: 'orders',
     label: 'Orders',
     path: '/orders',
-    roles: ['sales', 'ops', 'admin', 'accounts'],
+    roles: ['sales', 'ops', 'admin', 'management', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>,
     sub: [
       { key: 'orders-dash', label: 'Dashboard',  path: '/orders' },
@@ -39,7 +39,7 @@ const NAV_ITEMS = [
     key: 'procurement',
     label: 'Procurement',
     path: '/procurement',
-    roles: ['ops', 'admin'],
+    roles: ['ops', 'admin', 'management'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
     sub: [
       { key: 'proc-dash', label: 'Dashboard',       path: '/procurement' },
@@ -51,7 +51,7 @@ const NAV_ITEMS = [
     key: 'fc',
     label: 'Fulfilment Center',
     path: '/fc',
-    roles: ['fc_kaveri', 'fc_godawari', 'ops', 'admin', 'accounts'],
+    roles: ['fc_kaveri', 'fc_godawari', 'ops', 'admin', 'management', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>,
     sub: [
       { key: 'fc-dash', label: 'Dashboard',  path: '/fc' },
@@ -63,7 +63,7 @@ const NAV_ITEMS = [
     key: 'billing',
     label: 'Billing',
     path: '/billing',
-    roles: ['accounts', 'ops', 'admin'],
+    roles: ['accounts', 'ops', 'admin', 'management'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
     sub: [
       { key: 'bill-dash',    label: 'Dashboard',       path: '/billing' },
@@ -75,7 +75,7 @@ const NAV_ITEMS = [
     key: 'inventory',
     label: 'Inventory',
     path: '/sales',
-    roles: ['sales', 'admin', 'ops'],
+    roles: ['sales', 'admin', 'management', 'ops'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg>,
     section: '360',
   },
@@ -83,21 +83,21 @@ const NAV_ITEMS = [
     key: 'customer360',
     label: 'Customer 360',
     path: '/customers',
-    roles: ['sales', 'ops', 'admin', 'accounts'],
+    roles: ['sales', 'ops', 'admin', 'management', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><circle cx="19" cy="8" r="2.5"/><path d="M21.5 14c-.8-.9-2-1.5-3.5-1.5"/><circle cx="5" cy="8" r="2.5"/><path d="M2.5 14c.8-.9 2-1.5 3.5-1.5"/></svg>,
   },
   {
     key: 'item360',
     label: 'Item 360',
     path: '/items',
-    roles: ['sales', 'ops', 'admin', 'accounts'],
+    roles: ['ops', 'admin', 'management', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
   },
   {
     key: 'vendor360',
     label: 'Vendor 360',
     path: '/vendors',
-    roles: ['ops', 'admin', 'accounts'],
+    roles: ['ops', 'admin', 'management', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>,
   },
   {
@@ -281,9 +281,9 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
   async function doSearch(q) {
     const role = user.role
-    const canCRM = ['sales', 'ops', 'admin'].includes(role)
-    const canOrders = ['sales', 'ops', 'admin', 'accounts', 'fc_kaveri', 'fc_godawari'].includes(role)
-    const canProcurement = ['ops', 'admin', 'accounts'].includes(role)
+    const canCRM = ['sales', 'ops', 'admin', 'management'].includes(role)
+    const canOrders = ['sales', 'ops', 'admin', 'management', 'accounts', 'fc_kaveri', 'fc_godawari'].includes(role)
+    const canProcurement = ['ops', 'admin', 'management', 'accounts'].includes(role)
     const [ordersRes, companiesRes, leadsRes, oppsRes, vendorsRes, poRes, grnRes, piRes] = await Promise.all([
       canOrders ? sb.from('orders').select('id,order_number,customer_name,status').or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`).eq('is_test', false).limit(5) : { data: [] },
       (canCRM || canProcurement) ? sb.from('customers').select('id,customer_name').ilike('customer_name', `%${q}%`).limit(5) : { data: [] },

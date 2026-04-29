@@ -37,7 +37,7 @@ export default function ProcurementDashboard() {
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
     const name = profile?.name || session.user.email.split('@')[0]
     const role = profile?.role || 'ops'
-    if (!['ops','admin'].includes(role)) { navigate('/dashboard'); return }
+    if (!['ops','admin','management'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, role })
 
     const [posRes, grnCountRes, inwardCountRes] = await Promise.all([

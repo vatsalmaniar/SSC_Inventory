@@ -121,7 +121,7 @@ export default function PurchaseOrderDetail() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role,username,email').eq('id', session.user.id).single()
-    if (!['ops','admin'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['ops','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
     setUserRole(profile?.role || '')
     setUserName(profile?.name || '')
     setSenderEmail(profile?.email || (profile?.username ? profile.username + '@ssccontrol.com' : ''))

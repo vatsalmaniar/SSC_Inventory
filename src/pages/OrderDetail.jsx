@@ -28,7 +28,7 @@ function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+
 function OwnerChip({name}) { if(!name) return '—'; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:26,height:26,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:13,fontWeight:500}}>{name}</span></div> }
 
 function emptyItem() {
-  return { _new: true, item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '' }
+  return { _new: true, item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '', description: '' }
 }
 
 function numToWords(n) {
@@ -55,8 +55,11 @@ function fmtDC(d) {
 
 function printDCChallan(order, batch, dcNumber, isSample = false, custCode = '') {
   const items = batch?.dispatched_items
-    ? batch.dispatched_items
-    : (order.order_items || []).map(i => ({ item_code: i.item_code, qty: i.qty, unit_price: i.unit_price_after_disc || i.unit_price, total_price: i.total_price }))
+    ? batch.dispatched_items.map(di => {
+        const master = (order.order_items || []).find(oi => oi.id === di.order_item_id)
+        return { ...di, description: master?.description || '', customer_ref_no: di.customer_ref_no || master?.customer_ref_no || '' }
+      })
+    : (order.order_items || []).map(i => ({ item_code: i.item_code, qty: i.qty, unit_price: i.unit_price_after_disc || i.unit_price, total_price: i.total_price, description: i.description || '', customer_ref_no: i.customer_ref_no || '' }))
   const subtotal = items.reduce((s, i) => s + (i.total_price || 0), 0)
   const cgst = Math.round(subtotal * 0.09 * 100) / 100
   const sgst = Math.round(subtotal * 0.09 * 100) / 100
@@ -88,7 +91,7 @@ table.items{width:100%;border-collapse:collapse;margin-bottom:4px}table.items th
 <hr class="divider"/>
 <div class="terms"><span>Delivery terms: <strong>${esc(order.dispatch_mode) || 'EXW Through Transport'}</strong></span><span>Payment terms: <strong>${esc(order.credit_terms) || '—'}</strong></span><span>Currency: <strong>INR</strong></span></div>
 <table class="items"><thead><tr><th style="width:40px">#</th><th>Item Code</th><th class="c" style="width:80px">Qty</th><th class="c" style="width:50px">Unit</th><th style="width:110px">Cust. Ref No</th><th class="r" style="width:100px">Unit Price</th><th class="r" style="width:100px">Amount</th></tr></thead><tbody>
-${items.map((item, idx) => `<tr><td style="color:#94a3b8">${idx+1}</td><td class="code">${esc(item.item_code) || '—'}</td><td class="c" style="font-weight:700">${item.qty}</td><td class="c" style="color:#64748b">Pc</td><td style="font-size:11px;color:#475569">${esc(item.customer_ref_no) || '—'}</td><td class="r">${(item.unit_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="r" style="font-weight:600">${(item.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join('')}
+${items.map((item, idx) => `<tr><td style="color:#94a3b8">${idx+1}</td><td class="code">${esc(item.item_code) || '—'}${item.description ? `<div style="font-size:10px;color:#64748b;font-family:'Geist',sans-serif;font-weight:400;margin-top:2px">${esc(item.description)}</div>` : ''}</td><td class="c" style="font-weight:700">${item.qty}</td><td class="c" style="color:#64748b">Pc</td><td style="font-size:11px;color:#475569">${esc(item.customer_ref_no) || '—'}</td><td class="r">${(item.unit_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td class="r" style="font-weight:600">${(item.total_price||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join('')}
 </tbody></table>
 <div class="totals-wrap"><table class="totals-table"><tr><td class="lbl">Subtotal</td><td class="val">${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr><tr><td class="lbl">CGST (9%)</td><td class="val">${cgst.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr><tr><td class="lbl">SGST (9%)</td><td class="val">${sgst.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>${order.freight ? `<tr><td class="lbl">Freight</td><td class="val">${(order.freight).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>` : ''}<tr class="grand"><td class="lbl">Total Amount</td><td class="val">₹ ${grandTotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></table></div>
 <div class="words">Amount in words: <strong>${numToWords(grandTotal)}</strong></div>
@@ -228,7 +231,7 @@ export default function OrderDetail() {
   const effectiveStatus  = order?.status === 'partial_dispatch' ? 'delivery_created'
     : order?.status === 'gen_invoice' ? 'delivery_created'  // legacy orders
     : order?.status
-  const isOps            = ['ops', 'admin'].includes(user.role)
+  const isOps            = ['ops', 'admin', 'management'].includes(user.role)
   const isPending        = order?.status === 'pending'
   const isEditable       = ['pending', 'inv_check', 'inventory_check'].includes(order?.status)
   const isCancelled      = order?.status === 'cancelled'
@@ -271,6 +274,7 @@ export default function OrderDetail() {
       total_price:          String(item.total_price   || ''),
       dispatch_date:        item.dispatch_date         || '',
       customer_ref_no:      item.customer_ref_no       || '',
+      description:          item.description           || '',
       sr_no:                item.sr_no,
     })))
     setEditMode(true)
@@ -302,6 +306,11 @@ export default function OrderDetail() {
     return data || []
   }
 
+  async function goToItem(item_code) {
+    const { data } = await sb.from('items').select('id').eq('item_code', item_code).single()
+    if (data?.id) navigate(`/items/${data.id}`)
+  }
+
   async function saveEdits(reason = '') {
     setSaving(true)
     const validItems = editItems.filter(i => i.item_code.trim() && i.qty)
@@ -327,6 +336,7 @@ export default function OrderDetail() {
         total_price: parseFloat(item.total_price) || 0,
         dispatch_date: item.dispatch_date || '',
         customer_ref_no: item.customer_ref_no?.trim() || '',
+        description: item.description?.trim() || '',
       }))
     })
     if (itemsErr) { toast('Failed to save items: ' + itemsErr.message); setSaving(false); return }
@@ -363,6 +373,7 @@ export default function OrderDetail() {
         total_price: parseFloat(item.total_price) || 0,
         dispatch_date: item.dispatch_date || '',
         customer_ref_no: item.customer_ref_no?.trim() || '',
+        description: item.description?.trim() || '',
       }))
     })
     if (itemsErr) { toast('Failed to save items: ' + itemsErr.message); setSaving(false); return }
@@ -392,7 +403,7 @@ export default function OrderDetail() {
     const targets = []
     // Caller passes the exact operational roles (e.g. a specific FC). Sales and admin are never
     // role-broadcast — they only get notified as account owner, creator, or via @tag below.
-    const broadcastRoles = (roles || []).filter(r => r !== 'sales' && r !== 'admin')
+    const broadcastRoles = (roles || []).filter(r => r !== 'sales' && r !== 'admin' && r !== 'management')
     if (broadcastRoles.length) {
       profiles.filter(p => broadcastRoles.includes(p.role)).forEach(p => {
         if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
@@ -651,7 +662,7 @@ if (match) {
 
       const PRE_APPROVAL  = ['draft','pending_approval']
       const POST_APPROVAL = ['approved','placed','acknowledged','delivery_confirmation','partially_received']
-      const targets = profiles.filter(p => ['ops','admin'].includes(p.role) && p.id !== user.id)
+      const targets = profiles.filter(p => ['ops','admin','management'].includes(p.role) && p.id !== user.id)
       if (!targets.length) return
 
       const rows = []
@@ -1049,7 +1060,8 @@ if (match) {
                       </thead>
                       <tbody>
                         {editItems.map((item, idx) => (
-                          <tr key={idx} className={item.item_code ? 'row-filled' : ''}>
+                          <>
+                          <tr key={idx} className={item.item_code ? 'row-filled' : ''} style={{ borderBottom: item.item_code ? 'none' : undefined }}>
                             <td className="col-sr">{idx + 1}</td>
                             <td className="col-code">
                               <Typeahead value={item.item_code} onChange={v => updateEditItem(idx, 'item_code', v)}
@@ -1069,6 +1081,20 @@ if (match) {
                               </button>
                             )}</td>
                           </tr>
+                          {item.item_code && (
+                            <tr key={`desc-${idx}`} style={{ borderTop: 'none' }}>
+                              <td></td>
+                              <td colSpan={9} style={{ paddingTop: 2, paddingBottom: 8 }}>
+                                <input
+                                  value={item.description || ''}
+                                  onChange={e => updateEditItem(idx, 'description', e.target.value)}
+                                  placeholder="Description (optional)"
+                                  style={{ width: '100%', fontSize: 11, color: 'var(--gray-500)', fontStyle: item.description ? 'normal' : 'italic' }}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                          </>
                         ))}
                       </tbody>
                     </table>
@@ -1130,7 +1156,7 @@ if (match) {
                             return (
                               <tr key={item.id}>
                                 <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
-                                <td className="mono">{item.item_code}</td>
+                                <td className="mono"><span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>{item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}</td>
                                 <td style={{ fontSize: 12 }}>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
                                 <td style={{ fontSize: 12, color: itemBatch?.delivered_at ? '#166534' : 'var(--gray-400)', fontWeight: itemBatch?.delivered_at ? 600 : 400 }}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>
                                 <td style={{ textAlign: 'center' }}>{item.qty}</td>
@@ -1180,7 +1206,7 @@ if (match) {
                             return (
                               <tr key={item.id} style={{ background: pendingQty === 0 ? '#f0fdf4' : undefined }}>
                                 <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
-                                <td className="mono">{item.item_code}</td>
+                                <td className="mono"><span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>{item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}</td>
                                 <td style={{ fontSize: 12 }}>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
                                 <td style={{ fontSize: 12, color: itemBatch?.delivered_at ? '#166534' : 'var(--gray-400)', fontWeight: itemBatch?.delivered_at ? 600 : 400 }}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>
                                 <td style={{ textAlign: 'center' }}>{item.qty}</td>
@@ -1253,7 +1279,7 @@ if (match) {
                         return (
                         <tr key={item.id}>
                           <td style={{ paddingLeft: 20, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
-                          <td className="mono">{item.item_code}</td>
+                          <td className="mono"><span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>{item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}</td>
                           <td>{item.qty}</td>
                           {order.status !== 'inventory_check' && <><td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
                           <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td></>}
