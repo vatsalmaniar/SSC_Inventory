@@ -137,7 +137,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
   const [searchQ, setSearchQ]     = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
-  const [searchResults, setSearchResults] = useState({ orders: [], companies: [], leads: [], opportunities: [], vendors: [], purchaseOrders: [], grns: [], purchaseInvoices: [] })
+  const [searchResults, setSearchResults] = useState({ orders: [], companies: [], leads: [], opportunities: [], vendors: [], purchaseOrders: [], grns: [], purchaseInvoices: [], items: [] })
 
   useEffect(() => {
     // Force re-login after 24 hours
@@ -273,7 +273,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
     const q = e.target.value
     setSearchQ(q)
     clearTimeout(searchTimer.current)
-    if (q.trim().length < 3) { setSearchResults({ orders:[], companies:[], leads:[], opportunities:[], vendors:[], purchaseOrders:[], grns:[], purchaseInvoices:[] }); setSearchOpen(q.length > 0); return }
+    if (q.trim().length < 3) { setSearchResults({ orders:[], companies:[], leads:[], opportunities:[], vendors:[], purchaseOrders:[], grns:[], purchaseInvoices:[], items:[] }); setSearchOpen(q.length > 0); return }
     setSearchLoading(true)
     setSearchOpen(true)
     searchTimer.current = setTimeout(() => doSearch(q.trim()), 600)
@@ -284,7 +284,8 @@ export default function Layout({ children, pageTitle, pageKey }) {
     const canCRM = ['sales', 'ops', 'admin', 'management'].includes(role)
     const canOrders = ['sales', 'ops', 'admin', 'management', 'accounts', 'fc_kaveri', 'fc_godawari'].includes(role)
     const canProcurement = ['ops', 'admin', 'management', 'accounts'].includes(role)
-    const [ordersRes, companiesRes, leadsRes, oppsRes, vendorsRes, poRes, grnRes, piRes] = await Promise.all([
+    const canItems = ['ops', 'admin', 'management', 'accounts'].includes(role)
+    const [ordersRes, companiesRes, leadsRes, oppsRes, vendorsRes, poRes, grnRes, piRes, itemsRes] = await Promise.all([
       canOrders ? sb.from('orders').select('id,order_number,customer_name,status').or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`).eq('is_test', false).limit(5) : { data: [] },
       (canCRM || canProcurement) ? sb.from('customers').select('id,customer_name').ilike('customer_name', `%${q}%`).limit(5) : { data: [] },
       canCRM    ? sb.from('crm_leads').select('id,contact_name_freetext,freetext_company,stage').or(`contact_name_freetext.ilike.%${q}%,freetext_company.ilike.%${q}%`).limit(5) : { data: [] },
@@ -293,6 +294,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
       canProcurement ? sb.from('purchase_orders').select('id,po_number,vendor_name,status').or(`po_number.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
       canProcurement ? sb.from('grn').select('id,grn_number,grn_type,status').ilike('grn_number', `%${q}%`).limit(5) : { data: [] },
       canProcurement ? sb.from('purchase_invoices').select('id,invoice_number,vendor_name,status').or(`invoice_number.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
+      canItems ? sb.from('items').select('id,item_code,item_no,brand,category').or(`item_code.ilike.%${q}%,item_no.ilike.%${q}%,brand.ilike.%${q}%`).limit(5) : { data: [] },
     ])
     setSearchResults({
       orders:           ordersRes.data || [],
@@ -303,6 +305,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
       purchaseOrders:   poRes.data || [],
       grns:             grnRes.data || [],
       purchaseInvoices: piRes.data || [],
+      items:            itemsRes.data || [],
     })
     setSearchLoading(false)
   }
@@ -313,7 +316,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
     navigate(path)
   }
 
-  const totalResults = searchResults.orders.length + searchResults.companies.length + searchResults.leads.length + searchResults.opportunities.length + searchResults.vendors.length + searchResults.purchaseOrders.length + searchResults.grns.length + searchResults.purchaseInvoices.length
+  const totalResults = searchResults.orders.length + searchResults.companies.length + searchResults.leads.length + searchResults.opportunities.length + searchResults.vendors.length + searchResults.purchaseOrders.length + searchResults.grns.length + searchResults.purchaseInvoices.length + searchResults.items.length
 
   const STATUS_LABEL = { pending:'Pending', dispatch:'Ready to Ship', partial_dispatch:'Partially Shipped', delivery_created:'At FC', picking:'Picking', packing:'Packing', goods_issued:'Goods Issued', invoice_generated:'Invoiced', dispatched_fc:'Delivered', cancelled:'Cancelled' }
 
@@ -468,7 +471,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
                 placeholder="Search orders, customers, leads… (⌘K)"
                 style={{flex:1,border:'none',background:'none',outline:'none',fontFamily:'var(--font)',fontSize:13,color:'var(--gray-900)',padding:'8px 0'}}
               />
-              {searchQ && <button onClick={() => { setSearchQ(''); setSearchOpen(false); setSearchResults({ orders:[], companies:[], leads:[], opportunities:[], vendors:[], purchaseOrders:[], grns:[], purchaseInvoices:[] }) }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--gray-400)',padding:0,lineHeight:1}}>✕</button>}
+              {searchQ && <button onClick={() => { setSearchQ(''); setSearchOpen(false); setSearchResults({ orders:[], companies:[], leads:[], opportunities:[], vendors:[], purchaseOrders:[], grns:[], purchaseInvoices:[], items:[] }) }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--gray-400)',padding:0,lineHeight:1}}>✕</button>}
               {!searchQ && <span style={{fontSize:11,color:'var(--gray-300)',background:'var(--gray-100)',border:'1px solid var(--gray-200)',borderRadius:4,padding:'2px 5px',flexShrink:0}}>⌘K</span>}
             </div>
             {searchOpen && (
@@ -611,6 +614,22 @@ export default function Layout({ children, pageTitle, pageKey }) {
                               <div style={{fontSize:11,color:'var(--gray-400)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pi.vendor_name}</div>
                             </div>
                             <span style={{marginLeft:'auto',fontSize:10,padding:'2px 7px',borderRadius:4,background:'#fce7f3',color:'#db2777',flexShrink:0,fontWeight:600}}>{pi.status || 'Invoice'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.items.length > 0 && (
+                      <div>
+                        <div style={{padding:'10px 16px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.8px',color:'var(--gray-400)'}}>Items</div>
+                        {searchResults.items.map(it => (
+                          <div key={it.id} onClick={() => goToResult('/items/'+it.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
+                            <div style={{width:28,height:28,borderRadius:7,background:'#f0f9ff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              <svg fill="none" stroke="#0369a1" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#0369a1',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.item_code}</div>
+                              <div style={{fontSize:11,color:'var(--gray-400)'}}>{[it.brand, it.category].filter(Boolean).join(' · ') || it.item_no || '—'}</div>
+                            </div>
                           </div>
                         ))}
                       </div>
