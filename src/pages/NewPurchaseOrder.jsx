@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -24,6 +24,7 @@ export default function NewPurchaseOrder() {
 
   const [user, setUser]         = useState({ name: '', avatar: '', role: '', id: '' })
   const [submitting, setSubmitting] = useState(false)
+  const submitGuard = useRef(false)
 
   // Vendor
   const [vendorText, setVendorText] = useState('')
@@ -249,6 +250,7 @@ export default function NewPurchaseOrder() {
   const isCO = poType === 'CO'
 
   async function submitPO(submitForApproval) {
+    if (submitGuard.current) return
     if (!vendorId)          { toast('Please select a vendor'); return }
     if (isCO && !coOrder)   { toast('Please select a Custom Order (SSC CO No.)'); return }
     if (!fulfilmentCenter)  { toast('Please select a delivery address'); return }
@@ -260,6 +262,7 @@ export default function NewPurchaseOrder() {
       if (!item.delivery_date) { toast(`Delivery Date is required for item: ${item.item_code}`); return }
     }
 
+    submitGuard.current = true
     setSubmitting(true)
 
     // Upload documents if provided
@@ -320,7 +323,7 @@ export default function NewPurchaseOrder() {
         is_test:           isTest,
       }).select('id').single()
 
-      if (insertErr) { toast(friendlyError(insertErr)); setSubmitting(false); return }
+      if (insertErr) { toast(friendlyError(insertErr)); submitGuard.current = false; setSubmitting(false); return }
 
       const lineItems = filledItems.map((item, idx) => ({
         po_id:            po.id,
@@ -342,6 +345,7 @@ export default function NewPurchaseOrder() {
       navigate('/procurement/po/' + po.id)
     } catch (err) {
       toast(friendlyError(err))
+      submitGuard.current = false
       setSubmitting(false)
     }
   }

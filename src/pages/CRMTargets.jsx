@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
@@ -42,6 +42,7 @@ export default function CRMTargets() {
   const [editingCell, setEditingCell] = useState(null) // { repId, type }
   const [editVal, setEditVal] = useState('')
   const [saving, setSaving] = useState(false)
+  const saveGuard = useRef(false)
 
   const periods = getPeriods()
 
@@ -70,6 +71,8 @@ export default function CRMTargets() {
   }
 
   async function saveTarget(repId, type, targetValue, achievedValue) {
+    if (saveGuard.current) return
+    saveGuard.current = true
     setSaving(true)
     const existing = getTarget(repId, type)
     if (existing) {
@@ -79,7 +82,7 @@ export default function CRMTargets() {
     }
     await loadTargets()
     toast('Target saved', 'success')
-    setEditingCell(null); setEditVal(''); setSaving(false)
+    setEditingCell(null); setEditVal(''); saveGuard.current = false; setSaving(false)
   }
 
   const isManager = ['admin','management'].includes(user.role)

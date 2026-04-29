@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -26,6 +26,7 @@ export default function NewGRN() {
 
   const [grnType, setGrnType] = useState('po_inward')
   const [saving, setSaving]   = useState(false)
+  const saveGuard = useRef(false)
   const [userName, setUserName] = useState('')
   const [userRole, setUserRole] = useState('')
   // Form fields
@@ -232,6 +233,7 @@ export default function NewGRN() {
 
   // ── Save ──
   async function handleSave() {
+    if (saveGuard.current) return
     if (!fc) { toast('Please select a Fulfilment Centre'); return }
     if (!receivedDate) { toast('Please enter received date'); return }
 
@@ -253,11 +255,12 @@ export default function NewGRN() {
       if (!selectedSO) { toast('Please select an Order'); return }
     }
 
+    saveGuard.current = true
     setSaving(true)
     try {
       const fcCode = fc === 'Kaveri' ? 'AMD' : fc === 'Godawari' ? 'BRD' : fc
       const { data: grnNumber, error: seqErr } = await sb.rpc('next_grn_number', { p_fc: fcCode })
-      if (seqErr) { toast(friendlyError(seqErr, "Generating GRN number failed. Please try again.")); setSaving(false); return }
+      if (seqErr) { toast(friendlyError(seqErr, "Generating GRN number failed. Please try again.")); saveGuard.current = false; setSaving(false); return }
 
       const grnRow = {
         grn_number: grnNumber,
@@ -282,7 +285,7 @@ export default function NewGRN() {
       }
 
       const { data: grn, error: insertErr } = await sb.from('grn').insert(grnRow).select('id').single()
-      if (insertErr) { toast(friendlyError(insertErr)); setSaving(false); return }
+      if (insertErr) { toast(friendlyError(insertErr)); saveGuard.current = false; setSaving(false); return }
 
       if (isPOInward) {
         const validItems = items.filter(i => i.item_code && i._poId && parseFloat(i.received_qty) > 0)
@@ -323,6 +326,7 @@ export default function NewGRN() {
       navigate('/fc/grn/' + grn.id)
     } catch (err) {
       toast(friendlyError(err))
+      saveGuard.current = false
       setSaving(false)
     }
   }
