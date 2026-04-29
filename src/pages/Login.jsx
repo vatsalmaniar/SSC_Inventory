@@ -168,276 +168,214 @@ export default function Login() {
   const hasError = error.length > 0
 
   return (
-    <div className="bg-wrap">
-      <div className="dots-grid" />
-      <div className="glow-orb glow-1" />
-      <div className="glow-orb glow-2" />
+    <div className="split-wrap">
 
-      {/* Top strip */}
-      <div className="top-strip">
-        <img src="/ssc-logo.svg" alt="SSC Control" className="logo-img" />
+      {/* ── Left Panel ── */}
+      <div className="split-left">
+        <div className="left-orb-top" />
+        <div className="left-orb-bottom" />
+        <div className="left-content">
+          <div><img src="/ssc-logo.svg" alt="SSC Control Pvt. Ltd." style={{height:50,objectFit:'contain',filter:'brightness(0) invert(1)'}}/></div>
+          <div className="left-divider" />
+          <div className="left-headline">Internal Operations<br/>Management System</div>
+          <div className="left-sub">Orders · Procurement · CRM<br/>Fulfilment · Accounts</div>
+          <div className="left-badge">
+            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            Authorised access only
+          </div>
+          <div className="left-tagline">your link to excellence</div>
+        </div>
       </div>
 
-      <div className="main">
-        {/* Login Card */}
+      {/* ── Right Panel ── */}
+      <div className="split-right">
+
+        {/* Login form */}
         {view === 'login' && (
-          <div className="card">
-            <div className="card-band">
-              <div className="band-eyebrow">Internal access only</div>
-              <div className="band-title">Welcome back</div>
-              <div className="band-sub">Sign in with your username and password</div>
-            </div>
+          <div className="right-inner">
+            <div className="right-eyebrow">Internal access</div>
+            <div className="right-title">Welcome back</div>
+            <div className="right-sub">Sign in with your username and password</div>
 
-            <div className="card-body">
-              {hasError && (
-                <div className="error-msg show">
-                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
-                  </svg>
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <div className="field">
-                <label className="field-label">Username</label>
-                <div className="input-wrap">
-                  <span className="input-icon">
-                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                      <circle cx="12" cy="7" r="4"/>
-                    </svg>
-                  </span>
-                  <input
-                    ref={usernameRef}
-                    type="text"
-                    value={username}
-                    onChange={e => { setUsername(e.target.value); setError('') }}
-                    onKeyDown={onKeyDown}
-                    placeholder="e.g. vatsal.maniar"
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    className={hasError ? 'error' : ''}
-                  />
-                </div>
-              </div>
-
-              <div className="field">
-                <label className="field-label">Password</label>
-                <div className="input-wrap">
-                  <span className="input-icon">
-                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <rect x="3" y="11" width="18" height="11" rx="2"/>
-                      <path d="M7 11V7a5 5 0 0110 0v4"/>
-                    </svg>
-                  </span>
-                  <input
-                    type={showPwd ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => { setPassword(e.target.value); setError('') }}
-                    onKeyDown={onKeyDown}
-                    placeholder="Enter your password"
-                    className={hasError ? 'error' : ''}
-                  />
-                  <button className="eye-btn" type="button" onClick={() => setShowPwd(v => !v)}>
-                    {showPwd ? (
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                        <line x1="1" y1="1" x2="23" y2="23"/>
-                      </svg>
-                    ) : (
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                        <circle cx="12" cy="12" r="3"/>
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <button className="submit-btn" onClick={doLogin} disabled={loading}>
-                {loading ? (
-                  <>
-                    <div className="spinner" />
-                    <span>Signing in...</span>
-                  </>
-                ) : (
-                  <span>Sign in</span>
-                )}
-              </button>
-            </div>
-
-            <div className="card-footer">
-              <div className="lock-icon">
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{color:'var(--blue-600)'}}>
-                  <rect x="3" y="11" width="18" height="11" rx="2"/>
-                  <path d="M7 11V7a5 5 0 0110 0v4"/>
+            {hasError && (
+              <div className="error-msg show">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
                 </svg>
+                <span>{error}</span>
               </div>
-              <div className="footer-text">
-                <strong>Internal system — SSC Control Pvt. Ltd.</strong><br/>
-                Authorised personnel only
+            )}
+
+            <div className="field">
+              <label className="field-label">Username</label>
+              <div className="input-wrap">
+                <span className="input-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                  </svg>
+                </span>
+                <input ref={usernameRef} type="text" value={username}
+                  onChange={e => { setUsername(e.target.value); setError('') }}
+                  onKeyDown={onKeyDown} placeholder="e.g. vatsal.maniar"
+                  autoComplete="off" autoCapitalize="none"
+                  className={hasError ? 'error' : ''} />
               </div>
+            </div>
+
+            <div className="field">
+              <label className="field-label">Password</label>
+              <div className="input-wrap">
+                <span className="input-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                  </svg>
+                </span>
+                <input type={showPwd ? 'text' : 'password'} value={password}
+                  onChange={e => { setPassword(e.target.value); setError('') }}
+                  onKeyDown={onKeyDown} placeholder="Enter your password"
+                  className={hasError ? 'error' : ''} />
+                <button className="eye-btn" type="button" onClick={() => setShowPwd(v => !v)}>
+                  {showPwd ? (
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  ) : (
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <button className="submit-btn" onClick={doLogin} disabled={loading}>
+              {loading ? <><div className="spinner"/><span>Signing in...</span></> : <span>Sign in</span>}
+            </button>
+
+            <div className="right-footer">
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
+              <span><strong style={{color:'var(--gray-600)'}}>SSC Control Pvt. Ltd.</strong> · Access limited to authorised team members only.</span>
             </div>
           </div>
         )}
 
         {/* MFA — Verify TOTP */}
         {view === 'totp' && (
-          <div className="card">
-            <div className="card-band">
-              <div className="band-eyebrow">Two-factor authentication</div>
-              <div className="band-title">Enter your code</div>
-              <div className="band-sub">Open your authenticator app and enter the 6-digit code</div>
-            </div>
-            <div className="card-body">
-              {mfaError && (
-                <div className="error-msg show">
-                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
-                  </svg>
-                  <span>{mfaError}</span>
-                </div>
-              )}
-              <div className="field">
-                <label className="field-label">Authentication Code</label>
-                <div className="input-wrap">
-                  <span className="input-icon">
-                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
-                    </svg>
-                  </span>
-                  <input
-                    ref={totpRef}
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    value={totpCode}
-                    onChange={e => { setTotpCode(e.target.value.replace(/\D/g, '')); setMfaError('') }}
-                    onKeyDown={e => e.key === 'Enter' && submitTOTP()}
-                    placeholder="000000"
-                    style={{letterSpacing:'0.3em',fontSize:20,fontFamily:'var(--mono)',textAlign:'center'}}
-                  />
-                </div>
+          <div className="right-inner">
+            <div className="mfa-eyebrow">Two-factor authentication</div>
+            <div className="mfa-title">Enter your code</div>
+            <div className="mfa-sub">Open your authenticator app and enter the 6-digit code</div>
+            {mfaError && (
+              <div className="error-msg show">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+                </svg>
+                <span>{mfaError}</span>
               </div>
-              <button className="submit-btn" onClick={submitTOTP} disabled={mfaLoading}>
-                {mfaLoading ? <><div className="spinner" /><span>Verifying...</span></> : <span>Verify</span>}
-              </button>
-              <button style={{marginTop:10,width:'100%',background:'none',border:'none',color:'var(--gray-400)',fontSize:13,cursor:'pointer'}} onClick={() => { setView('login'); setTotpCode(''); setMfaError('') }}>
-                Back to login
-              </button>
+            )}
+            <div className="field">
+              <label className="field-label">Authentication Code</label>
+              <div className="input-wrap">
+                <span className="input-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                  </svg>
+                </span>
+                <input ref={totpRef} type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                  value={totpCode} onChange={e => { setTotpCode(e.target.value.replace(/\D/g, '')); setMfaError('') }}
+                  onKeyDown={e => e.key === 'Enter' && submitTOTP()} placeholder="000000"
+                  style={{letterSpacing:'0.3em',fontSize:20,fontFamily:'var(--mono)',textAlign:'center'}} />
+              </div>
             </div>
+            <button className="submit-btn" onClick={submitTOTP} disabled={mfaLoading}>
+              {mfaLoading ? <><div className="spinner"/><span>Verifying...</span></> : <span>Verify</span>}
+            </button>
+            <button style={{marginTop:12,width:'100%',background:'none',border:'none',color:'var(--gray-400)',fontSize:13,cursor:'pointer'}}
+              onClick={() => { setView('login'); setTotpCode(''); setMfaError('') }}>← Back to login</button>
           </div>
         )}
 
         {/* MFA — First time enroll */}
         {view === 'enroll' && enrollData && (
-          <div className="card">
-            <div className="card-band">
-              <div className="band-eyebrow">Admin security setup</div>
-              <div className="band-title">Set up 2-factor auth</div>
-              <div className="band-sub">Scan with Google Authenticator or any TOTP app</div>
+          <div className="right-inner">
+            <div className="mfa-eyebrow">Security setup</div>
+            <div className="mfa-title">Set up 2-factor auth</div>
+            <div className="mfa-sub">Scan with Google Authenticator or any TOTP app</div>
+            {mfaError && (
+              <div className="error-msg show">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+                </svg>
+                <span>{mfaError}</span>
+              </div>
+            )}
+            <div style={{textAlign:'center',margin:'0 0 20px'}}>
+              <div dangerouslySetInnerHTML={{ __html: enrollData.qr_code }} style={{display:'inline-block',background:'white',padding:12,borderRadius:8,border:'1px solid var(--gray-200)'}} />
+              <div style={{marginTop:10,fontSize:11,color:'var(--gray-400)'}}>
+                Can't scan? Enter manually:<br/>
+                <span style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--gray-600)',letterSpacing:'0.1em',wordBreak:'break-all'}}>{enrollData.secret}</span>
+              </div>
             </div>
-            <div className="card-body">
-              {mfaError && (
-                <div className="error-msg show">
+            <div className="field">
+              <label className="field-label">Confirm with 6-digit code</label>
+              <div className="input-wrap">
+                <span className="input-icon">
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+                    <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
                   </svg>
-                  <span>{mfaError}</span>
-                </div>
-              )}
-              <div style={{textAlign:'center',margin:'0 0 16px'}}>
-                <div dangerouslySetInnerHTML={{ __html: enrollData.qr_code }} style={{display:'inline-block',background:'white',padding:12,borderRadius:8,border:'1px solid var(--gray-200)'}} />
-                <div style={{marginTop:10,fontSize:11,color:'var(--gray-400)'}}>
-                  Can't scan? Enter manually:<br/>
-                  <span style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--gray-600)',letterSpacing:'0.1em',wordBreak:'break-all'}}>{enrollData.secret}</span>
-                </div>
+                </span>
+                <input ref={totpRef} type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                  value={totpCode} onChange={e => { setTotpCode(e.target.value.replace(/\D/g, '')); setMfaError('') }}
+                  onKeyDown={e => e.key === 'Enter' && submitEnroll()} placeholder="000000"
+                  style={{letterSpacing:'0.3em',fontSize:20,fontFamily:'var(--mono)',textAlign:'center'}} />
               </div>
-              <div className="field">
-                <label className="field-label">Confirm with 6-digit code</label>
-                <div className="input-wrap">
-                  <span className="input-icon">
-                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
-                    </svg>
-                  </span>
-                  <input
-                    ref={totpRef}
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    value={totpCode}
-                    onChange={e => { setTotpCode(e.target.value.replace(/\D/g, '')); setMfaError('') }}
-                    onKeyDown={e => e.key === 'Enter' && submitEnroll()}
-                    placeholder="000000"
-                    style={{letterSpacing:'0.3em',fontSize:20,fontFamily:'var(--mono)',textAlign:'center'}}
-                  />
-                </div>
-              </div>
-              <button className="submit-btn" onClick={submitEnroll} disabled={mfaLoading}>
-                {mfaLoading ? <><div className="spinner" /><span>Activating...</span></> : <span>Activate 2FA</span>}
-              </button>
-              <button style={{marginTop:10,width:'100%',background:'none',border:'none',color:'var(--gray-400)',fontSize:13,cursor:'pointer'}} onClick={() => { setView('login'); setTotpCode(''); setMfaError('') }}>
-                Back to login
-              </button>
             </div>
+            <button className="submit-btn" onClick={submitEnroll} disabled={mfaLoading}>
+              {mfaLoading ? <><div className="spinner"/><span>Activating...</span></> : <span>Activate 2FA</span>}
+            </button>
+            <button style={{marginTop:12,width:'100%',background:'none',border:'none',color:'var(--gray-400)',fontSize:13,cursor:'pointer'}}
+              onClick={() => { setView('login'); setTotpCode(''); setMfaError('') }}>← Back to login</button>
           </div>
         )}
 
         {/* Admin Selector */}
         {view === 'selector' && (
-          <div className="selector-card">
-            <div className="selector-band">
-              <div className="welcome">Signed in as admin</div>
-              <h2>{selectorName}</h2>
-              <p>Choose which view to open</p>
-            </div>
-            <div className="selector-body">
-              <button className="view-btn" onClick={() => goTo('/sales')}>
-                <div className="view-btn-icon sales">
-                  <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/>
-                  </svg>
-                </div>
-                <div>
-                  <div className="view-btn-title">Sales View</div>
-                  <div className="view-btn-sub">Search product codes, check stock</div>
-                </div>
-                <div className="view-btn-arrow">
-                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M9 18l6-6-6-6"/>
-                  </svg>
-                </div>
-              </button>
-
-              <button className="view-btn" onClick={() => goTo('/accounts')}>
-                <div className="view-btn-icon accounts">
-                  <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                </div>
-                <div>
-                  <div className="view-btn-title">Accounts View</div>
-                  <div className="view-btn-sub">Upload XLS, update live inventory</div>
-                </div>
-                <div className="view-btn-arrow">
-                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M9 18l6-6-6-6"/>
-                  </svg>
-                </div>
-              </button>
-            </div>
+          <div className="right-inner">
+            <div className="selector-eyebrow">Signed in as admin</div>
+            <div className="selector-title" id="selector-name">Welcome!</div>
+            <button className="view-btn" onClick={() => goTo('/dashboard')}>
+              <div className="view-btn-icon sales">
+                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                  <path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/>
+                </svg>
+              </div>
+              <div>
+                <div className="view-btn-title">Sales View</div>
+                <div className="view-btn-sub">Search product codes, check stock</div>
+              </div>
+              <div className="view-btn-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            </button>
+            <button className="view-btn" onClick={() => goTo('/billing')}>
+              <div className="view-btn-icon accounts">
+                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
+              <div>
+                <div className="view-btn-title">Accounts View</div>
+                <div className="view-btn-sub">Upload XLS, update live inventory</div>
+              </div>
+              <div className="view-btn-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+            </button>
           </div>
         )}
 
-        <div className="tagline">
-          your link to excellence · <strong>SSC Control Pvt. Ltd.</strong>
-        </div>
-      </div>
+      </div>{/* end split-right */}
 
       {/* Success Overlay */}
       {view === 'overlay' && (
