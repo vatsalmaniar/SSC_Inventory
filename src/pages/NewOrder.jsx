@@ -155,6 +155,7 @@ export default function NewOrder() {
 
     setShowCOConfirm(false)
     if (!customerInput.trim())  { toast('Customer name is required'); return }
+    if (!customerId)            { toast('Please select a customer from the list — free-text names are not allowed.'); return }
     if (customerPending)        { toast('This customer is pending approval. Orders cannot be placed until the customer is approved in Customer 360.'); return }
     if (customerBlacklisted)    { toast('This customer is blacklisted. Orders cannot be placed for blacklisted customers.'); return }
     if (!dispatchAddr.trim())   { toast('Dispatch address is required'); return }
@@ -261,6 +262,7 @@ export default function NewOrder() {
                 onSelect={selectCustomer}
                 placeholder="Search customer name..."
                 fetchFn={fetchCustomers}
+                strictSelect
                 renderItem={c => (
                   <>
                     <div className="typeahead-item-main" style={{ display:'flex', alignItems:'center', gap:6 }}>
