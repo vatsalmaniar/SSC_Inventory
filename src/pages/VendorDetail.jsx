@@ -6,6 +6,7 @@ import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
+import { friendlyError } from '../lib/errorMsg'
 
 const VENDOR_TYPES = ['Manufacturer','Distributor','Agent']
 const CREDIT_TERMS = ['Against PI','Advance','7 Days','15 Days','30 Days','45 Days','60 Days','75 Days','90 Days','Against Delivery']
@@ -122,7 +123,7 @@ export default function VendorDetail() {
       notes:            editData.notes || null,
       updated_at:       new Date().toISOString(),
     }).eq('id', id)
-    if (error) { toast('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     const { data: fresh } = await sb.from('vendors').select('*').eq('id', id).single()
     setVendor(fresh || editData)
     setEditData(fresh || editData)
@@ -134,7 +135,7 @@ export default function VendorDetail() {
     if (!contactForm.name.trim()) { toast('Name is required'); return }
     setSavingContact(true)
     const { data, error } = await sb.from('vendor_contacts').insert({ ...contactForm, vendor_id: id }).select().single()
-    if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+    if (error) { toast(friendlyError(error)); setSavingContact(false); return }
     setContacts(p => [...p, data])
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
     setShowContactModal(false); setSavingContact(false)

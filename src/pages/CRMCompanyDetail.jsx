@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { friendlyError } from '../lib/errorMsg'
 
 import { toast } from '../lib/toast'
 import { fmtNum } from '../lib/fmt'
@@ -75,7 +76,7 @@ export default function CRMCompanyDetail() {
       status: editData.status,
       assigned_rep_id: editData.assigned_rep_id,
     }).eq('id', id)
-    if (error) { toast('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     setCompany(p => ({ ...p, ...editData }))
     toast('Company updated', 'success')
     setEditMode(false)
@@ -86,7 +87,7 @@ export default function CRMCompanyDetail() {
     if (!contactForm.name.trim()) { toast('Contact name is required'); return }
     setSavingContact(true)
     const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: id }).select().single()
-    if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+    if (error) { toast(friendlyError(error)); setSavingContact(false); return }
     setContacts(prev => [...prev, data])
     toast('Contact added', 'success')
     setShowContactForm(false)

@@ -7,6 +7,7 @@ import { fmt, fmtTs, esc } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/orders.css'
+import { friendlyError } from '../lib/errorMsg'
 
 // FC pipeline stages
 const FC_STAGES = [
@@ -515,7 +516,7 @@ export default function FCOrderDetail() {
       const { error } = await sb.from('order_dispatches').update({
         status: toStatus, updated_at: new Date().toISOString(), ...extraUpdate
       }).eq('id', activeBatch.id)
-      if (error) { toast('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast(friendlyError(error)); setSaving(false); return }
     }
     await logActivity(activityMsg)
     toast('Status updated', 'success')
@@ -532,7 +533,7 @@ export default function FCOrderDetail() {
       const { data } = await sb.rpc('confirm_dispatch_dc', { p_dispatch_id: activeBatch.id })
       dcNum = data
       const { error } = await sb.from('order_dispatches').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
-      if (error) { toast('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast(friendlyError(error)); setSaving(false); return }
     }
     // Update orders.status to notify accounts — only if order isn't already past this stage
     const alreadyPast = ['dispatched_fc'].includes(order.status)
@@ -601,7 +602,7 @@ export default function FCOrderDetail() {
       const { error } = await sb.from('order_dispatches').update({
         status: nextOrderStatus, ...updateFields, updated_at: new Date().toISOString(),
       }).eq('id', activeBatch.id)
-      if (error) { toast('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast(friendlyError(error)); setSaving(false); return }
     }
     await logActivity(`Delivery Ready — ${detail}. ${actSuffix}`)
     toast('Delivery details saved', 'success')
@@ -620,7 +621,7 @@ export default function FCOrderDetail() {
     const allBatchesDone = (allBatchData || []).every(b => b.status === 'dispatched_fc')
     const finalStatus = allBatchesDone ? 'dispatched_fc' : 'partial_dispatch'
     const { error } = await sb.from('orders').update({ status: finalStatus, updated_at: new Date().toISOString() }).eq('id', id)
-    if (error) { toast('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     await logActivity(allBatchesDone ? 'Order Delivered — all batches complete.' : 'Batch Delivered — remaining batch(es) still pending.')
     if (allBatchesDone) await notifyUsers([], `${order.order_number} — Order delivered to customer.`, 'order_delivered')
     toast(allBatchesDone ? 'Order delivered' : 'Batch delivered', 'success')

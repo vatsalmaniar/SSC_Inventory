@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { friendlyError } from '../lib/errorMsg'
 
 const INDUSTRIES = [
   'Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal',
@@ -167,7 +168,7 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
 
     try {
       const { data: generatedId, error: rpcErr } = await sb.rpc('generate_customer_id')
-      if (rpcErr) { toast('Error generating customer ID: ' + rpcErr.message); setSaving(false); return }
+      if (rpcErr) { toast(friendlyError(rpcErr, "Generating customer ID failed. Please try again.")); setSaving(false); return }
 
       const { data: inserted, error: insertErr } = await sb.from('customers').insert({
         customer_id:      generatedId,
@@ -197,14 +198,14 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
         vi_expected_business: form.vi_expected_business || null,
       }).select('id').single()
 
-      if (insertErr) { toast('Error: ' + insertErr.message); setSaving(false); return }
+      if (insertErr) { toast(friendlyError(insertErr)); setSaving(false); return }
       const newId = inserted.id
 
       let gstUrl
       try { gstUrl = await uploadDoc(gstCertFile, `gst/${newId}/${Date.now()}.pdf`) }
       catch (uploadErr) {
         await sb.from('customers').delete().eq('id', newId)
-        toast('GST certificate upload failed: ' + uploadErr.message)
+        toast(friendlyError(uploadErr, "GST certificate upload failed. Please try again."))
         setSaving(false); return
       }
 
@@ -213,7 +214,7 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
         try { msmeUrl = await uploadDoc(msmeCertFile, `msme/${newId}/${Date.now()}.pdf`) }
         catch (uploadErr) {
           await sb.from('customers').delete().eq('id', newId)
-          toast('MSME certificate upload failed: ' + uploadErr.message)
+          toast(friendlyError(uploadErr, "MSME certificate upload failed. Please try again."))
           setSaving(false); return
         }
       }
@@ -221,7 +222,7 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
       await sb.from('customers').update({ gst_cert_url: gstUrl, msme_cert_url: msmeUrl }).eq('id', newId)
       onCreated(newId)
     } catch (err) {
-      toast('Error: ' + err.message)
+      toast(friendlyError(err))
       setSaving(false)
     }
   }

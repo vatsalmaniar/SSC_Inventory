@@ -5,6 +5,7 @@ import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import Typeahead from '../components/Typeahead'
 import '../styles/neworder.css'
+import { friendlyError } from '../lib/errorMsg'
 
 const GRN_TYPES = [
   { key: 'po_inward',           label: 'PO Inward' },
@@ -256,7 +257,7 @@ export default function NewGRN() {
     try {
       const fcCode = fc === 'Kaveri' ? 'AMD' : fc === 'Godawari' ? 'BRD' : fc
       const { data: grnNumber, error: seqErr } = await sb.rpc('next_grn_number', { p_fc: fcCode })
-      if (seqErr) { toast('Error generating GRN number: ' + seqErr.message); setSaving(false); return }
+      if (seqErr) { toast(friendlyError(seqErr, "Generating GRN number failed. Please try again.")); setSaving(false); return }
 
       const grnRow = {
         grn_number: grnNumber,
@@ -281,7 +282,7 @@ export default function NewGRN() {
       }
 
       const { data: grn, error: insertErr } = await sb.from('grn').insert(grnRow).select('id').single()
-      if (insertErr) { toast('Error: ' + insertErr.message); setSaving(false); return }
+      if (insertErr) { toast(friendlyError(insertErr)); setSaving(false); return }
 
       if (isPOInward) {
         const validItems = items.filter(i => i.item_code && i._poId && parseFloat(i.received_qty) > 0)
@@ -295,7 +296,7 @@ export default function NewGRN() {
           accepted_qty: parseFloat(i.received_qty) || 0,
         }))
         const { error: itemsErr } = await sb.from('grn_items').insert(itemRows)
-        if (itemsErr) { toast('GRN created but items failed: ' + itemsErr.message); navigate('/fc/grn/' + grn.id); return }
+        if (itemsErr) { toast(friendlyError(itemsErr, "GRN created but items failed. Please try again.")); navigate('/fc/grn/' + grn.id); return }
 
       } else if (isSample) {
         const itemRows = srItems.filter(i => parseFloat(i.return_qty) > 0).map(i => ({
@@ -304,7 +305,7 @@ export default function NewGRN() {
         }))
         if (itemRows.length) {
           const { error: itemsErr } = await sb.from('grn_items').insert(itemRows)
-          if (itemsErr) { toast('GRN created but items failed: ' + itemsErr.message); navigate('/fc/grn/' + grn.id); return }
+          if (itemsErr) { toast(friendlyError(itemsErr, "GRN created but items failed. Please try again.")); navigate('/fc/grn/' + grn.id); return }
         }
 
       } else {
@@ -314,14 +315,14 @@ export default function NewGRN() {
         }))
         if (itemRows.length) {
           const { error: itemsErr } = await sb.from('grn_items').insert(itemRows)
-          if (itemsErr) { toast('GRN created but items failed: ' + itemsErr.message); navigate('/fc/grn/' + grn.id); return }
+          if (itemsErr) { toast(friendlyError(itemsErr, "GRN created but items failed. Please try again.")); navigate('/fc/grn/' + grn.id); return }
         }
       }
 
       toast('GRN ' + grnNumber + ' created', 'success')
       navigate('/fc/grn/' + grn.id)
     } catch (err) {
-      toast('Error: ' + err.message)
+      toast(friendlyError(err))
       setSaving(false)
     }
   }

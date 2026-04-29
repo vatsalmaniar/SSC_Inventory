@@ -5,6 +5,7 @@ import { toast } from '../lib/toast'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
+import { friendlyError } from '../lib/errorMsg'
 
 const STATUSES = ['all', 'partial', 'pending', 'inv_check', 'inventory_check', 'dispatch', 'delivery_created', 'picking', 'packing', 'inflow', 'dispatched_fc', 'cancelled']
 
@@ -100,7 +101,7 @@ export default function OpsOrders() {
     const { error } = await sb.from('orders')
       .update({ status: newStatus, notes: notes.trim(), updated_at: new Date().toISOString() })
       .eq('id', detail.id)
-    if (error) { toast('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     setSaving(false)
     setDetail(null)
     await loadOrders()

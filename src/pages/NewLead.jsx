@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
+import { friendlyError } from '../lib/errorMsg'
 
 const INDUSTRIES = ['Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal','Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG','Energy','Automobile','Power Electronics','Datacenters','Road Construction','Cement','Tyre','Petroleum','Chemical']
 
@@ -64,7 +65,7 @@ export default function NewLead() {
       created_by:    (await sb.auth.getUser()).data.user?.id,
     }).select().single()
     setSubmitting(false)
-    if (error) { toast('Error: ' + error.message); return }
+    if (error) { toast(friendlyError(error)); return }
     navigate('/crm/' + data.id)
   }
 

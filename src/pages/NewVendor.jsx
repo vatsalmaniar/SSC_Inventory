@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
+import { friendlyError } from '../lib/errorMsg'
 
 const VENDOR_TYPES   = ['Manufacturer','Distributor','Agent']
 const CREDIT_TERMS   = ['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','75 Days','90 Days','Against Delivery']
@@ -155,7 +156,7 @@ export default function NewVendor() {
     setSaving(true)
     try {
       const { data: vendorCode, error: rpcErr } = await sb.rpc('next_vendor_code')
-      if (rpcErr) { toast('Error generating vendor code: ' + rpcErr.message); setSaving(false); return }
+      if (rpcErr) { toast(friendlyError(rpcErr, "Generating vendor code failed. Please try again.")); setSaving(false); return }
 
       const { data: inserted, error: insertErr } = await sb.from('vendors').insert({
         vendor_code:      vendorCode,
@@ -181,7 +182,7 @@ export default function NewVendor() {
         notes:            null,
       }).select('id').single()
 
-      if (insertErr) { toast('Error creating vendor: ' + insertErr.message); setSaving(false); return }
+      if (insertErr) { toast(friendlyError(insertErr, "Creating vendor failed. Please try again.")); setSaving(false); return }
       const newId = inserted.id
 
       // Upload GST cert (optional)
@@ -191,7 +192,7 @@ export default function NewVendor() {
           gstUrl = await uploadDoc(gstCertFile, `gst/${newId}/${Date.now()}.pdf`)
         } catch (uploadErr) {
           await sb.from('vendors').delete().eq('id', newId)
-          toast('GST certificate upload failed — vendor not saved. Please try again.\n' + uploadErr.message)
+          toast(friendlyError(uploadErr, "GST certificate upload failed — vendor not saved. Please try again."))
           setSaving(false); return
         }
       }
@@ -203,7 +204,7 @@ export default function NewVendor() {
           msmeUrl = await uploadDoc(msmeCertFile, `msme/${newId}/${Date.now()}.pdf`)
         } catch (uploadErr) {
           await sb.from('vendors').delete().eq('id', newId)
-          toast('MSME certificate upload failed — vendor not saved. Please try again.\n' + uploadErr.message)
+          toast(friendlyError(uploadErr, "MSME certificate upload failed — vendor not saved. Please try again."))
           setSaving(false); return
         }
       }
@@ -236,7 +237,7 @@ export default function NewVendor() {
         navigate('/vendors', { state: { submitted: true, vendorCode } })
       }
     } catch (err) {
-      toast('Error: ' + err.message)
+      toast(friendlyError(err))
       setSaving(false)
     }
   }

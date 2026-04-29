@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
@@ -116,7 +117,7 @@ export default function GRNDetail() {
   async function handleMoveToChecking() {
     setSaving(true)
     const { error } = await sb.from('grn').update({ status: 'checking' }).eq('id', id)
-    if (error) { toast('Failed: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     toast('Moved to Check Goods', 'success')
     setSaving(false)
     await loadGRN()
@@ -144,7 +145,7 @@ export default function GRNDetail() {
     // Use atomic RPC for GRN confirmation + PO received_qty updates (row-level locks, no race conditions)
     if (grn.grn_type === 'po_inward') {
       const { error: rpcErr } = await sb.rpc('confirm_grn', { p_grn_id: id })
-      if (rpcErr) { toast('GRN confirmation failed: ' + rpcErr.message); setSaving(false); return }
+      if (rpcErr) { toast(friendlyError(rpcErr, "GRN confirmation failed. Please try again.")); setSaving(false); return }
 
       // Auto-create purchase invoice entry for inward billing (dedup: skip if one already exists for this GRN)
       const { count: existingInv } = await sb.from('purchase_invoices').select('id', { count: 'exact', head: true }).eq('grn_id', id)
@@ -158,12 +159,12 @@ export default function GRNDetail() {
           is_test: false,
           created_at: new Date().toISOString(),
         })
-        if (invErr) toast('GRN confirmed but purchase invoice auto-create failed: ' + invErr.message)
+        if (invErr) toast(friendlyError(invErr, "GRN confirmed but purchase invoice auto-create failed. Please try again."))
       }
     } else {
       // Non-PO GRNs (returns/rejections) — just confirm status
       const { error } = await sb.from('grn').update({ status: 'confirmed' }).eq('id', id)
-      if (error) { toast('Failed: ' + error.message); setSaving(false); return }
+      if (error) { toast(friendlyError(error)); setSaving(false); return }
     }
 
     toast('GRN confirmed', 'success')

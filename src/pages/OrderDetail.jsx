@@ -8,6 +8,7 @@ import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/neworder.css'
+import { friendlyError } from '../lib/errorMsg'
 
 
 const ORDER_MODULE_STAGES = [
@@ -446,7 +447,7 @@ export default function OrderDetail() {
     setSaving(true)
     if (isPending) {
       const { error } = await sb.rpc('approve_order', { order_id: id, approver_name: user.name, order_type: order.order_type })
-      if (error) { toast('Error: ' + error.message); setSaving(false); return }
+      if (error) { toast(friendlyError(error)); setSaving(false); return }
       await sb.from('orders').update({ status: 'inv_check', updated_at: new Date().toISOString() }).eq('id', id)
       await logActivity('Order accepted — moved to Order Approved')
       toast('Order approved', 'success')
@@ -484,7 +485,7 @@ export default function OrderDetail() {
     const { error } = await sb.from('orders').update({
       status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
     }).eq('id', id)
-    if (error) { toast('Failed: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     const itemsJson = (order.order_items || []).map(i => ({
       order_item_id: i.id, item_code: i.item_code, qty: i.qty,
       unit_price: i.unit_price_after_disc, total_price: i.total_price,
@@ -542,7 +543,7 @@ export default function OrderDetail() {
     const { error } = await sb.from('orders').update({
       status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
     }).eq('id', id)
-    if (error) { toast('Failed: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     const itemsJson = selected.map(i => {
       const full = (order.order_items || []).find(o => o.id === i.id) || {}
       return { order_item_id: i.id, item_code: i.item_code, qty: parseFloat(i.dispatchQty), unit_price: full.unit_price_after_disc, total_price: (full.unit_price_after_disc || 0) * parseFloat(i.dispatchQty), customer_ref_no: full.customer_ref_no || null }

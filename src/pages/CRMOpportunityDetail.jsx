@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { friendlyError } from '../lib/errorMsg'
 
 import { toast } from '../lib/toast'
 import { fmt, fmtNum, fmtTs, esc } from '../lib/fmt'
@@ -247,7 +248,7 @@ export default function CRMOpportunityDetail() {
     setSavingContact(true)
     if (opp.customer_id) {
       const { data, error } = await sb.from('customer_contacts').insert({ ...contactForm, customer_id: opp.customer_id }).select().single()
-      if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+      if (error) { toast(friendlyError(error)); setSavingContact(false); return }
       setCustContacts(p => [...p, data])
     } else {
       let companyId = opp.company_id
@@ -265,7 +266,7 @@ export default function CRMOpportunityDetail() {
       }
       if (companyId) {
         const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: companyId }).select().single()
-        if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+        if (error) { toast(friendlyError(error)); setSavingContact(false); return }
         setContacts(p => [...p, data])
       }
     }
@@ -383,7 +384,7 @@ export default function CRMOpportunityDetail() {
       created_by:        session.user.id,
       is_test:           false,
     }).select().single()
-    if (error) { toast('Error: ' + error.message); setSubmittingSample(false); return }
+    if (error) { toast(friendlyError(error)); setSubmittingSample(false); return }
     const { error: itemsErr } = await sb.from('order_items').insert(
       validItems.map((item, i) => ({
         order_id:              order.id,
@@ -398,7 +399,7 @@ export default function CRMOpportunityDetail() {
         customer_ref_no:       item.customer_ref_no?.trim() || null,
       }))
     )
-    if (itemsErr) { toast('Order created but items failed: ' + itemsErr.message); setSubmittingSample(false); return }
+    if (itemsErr) { toast(friendlyError(itemsErr, "Order created but items failed. Please try again.")); setSubmittingSample(false); return }
     // Link SO number back to opportunity
     await sb.from('crm_opportunities').update({ so_number: order.order_number }).eq('id', id)
     await sb.from('crm_activities').insert({ opportunity_id: id, rep_id: user.id, activity_type: 'Note', notes: `Converted to order ${order.order_number}` })
@@ -436,7 +437,7 @@ export default function CRMOpportunityDetail() {
       created_by:        session.user.id,
       is_test:           false,
     }).select().single()
-    if (error) { toast('Error: ' + error.message); setSubmittingSample(false); return }
+    if (error) { toast(friendlyError(error)); setSubmittingSample(false); return }
     const { error: itemsErr } = await sb.from('order_items').insert(
       validItems.map((item, i) => ({
         order_id:              order.id,
@@ -451,7 +452,7 @@ export default function CRMOpportunityDetail() {
         customer_ref_no:       item.customer_ref_no?.trim() || null,
       }))
     )
-    if (itemsErr) { toast('Order created but items failed: ' + itemsErr.message); setSubmittingSample(false); return }
+    if (itemsErr) { toast(friendlyError(itemsErr, "Order created but items failed. Please try again.")); setSubmittingSample(false); return }
     toast('Sample Order created', 'success')
     setShowSampleModal(false)
     setSubmittingSample(false)
@@ -482,7 +483,7 @@ export default function CRMOpportunityDetail() {
       quotation_value_inr: editData.quotation_value_inr || null,
       so_number: editData.so_number || null,
     }).eq('id', id)
-    if (error) { toast('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     setOpp(p => ({ ...p, ...editData }))
     toast('Opportunity updated', 'success')
     setEditMode(false); setSaving(false)
@@ -495,7 +496,7 @@ export default function CRMOpportunityDetail() {
     if (newStage === 'ON_HOLD') updateData.revisit_date = stageRevisit
     if (['WON','LOST','ON_HOLD'].includes(newStage) && stageReason) updateData.won_lost_on_hold_reason = stageReason
     const { error } = await sb.from('crm_opportunities').update(updateData).eq('id', id)
-    if (error) { toast('Error: ' + error.message); setChangingStage(false); return }
+    if (error) { toast(friendlyError(error)); setChangingStage(false); return }
     if (newStage === 'WON' && opp?.company_id) {
       await sb.from('crm_companies').update({ status: 'Active' }).eq('id', opp.company_id)
     }
@@ -567,7 +568,7 @@ export default function CRMOpportunityDetail() {
     const tagged = [...notes.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
     setPostingAct(true)
     const { error: actErr } = await sb.from('crm_activities').insert({ opportunity_id: id, rep_id: user.id, activity_type: activityType, notes })
-    if (actErr) { toast('Error logging activity: ' + actErr.message); setPostingAct(false); return }
+    if (actErr) { toast(friendlyError(actErr, "Logging activity failed. Please try again.")); setPostingAct(false); return }
     if (tagged.length > 0) {
       const notifRows = tagged.map(tname => {
         const p = reps.find(r => r.name === tname)
@@ -862,7 +863,7 @@ export default function CRMOpportunityDetail() {
       revision    = existingForOpp[0].revision + 1
     } else {
       const { data: genNum, error: genErr } = await sb.rpc('generate_crm_quote_number', { p_fy: fy })
-      if (genErr) { toast('Error generating quote number: ' + genErr.message); setSavingQuote(false); return }
+      if (genErr) { toast(friendlyError(genErr, "Generating quote number failed. Please try again.")); setSavingQuote(false); return }
       quoteNumber = genNum
       revision    = 1
     }
@@ -879,7 +880,7 @@ export default function CRMOpportunityDetail() {
       opportunity_id: id, quote_number: quoteNumber, full_ref: fullRef,
       revision, items, total_value: total, created_by: user.id,
     })
-    if (error) { toast('Error saving quote: ' + error.message); setSavingQuote(false); return }
+    if (error) { toast(friendlyError(error, "Saving quote failed. Please try again.")); setSavingQuote(false); return }
 
     // Also keep crm_quote_items in sync (for backward compat)
     await sb.from('crm_quote_items').delete().eq('opportunity_id', id)

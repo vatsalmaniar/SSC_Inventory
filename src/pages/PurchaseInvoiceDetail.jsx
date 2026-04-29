@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime } from '../lib/fmt'
 import { toast } from '../lib/toast'
@@ -120,7 +121,7 @@ export default function PurchaseInvoiceDetail() {
       three_way_checked_at: new Date().toISOString(),
       three_way_checked_by: userName,
     }).eq('id', id)
-    if (error) { toast('Failed: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     toast('3-Way Check complete', 'success')
     setSaving(false)
     await loadInvoice()
@@ -141,7 +142,7 @@ export default function PurchaseInvoiceDetail() {
       if (vendorInvoiceFile.size > 5 * 1024 * 1024) { toast('File must be under 5MB'); setSaving(false); return }
       const path = `purchase-invoices/${id}/vendor-${Date.now()}.pdf`
       const { error: upErr } = await sb.storage.from('customer-docs').upload(path, vendorInvoiceFile, { upsert: true })
-      if (upErr) { toast('Vendor upload failed: ' + upErr.message); setSaving(false); return }
+      if (upErr) { toast(friendlyError(upErr, "Vendor upload failed. Please try again.")); setSaving(false); return }
       vendorPdfUrl = sb.storage.from('customer-docs').getPublicUrl(path).data.publicUrl
     }
 
@@ -152,7 +153,7 @@ export default function PurchaseInvoiceDetail() {
       if (sscInvoiceFile.size > 5 * 1024 * 1024) { toast('File must be under 5MB'); setSaving(false); return }
       const path = `purchase-invoices/${id}/ssc-${Date.now()}.pdf`
       const { error: upErr } = await sb.storage.from('customer-docs').upload(path, sscInvoiceFile, { upsert: true })
-      if (upErr) { toast('SSC upload failed: ' + upErr.message); setSaving(false); return }
+      if (upErr) { toast(friendlyError(upErr, "SSC upload failed. Please try again.")); setSaving(false); return }
       sscPdfUrl = sb.storage.from('customer-docs').getPublicUrl(path).data.publicUrl
     }
 
@@ -170,7 +171,7 @@ export default function PurchaseInvoiceDetail() {
       inward_completed_at: new Date().toISOString(),
       inward_completed_by: userName,
     }).eq('id', id)
-    if (error) { toast('Failed: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
 
     // Auto-close PO if all linked purchase invoices are now inward_complete
     const poId = inv.po_id

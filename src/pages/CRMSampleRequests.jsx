@@ -5,6 +5,7 @@ import { toast } from '../lib/toast'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
+import { friendlyError } from '../lib/errorMsg'
 
 const SR_STATUSES = ['Pending','Dispatched','Delivered']
 
@@ -51,7 +52,7 @@ export default function CRMSampleRequests() {
     if (status === 'Dispatched') updateData.dispatched_date = new Date().toISOString().slice(0,10)
     if (status === 'Delivered')  updateData.delivered_date  = new Date().toISOString().slice(0,10)
     const { error } = await sb.from('crm_sample_requests').update(updateData).eq('id', srId)
-    if (error) { toast('Error: ' + error.message); setUpdating(null); return }
+    if (error) { toast(friendlyError(error)); setUpdating(null); return }
     setSrs(prev => prev.map(s => s.id === srId ? { ...s, ...updateData } : s))
     toast('Status updated to ' + status, 'success')
     setUpdating(null)

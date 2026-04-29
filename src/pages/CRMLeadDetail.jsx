@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { friendlyError } from '../lib/errorMsg'
 
 import { toast } from '../lib/toast'
 import { fmtTs } from '../lib/fmt'
@@ -134,12 +135,12 @@ export default function CRMLeadDetail() {
         await sb.from('crm_leads').update({ company_id: newCo.id }).eq('id', id)
         setLead(p => ({ ...p, company_id: newCo.id }))
         const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: newCo.id }).select().single()
-        if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+        if (error) { toast(friendlyError(error)); setSavingContact(false); return }
         setLeadContacts(p => [...p, data])
       }
     } else {
       const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: companyId }).select().single()
-      if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+      if (error) { toast(friendlyError(error)); setSavingContact(false); return }
       setLeadContacts(p => [...p, data])
     }
     toast('Contact added', 'success')
@@ -163,7 +164,7 @@ export default function CRMLeadDetail() {
       assigned_rep_id: editData.assigned_rep_id,
       status: editData.status,
     }).eq('id', id)
-    if (error) { toast('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     setLead(p => ({ ...p, ...editData }))
     toast('Lead updated', 'success')
     setEditMode(false); setSaving(false)
@@ -246,7 +247,7 @@ export default function CRMLeadDetail() {
       qty: parseFloat(r.qty) || 1, unit_price: parseFloat(r.unit_price) || 0,
       discount_pct: parseFloat(r.discount_pct) || 0, total_price: parseFloat(r.total_price) || 0,
     })))
-    if (error) { toast('Error saving quote: ' + error.message); setSavingQuote(false); return }
+    if (error) { toast(friendlyError(error, "Saving quote failed. Please try again.")); setSavingQuote(false); return }
     const { data: q } = await sb.from('crm_quote_items').select('*').eq('lead_id', id).order('created_at', { ascending: true })
     setQuoteItems(q || [])
     setQuoteLoaded(true)
@@ -264,7 +265,7 @@ export default function CRMLeadDetail() {
       assigned_rep_id: lead.assigned_rep_id || user.id,
       stage: 'LEAD_CAPTURED',
     }).select().single()
-    if (error) { toast('Error: ' + error.message); return }
+    if (error) { toast(friendlyError(error)); return }
     await sb.from('crm_leads').update({ status: 'Converted' }).eq('id', id)
     toast('Lead converted to opportunity', 'success')
     navigate('/crm/opportunities/' + opp.id)

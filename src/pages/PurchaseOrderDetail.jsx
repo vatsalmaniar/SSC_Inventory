@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
@@ -213,7 +214,7 @@ export default function PurchaseOrderDetail() {
     setSaving(true)
     const updates = { status: newStatus, updated_at: new Date().toISOString(), ...extra }
     const { error } = await sb.from('purchase_orders').update(updates).eq('id', id)
-    if (error) { toast('Failed: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     await logActivity(`Status changed to ${PO_STATUS_LABELS[newStatus] || newStatus}`)
     toast('Status updated to ' + (PO_STATUS_LABELS[newStatus] || newStatus), 'success')
     setSaving(false)
@@ -233,7 +234,7 @@ export default function PurchaseOrderDetail() {
     const { error } = await sb.from('purchase_orders').update({
       order_id: newCo.id, order_number: newCo.order_number, updated_at: new Date().toISOString(),
     }).eq('id', id)
-    if (error) { toast('Relink failed: ' + error.message); setRelinking(false); return }
+    if (error) { toast(friendlyError(error, "Relink failed. Please try again.")); setRelinking(false); return }
     await logActivity(`PO relinked from ${oldOrderNumber} (cancelled) to ${newCo.order_number}`)
     try {
       if (oldOrderId) await sb.from('order_comments').insert({ order_id: oldOrderId, author_name: userName, message: `PO ${po.po_number} was relinked away from this cancelled CO to ${newCo.order_number}.`, is_activity: true })
@@ -303,7 +304,7 @@ SSC Control Pvt. Ltd.`
     const ext = file.name.split('.').pop()
     const path = `po-email/${id}/${Date.now()}-${file.name}`
     const { error } = await sb.storage.from('po-documents').upload(path, file, { upsert: true })
-    if (error) { toast('Upload failed: ' + error.message); setUploadingFile(false); return }
+    if (error) { toast(friendlyError(error, "Upload failed. Please try again.")); setUploadingFile(false); return }
     const { data: { publicUrl } } = sb.storage.from('po-documents').getPublicUrl(path)
     setExtraFiles(p => [...p, { filename: file.name, url: publicUrl }])
     setUploadingFile(false)
@@ -351,7 +352,7 @@ SSC Control Pvt. Ltd.`
       }
     } catch (err) {
       console.error('PDF generation failed:', err)
-      toast('PDF generation failed: ' + err.message)
+      toast(friendlyError(err, "PDF generation failed. Please try again."))
       setSendingEmail(false)
       return
     }
@@ -387,7 +388,7 @@ SSC Control Pvt. Ltd.`
       setSendingEmail(false)
       await loadPO()
     } catch (e) {
-      toast('Send failed: ' + e.message)
+      toast(friendlyError(e, "Send failed. Please try again."))
       setSendingEmail(false)
     }
   }
@@ -437,7 +438,7 @@ SSC Control Pvt. Ltd.`
     // Generate PO number at approval
     const isCO = po.po_number?.startsWith('Temp/PCO') || po.order_id
     const { data: poNum, error: rpcErr } = await sb.rpc('next_po_number', { p_is_co: !!isCO })
-    if (rpcErr) { toast('Error generating PO number: ' + rpcErr.message); setSaving(false); return }
+    if (rpcErr) { toast(friendlyError(rpcErr, "Generating PO number failed. Please try again.")); setSaving(false); return }
 
     // Generate PO PDF
     let poPdfUrl = null
@@ -934,7 +935,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
       updated_at: new Date().toISOString(),
     }).eq('id', id)
 
-    if (poErr) { toast('Save failed: ' + poErr.message); setSaving(false); return }
+    if (poErr) { toast(friendlyError(poErr, "Save failed. Please try again.")); setSaving(false); return }
 
     const { error: delErr } = await sb.from('po_items').delete().eq('po_id', id)
     if (delErr) { toast('Failed to update items: ' + delErr.message); setSaving(false); return }
@@ -951,7 +952,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
         order_item_id: item.order_item_id || null,
       }))
       const { error: insErr } = await sb.from('po_items').insert(rows)
-      if (insErr) { toast('PO updated but items failed: ' + insErr.message); setSaving(false); await loadPO(); return }
+      if (insErr) { toast(friendlyError(insErr, "PO updated but items failed. Please try again.")); setSaving(false); await loadPO(); return }
     }
 
     await logActivity('Purchase Order edited')

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { friendlyError } from '../lib/errorMsg'
 
 const ALL_STAGES = [
   'LEAD_CAPTURED','CONTACTED','QUALIFIED','BOM_RECEIVED',
@@ -141,7 +142,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
       principal_id:       selectedBrands[0] || null,
       product_notes:      form.opportunity_name.trim(),
     }).select().single()
-    if (error) { toast('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     // Log creation activity with the actual creator's ID (not the assigned rep)
     await sb.from('crm_activities').insert({
       opportunity_id: data.id,

@@ -6,6 +6,7 @@ import { FY_START } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
+import { friendlyError } from '../lib/errorMsg'
 
 const FC_ADDRESSES = {
   Kaveri: 'SSC Control Pvt Ltd, 17(A) Ashwamegh Warehouse, Behind New Ujala Hotel, Sarkhej Bavla Highway, Sarkhej, Ahmedabad, Gujarat 382210',
@@ -316,7 +317,7 @@ export default function NewPurchaseOrder() {
         is_test:           isTest,
       }).select('id').single()
 
-      if (insertErr) { toast('Error: ' + insertErr.message); setSubmitting(false); return }
+      if (insertErr) { toast(friendlyError(insertErr)); setSubmitting(false); return }
 
       const lineItems = filledItems.map((item, idx) => ({
         po_id:            po.id,
@@ -332,12 +333,12 @@ export default function NewPurchaseOrder() {
       }))
 
       const { error: itemsErr } = await sb.from('po_items').insert(lineItems)
-      if (itemsErr) toast('PO created but items failed: ' + itemsErr.message)
+      if (itemsErr) toast(friendlyError(itemsErr, "PO created but items failed. Please try again."))
 
       toast('Purchase Order created — PO number will be assigned on approval', 'success')
       navigate('/procurement/po/' + po.id)
     } catch (err) {
-      toast('Error: ' + err.message)
+      toast(friendlyError(err))
       setSubmitting(false)
     }
   }

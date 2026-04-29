@@ -6,6 +6,7 @@ import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
+import { friendlyError } from '../lib/errorMsg'
 
 const SALES_REPS = [
   'Aarth Joshi','Akash Devda','Ankit Dave','Bhavesh Patel','Darsh Chauhan',
@@ -143,7 +144,7 @@ export default function CustomerDetail() {
     if (!contactForm.name.trim()) { toast('Name is required'); return }
     setSavingContact(true)
     const { data, error } = await sb.from('customer_contacts').insert({ ...contactForm, customer_id: id }).select().single()
-    if (error) { toast('Error: ' + error.message); setSavingContact(false); return }
+    if (error) { toast(friendlyError(error)); setSavingContact(false); return }
     setContacts(p => [...p, data])
     setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
     setShowContactModal(false)
@@ -206,7 +207,7 @@ export default function CustomerDetail() {
       vi_payment:       editData.vi_payment || null,
       vi_expected_business: editData.vi_expected_business || null,
     }).eq('id', id)
-    if (error) { toast('Error saving: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error, "Saving failed. Please try again.")); setSaving(false); return }
     const { data: fresh } = await sb.from('customers').select('*').eq('id', id).single()
     if (fresh && fresh.credit_terms !== editData.credit_terms) {
       toast('Save blocked by database policy. Ask your admin to enable UPDATE policy on the customers table in Supabase.')
@@ -231,7 +232,7 @@ export default function CustomerDetail() {
       credit_check_at:       new Date().toISOString(),
       credit_check_status:   'completed',
     }).eq('id', id)
-    if (error) { toast('Error: ' + error.message); setSavingCC(false); return }
+    if (error) { toast(friendlyError(error)); setSavingCC(false); return }
     setCustomer(p => ({ ...p, credit_check_gst: ccForm.gst||null, credit_check_mca: ccForm.mca||null, credit_check_3rdparty: ccForm.thirdparty||null, credit_check_by: userName, credit_check_at: new Date().toISOString(), credit_check_status:'completed' }))
     setShowCreditCheck(false); setSavingCC(false)
     toast('Credit check saved', 'success')

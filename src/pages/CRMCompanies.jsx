@@ -5,6 +5,7 @@ import Layout from '../components/Layout'
 import '../styles/crm.css'
 import '../styles/orders.css'
 import { toast } from '../lib/toast'
+import { friendlyError } from '../lib/errorMsg'
 
 const INDUSTRIES = ['Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal','Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG','Energy','Automobile','Power Electronics','Datacenters','Road Construction','Cement','Tyre','Petroleum','Chemical']
 const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
@@ -49,7 +50,7 @@ export default function CRMCompanies() {
       ...form,
       assigned_rep_id: form.assigned_rep_id || user.id,
     }).select('*, profiles(name)').single()
-    if (error) { toast('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
     setCompanies(prev => [data, ...prev])
     setShowForm(false)
     setForm({ company_name:'', gstin:'', city:'', address:'', customer_type:'', industry:'', status:'Active', assigned_rep_id:'' })

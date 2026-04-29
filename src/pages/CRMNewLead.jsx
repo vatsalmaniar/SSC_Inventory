@@ -5,6 +5,7 @@ import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import Typeahead from '../components/Typeahead'
 import '../styles/neworder.css'
+import { friendlyError } from '../lib/errorMsg'
 
 const ALL_STAGES = [
   'LEAD_CAPTURED','CONTACTED','QUALIFIED','BOM_RECEIVED',
@@ -155,7 +156,7 @@ export default function CRMNewLead() {
       product_notes:       form.opportunity_name.trim(),
     }).select().single()
 
-    if (error) { toast('Error: ' + error.message); setSaving(false); return }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
 
     await sb.from('crm_activities').insert({
       opportunity_id: data.id,

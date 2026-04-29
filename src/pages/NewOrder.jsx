@@ -5,6 +5,7 @@ import { toast } from '../lib/toast'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
+import { friendlyError } from '../lib/errorMsg'
 
 function emptyItem() {
   return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '' }
@@ -183,7 +184,7 @@ export default function NewOrder() {
       low_value_reason:  grandTotal < 8000 ? lowValueReason.trim() : null,
     }).select().single()
 
-    if (error) { toast('Error: ' + error.message); setSubmitting(false); return }
+    if (error) { toast(friendlyError(error)); setSubmitting(false); return }
 
     const { error: itemsError } = await sb.from('order_items').insert(
       validItems.map((item, i) => ({
