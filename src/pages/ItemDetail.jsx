@@ -187,16 +187,16 @@ export default function ItemDetail() {
             {/* KPI tiles */}
             <div className="c360-stats" style={{ marginTop: 16 }}>
               {[
-                { label: 'Total Orders',     val: kpi.totalOrders,    color: '#1a4dab', bg: '#eff6ff' },
-                { label: 'Pending Orders',   val: kpi.pendingOrders,  color: '#92400e', bg: '#fef3c7' },
-                { label: 'Delivered Orders', val: kpi.deliveredOrders, color: '#166534', bg: '#dcfce7' },
-                { label: 'Total POs',        val: kpi.totalPos,       color: '#5b21b6', bg: '#ede9fe' },
-                { label: 'Pending POs',      val: kpi.pendingPos,     color: '#92400e', bg: '#fef3c7' },
-                { label: 'Received POs',     val: kpi.receivedPos,    color: '#166534', bg: '#dcfce7' },
+                { label: 'Total Orders',     val: kpi.totalOrders     },
+                { label: 'Pending Orders',   val: kpi.pendingOrders   },
+                { label: 'Delivered Orders', val: kpi.deliveredOrders },
+                { label: 'Total POs',        val: kpi.totalPos        },
+                { label: 'Pending POs',      val: kpi.pendingPos      },
+                { label: 'Received POs',     val: kpi.receivedPos     },
               ].map(k => (
-                <div key={k.label} className="c360-stat" style={{ background: k.bg }}>
-                  <span style={{ fontSize: 20, fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.val}</span>
-                  <span style={{ fontSize: 10, color: k.color, opacity: 0.8, fontWeight: 600, whiteSpace: 'nowrap' }}>{k.label}</span>
+                <div key={k.label} className="c360-stat">
+                  <span className="c360-stat-label">{k.label}</span>
+                  <span className="c360-stat-value">{k.val}</span>
                 </div>
               ))}
             </div>
