@@ -263,7 +263,7 @@ BEGIN
   RETURN EXISTS (
     SELECT 1 FROM public.profiles
     WHERE id = auth.uid()
-    AND role IN ('admin', 'ops', 'accounts')
+    AND role IN ('admin', 'ops', 'accounts', 'management')
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -986,7 +986,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   const isCancelled = po.status === 'cancelled'
   const isDone = po.status === 'material_received'
   const isPostApproval  = !['draft','pending_approval'].includes(po.status)
-  const canAmendPostApproval = userRole === 'admin' || userName === 'Ankit Dave'
+  const canAmendPostApproval = ['admin','management'].includes(userRole)
   const canEdit = !['material_received','received','closed','cancelled'].includes(po.status)
     && !editMode
     && (!isPostApproval || canAmendPostApproval)
