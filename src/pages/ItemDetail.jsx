@@ -187,16 +187,16 @@ export default function ItemDetail() {
             {/* KPI tiles */}
             <div className="c360-stats" style={{ marginTop: 16 }}>
               {[
-                { label: 'Total Orders',     val: kpi.totalOrders     },
-                { label: 'Pending Orders',   val: kpi.pendingOrders   },
-                { label: 'Delivered Orders', val: kpi.deliveredOrders },
-                { label: 'Total POs',        val: kpi.totalPos        },
-                { label: 'Pending POs',      val: kpi.pendingPos      },
-                { label: 'Received POs',     val: kpi.receivedPos     },
+                { label: 'Total Orders',     val: kpi.totalOrders,     color: '#1a4dab' },
+                { label: 'Pending Orders',   val: kpi.pendingOrders,   color: '#92400e' },
+                { label: 'Delivered Orders', val: kpi.deliveredOrders, color: '#166534' },
+                { label: 'Total POs',        val: kpi.totalPos,        color: '#5b21b6' },
+                { label: 'Pending POs',      val: kpi.pendingPos,      color: '#92400e' },
+                { label: 'Received POs',     val: kpi.receivedPos,     color: '#166534' },
               ].map(k => (
                 <div key={k.label} className="c360-stat">
                   <span className="c360-stat-label">{k.label}</span>
-                  <span className="c360-stat-value">{k.val}</span>
+                  <span className="c360-stat-value" style={{ color: k.color }}>{k.val}</span>
                 </div>
               ))}
             </div>
