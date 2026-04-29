@@ -261,6 +261,14 @@ export default function ItemDetail() {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--gray-200)', background: 'var(--gray-50)' }}>
+                      <td colSpan={3} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({orders.length} rows)</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{orders.reduce((s, r) => s + (r.qty || 0), 0)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{orders.reduce((s, r) => s + (r.dispatched_qty || 0), 0)}</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tfoot>
                 </table>
               )}
             </div>
@@ -297,6 +305,14 @@ export default function ItemDetail() {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--gray-200)', background: 'var(--gray-50)' }}>
+                      <td colSpan={3} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({pos.length} rows)</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{pos.reduce((s, r) => s + (r.qty || 0), 0)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{pos.reduce((s, r) => s + (r.received_qty || 0), 0)}</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tfoot>
                 </table>
               )}
             </div>
