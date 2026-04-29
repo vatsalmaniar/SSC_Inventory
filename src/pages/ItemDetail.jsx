@@ -6,25 +6,28 @@ import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 
 const ORDER_STATUS = {
-  pending: { label: 'Pending', bg: '#fef3c7', color: '#92400e' },
-  dispatch: { label: 'Ready to Ship', bg: '#dbeafe', color: '#1e40af' },
-  partial_dispatch: { label: 'Partial', bg: '#ede9fe', color: '#5b21b6' },
-  delivery_created: { label: 'At FC', bg: '#e0e7ff', color: '#3730a3' },
-  picking: { label: 'Picking', bg: '#fef9c3', color: '#854d0e' },
-  packing: { label: 'Packing', bg: '#fef9c3', color: '#854d0e' },
-  goods_issued: { label: 'Goods Issued', bg: '#dcfce7', color: '#166534' },
-  invoice_generated: { label: 'Invoiced', bg: '#dcfce7', color: '#166534' },
-  dispatched_fc: { label: 'Delivered', bg: '#dcfce7', color: '#166534' },
-  cancelled: { label: 'Cancelled', bg: '#fee2e2', color: '#991b1b' },
+  pending:            { label: 'Pending',         bg: '#fef3c7', color: '#92400e' },
+  dispatch:           { label: 'Ready to Ship',   bg: '#dbeafe', color: '#1e40af' },
+  partial_dispatch:   { label: 'Partial',         bg: '#ede9fe', color: '#5b21b6' },
+  delivery_created:   { label: 'At FC',           bg: '#e0e7ff', color: '#3730a3' },
+  picking:            { label: 'Picking',         bg: '#fef9c3', color: '#854d0e' },
+  packing:            { label: 'Packing',         bg: '#fef9c3', color: '#854d0e' },
+  goods_issued:       { label: 'Goods Issued',    bg: '#dcfce7', color: '#166534' },
+  invoice_generated:  { label: 'Invoiced',        bg: '#dcfce7', color: '#166534' },
+  dispatched_fc:      { label: 'Delivered',       bg: '#dcfce7', color: '#166534' },
+  closed:             { label: 'Closed',          bg: '#f3f4f6', color: '#374151' },
+  cancelled:          { label: 'Cancelled',       bg: '#fee2e2', color: '#991b1b' },
 }
 
 const PO_STATUS = {
-  draft: { label: 'Draft', bg: '#f3f4f6', color: '#6b7280' },
-  pending: { label: 'Pending', bg: '#fef3c7', color: '#92400e' },
-  placed: { label: 'Placed', bg: '#dbeafe', color: '#1e40af' },
-  partial: { label: 'Partial', bg: '#ede9fe', color: '#5b21b6' },
-  received: { label: 'Received', bg: '#dcfce7', color: '#166534' },
-  cancelled: { label: 'Cancelled', bg: '#fee2e2', color: '#991b1b' },
+  draft:                { label: 'Draft',                bg: '#f3f4f6', color: '#6b7280' },
+  pending_approval:     { label: 'Pending Approval',     bg: '#fef3c7', color: '#92400e' },
+  approved:             { label: 'Approved',             bg: '#dbeafe', color: '#1e40af' },
+  placed:               { label: 'Placed',               bg: '#e0e7ff', color: '#3730a3' },
+  acknowledged:         { label: 'Acknowledged',         bg: '#ede9fe', color: '#5b21b6' },
+  delivery_confirmation:{ label: 'Delivery Confirmed',   bg: '#d1fae5', color: '#065f46' },
+  material_received:    { label: 'Material Received',    bg: '#dcfce7', color: '#166534' },
+  cancelled:            { label: 'Cancelled',            bg: '#fee2e2', color: '#991b1b' },
 }
 
 function StatusBadge({ status, map }) {
