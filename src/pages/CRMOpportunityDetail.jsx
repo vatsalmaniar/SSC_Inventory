@@ -1619,6 +1619,7 @@ export default function CRMOpportunityDetail() {
                               onSelect={it => updateQuoteRow(idx, 'item_code', it.item_code)}
                               placeholder="Search or type..."
                               fetchFn={fetchItems}
+                              strictSelect
                               renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>}
                             />
                             <input
@@ -2162,6 +2163,7 @@ export default function CRMOpportunityDetail() {
                                 onSelect={it => updateSampleItem(idx,'item_code',it.item_code)}
                                 placeholder="Search or type…"
                                 fetchFn={async q => { const { data } = await sb.from('items').select('item_code').ilike('item_code','%'+q+'%').limit(10); return data||[] }}
+                                strictSelect
                                 renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>}
                               />
                             </td>
@@ -2344,6 +2346,7 @@ export default function CRMOpportunityDetail() {
                                 onSelect={it => updateSampleItem(idx, 'item_code', it.item_code)}
                                 placeholder="Search or type…"
                                 fetchFn={async q => { const { data } = await sb.from('items').select('item_code').ilike('item_code','%'+q+'%').limit(10); return data||[] }}
+                                strictSelect
                                 renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>}
                               />
                             </td>

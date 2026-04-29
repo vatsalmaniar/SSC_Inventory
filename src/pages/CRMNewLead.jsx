@@ -213,6 +213,7 @@ export default function CRMNewLead() {
                 onSelect={selectCustomer}
                 placeholder="Search customer name..."
                 fetchFn={fetchCustomers}
+                strictSelect
                 renderItem={c => (
                   <>
                     <div className="typeahead-item-main" style={{display:'flex',alignItems:'center',gap:6}}>

@@ -1361,7 +1361,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                             <td className="col-code">
                               <Typeahead value={item.item_code || ''} onChange={v => updateEditItem(idx, 'item_code', v)}
                                 onSelect={it => updateEditItem(idx, 'item_code', it.item_code)} placeholder="Search..."
-                                fetchFn={fetchItems} renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>} />
+                                fetchFn={fetchItems} strictSelect renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>} />
                             </td>
                             <td className="col-qty"><input type="number" value={item.qty} onChange={e => updateEditItem(idx, 'qty', e.target.value)} placeholder="0" /></td>
                             <td className="col-lp"><input type="number" value={item.lp_unit_price} onChange={e => updateEditItem(idx, 'lp_unit_price', e.target.value)} placeholder="0.00" step="0.01" /></td>

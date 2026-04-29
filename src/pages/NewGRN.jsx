@@ -389,6 +389,7 @@ export default function NewGRN() {
                     onSelect={selectVendor}
                     placeholder="Search vendor by name or code..."
                     fetchFn={fetchVendors}
+                    strictSelect
                     renderItem={v => (
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                         {v.vendor_name}
@@ -426,6 +427,7 @@ export default function NewGRN() {
                   onSelect={o => loadSRItems(o)}
                   placeholder="Search SSC/SR number or customer..."
                   fetchFn={fetchSROrders}
+                  strictSelect
                   renderItem={o => (
                     <div>
                       <span style={{ fontWeight: 600, fontFamily: 'var(--mono)' }}>{o.order_number}</span>
@@ -447,6 +449,7 @@ export default function NewGRN() {
                   value={soText}
                   onChange={v => { setSoText(v); if (!v.trim()) { setSelectedSO(null); setSoItems([]) } }}
                   onSelect={o => loadSOItems(o)}
+                  strictSelect
                   placeholder="Search order number or customer..."
                   fetchFn={fetchSOOrders}
                   renderItem={o => (
@@ -497,6 +500,7 @@ export default function NewGRN() {
                             setItems(prev => { const n = [...prev]; n[idx] = { ...emptyItem(), _poText: v }; return n })
                           }}
                           onSelect={po => selectPOForRow(idx, po)}
+                          strictSelect
                           placeholder="Search PO..."
                           fetchFn={fetchPOs}
                           renderItem={po => (

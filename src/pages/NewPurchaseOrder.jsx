@@ -388,6 +388,7 @@ export default function NewPurchaseOrder() {
                 onSelect={selectVendor}
                 placeholder="Search vendor by name or code..."
                 fetchFn={fetchVendors}
+                strictSelect
                 renderItem={v => (
                   <>
                     <div className="typeahead-item-main" style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -438,6 +439,7 @@ export default function NewPurchaseOrder() {
                   onSelect={selectDeliveryCustomer}
                   placeholder="Search customer name..."
                   fetchFn={fetchCustomers}
+                  strictSelect
                   renderItem={c => (
                     <div className="typeahead-item-main" style={{ display:'flex', alignItems:'center', gap:6 }}>
                       {c.customer_name}
@@ -503,6 +505,7 @@ export default function NewPurchaseOrder() {
                   onSelect={selectCO}
                   placeholder="Type CO number or customer name..."
                   fetchFn={fetchPendingCOs}
+                  strictSelect
                   renderItem={co => (
                     <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
                       <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:600 }}>{co.order_number}</div>
