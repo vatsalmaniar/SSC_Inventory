@@ -35,6 +35,8 @@ const VendorMaster = lazy(() => import('./pages/VendorMaster'))
 const NewVendor = lazy(() => import('./pages/NewVendor'))
 const VendorDetail = lazy(() => import('./pages/VendorDetail'))
 const ProcurementDashboard = lazy(() => import('./pages/ProcurementDashboard'))
+const ProcurementForecast = lazy(() => import('./pages/ProcurementForecast'))
+const ProcurementForecastConfig = lazy(() => import('./pages/ProcurementForecastConfig'))
 const PurchaseOrderList = lazy(() => import('./pages/PurchaseOrderList'))
 const NewPurchaseOrder = lazy(() => import('./pages/NewPurchaseOrder'))
 const PurchaseOrderDetail = lazy(() => import('./pages/PurchaseOrderDetail'))
@@ -93,6 +95,8 @@ export default function App() {
           <Route path="/procurement/po/new" element={<NewPurchaseOrder />} />
           <Route path="/procurement/po/:id" element={<PurchaseOrderDetail />} />
           <Route path="/procurement/orders" element={<ProcurementOrders />} />
+          <Route path="/procurement/forecast" element={<ProcurementForecast />} />
+          <Route path="/procurement/forecast/config" element={<ProcurementForecastConfig />} />
           <Route path="/procurement/grn" element={<Navigate to="/fc/grn" replace />} />
           <Route path="/procurement/grn/new" element={<Navigate to="/fc/grn/new" replace />} />
           <Route path="/procurement/invoices" element={<PurchaseInvoiceList />} />
