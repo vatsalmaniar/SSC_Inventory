@@ -172,11 +172,11 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
   if (!open) return null
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'24px 16px', overflowY:'auto' }}>
-      <div style={{ background:'var(--gray-50)', width:'100%', maxWidth:920, borderRadius:12, boxShadow:'0 24px 80px rgba(0,0,0,0.3)', display:'flex', flexDirection:'column', minHeight:'min-content' }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:200, overflowY:'auto', padding:'24px 16px' }}>
+      <div style={{ background:'var(--gray-50)', width:'100%', maxWidth:920, margin:'0 auto', borderRadius:12, boxShadow:'0 24px 80px rgba(0,0,0,0.3)' }}>
 
         {/* Header */}
-        <div style={{ background:'white', borderBottom:'1px solid var(--gray-100)', padding:'16px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', borderRadius:'12px 12px 0 0', position:'sticky', top:0, zIndex:10 }}>
+        <div style={{ background:'white', borderBottom:'1px solid var(--gray-100)', padding:'16px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', borderRadius:'12px 12px 0 0' }}>
           <div>
             <div style={{ fontSize:16, fontWeight:700, color:'var(--gray-900)' }}>New Purchase Order</div>
             <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:2 }}>
@@ -191,7 +191,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
         </div>
 
         {/* Body */}
-        <div className="no-body" style={{ flex:1 }}>
+        <div className="no-body">
 
           {/* ── Vendor ── */}
           <div className="no-card">
