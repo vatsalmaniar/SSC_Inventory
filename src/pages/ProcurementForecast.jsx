@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import ForecastPOModal from './ForecastPOModal'
+import ForecastPOReviewModal from './ForecastPOReviewModal'
 
 const MONTH_NAMES = { '01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec' }
 const DELIVERED_STATUSES = ['dispatched_fc', 'goods_issued', 'invoice_generated', 'closed']
@@ -161,6 +162,8 @@ export default function ProcurementForecast() {
   const [saving, setSaving]         = useState(false)
   const saveGuard = useRef(false)
 
+  const [showPOReview, setShowPOReview]             = useState(false)
+  const [reviewItems, setReviewItems]               = useState([])
   const [showForecastPO, setShowForecastPO]         = useState(false)
   const [forecastPOItems, setForecastPOItems]       = useState([])
   const [loadingForecastPO, setLoadingForecastPO]   = useState(false)
@@ -308,11 +311,23 @@ export default function ProcurementForecast() {
     })
     const seeds = triggered.map(i => {
       const c = calc(i.item_code)
+      const item = brandItems.find(b => b.item_code === i.item_code)
       const pendingQty = pendingMap[i.item_code] || 0
-      return { item_code: i.item_code, qty: Math.max(0, c.poQty - pendingQty), pendingQty, poQty: c.poQty }
+      return { item_code: i.item_code, itemNo: item?.item_no || '', poQty: c.poQty, pendingQty }
     })
-    setForecastPOItems(seeds)
+    setReviewItems(seeds)
     setLoadingForecastPO(false)
+    setShowPOReview(true)
+  }
+
+  function handleReviewNext(confirmedItems) {
+    setShowPOReview(false)
+    setForecastPOItems(confirmedItems.map(r => ({
+      item_code: r.item_code,
+      qty: r.netQty,
+      pendingQty: r.pendingQty,
+      poQty: r.poQty,
+    })))
     setShowForecastPO(true)
   }
 
@@ -551,6 +566,15 @@ export default function ProcurementForecast() {
           </>
         )}
       </div>
+
+      <ForecastPOReviewModal
+        open={showPOReview}
+        onClose={() => setShowPOReview(false)}
+        onNext={handleReviewNext}
+        seedItems={reviewItems}
+        brand={selectedBrand}
+        qLabel={QLabel}
+      />
 
       <ForecastPOModal
         open={showForecastPO}
