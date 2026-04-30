@@ -464,14 +464,16 @@ export default function OrderDetail() {
       toast('Order approved', 'success')
       await loadOrder(); setSaving(false)
     } else if (order.status === 'inv_check') {
-      await sb.from('orders').update({ status: 'inventory_check', updated_at: new Date().toISOString() }).eq('id', id)
+      const { error } = await sb.from('orders').update({ status: 'inventory_check', updated_at: new Date().toISOString() }).eq('id', id)
+      if (error) { toast(friendlyError(error)); setSaving(false); return }
       await logActivity('Approval confirmed — moved to Inventory Check')
       toast('Moved to Inventory Check', 'success')
       await loadOrder(); setSaving(false)
     } else if (order.status === 'inventory_check') {
       const allInStock = (order.order_items || []).every(i => stockStatuses[i.id] === 'in_stock')
       if (!allInStock) { toast('All items must be marked "In Stock" before proceeding'); setSaving(false); return }
-      await sb.from('orders').update({ status: 'dispatch', updated_at: new Date().toISOString() }).eq('id', id)
+      const { error } = await sb.from('orders').update({ status: 'dispatch', updated_at: new Date().toISOString() }).eq('id', id)
+      if (error) { toast(friendlyError(error)); setSaving(false); return }
       await logActivity('Inventory confirmed — Ready to Ship')
       toast('Ready to Ship', 'success')
       await loadOrder(); setSaving(false)
