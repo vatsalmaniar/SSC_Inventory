@@ -6,12 +6,14 @@ import Layout from '../components/Layout'
 
 export default function ProcurementForecastConfig() {
   const navigate = useNavigate()
-  const [userRole, setUserRole] = useState('')
-  const [brands, setBrands]     = useState([])
-  const [configs, setConfigs]   = useState({}) // { brand: row }
-  const [edits, setEdits]       = useState({}) // { brand: { lead_time_days, transit_days, processing_days, inventory_days } }
-  const [saving, setSaving]     = useState(null) // brand being saved
-  const [loading, setLoading]   = useState(true)
+  const [brands, setBrands]       = useState([])
+  const [selectedBrand, setSelectedBrand] = useState('')
+  const [configs, setConfigs]     = useState({})
+  const [row, setRow]             = useState({ lead_time_days: 0, transit_days: 0, processing_days: 0, inventory_days: 45 })
+  const [saved, setSaved]         = useState(null) // last saved values for dirty check
+  const [saving, setSaving]       = useState(false)
+  const [loading, setLoading]     = useState(true)
+  const saveGuard = { current: false }
 
   useEffect(() => { init() }, [])
 
@@ -19,137 +21,171 @@ export default function ProcurementForecastConfig() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
-    const role = profile?.role || ''
-    if (!['ops', 'admin', 'management'].includes(role)) { navigate('/dashboard'); return }
-    setUserRole(role)
+    if (!['ops','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
 
     const [brandsRes, configRes] = await Promise.all([
-      sb.from('items').select('brand').not('brand', 'is', null).neq('brand', '').order('brand'),
+      sb.rpc('get_distinct_brands'),
       sb.from('procurement_forecast_config').select('*'),
     ])
-
-    const uniqueBrands = [...new Set((brandsRes.data || []).map(r => r.brand).filter(Boolean))].sort()
+    const uniqueBrands = (brandsRes.data || []).map(r => r.brand).filter(Boolean)
     const configMap = {}
     ;(configRes.data || []).forEach(r => { configMap[r.brand] = r })
     setBrands(uniqueBrands)
     setConfigs(configMap)
-
-    const editMap = {}
-    uniqueBrands.forEach(b => {
-      editMap[b] = configMap[b]
-        ? { lead_time_days: configMap[b].lead_time_days, transit_days: configMap[b].transit_days, processing_days: configMap[b].processing_days, inventory_days: configMap[b].inventory_days }
-        : { lead_time_days: 0, transit_days: 0, processing_days: 0, inventory_days: 45 }
-    })
-    setEdits(editMap)
     setLoading(false)
   }
 
-  function setField(brand, field, val) {
-    setEdits(prev => ({ ...prev, [brand]: { ...prev[brand], [field]: val === '' ? '' : parseInt(val) || 0 } }))
+  function selectBrand(brand) {
+    setSelectedBrand(brand)
+    const cfg = configs[brand]
+    const vals = cfg
+      ? { lead_time_days: cfg.lead_time_days, transit_days: cfg.transit_days, processing_days: cfg.processing_days, inventory_days: cfg.inventory_days }
+      : { lead_time_days: 0, transit_days: 0, processing_days: 0, inventory_days: 45 }
+    setRow(vals)
+    setSaved(cfg ? { ...vals } : null)
   }
 
-  async function saveRow(brand) {
-    setSaving(brand)
-    const row = edits[brand]
-    const reorderDays = (row.lead_time_days || 0) + (row.transit_days || 0) + (row.processing_days || 0)
+  function setField(field, val) {
+    setRow(prev => ({ ...prev, [field]: parseInt(val) || 0 }))
+  }
+
+  const reorderDays = (row.lead_time_days || 0) + (row.transit_days || 0) + (row.processing_days || 0)
+  const replenishDays = reorderDays + (row.inventory_days || 45)
+  const isDirty = !saved || JSON.stringify(row) !== JSON.stringify(saved)
+
+  async function saveConfig() {
+    if (saveGuard.current || !selectedBrand) return
+    saveGuard.current = true
+    setSaving(true)
     const { error } = await sb.from('procurement_forecast_config').upsert({
-      brand,
-      lead_time_days: row.lead_time_days || 0,
-      transit_days: row.transit_days || 0,
-      processing_days: row.processing_days || 0,
-      inventory_days: row.inventory_days || 45,
+      brand: selectedBrand,
+      lead_time_days: row.lead_time_days,
+      transit_days: row.transit_days,
+      processing_days: row.processing_days,
+      inventory_days: row.inventory_days,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'brand' })
-    if (error) { toast('Failed to save: ' + error.message); setSaving(null); return }
-    setConfigs(prev => ({ ...prev, [brand]: { ...prev[brand], ...row, brand } }))
-    toast(`${brand} config saved`, 'success')
-    setSaving(null)
+    if (error) { toast('Failed to save: ' + error.message); saveGuard.current = false; setSaving(false); return }
+    setConfigs(prev => ({ ...prev, [selectedBrand]: { ...prev[selectedBrand], ...row, brand: selectedBrand } }))
+    setSaved({ ...row })
+    toast(`${selectedBrand} saved`, 'success')
+    saveGuard.current = false
+    setSaving(false)
   }
 
-  const INP = { width: 72, padding: '6px 8px', border: '1.5px solid var(--gray-200)', borderRadius: 6, fontFamily: 'var(--mono)', fontSize: 13, textAlign: 'right', outline: 'none', background: 'var(--gray-50)' }
-  const TH = { padding: '10px 14px', fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.5px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-100)', whiteSpace: 'nowrap' }
-  const TD = { padding: '12px 14px', fontSize: 13, borderBottom: '1px solid var(--gray-50)', verticalAlign: 'middle' }
+  const SLIDER_STYLE = { width: '100%', accentColor: '#2550c0', height: 4, cursor: 'pointer' }
+
+  function SliderRow({ label, field, max, color }) {
+    const val = row[field] || 0
+    return (
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--gray-700)' }}>{label}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 22, fontWeight: 700, color, fontFamily: 'var(--mono)' }}>{val}</span>
+            <span style={{ fontSize: 13, color: 'var(--gray-500)' }}>days</span>
+          </div>
+        </div>
+        <input type="range" min="0" max={max} value={val} onChange={e => setField(field, e.target.value)} style={SLIDER_STYLE} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--gray-300)', marginTop: 4 }}>
+          <span>0</span><span>{max / 2}</span><span>{max}</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <Layout>
-      <div style={{ padding: '28px 32px', maxWidth: 960, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+      <div style={{ padding: '28px 32px', maxWidth: 720, margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
           <button onClick={() => navigate('/procurement/forecast')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
             <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
             Forecast
           </button>
           <span style={{ color: 'var(--gray-300)' }}>/</span>
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--gray-900)' }}>Lead Time Configuration</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--gray-900)' }}>Lead Time Configuration</span>
         </div>
 
-        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '12px 16px', marginBottom: 24, fontSize: 13, color: '#1d4ed8' }}>
-          Set supplier lead time, transportation, and processing days per brand. Reorder Level = Lead Time + Transit + Processing. Replenishment Level = Reorder Level + Inventory Days.
+        {/* Brand selector */}
+        <div style={{ marginBottom: 28 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-600)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Select Brand</label>
+          <select value={selectedBrand} onChange={e => selectBrand(e.target.value)}
+            style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--gray-200)', borderRadius: 8, fontSize: 14, color: 'var(--gray-900)', background: 'white', outline: 'none', cursor: 'pointer' }}>
+            <option value="">— Choose a brand —</option>
+            {brands.map(b => <option key={b} value={b}>{b} {configs[b] ? '✓' : ''}</option>)}
+          </select>
         </div>
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 48, color: 'var(--gray-400)' }}>Loading…</div>
+        {!selectedBrand ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--gray-400)', fontSize: 14 }}>
+            Select a brand above to configure its lead time
+          </div>
         ) : (
-          <div style={{ background: 'white', border: '1px solid var(--gray-100)', borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ ...TH, textAlign: 'left' }}>Brand</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Lead Time (days)</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Transit (days)</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Processing (days)</th>
-                  <th style={{ ...TH, textAlign: 'right', color: '#1d4ed8' }}>Reorder Level</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Inventory Days</th>
-                  <th style={{ ...TH, textAlign: 'right', color: '#15803d' }}>Replenishment Level</th>
-                  <th style={{ ...TH }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {brands.map(brand => {
-                  const row = edits[brand] || { lead_time_days: 0, transit_days: 0, processing_days: 0, inventory_days: 45 }
-                  const reorderDays = (row.lead_time_days || 0) + (row.transit_days || 0) + (row.processing_days || 0)
-                  const replenishDays = reorderDays + (row.inventory_days || 45)
-                  const isSaving = saving === brand
-                  const isDirty = JSON.stringify(row) !== JSON.stringify(
-                    configs[brand]
-                      ? { lead_time_days: configs[brand].lead_time_days, transit_days: configs[brand].transit_days, processing_days: configs[brand].processing_days, inventory_days: configs[brand].inventory_days }
-                      : { lead_time_days: 0, transit_days: 0, processing_days: 0, inventory_days: 45 }
-                  )
-                  return (
-                    <tr key={brand} style={{ background: isDirty ? '#fffbeb' : 'white' }}>
-                      <td style={{ ...TD, fontWeight: 600, color: 'var(--gray-900)' }}>{brand}</td>
-                      <td style={{ ...TD, textAlign: 'right' }}>
-                        <input style={INP} type="number" min="0" value={row.lead_time_days} onChange={e => setField(brand, 'lead_time_days', e.target.value)} />
-                      </td>
-                      <td style={{ ...TD, textAlign: 'right' }}>
-                        <input style={INP} type="number" min="0" value={row.transit_days} onChange={e => setField(brand, 'transit_days', e.target.value)} />
-                      </td>
-                      <td style={{ ...TD, textAlign: 'right' }}>
-                        <input style={INP} type="number" min="0" value={row.processing_days} onChange={e => setField(brand, 'processing_days', e.target.value)} />
-                      </td>
-                      <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#1d4ed8', fontFamily: 'var(--mono)' }}>{reorderDays}d</td>
-                      <td style={{ ...TD, textAlign: 'right' }}>
-                        <input style={INP} type="number" min="1" value={row.inventory_days} onChange={e => setField(brand, 'inventory_days', e.target.value)} />
-                      </td>
-                      <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#15803d', fontFamily: 'var(--mono)' }}>{replenishDays}d</td>
-                      <td style={{ ...TD }}>
-                        {isDirty && (
-                          <button onClick={() => saveRow(brand)} disabled={isSaving}
-                            style={{ padding: '6px 14px', background: 'var(--blue-700)', color: 'white', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: isSaving ? 0.7 : 1 }}>
-                            {isSaving ? 'Saving…' : 'Save'}
-                          </button>
-                        )}
-                        {!isDirty && configs[brand] && (
-                          <span style={{ fontSize: 11, color: 'var(--gray-400)' }}>Saved</span>
-                        )}
-                        {!isDirty && !configs[brand] && (
-                          <span style={{ fontSize: 11, color: 'var(--gray-300)' }}>Not set</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div style={{ background: 'white', border: '1px solid var(--gray-100)', borderRadius: 12, padding: 28 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--gray-900)', marginBottom: 4 }}>{selectedBrand}</div>
+            <div style={{ fontSize: 12, color: 'var(--gray-500)', marginBottom: 28 }}>Drag sliders to set days. Changes are live — save when done.</div>
+
+            <SliderRow label="Supplier Lead Time" field="lead_time_days" max={90} color="#1d4ed8" />
+            <SliderRow label="Transportation Time" field="transit_days" max={30} color="#7c3aed" />
+            <SliderRow label="Order Processing Time" field="processing_days" max={14} color="#0891b2" />
+
+            {/* Divider */}
+            <div style={{ borderTop: '1px dashed var(--gray-100)', margin: '8px 0 24px' }} />
+
+            {/* Calculation summary */}
+            <div style={{ background: 'var(--gray-50)', borderRadius: 10, padding: '20px 24px', marginBottom: 24 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 16 }}>Calculated Levels</div>
+
+              {/* Visual timeline bar */}
+              <div style={{ position: 'relative', height: 36, borderRadius: 8, overflow: 'hidden', marginBottom: 16, background: 'var(--gray-200)' }}>
+                {replenishDays > 0 && <>
+                  <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${(row.lead_time_days / replenishDays) * 100}%`, background: '#1d4ed8', transition: 'width 0.3s' }} />
+                  <div style={{ position: 'absolute', left: `${(row.lead_time_days / replenishDays) * 100}%`, top: 0, height: '100%', width: `${(row.transit_days / replenishDays) * 100}%`, background: '#7c3aed', transition: 'all 0.3s' }} />
+                  <div style={{ position: 'absolute', left: `${((row.lead_time_days + row.transit_days) / replenishDays) * 100}%`, top: 0, height: '100%', width: `${(row.processing_days / replenishDays) * 100}%`, background: '#0891b2', transition: 'all 0.3s' }} />
+                  <div style={{ position: 'absolute', left: `${(reorderDays / replenishDays) * 100}%`, top: 0, height: '100%', width: `${((row.inventory_days || 45) / replenishDays) * 100}%`, background: '#16a34a', opacity: 0.7, transition: 'all 0.3s' }} />
+                </>}
+              </div>
+
+              {/* Legend */}
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 20 }}>
+                {[['#1d4ed8', 'Lead Time'], ['#7c3aed', 'Transit'], ['#0891b2', 'Processing'], ['#16a34a', 'Inventory Buffer']].map(([c, l]) => (
+                  <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--gray-600)' }}>
+                    <div style={{ width: 10, height: 10, borderRadius: 2, background: c }} />{l}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ background: 'white', borderRadius: 8, padding: '14px 16px', border: '1px solid var(--gray-100)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--gray-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>Reorder Level</div>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: '#1d4ed8', fontFamily: 'var(--mono)' }}>{reorderDays}<span style={{ fontSize: 14, fontWeight: 500, color: 'var(--gray-500)', marginLeft: 4 }}>days</span></div>
+                  <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 4 }}>Lead + Transit + Processing</div>
+                </div>
+                <div style={{ background: 'white', borderRadius: 8, padding: '14px 16px', border: '1px solid var(--gray-100)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--gray-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>Replenishment Level</div>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: '#16a34a', fontFamily: 'var(--mono)' }}>{replenishDays}<span style={{ fontSize: 14, fontWeight: 500, color: 'var(--gray-500)', marginLeft: 4 }}>days</span></div>
+                  <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 4 }}>Reorder + {row.inventory_days || 45}d inventory</div>
+                </div>
+              </div>
+
+              {/* Inventory days */}
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gray-700)' }}>Inventory Buffer Days</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 20, fontWeight: 700, color: '#16a34a', fontFamily: 'var(--mono)' }}>{row.inventory_days || 45}</span>
+                    <span style={{ fontSize: 13, color: 'var(--gray-500)' }}>days</span>
+                  </div>
+                </div>
+                <input type="range" min="1" max="90" value={row.inventory_days || 45} onChange={e => setField('inventory_days', e.target.value)} style={{ ...SLIDER_STYLE, accentColor: '#16a34a' }} />
+              </div>
+            </div>
+
+            <button onClick={saveConfig} disabled={saving || !isDirty}
+              style={{ width: '100%', padding: '13px', background: isDirty ? 'var(--blue-700)' : 'var(--gray-100)', color: isDirty ? 'white' : 'var(--gray-400)', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: isDirty ? 'pointer' : 'default', transition: 'all 0.15s' }}>
+              {saving ? 'Saving…' : isDirty ? `Save ${selectedBrand} Configuration` : 'Saved ✓'}
+            </button>
           </div>
         )}
       </div>
