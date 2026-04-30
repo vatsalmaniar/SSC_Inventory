@@ -45,87 +45,78 @@ function sparklinePath(values, w = 300, h = 56) {
 
 function buildMonthlyData(orders) {
   const now = new Date()
+  const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
   const months = []
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(fyStartYear, 3 + i, 1)
     months.push({
       label: MO[d.getMonth()],
       year: d.getFullYear(), month: d.getMonth(), count: 0, value: 0,
+      ordered: 0, dispatched: 0,
     })
   }
+  const curIdx = months.findIndex(m => m.year === now.getFullYear() && m.month === now.getMonth())
   orders.forEach(o => {
     const d = new Date(o.created_at)
     const slot = months.find(m => m.year === d.getFullYear() && m.month === d.getMonth())
     if (slot) {
       slot.count++
       slot.value += (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+      slot.ordered += (o.order_items || []).reduce((s, i) => s + (i.qty || 0), 0)
+      slot.dispatched += (o.order_items || []).reduce((s, i) => s + (i.dispatched_qty || 0), 0)
     }
   })
+  months.forEach((m, i) => { m.isCurrent = i === curIdx; m.isFuture = curIdx >= 0 && i > curIdx })
   return months
 }
 
-function BubbleChart({ data }) {
-  const MAX_DOTS = 8       // rows
-  const R        = 5       // dot radius
-  const GAP      = 4       // gap between dots vertically
-  const SLOT     = R * 2 + GAP   // 14px per row
-  const COL_GAP  = 32      // wider gap → larger viewBox → smaller apparent font size
-  const CHART_H  = MAX_DOTS * SLOT
-  const LABEL_H  = 16
-  const SVG_H    = CHART_H + LABEL_H
-  const maxCount = Math.max(...data.map(d => d.count), 1)
+function OrderVsDispatchChart({ data }) {
+  const PL = 48, PR = 18, PT = 24, PB = 32
+  const W = 760, H = 260
+  const innerW = W - PL - PR
+  const innerH = H - PT - PB
+  const active = data.filter(d => !d.isFuture)
+  const maxVal = Math.max(...active.map(d => Math.max(d.ordered, d.dispatched)), 1)
+  const niceMax = Math.ceil(maxVal / 100) * 100 || 100
+  const stepX = data.length > 1 ? innerW / (data.length - 1) : 0
 
-  // column width = dot diameter; total width fills viewBox
-  const COL_W = R * 2
-  const W     = data.length * (COL_W + COL_GAP) - COL_GAP
+  const xy = (i, v) => [PL + i * stepX, PT + innerH - (v / niceMax) * innerH]
+  const orderedPts = active.map((d, i) => xy(data.indexOf(d), d.ordered))
+  const dispatchedPts = active.map((d, i) => xy(data.indexOf(d), d.dispatched))
+  const toPath = pts => pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ',' + p[1]).join(' ')
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({ v: Math.round(niceMax * t), y: PT + innerH - t * innerH }))
 
   return (
-    <svg viewBox={`0 0 ${W} ${SVG_H}`} width="100%" style={{ display:'block' }}>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display:'block' }}>
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={PL} y1={t.y} x2={W - PR} y2={t.y} stroke="#f1f5f9" strokeWidth="1"/>
+          <text x={PL - 8} y={t.y + 3} fontSize="10" textAnchor="end" fill="#94a3b8" fontFamily="Geist, sans-serif">{t.v}</text>
+        </g>
+      ))}
+      <path d={toPath(orderedPts)} fill="none" stroke="#1a4dab" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d={toPath(dispatchedPts)} fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 3"/>
       {data.map((d, i) => {
-        const filled = Math.round((d.count / maxCount) * MAX_DOTS)
-        const cx     = i * (COL_W + COL_GAP) + R
-        const isCur  = i === data.length - 1
-
-        // tooltip position — top of the filled stack
-        const topFilledY = filled > 0 ? (MAX_DOTS - filled) * SLOT + R : CHART_H
-
+        const [ox, oy] = xy(i, d.ordered)
+        const [dx, dy] = xy(i, d.dispatched)
+        const isCur = d.isCurrent
+        const showOrdered = !d.isFuture && d.ordered > 0
+        const showDispatched = !d.isFuture && d.dispatched > 0
         return (
           <g key={i}>
-            {/* floating count badge on current month */}
-            {isCur && d.count > 0 && (
-              <g>
-                <rect
-                  x={cx - 18} y={topFilledY - SLOT - 16}
-                  width={36} height={18} rx={9}
-                  fill="white"
-                  style={{ filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.14))' }}
-                />
-                <text x={cx} y={topFilledY - SLOT - 4}
-                  textAnchor="middle" fontSize="7" fontWeight="600" fill="#1a4dab"
-                  fontFamily="Geist, sans-serif">
-                  {d.count}
-                </text>
-              </g>
+            {showOrdered && <circle cx={ox} cy={oy} r={isCur ? 4 : 3} fill="#1a4dab"/>}
+            {showDispatched && <circle cx={dx} cy={dy} r={isCur ? 4 : 3} fill="#059669"/>}
+            <text x={PL + i * stepX} y={H - 12} textAnchor="middle" fontSize="11"
+              fill={d.isFuture ? '#cbd5e1' : isCur ? '#0e2d6a' : '#64748b'}
+              fontWeight={isCur ? 700 : 500}
+              fontFamily="Geist, sans-serif">{d.label}</text>
+            {showOrdered && (
+              <text x={ox} y={oy - 7} textAnchor="middle" fontSize="9" fontWeight="600" fill="#1a4dab" fontFamily="Geist, sans-serif">{d.ordered}</text>
             )}
-
-            {/* dot grid */}
-            {Array.from({ length: MAX_DOTS }).map((_, j) => {
-              const cy      = j * SLOT + R
-              const slotIdx = MAX_DOTS - 1 - j  // 0 = bottom
-              const active  = slotIdx < filled
-              return (
-                <circle key={j} cx={cx} cy={cy} r={R}
-                  fill={active ? (isCur ? '#1a4dab' : '#c2d9f5') : '#e2e8f0'} />
-              )
-            })}
-
-            {/* month label */}
-            <text x={cx} y={SVG_H - 2} textAnchor="middle"
-              fontSize="7" fill={isCur ? '#1a4dab' : '#94a3b8'}
-              fontWeight={isCur ? '600' : '400'}
-              fontFamily="Geist, sans-serif">
-              {d.label}
-            </text>
+            {showDispatched && (
+              <text x={dx} y={dy + 14} textAnchor="middle" fontSize="9" fontWeight="600" fill="#059669" fontFamily="Geist, sans-serif">{d.dispatched}</text>
+            )}
           </g>
         )
       })}
@@ -239,8 +230,9 @@ export default function Orders() {
   const spark = sparklinePath(sparkValues, 300, 56)
 
   // month-over-month change for badge
-  const prevMonth  = monthlyData[monthlyData.length - 2]?.count || 0
-  const thisMonth  = monthlyData[monthlyData.length - 1]?.count || 0
+  const curIdx     = monthlyData.findIndex(m => m.isCurrent)
+  const prevMonth  = curIdx > 0 ? monthlyData[curIdx - 1].count : 0
+  const thisMonth  = curIdx >= 0 ? monthlyData[curIdx].count : 0
   const momPct     = prevMonth ? Math.round(((thisMonth - prevMonth) / prevMonth) * 100) : null
 
   const PIPELINE = [
@@ -398,20 +390,24 @@ export default function Orders() {
             {/* Mid row */}
             <div className="dash-mid">
 
-              {/* Bar chart */}
+              {/* Order vs Dispatch chart */}
               <div className="dash-card dash-card-chart">
                 <div className="dash-card-head">
                   <div>
                     <div className="dash-card-title">Order Summary</div>
-                    <div className="dash-card-sub">Last 6 months · by order count</div>
+                    <div className="dash-card-sub">Ordered vs Dispatched (units) · last 12 months</div>
                   </div>
-                  <div style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:28, fontWeight:800, color:'#0e2d6a', letterSpacing:'-1px', lineHeight:1 }}>{orders.length}</div>
-                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>total orders</div>
+                  <div style={{ display:'flex', gap:14, alignItems:'center' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#475569' }}>
+                      <span style={{ width:14, height:2, background:'#1a4dab', borderRadius:1 }}/>Ordered
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#475569' }}>
+                      <span style={{ width:14, height:2, background:'#059669', borderRadius:1, borderTop:'1px dashed #059669' }}/>Dispatched
+                    </div>
                   </div>
                 </div>
                 <div style={{ padding:'12px 16px 16px' }}>
-                  <BubbleChart data={monthlyData} />
+                  <OrderVsDispatchChart data={monthlyData} />
                 </div>
               </div>
 
