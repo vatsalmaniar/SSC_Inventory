@@ -11,7 +11,7 @@ const FC_ADDRESSES = {
 }
 
 function emptyPOItem() {
-  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', _note: '' }
+  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', _pendingQty: 0 }
 }
 
 export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabel, userName, userId, userRole, navigate }) {
@@ -50,7 +50,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
         ...emptyPOItem(),
         item_code: s.item_code,
         qty: s.qty > 0 ? String(s.qty) : '',
-        _note: s.pendingQty > 0 ? `Pending PO: ${s.pendingQty} · Suggested: ${s.poQty}` : `Suggested: ${s.poQty}`,
+        _pendingQty: s.pendingQty || 0,
       })))
     } else {
       setItems([emptyPOItem()])
@@ -278,6 +278,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
                   <tr>
                     <th className="col-sr">#</th>
                     <th className="col-code">Item Code <span className="req">*</span></th>
+                    <th style={{ padding:'9px 10px', fontSize:11, fontWeight:600, color:'#92400e', background:'#fffbeb', whiteSpace:'nowrap', textAlign:'right', borderBottom:'1px solid var(--gray-100)' }}>Pending PO</th>
                     <th className="col-qty">Order Qty <span className="req">*</span></th>
                     <th className="col-lp">LP Price (₹) <span className="req">*</span></th>
                     <th className="col-disc">Disc %</th>
@@ -290,14 +291,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
                 <tbody>
                   {items.map((item, idx) => (
                     <tr key={idx} className={item.item_code ? 'row-filled' : ''}>
-                      <td className="col-sr">
-                        <div>{idx + 1}</div>
-                        {item._note && (
-                          <div style={{ fontSize:9, color:'var(--gray-400)', fontWeight:400, fontFamily:'inherit', lineHeight:1.3, marginTop:2, whiteSpace:'nowrap' }}>
-                            {item._note}
-                          </div>
-                        )}
-                      </td>
+                      <td className="col-sr">{idx + 1}</td>
                       <td className="col-code">
                         <Typeahead
                           value={item.item_code}
@@ -313,6 +307,12 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
                             </div>
                           )}
                         />
+                      </td>
+                      <td style={{ padding:'8px 10px', textAlign:'right', background: item._pendingQty > 0 ? '#fffbeb' : 'transparent', verticalAlign:'middle' }}>
+                        {item._pendingQty > 0
+                          ? <span style={{ fontFamily:'var(--mono)', fontSize:13, fontWeight:700, color:'#b45309' }}>{item._pendingQty}</span>
+                          : <span style={{ color:'var(--gray-300)', fontSize:12 }}>—</span>
+                        }
                       </td>
                       <td className="col-qty">
                         <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', e.target.value)} placeholder="0" min="0" />
