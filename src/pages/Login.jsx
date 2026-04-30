@@ -66,39 +66,38 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    const { data: profile, error: profileErr } = await sb
-      .from('profiles').select('id, name, role, username').eq('username', u).single()
-
-    if (profileErr || !profile) {
-      setLoading(false)
-      setError('Username not found. Check and try again.')
-      return
-    }
-
     const email = u + '@ssccontrol.com'
     const { data, error: authErr } = await sb.auth.signInWithPassword({ email, password: p })
 
     if (authErr) {
-      // Log failed login attempt (fire-and-forget)
       sb.from('login_audit').insert({
-        user_id: profile.id, user_name: profile.name,
+        user_id: null, user_name: null,
         email: email, event_type: 'login_failed',
         user_agent: navigator.userAgent,
       }).then(() => {}).catch(() => {})
       setLoading(false)
-      setError('Incorrect password. Please try again.')
+      setError('Invalid username or password.')
       setPassword('')
       return
     }
 
-    // Demo users bypass MFA entirely
+    const { data: profile, error: profileErr } = await sb
+      .from('profiles').select('id, name, role, username').eq('id', data.session.user.id).single()
+
+    if (profileErr || !profile) {
+      await sb.auth.signOut()
+      setLoading(false)
+      setError('Account is misconfigured. Please contact admin.')
+      setPassword('')
+      return
+    }
+
     if (profile.role === 'demo') {
       await handleSession(data.session)
       setLoading(false)
       return
     }
 
-    // All other users require MFA
     setPendingSession(data.session)
     setPendingProfile(profile)
     await checkAdminMFA()
@@ -223,7 +222,7 @@ export default function Login() {
                 </span>
                 <input ref={usernameRef} type="text" value={username}
                   onChange={e => { setUsername(e.target.value); setError('') }}
-                  onKeyDown={onKeyDown} placeholder="e.g. vatsal.maniar"
+                  onKeyDown={onKeyDown} placeholder="Enter your username"
                   autoComplete="off" autoCapitalize="none"
                   className={hasError ? 'error' : ''} />
               </div>
