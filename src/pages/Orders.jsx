@@ -62,8 +62,8 @@ function buildMonthlyData(orders) {
     if (slot) {
       slot.count++
       slot.value += (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
-      slot.ordered += (o.order_items || []).reduce((s, i) => s + (i.qty || 0), 0)
-      slot.dispatched += (o.order_items || []).reduce((s, i) => s + (i.dispatched_qty || 0), 0)
+      slot.ordered++
+      if (o.status === 'dispatched_fc') slot.dispatched++
     }
   })
   months.forEach((m, i) => { m.isCurrent = i === curIdx; m.isFuture = curIdx >= 0 && i > curIdx })
@@ -77,7 +77,7 @@ function OrderVsDispatchChart({ data }) {
   const innerH = H - PT - PB
   const active = data.filter(d => !d.isFuture)
   const maxVal = Math.max(...active.map(d => Math.max(d.ordered, d.dispatched)), 1)
-  const niceMax = Math.ceil(maxVal / 100) * 100 || 100
+  const niceMax = maxVal <= 10 ? Math.ceil(maxVal) : maxVal <= 50 ? Math.ceil(maxVal / 5) * 5 : Math.ceil(maxVal / 10) * 10
   const stepX = data.length > 1 ? innerW / (data.length - 1) : 0
 
   const xy = (i, v) => [PL + i * stepX, PT + innerH - (v / niceMax) * innerH]
@@ -395,14 +395,14 @@ export default function Orders() {
                 <div className="dash-card-head">
                   <div>
                     <div className="dash-card-title">Order Summary</div>
-                    <div className="dash-card-sub">Ordered vs Dispatched (units) · last 12 months</div>
+                    <div className="dash-card-sub">Orders placed vs Delivered · this FY</div>
                   </div>
                   <div style={{ display:'flex', gap:14, alignItems:'center' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#475569' }}>
-                      <span style={{ width:14, height:2, background:'#1a4dab', borderRadius:1 }}/>Ordered
+                      <span style={{ width:14, height:2, background:'#1a4dab', borderRadius:1 }}/>Placed
                     </div>
                     <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#475569' }}>
-                      <span style={{ width:14, height:2, background:'#059669', borderRadius:1, borderTop:'1px dashed #059669' }}/>Dispatched
+                      <span style={{ width:14, height:2, background:'#059669', borderRadius:1, borderTop:'1px dashed #059669' }}/>Delivered
                     </div>
                   </div>
                 </div>
