@@ -91,7 +91,14 @@ export default function Login() {
       return
     }
 
-    // All users require MFA
+    // Demo users bypass MFA entirely
+    if (profile.role === 'demo') {
+      await handleSession(data.session)
+      setLoading(false)
+      return
+    }
+
+    // All other users require MFA
     setPendingSession(data.session)
     setPendingProfile(profile)
     await checkAdminMFA()

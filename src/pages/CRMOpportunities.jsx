@@ -59,7 +59,7 @@ export default function CRMOpportunities() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
-    if (!['sales','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
 
     const [oppsRes, repsRes, principalsRes] = await Promise.all([
       sb.from('crm_opportunities').select('id,opportunity_name,product_notes,estimated_value_inr,stage,expected_close_date,assigned_rep_id,scenario_type,created_at,updated_at,company_id,contact_id,principal_id,customer_id,quotation_value_inr,won_lost_on_hold_reason,revisit_date, crm_companies(company_name), crm_principals(name), crm_contacts(name), profiles(name), customers(customer_name), crm_activities(created_at)').order('created_at', { ascending: false }),

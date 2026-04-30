@@ -21,7 +21,7 @@ export default function ProcurementForecastConfig() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
-    if (!['ops','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['ops','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
 
     const [brandsRes, configRes] = await Promise.all([
       sb.rpc('get_distinct_brands'),

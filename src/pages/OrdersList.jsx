@@ -194,7 +194,7 @@ export default function OrdersList() {
     const role   = profile?.role || 'sales'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setUser({ name, avatar, role, id: session.user.id })
-    await loadOrders(false, role === 'sales' ? session.user.id : null)
+    await loadOrders(role === 'demo', role === 'sales' ? session.user.id : null)
   }
 
   async function loadOrders(testMode = false, salesUserId = null, silent) {

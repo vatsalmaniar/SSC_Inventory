@@ -46,7 +46,7 @@ export default function FCDashboard() {
     const name = profile?.name || session.user.email.split('@')[0]
     const role = profile?.role || 'fc_kaveri'
     const fc   = role === 'fc_kaveri' ? 'Kaveri' : role === 'fc_godawari' ? 'Godawari' : null
-    if (!['fc_kaveri','fc_godawari','ops','admin','management','accounts'].includes(role)) { navigate('/dashboard'); return }
+    if (!['fc_kaveri','fc_godawari','ops','admin','management','accounts','demo'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, role, fc })
     await loadOrders(fc)
 

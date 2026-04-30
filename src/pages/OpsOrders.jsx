@@ -77,7 +77,7 @@ export default function OpsOrders() {
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'ops'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    if (!['ops', 'admin', 'management'].includes(role)) { navigate('/dashboard'); return }
+    if (!['ops', 'admin', 'management', 'demo'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, avatar, role })
   }
 

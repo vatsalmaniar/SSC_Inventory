@@ -57,7 +57,7 @@ export default function GRNList() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     const role = profile?.role || 'sales'
-    if (!['ops','admin','management','fc_kaveri','fc_godawari'].includes(role)) { navigate('/dashboard'); return }
+    if (!['ops','admin','management','fc_kaveri','fc_godawari','demo'].includes(role)) { navigate('/dashboard'); return }
     setUserRole(role)
     await loadGrns()
   }

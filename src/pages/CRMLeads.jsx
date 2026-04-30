@@ -36,7 +36,7 @@ export default function CRMLeads() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
-    if (!['sales','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
     const [leadsRes, repsRes, principalsRes] = await Promise.all([
       sb.from('crm_leads').select('*, crm_companies(company_name), crm_principals(name), profiles(name)').order('created_at', { ascending: false }),
       sb.from('profiles').select('id,name').in('role',['sales','admin']),

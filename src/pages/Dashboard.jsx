@@ -95,6 +95,7 @@ export default function Dashboard() {
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
     setUser({ name, role })
+    if (role === 'demo') { setLoading(false); return }
     if (orders) {
       const active    = orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length
       const pending   = orders.filter(o => o.status === 'pending').length
@@ -116,7 +117,9 @@ export default function Dashboard() {
   const firstName = user.name.split(' ')[0] || '...'
   const dateStr   = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-  const visibleApps = APPS.filter(a => a.roles.includes('all') || a.roles.includes(user.role))
+  const visibleApps = user.role === 'demo'
+    ? APPS.filter(a => !['upload','users'].includes(a.key))
+    : APPS.filter(a => a.roles.includes('all') || a.roles.includes(user.role))
 
   function openApp(app) {
     if (!app.path) return

@@ -179,7 +179,7 @@ export default function ProcurementForecast() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
     const role = profile?.role || ''
-    if (!['ops','admin','management'].includes(role)) { navigate('/dashboard'); return }
+    if (!['ops','admin','management','demo'].includes(role)) { navigate('/dashboard'); return }
     setUserName(profile?.name || '')
     setUserId(session.user.id)
     setUserRole(role)

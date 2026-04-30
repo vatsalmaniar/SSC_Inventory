@@ -162,7 +162,7 @@ export default function Orders() {
     const role   = profile?.role || 'sales'
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setUser({ name, avatar, role })
-    await loadOrders(false, role === 'sales' ? session.user.id : null)
+    await loadOrders(role === 'demo', role === 'sales' ? session.user.id : null)
   }
 
   async function loadOrders(testMode = false, salesUserId = null) {
@@ -264,7 +264,7 @@ export default function Orders() {
               <div className="dash-date">{now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
             </div>
             <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-              {user.role !== 'ops' && (
+              {user.role !== 'ops' && user.role !== 'demo' && (
                 <button className="new-order-btn" onClick={() => navigate('/orders/new')}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   New Order

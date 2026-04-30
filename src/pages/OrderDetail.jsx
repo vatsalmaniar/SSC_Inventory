@@ -737,7 +737,7 @@ if (match) {
               </button>
               {isOps && !isCancelled && (
                 <>
-                  {isEditable && !editMode && (
+                  {isEditable && !editMode && user.role !== 'management' && (
                     <button className="od-btn od-btn-edit" onClick={() => setShowEditConfirm(true)}>
                       <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       Edit Order
@@ -747,7 +747,7 @@ if (match) {
                     <>
                       <button className="od-btn" onClick={() => setEditMode(false)} disabled={saving}>Discard</button>
                       <button className="od-btn od-btn-edit" onClick={() => { setEditReason(''); setPendingSaveApprove(false); setShowSaveReason(true) }} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
-                      {isPending && (order.order_type !== 'SAMPLE' || user.role === 'admin') && (
+                      {isPending && (order.order_type !== 'SAMPLE' || ['admin','management'].includes(user.role)) && (
                         <button className="od-btn od-btn-approve" onClick={() => { setEditReason(''); setPendingSaveApprove(true); setShowSaveReason(true) }} disabled={saving}>
                           <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
                           {saving ? 'Approving...' : 'Save & Approve'}
@@ -784,13 +784,13 @@ if (match) {
               )
             })}
           </div>
-          {isOps && !isCancelled && canAdvance && !editMode && !(order.order_type === 'SAMPLE' && isPending && user.role !== 'admin') && (
+          {isOps && !isCancelled && canAdvance && !editMode && !(order.order_type === 'SAMPLE' && isPending && !['admin','management'].includes(user.role)) && (
             <button className="od-mark-complete-btn" onClick={advanceToNext} disabled={saving || (order.status === 'inventory_check' && !(order.order_items || []).every(i => stockStatuses[i.id] === 'in_stock'))} style={order.status === 'inventory_check' && !(order.order_items || []).every(i => stockStatuses[i.id] === 'in_stock') ? { opacity: 0.5, cursor: 'not-allowed' } : {}}>
               <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
               {saving ? 'Updating...' : actionBtnLabel}
             </button>
           )}
-          {order.order_type === 'SAMPLE' && isPending && user.role !== 'admin' && (
+          {order.order_type === 'SAMPLE' && isPending && !['admin','management'].includes(user.role) && (
             <div style={{fontSize:12,color:'#92400e',background:'#fef3c7',border:'1px solid #fde68a',borderRadius:8,padding:'6px 14px',fontWeight:600}}>
               Awaiting admin approval
             </div>

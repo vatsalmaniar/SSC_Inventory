@@ -60,6 +60,7 @@ export default function NewOrder() {
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'sales'
+    if (role === 'demo') { navigate('/orders'); return }
     const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     setUser({ name, avatar, role })
   }

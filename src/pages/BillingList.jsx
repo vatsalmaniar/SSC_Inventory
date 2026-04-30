@@ -45,7 +45,7 @@ export default function BillingList() {
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
     const name = profile?.name || session.user.email.split('@')[0]
     const role = profile?.role || 'accounts'
-    if (!['accounts','ops','admin','management'].includes(role)) { navigate('/dashboard'); return }
+    if (!['accounts','ops','admin','management','demo'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name, role })
     await loadBatches()
   }

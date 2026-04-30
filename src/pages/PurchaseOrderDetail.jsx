@@ -122,7 +122,7 @@ export default function PurchaseOrderDetail() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role,username,email').eq('id', session.user.id).single()
-    if (!['ops','admin','management'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['ops','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
     setUserRole(profile?.role || '')
     setUserName(profile?.name || '')
     setSenderEmail(profile?.email || (profile?.username ? profile.username + '@ssccontrol.com' : ''))
@@ -999,7 +999,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   // Pipeline — determine primary action button
   const statusActions = {
     draft: { label: 'Submit for Approval', next: 'pending_approval' },
-    pending_approval: userRole === 'admin' ? { label: 'Approve PO', fn: handleApprove } : null,
+    pending_approval: ['admin','management'].includes(userRole) ? { label: 'Approve PO', fn: handleApprove } : null,
     approved: { label: 'Mark as Placed', fn: handlePlace },
     placed: { label: 'Record Acknowledgement', fn: handleAcknowledge },
     acknowledged: { label: 'Delivery Confirmation', fn: handleDeliveryConfirmation },
