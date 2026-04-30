@@ -33,7 +33,7 @@ export function toast(message, type = 'error') {
   setTimeout(() => {
     el.style.animation = 'toast-out 0.2s ease-in forwards'
     setTimeout(() => el.remove(), 200)
-  }, 4000)
+  }, 6000)
 }
 
 // Inject animation keyframes once
