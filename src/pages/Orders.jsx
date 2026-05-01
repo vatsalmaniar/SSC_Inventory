@@ -71,8 +71,8 @@ function buildMonthlyData(orders) {
 }
 
 function OrderVsDispatchChart({ data }) {
-  const PL = 48, PR = 18, PT = 24, PB = 32
-  const W = 760, H = 260
+  const PL = 52, PR = 22, PT = 30, PB = 38
+  const W = 760, H = 280
   const innerW = W - PL - PR
   const innerH = H - PT - PB
   const active = data.filter(d => !d.isFuture)
@@ -81,8 +81,8 @@ function OrderVsDispatchChart({ data }) {
   const stepX = data.length > 1 ? innerW / (data.length - 1) : 0
 
   const xy = (i, v) => [PL + i * stepX, PT + innerH - (v / niceMax) * innerH]
-  const orderedPts = active.map((d, i) => xy(data.indexOf(d), d.ordered))
-  const dispatchedPts = active.map((d, i) => xy(data.indexOf(d), d.dispatched))
+  const orderedPts = active.map(d => xy(data.indexOf(d), d.ordered))
+  const dispatchedPts = active.map(d => xy(data.indexOf(d), d.dispatched))
   const toPath = pts => pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ',' + p[1]).join(' ')
 
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({ v: Math.round(niceMax * t), y: PT + innerH - t * innerH }))
@@ -92,30 +92,38 @@ function OrderVsDispatchChart({ data }) {
       {yTicks.map((t, i) => (
         <g key={i}>
           <line x1={PL} y1={t.y} x2={W - PR} y2={t.y} stroke="#f1f5f9" strokeWidth="1"/>
-          <text x={PL - 8} y={t.y + 3} fontSize="10" textAnchor="end" fill="#94a3b8" fontFamily="Geist, sans-serif">{t.v}</text>
+          <text x={PL - 10} y={t.y + 4} fontSize="12" textAnchor="end" fill="#94a3b8" fontFamily="Geist, sans-serif">{t.v}</text>
         </g>
       ))}
-      <path d={toPath(orderedPts)} fill="none" stroke="#1a4dab" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d={toPath(dispatchedPts)} fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 3"/>
+      <path d={toPath(orderedPts)} fill="none" stroke="#1a4dab" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d={toPath(dispatchedPts)} fill="none" stroke="#059669" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="6 4"/>
       {data.map((d, i) => {
         const [ox, oy] = xy(i, d.ordered)
         const [dx, dy] = xy(i, d.dispatched)
         const isCur = d.isCurrent
         const showOrdered = !d.isFuture && d.ordered > 0
         const showDispatched = !d.isFuture && d.dispatched > 0
+        const gapPct = d.ordered > 0 ? Math.round(((d.ordered - d.dispatched) / d.ordered) * 100) : null
+        const showGap = !d.isFuture && d.ordered > 0
         return (
           <g key={i}>
-            {showOrdered && <circle cx={ox} cy={oy} r={isCur ? 4 : 3} fill="#1a4dab"/>}
-            {showDispatched && <circle cx={dx} cy={dy} r={isCur ? 4 : 3} fill="#059669"/>}
-            <text x={PL + i * stepX} y={H - 12} textAnchor="middle" fontSize="11"
+            {showOrdered && <circle cx={ox} cy={oy} r={isCur ? 5.5 : 4.5} fill="#1a4dab"/>}
+            {showDispatched && <circle cx={dx} cy={dy} r={isCur ? 5.5 : 4.5} fill="#059669"/>}
+            <text x={PL + i * stepX} y={H - 16} textAnchor="middle" fontSize="13"
               fill={d.isFuture ? '#cbd5e1' : isCur ? '#0e2d6a' : '#64748b'}
               fontWeight={isCur ? 700 : 500}
               fontFamily="Geist, sans-serif">{d.label}</text>
+            {showGap && (
+              <text x={PL + i * stepX} y={H - 2} textAnchor="middle" fontSize="11"
+                fill={gapPct >= 70 ? '#dc2626' : gapPct >= 40 ? '#d97706' : '#059669'}
+                fontWeight="700"
+                fontFamily="Geist, sans-serif">{gapPct === 0 ? '✓' : '−' + gapPct + '%'}</text>
+            )}
             {showOrdered && (
-              <text x={ox} y={oy - 7} textAnchor="middle" fontSize="9" fontWeight="600" fill="#1a4dab" fontFamily="Geist, sans-serif">{d.ordered}</text>
+              <text x={ox} y={oy - 10} textAnchor="middle" fontSize="13" fontWeight="700" fill="#1a4dab" fontFamily="Geist, sans-serif">{d.ordered}</text>
             )}
             {showDispatched && (
-              <text x={dx} y={dy + 14} textAnchor="middle" fontSize="9" fontWeight="600" fill="#059669" fontFamily="Geist, sans-serif">{d.dispatched}</text>
+              <text x={dx} y={dy + 18} textAnchor="middle" fontSize="13" fontWeight="700" fill="#059669" fontFamily="Geist, sans-serif">{d.dispatched}</text>
             )}
           </g>
         )
