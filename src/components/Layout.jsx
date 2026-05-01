@@ -62,6 +62,17 @@ const NAV_ITEMS = [
     ],
   },
   {
+    key: 'people',
+    label: 'People',
+    path: '/people',
+    roles: ['sales', 'ops', 'admin', 'management', 'accounts', 'fc_kaveri', 'fc_godawari'],
+    icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
+    sub: [
+      { key: 'people-hub', label: 'Dashboard',  path: '/people' },
+      { key: 'people-kpi', label: 'KRA / KPI',  path: '/people/kpi' },
+    ],
+  },
+  {
     key: 'billing',
     label: 'Billing',
     path: '/billing',
