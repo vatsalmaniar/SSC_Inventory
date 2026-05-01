@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import { fmt, esc } from '../lib/fmt'
+import { fmt, fmtTs, esc } from '../lib/fmt'
 import Layout from '../components/Layout'
 import { friendlyError } from '../lib/errorMsg'
 import '../styles/orderdetail.css'
@@ -255,6 +255,11 @@ export default function StockTransferDetail() {
     setLoading(false)
   }
 
+  async function goToItem(item_code) {
+    const { data } = await sb.from('items').select('id').eq('item_code', item_code).single()
+    if (data?.id) navigate(`/items/${data.id}`)
+  }
+
   async function logActivity(action, note) {
     await sb.from('stock_transfer_activity').insert({
       transfer_id: id, action, actor_name: userName, actor_id: userId, note: note || null,
@@ -379,10 +384,6 @@ export default function StockTransferDetail() {
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
                 Back
               </button>
-              <button className="od-btn" onClick={() => { if (!printStockTransferDC(transfer, items)) toast('Popup blocked — allow popups for this site') }} style={{gap:6}}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                Print Challan
-              </button>
               {canCancel && (
                 <button className="od-btn od-btn-danger" onClick={() => setShowCancel(true)}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -435,109 +436,169 @@ export default function StockTransferDetail() {
           </div>
         </div>
 
-        {isCancelled && (
-          <div className="od-card" style={{ background: '#fef2f2', borderColor: '#fecaca', padding:'10px 14px' }}>
-            <div style={{ fontSize:13, color:'#991b1b', fontWeight:600, marginBottom:4 }}>Cancelled</div>
-            <div style={{ fontSize:12, color:'#7f1d1d' }}>{transfer.cancelled_reason} · by {transfer.cancelled_by} · {fmt(transfer.cancelled_at)}</div>
-          </div>
-        )}
-
         <div className="od-layout">
           <div className="od-main">
 
-        {/* ── Two-column details ── */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 14 }}>
-          <div className="od-card">
-            <div className="od-card-header"><div className="od-card-title">Source ({transfer.source_fc})</div></div>
-            <div className="od-card-body">
-              <Detail label="Created by"  value={transfer.created_by_name || '—'} />
-              <Detail label="Created at"  value={fmt(transfer.created_at)} />
-              <Detail label="Approved by" value={transfer.approved_by || '—'} />
-              <Detail label="Approved at" value={transfer.approved_at ? fmt(transfer.approved_at) : '—'} />
-              <Detail label="Picked by"   value={transfer.picked_by || '—'} />
-              <Detail label="Packed by"   value={transfer.packed_by || '—'} />
-              <Detail label="Dispatched by" value={transfer.dispatched_by || '—'} />
-              <Detail label="Dispatched at" value={transfer.dispatched_at ? fmt(transfer.dispatched_at) : '—'} />
-              <Detail label="Vehicle"     value={transfer.vehicle_no || '—'} />
-              <Detail label="Transporter" value={transfer.transporter || '—'} />
-            </div>
-          </div>
-          <div className="od-card">
-            <div className="od-card-header"><div className="od-card-title">Destination ({transfer.destination_fc})</div></div>
-            <div className="od-card-body">
-              <Detail label="Received by" value={transfer.received_by || '—'} />
-              <Detail label="Received at" value={transfer.received_at ? fmt(transfer.received_at) : '—'} />
-              {transfer.notes && <Detail label="Notes" value={transfer.notes} />}
-            </div>
-          </div>
-        </div>
+            {/* Cancelled banner */}
+            {isCancelled && (
+              <div className="od-cancelled-banner">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                <div><div className="od-cancelled-banner-label">Transfer Cancelled</div><div>{transfer.cancelled_reason || 'No reason provided.'}</div></div>
+              </div>
+            )}
 
-        {/* ── Items ── */}
-        <div className="od-card">
-          <div className="od-card-header"><div className="od-card-title">Items ({items.length})</div></div>
-          <div className="od-items-table-wrap">
-            <table className="od-items-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 50, textAlign:'left' }}>#</th>
-                  <th style={{ textAlign:'left' }}>Item Code</th>
-                  <th style={{ width: 130, textAlign:'right' }}>Dispatched Qty</th>
-                  <th style={{ width: 160, textAlign:'right' }}>Received Qty</th>
-                  <th style={{ minWidth: 200, textAlign:'left' }}>Discrepancy</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it, idx) => (
-                  <tr key={it.id}>
-                    <td style={{ fontSize:13, color:'var(--gray-500)' }}>{idx + 1}</td>
-                    <td style={{ fontSize:13, fontWeight:600, color:'var(--gray-900)', fontFamily:'var(--mono)' }}>{it.item_code}</td>
-                    <td style={{ fontSize:13, textAlign:'right', fontFamily:'var(--mono)' }}>{it.qty}</td>
-                    <td style={{ textAlign:'right', fontFamily:'var(--mono)' }}>
-                      {canReceive ? (
-                        <input type="number" min="0" max={it.qty} value={recvQtys[it.id] ?? ''}
-                          onChange={e => setRecvQtys(prev => ({ ...prev, [it.id]: e.target.value }))}
-                          style={{ width:90, padding:'6px 8px', textAlign:'right', border:'1.5px solid var(--gray-200)', borderRadius:5, fontFamily:'var(--mono)', fontSize:13, outline:'none' }} />
-                      ) : (
-                        <span style={{ fontSize:13 }}>{it.received_qty || (transfer.status === 'received' ? 0 : '—')}</span>
-                      )}
-                    </td>
-                    <td>
-                      {canReceive ? (
-                        <input value={discrepancies[it.id] || ''} onChange={e => setDiscrepancies(prev => ({ ...prev, [it.id]: e.target.value }))}
-                          placeholder="Reason if short..."
-                          style={{ width:'100%', padding:'6px 8px', border:'1.5px solid var(--gray-200)', borderRadius:5, fontSize:12, outline:'none' }} />
-                      ) : (
-                        <span style={{ fontSize:12, color:'var(--gray-500)' }}>{it.discrepancy_reason || '—'}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+            {/* In Transit banner */}
+            {transfer.status === 'dispatched' && (
+              <div className="od-delivery-banner">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>
+                <div>
+                  <div className="od-pending-banner-label">In Transit — {transfer.source_fc} → {transfer.destination_fc}</div>
+                  <div>Dispatched on {fmt(transfer.dispatched_at)} by {transfer.dispatched_by || '—'}. Awaiting receipt at destination.</div>
+                </div>
+              </div>
+            )}
+
+            {/* Received banner */}
+            {transfer.status === 'received' && (
+              <div className="od-pending-banner" style={{background:'#f0fdf4',border:'1px solid #bbf7d0',color:'#166534'}}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                <div>
+                  <div className="od-pending-banner-label">Received · {transfer.destination_fc}</div>
+                  <div>Transfer fully received and complete.</div>
+                </div>
+              </div>
+            )}
+
+            {/* Transfer Information */}
+            <div className="od-card">
+              <div className="od-card-header"><div className="od-card-title">Transfer Information</div></div>
+              <div className="od-card-body">
+                <div className="od-detail-grid">
+                  <div className="od-detail-field"><label>Source FC</label><div className="val" style={{fontWeight:600}}>{transfer.source_fc}</div></div>
+                  <div className="od-detail-field"><label>Destination FC</label><div className="val" style={{fontWeight:600}}>{transfer.destination_fc}</div></div>
+                  <div className="od-detail-field"><label>Created By</label><div className="val">{transfer.created_by_name || '—'}</div></div>
+                  <div className="od-detail-field"><label>Created Date</label><div className="val">{fmt(transfer.created_at)}</div></div>
+                  <div className="od-detail-field"><label>Approved By</label><div className="val">{transfer.approved_by || '—'}</div></div>
+                  <div className="od-detail-field"><label>Approved Date</label><div className="val">{transfer.approved_at ? fmt(transfer.approved_at) : '—'}</div></div>
+                  <div className="od-detail-field"><label>Picked By</label><div className="val">{transfer.picked_by || '—'}</div></div>
+                  <div className="od-detail-field"><label>Packed By</label><div className="val">{transfer.packed_by || '—'}</div></div>
+                  <div className="od-detail-field"><label>Dispatched By</label><div className="val">{transfer.dispatched_by || '—'}</div></div>
+                  <div className="od-detail-field"><label>Dispatched Date</label><div className="val">{transfer.dispatched_at ? fmt(transfer.dispatched_at) : '—'}</div></div>
+                  <div className="od-detail-field"><label>Received By</label><div className="val">{transfer.received_by || '—'}</div></div>
+                  <div className="od-detail-field"><label>Received Date</label><div className="val">{transfer.received_at ? fmt(transfer.received_at) : '—'}</div></div>
+                  <div className="od-detail-field"><label>Vehicle No</label><div className="val">{transfer.vehicle_no || '—'}</div></div>
+                  <div className="od-detail-field"><label>Transporter</label><div className="val">{transfer.transporter || '—'}</div></div>
+                  {transfer.notes && <div className="od-detail-field" style={{ gridColumn: '1/-1' }}><label>Notes</label><div className="val od-notes-val">{transfer.notes}</div></div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Items */}
+            <div className="od-card">
+              <div className="od-card-header"><div className="od-card-title">Items ({items.length})</div></div>
+              <div className="od-items-table-wrap">
+                <table className="od-items-table">
+                  <thead>
+                    <tr>
+                      <th style={{ paddingLeft: 16 }}>#</th>
+                      <th>Item Code</th>
+                      <th style={{ textAlign: 'center' }}>Dispatched Qty</th>
+                      <th style={{ textAlign: 'center' }}>Received Qty</th>
+                      <th style={{ paddingRight: 16 }}>Discrepancy</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, idx) => (
+                      <tr key={it.id}>
+                        <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{idx + 1}</td>
+                        <td className="mono">
+                          <span onClick={() => goToItem(it.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{it.item_code}</span>
+                        </td>
+                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{it.qty}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          {canReceive ? (
+                            <input type="number" min="0" max={it.qty} value={recvQtys[it.id] ?? ''}
+                              onChange={e => setRecvQtys(prev => ({ ...prev, [it.id]: e.target.value }))}
+                              style={{ width:80, padding:'6px 8px', textAlign:'center', border:'1.5px solid var(--gray-200)', borderRadius:5, fontFamily:'var(--mono)', fontSize:13, outline:'none' }} />
+                          ) : (
+                            <span style={{ fontWeight: it.received_qty === it.qty ? 600 : 700, color: it.received_qty === it.qty ? '#166534' : it.received_qty > 0 ? '#c2410c' : 'var(--gray-400)' }}>
+                              {transfer.status === 'received' ? (it.received_qty ?? 0) : '—'}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ paddingRight: 16, fontSize: 12 }}>
+                          {canReceive ? (
+                            <input value={discrepancies[it.id] || ''} onChange={e => setDiscrepancies(prev => ({ ...prev, [it.id]: e.target.value }))}
+                              placeholder="Reason if short..."
+                              style={{ width:'100%', padding:'6px 8px', border:'1.5px solid var(--gray-200)', borderRadius:5, fontSize:12, outline:'none' }} />
+                          ) : (
+                            <span style={{ color:'var(--gray-500)' }}>{it.discrepancy_reason || '—'}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
           </div>
-          {/* ── Sidebar: Activity log ── */}
+          {/* ── Sidebar ── */}
           <div className="od-sidebar">
+
+            {/* Challan card */}
+            {['dispatched','received'].includes(transfer.status) && (
+              <div className="od-side-card">
+                <div className="od-side-card-title">Stock Transfer Challan</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gray-900)', fontFamily: 'var(--mono)', marginBottom: 4 }}>{transfer.transfer_number}</div>
+                <div style={{ fontSize: 11, color: 'var(--gray-500)', marginBottom: 12 }}>
+                  {transfer.source_fc} → {transfer.destination_fc}
+                  {transfer.dispatched_at && <> · {fmt(transfer.dispatched_at)}</>}
+                </div>
+                <button onClick={() => { if (!printStockTransferDC(transfer, items)) toast('Popup blocked — allow popups for this site') }}
+                  style={{ width:'100%', padding:'9px 14px', background:'var(--blue-700)', color:'white', border:'none', borderRadius:7, fontSize:13, fontWeight:600, cursor:'pointer', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                  Print DC
+                </button>
+              </div>
+            )}
+
             <div className="od-side-card od-activity-card">
-              <div className="od-side-card-title">Activity</div>
+              <div className="od-side-card-title">Activity & Notes</div>
               <div className="od-activity-list">
                 {activity.length === 0 ? (
-                  <div style={{ fontSize:12, color:'var(--gray-400)', padding:'8px 0' }}>No activity yet.</div>
+                  <div style={{ fontSize:12, color:'var(--gray-400)', padding:'14px 4px' }}>No activity yet.</div>
                 ) : (
-                  activity.map((a, i) => (
-                    <div key={a.id} style={{ display:'flex', gap:10, padding:'10px 0', borderBottom: i < activity.length - 1 ? '1px solid var(--gray-100)' : 'none' }}>
-                      <div style={{ width:8, height:8, borderRadius:'50%', background: a.action === 'cancelled' ? '#dc2626' : a.action === 'received' ? '#059669' : 'var(--blue-700)', marginTop: 6, flexShrink: 0 }}/>
-                      <div style={{ flex:1, minWidth: 0 }}>
-                        <div style={{ fontSize:12, fontWeight:600, color:'var(--gray-900)' }}>{ACTION_LABELS[a.action] || a.action}</div>
-                        {a.note && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2, lineHeight:1.4 }}>{a.note}</div>}
-                        <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:4 }}>
-                          {a.actor_name || '—'} · {fmt(a.created_at)}
+                  activity.slice().reverse().map(a => {
+                    const dotType =
+                      a.action === 'cancelled' ? 'cancel'
+                      : a.action === 'dispatched' ? 'dispatch'
+                      : a.action === 'received' ? 'success'
+                      : a.action === 'approved' ? 'approved'
+                      : a.action === 'created' ? 'created'
+                      : 'system'
+                    const dotIcon = {
+                      cancel:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+                      dispatch: <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+                      success:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>,
+                      approved: <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>,
+                      created:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
+                      system:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+                    }[dotType]
+                    return (
+                      <div key={a.id} className={'od-tl-item' + (a.action === 'cancelled' ? ' od-tl-cancel' : '')}>
+                        <div className={'od-tl-dot ' + dotType}>{dotIcon}</div>
+                        <div className="od-tl-content">
+                          <div className="od-tl-header">
+                            <div className="od-tl-title">{ACTION_LABELS[a.action] || a.action}</div>
+                            <div className="od-tl-time">{fmtTs(a.created_at)}</div>
+                          </div>
+                          <div className="od-tl-sub">{a.actor_name || '—'}</div>
+                          {a.note && <div className="od-tl-sub" style={{ marginTop: 2 }}>{a.note}</div>}
                         </div>
                       </div>
-                    </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </div>
@@ -567,11 +628,3 @@ export default function StockTransferDetail() {
   )
 }
 
-function Detail({ label, value, mono }) {
-  return (
-    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 0', fontSize: 13 }}>
-      <span style={{ color:'var(--gray-500)' }}>{label}</span>
-      <span style={{ color:'var(--gray-900)', fontWeight: 500, fontFamily: mono ? 'var(--mono)' : 'inherit' }}>{value}</span>
-    </div>
-  )
-}
