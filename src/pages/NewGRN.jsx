@@ -258,7 +258,7 @@ export default function NewGRN() {
     saveGuard.current = true
     setSaving(true)
     try {
-      const fcCode = fc === 'Kaveri' ? 'AMD' : fc === 'Godawari' ? 'BRD' : fc
+      const fcCode = fc === 'Kaveri' ? 'KAV' : fc === 'Godawari' ? 'GOD' : fc
       const { data: grnNumber, error: seqErr } = await sb.rpc('next_grn_number', { p_fc: fcCode })
       if (seqErr) { toast(friendlyError(seqErr, "Generating GRN number failed. Please try again.")); saveGuard.current = false; setSaving(false); return }
 
