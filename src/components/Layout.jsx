@@ -58,6 +58,7 @@ const NAV_ITEMS = [
       { key: 'fc-dash', label: 'Dashboard',  path: '/fc' },
       { key: 'fc-list', label: 'Deliveries', path: '/fc/list' },
       { key: 'fc-grn',  label: 'GRN',        path: '/fc/grn' },
+      { key: 'fc-transfers', label: 'Stock Transfers', path: '/fc/transfers' },
     ],
   },
   {

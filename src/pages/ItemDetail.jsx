@@ -81,6 +81,7 @@ export default function ItemDetail() {
   const [orders, setOrders]     = useState([])
   const [pos, setPos]           = useState([])
   const [kpi, setKpi]           = useState({ totalOrders: 0, pendingOrders: 0, deliveredOrders: 0, totalPos: 0, pendingPos: 0, receivedPos: 0 })
+  const [transfers, setTransfers] = useState([])
 
   useEffect(() => { init() }, [id])
 
@@ -93,7 +94,7 @@ export default function ItemDetail() {
     if (!itemData) { navigate('/items'); return }
     setItem(itemData)
 
-    const [ordItemsRes, poItemsRes] = await Promise.all([
+    const [ordItemsRes, poItemsRes, transferRes] = await Promise.all([
       sb.from('order_items')
         .select('id,qty,dispatched_qty,unit_price_after_disc,total_price,orders!inner(id,order_number,customer_name,order_date,status,is_test)')
         .eq('item_code', itemData.item_code)
@@ -103,7 +104,13 @@ export default function ItemDetail() {
         .select('id,qty,received_qty,unit_price,total_price,purchase_orders!inner(id,po_number,vendor_name,po_date,status)')
         .eq('item_code', itemData.item_code)
         .order('id', { ascending: false }),
+      sb.from('stock_transfer_items')
+        .select('id,qty,received_qty,stock_transfers!inner(id,transfer_number,source_fc,destination_fc,status,created_at,is_test)')
+        .eq('item_code', itemData.item_code)
+        .eq('stock_transfers.is_test', false)
+        .order('id', { ascending: false }),
     ])
+    setTransfers(transferRes.data || [])
 
     const ordRows = ordItemsRes.data || []
     const poRows  = poItemsRes.data || []
@@ -142,10 +149,13 @@ export default function ItemDetail() {
 
   if (!item) return null
 
+  const transferQty = transfers.reduce((s, t) => s + (t.qty || 0), 0)
+
   const TABS = [
     { key: 'summary',  label: 'Summary' },
     { key: 'orders',   label: `Order History (${kpi.totalOrders})` },
     { key: 'pos',      label: `PO History (${kpi.totalPos})` },
+    { key: 'transfers', label: `Internal Transfers (${transfers.length})` },
   ]
 
   return (
@@ -193,6 +203,8 @@ export default function ItemDetail() {
                 { label: 'Total POs',        val: kpi.totalPos,        color: '#5b21b6' },
                 { label: 'Pending POs',      val: kpi.pendingPos,      color: '#92400e' },
                 { label: 'Received POs',     val: kpi.receivedPos,     color: '#166534' },
+                { label: 'Internal Transfers', val: transfers.length,  color: '#0891b2' },
+                { label: 'Transfer Qty',     val: transferQty,         color: '#0891b2' },
               ].map(k => (
                 <div key={k.label} className="c360-stat">
                   <span className="c360-stat-label">{k.label}</span>
@@ -326,6 +338,48 @@ export default function ItemDetail() {
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{pos.reduce((s, r) => s + (r.qty || 0), 0)}</td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{pos.reduce((s, r) => s + (r.received_qty || 0), 0)}</td>
                       <td colSpan={2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* ── Internal Transfers Tab ── */}
+          {tab === 'transfers' && (
+            <div className="c360-card">
+              {transfers.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--gray-400)', fontSize: 13 }}>No internal transfers for this item.</div>
+              ) : (
+                <table className="od-items-table">
+                  <thead>
+                    <tr>
+                      <th>Transfer #</th>
+                      <th>Route</th>
+                      <th>Date</th>
+                      <th style={{ textAlign: 'right' }}>Qty Sent</th>
+                      <th style={{ textAlign: 'right' }}>Qty Received</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transfers.map(r => (
+                      <tr key={r.id} onClick={() => navigate('/fc/transfers/' + r.stock_transfers?.id)} style={{ cursor: 'pointer' }}>
+                        <td><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#0891b2' }}>{r.stock_transfers?.transfer_number || '—'}</span></td>
+                        <td style={{ fontSize: 13 }}>{r.stock_transfers?.source_fc} → {r.stock_transfers?.destination_fc}</td>
+                        <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{fmt(r.stock_transfers?.created_at)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.qty}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.received_qty || '—'}</td>
+                        <td><span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: r.stock_transfers?.status === 'received' ? '#d1fae5' : r.stock_transfers?.status === 'cancelled' ? '#fee2e2' : '#dbeafe', color: r.stock_transfers?.status === 'received' ? '#065f46' : r.stock_transfers?.status === 'cancelled' ? '#991b1b' : '#1e40af' }}>{r.stock_transfers?.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--gray-200)', background: 'var(--gray-50)' }}>
+                      <td colSpan={3} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({transfers.length} rows)</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{transfers.reduce((s, r) => s + (r.qty || 0), 0)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{transfers.reduce((s, r) => s + (r.received_qty || 0), 0)}</td>
+                      <td />
                     </tr>
                   </tfoot>
                 </table>

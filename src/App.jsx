@@ -44,6 +44,9 @@ const ProcurementOrders = lazy(() => import('./pages/ProcurementOrders'))
 const GRNList = lazy(() => import('./pages/GRNList'))
 const NewGRN = lazy(() => import('./pages/NewGRN'))
 const GRNDetail = lazy(() => import('./pages/GRNDetail'))
+const StockTransferList = lazy(() => import('./pages/StockTransferList'))
+const NewStockTransfer = lazy(() => import('./pages/NewStockTransfer'))
+const StockTransferDetail = lazy(() => import('./pages/StockTransferDetail'))
 const PurchaseInvoiceList = lazy(() => import('./pages/PurchaseInvoiceList'))
 const PurchaseInvoiceDetail = lazy(() => import('./pages/PurchaseInvoiceDetail'))
 const FCDashboard = lazy(() => import('./pages/FCDashboard'))
@@ -106,6 +109,9 @@ export default function App() {
           <Route path="/fc/grn" element={<GRNList />} />
           <Route path="/fc/grn/new" element={<NewGRN />} />
           <Route path="/fc/grn/:id" element={<GRNDetail />} />
+          <Route path="/fc/transfers" element={<StockTransferList />} />
+          <Route path="/fc/transfers/new" element={<NewStockTransfer />} />
+          <Route path="/fc/transfers/:id" element={<StockTransferDetail />} />
           <Route path="/fc/:id" element={<FCOrderDetail />} />
           <Route path="/billing" element={<BillingDashboard />} />
           <Route path="/billing/list" element={<BillingList />} />
