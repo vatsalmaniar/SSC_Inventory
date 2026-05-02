@@ -319,7 +319,14 @@ function ThresholdEditor({ def, threshold, onSave }) {
   }, [threshold.id, threshold.thresholds])
 
   function update(idx, field, val) {
-    setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: Number(val) || 0 } : r))
+    setRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r
+      let n = Number(val)
+      if (isNaN(n)) n = 0
+      if (field === 'points') n = Math.max(0, n)   // never negative points
+      if ((field === 'min' || field === 'value') && n < 0) n = 0   // never negative thresholds
+      return { ...r, [field]: n }
+    }))
     setDirty(true)
   }
   function addRow() {
@@ -352,20 +359,28 @@ function ThresholdEditor({ def, threshold, onSave }) {
       </div>
       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
         <thead>
-          <tr><th style={{ ...th, padding:'5px 8px' }}>{threshold.match_type === 'exact' ? 'Count' : 'Min'}</th><th style={{ ...th, padding:'5px 8px' }}>Points</th><th style={{ width:30 }} /></tr>
+          <tr>
+            <th style={{ ...th, padding:'5px 8px', width: 90 }}>{threshold.match_type === 'exact' ? 'Count' : 'Min'}</th>
+            <th style={{ ...th, padding:'5px 8px' }}>Points (0–20)</th>
+            <th style={{ width:30 }} />
+          </tr>
         </thead>
         <tbody>
           {rows.map((r, idx) => (
             <tr key={idx}>
-              <td style={{ padding:'4px 8px' }}>
-                <input type="number" step="any"
+              <td style={{ padding:'6px 8px' }}>
+                <input type="number" step="any" min="0"
                   value={threshold.match_type === 'exact' ? r.value : r.min}
                   onChange={e => update(idx, threshold.match_type === 'exact' ? 'value' : 'min', e.target.value)}
-                  style={{ width:'100%', padding:'5px 7px', fontSize:12, border:'1px solid var(--gray-200)', borderRadius:4, fontFamily:'var(--mono)' }} />
+                  style={{ width:'100%', padding:'5px 7px', fontSize:12, border:'1px solid var(--gray-200)', borderRadius:4, fontFamily:'var(--mono)', textAlign:'right' }} />
               </td>
-              <td style={{ padding:'4px 8px' }}>
-                <input type="number" value={r.points} onChange={e => update(idx, 'points', e.target.value)}
-                  style={{ width:'100%', padding:'5px 7px', fontSize:12, border:'1px solid var(--gray-200)', borderRadius:4, fontFamily:'var(--mono)' }} />
+              <td style={{ padding:'6px 8px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <input type="range" min="0" max="20" step="1" value={r.points}
+                    onChange={e => update(idx, 'points', e.target.value)}
+                    style={{ flex: 1, accentColor:'var(--blue-700)', cursor:'pointer' }} />
+                  <span style={{ minWidth: 28, fontFamily:'var(--mono)', fontSize:12, fontWeight:700, color: r.points > 0 ? 'var(--blue-700)' : 'var(--gray-400)', textAlign:'right' }}>{r.points}</span>
+                </div>
               </td>
               <td><button onClick={() => removeRow(idx)} style={{ background:'none', border:'none', color:'var(--gray-400)', cursor:'pointer', fontSize:14 }}>×</button></td>
             </tr>
