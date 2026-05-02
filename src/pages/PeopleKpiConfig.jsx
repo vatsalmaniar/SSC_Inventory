@@ -312,6 +312,12 @@ function ThresholdEditor({ def, threshold, onSave }) {
   const [rows, setRows] = useState(() => threshold.thresholds || [])
   const [dirty, setDirty] = useState(false)
 
+  // Sync rows when threshold prop changes (team switch, post-save refetch)
+  useEffect(() => {
+    setRows(threshold.thresholds || [])
+    setDirty(false)
+  }, [threshold.id, threshold.thresholds])
+
   function update(idx, field, val) {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: Number(val) || 0 } : r))
     setDirty(true)
