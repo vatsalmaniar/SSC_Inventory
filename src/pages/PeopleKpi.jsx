@@ -360,10 +360,11 @@ export default function PeopleKpi() {
                 {/* All editable KPIs (manual + auto+manual) */}
                 {KPI_DEFS.filter(d => d.source !== 'derived').map(def => {
                   const t = maxPointsThreshold(thresholds[def.key])
+                  const maxPts = thresholds[def.key]?.thresholds ? Math.max(...thresholds[def.key].thresholds.map(x => Number(x.points) || 0)) : 0
                   let targetLabel = null
                   if (t != null) {
-                    if (def.key === 'complaints') targetLabel = 'Target: ≤ 0 (' + t + ' for max pts)'
-                    else                          targetLabel = 'Target: ' + t + '+ for 10 pts'
+                    if (def.key === 'complaints') targetLabel = 'Target: ≤ 0 (max ' + maxPts + ' pts)'
+                    else                          targetLabel = 'Target: ' + t + '+ for ' + maxPts + ' pts'
                   }
                   return (
                     <InputTile
@@ -480,11 +481,12 @@ function InputTile({ def, value, autoValue, storedManual, target, isAdmin, savin
 
 function KpiTile({ def, months, selectedMonth, valueByMonth, threshold }) {
   const targetVal = maxPointsThreshold(threshold)
+  const maxPts = threshold?.thresholds ? Math.max(...threshold.thresholds.map(x => Number(x.points) || 0)) : 10
   let targetLabel = null
   if (targetVal != null) {
-    if (def.format === 'pct')      targetLabel = 'Target: ' + Math.round(targetVal * 100) + '%'
-    else if (def.key === 'complaints') targetLabel = 'Target: ' + targetVal + ' or fewer'
-    else                            targetLabel = 'Target: ' + targetVal + '+'
+    if (def.format === 'pct')      targetLabel = 'Target: ' + Math.round(targetVal * 100) + '% (' + maxPts + ' pts)'
+    else if (def.key === 'complaints') targetLabel = 'Target: ' + targetVal + ' or fewer (' + maxPts + ' pts)'
+    else                            targetLabel = 'Target: ' + targetVal + '+ (' + maxPts + ' pts)'
   }
   const monthKeys = months.map(m => monthKey(m))
   const values    = monthKeys.map(k => Number(valueByMonth[k]) || 0)
@@ -510,8 +512,8 @@ function KpiTile({ def, months, selectedMonth, valueByMonth, threshold }) {
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gray-900)' }}>{def.label}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: curScore >= 8 ? '#059669' : curScore >= 6 ? '#d97706' : 'var(--gray-400)', fontFamily: 'var(--mono)', lineHeight: 1 }}>{curScore}</div>
-          <div style={{ fontSize: 10, color: 'var(--gray-400)', marginTop: 2 }}>/ 10 pts</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: curScore >= maxPts * 0.8 ? '#059669' : curScore >= maxPts * 0.6 ? '#d97706' : 'var(--gray-400)', fontFamily: 'var(--mono)', lineHeight: 1 }}>{curScore}</div>
+          <div style={{ fontSize: 10, color: 'var(--gray-400)', marginTop: 2 }}>/ {maxPts} pts</div>
         </div>
       </div>
       <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--gray-900)', fontFamily: 'var(--mono)', marginTop: 4 }}>
