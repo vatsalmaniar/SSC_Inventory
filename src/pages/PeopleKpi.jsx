@@ -48,17 +48,19 @@ export default function PeopleKpi() {
     setTeams(tRes.data || [])
     setAssignments(aRes.data || [])
 
-    // Default team = first team
-    const firstTeam = (tRes.data || [])[0]
-    if (firstTeam) setSelectedTeamId(firstTeam.id)
-
-    // Default person: own profile if assignment exists; else first assignment for the team
+    // Default to user's own assignment if it exists
     const ownAssignment = (aRes.data || []).find(a => a.profile_id === session.user.id)
     if (ownAssignment) {
+      setSelectedTeamId(ownAssignment.team_id)
       setSelectedProfileId(session.user.id)
     } else {
-      const firstInTeam = (aRes.data || []).find(a => a.team_id === firstTeam?.id)
-      if (firstInTeam) setSelectedProfileId(firstInTeam.profile_id)
+      // Admin / management without their own assignment — fall back to first team + first person
+      const firstTeam = (tRes.data || [])[0]
+      if (firstTeam) {
+        setSelectedTeamId(firstTeam.id)
+        const firstInTeam = (aRes.data || []).find(a => a.team_id === firstTeam.id)
+        if (firstInTeam) setSelectedProfileId(firstInTeam.profile_id)
+      }
     }
   }
 

@@ -338,7 +338,11 @@ function ThresholdEditor({ def, threshold, onSave }) {
     <div style={{ background:'white', border:'1px solid var(--gray-100)', borderRadius:10, padding:14 }}>
       <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
         <span style={{ fontSize:10, fontWeight:700, color:'white', background:KRA_COLORS[def.kra], padding:'2px 6px', borderRadius:4 }}>{def.kra}</span>
-        <div style={{ fontSize:13, fontWeight:700, color:'var(--gray-900)' }}>{def.label}</div>
+        <div style={{ fontSize:13, fontWeight:700, color:'var(--gray-900)', flex: 1 }}>{def.label}</div>
+        {(() => {
+          const max = Math.max(...rows.map(r => Number(r.points) || 0), 0)
+          return <span style={{ fontSize:11, fontWeight:700, color:'var(--blue-700)', background:'#eff6ff', padding:'3px 8px', borderRadius:5 }}>Max {max} pts</span>
+        })()}
       </div>
       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
         <thead>
