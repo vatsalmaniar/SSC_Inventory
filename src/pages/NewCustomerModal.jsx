@@ -62,6 +62,7 @@ function Card({ title, children, style }) {
 // prop: onCreated(customerId)
 export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
   const [ownerName, setOwnerName] = useState('')
+  const [loggedInName, setLoggedInName] = useState('')
   const [userRole, setUserRole]   = useState('sales')
   const [saving, setSaving]       = useState(false)
   const [errors, setErrors]       = useState({})
@@ -98,6 +99,7 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
     sb.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) return
       const { data: p } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
+      setLoggedInName(p?.name || '')
       setOwnerName(p?.name || '')
       setUserRole(p?.role || 'sales')
       if (prefill.account_owner) setOwnerName(prefill.account_owner)
@@ -193,6 +195,8 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
         account_status:   form.account_status || 'Active',
         account_owner:    ownerName,
         approval_status:  userRole === 'admin' ? 'approved' : 'pending',
+        approved_by:      userRole === 'admin' ? loggedInName : null,
+        approved_at:      userRole === 'admin' ? new Date().toISOString() : null,
         vi_shopfloor:     form.vi_shopfloor || null,
         vi_payment:       form.vi_payment || null,
         vi_expected_business: form.vi_expected_business || null,

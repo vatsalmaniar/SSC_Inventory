@@ -154,8 +154,9 @@ export default function CustomerDetail() {
 
   async function approve() {
     setApproving(true)
-    await sb.from('customers').update({ approval_status: 'approved' }).eq('id', id)
-    setCustomer(p => ({ ...p, approval_status: 'approved' }))
+    const approvedAt = new Date().toISOString()
+    await sb.from('customers').update({ approval_status: 'approved', approved_by: userName, approved_at: approvedAt }).eq('id', id)
+    setCustomer(p => ({ ...p, approval_status: 'approved', approved_by: userName, approved_at: approvedAt }))
     if (customer?.account_owner && customer.account_owner !== userName) {
       const { data: ownerProfile } = await sb.from('profiles').select('id,name').eq('name', customer.account_owner).maybeSingle()
       if (ownerProfile?.id) {
@@ -466,6 +467,11 @@ ${oppsHTML}
                   )}
                   {customer.credit_terms  && <span className="c360-badge c360-badge-gray">{customer.credit_terms}</span>}
                   {customer.approval_status === 'pending' && <span className="c360-badge c360-badge-amber">⏳ Pending Approval</span>}
+                  {customer.approval_status === 'approved' && customer.approved_by && (
+                    <span className="c360-badge c360-badge-green" title={customer.approved_at ? 'Approved on ' + fmt(customer.approved_at) : ''}>
+                      ✓ Approved by {customer.approved_by}{customer.approved_at ? ' · ' + fmt(customer.approved_at) : ''}
+                    </span>
+                  )}
                   {userRole === 'admin' && customer.credit_check_status === 'pending' && customer.created_at >= NEW_CUSTOMER_FLOOR && (
                     <span className="c360-badge c360-badge-amber">Credit Check Pending</span>
                   )}

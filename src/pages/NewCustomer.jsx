@@ -195,6 +195,8 @@ export default function NewCustomer() {
         account_status:   form.account_status || 'Active',
         account_owner:    ownerName,
         approval_status:  userRole === 'admin' ? 'approved' : 'pending',
+        approved_by:      userRole === 'admin' ? ownerName : null,
+        approved_at:      userRole === 'admin' ? new Date().toISOString() : null,
         vi_shopfloor:     form.vi_shopfloor || null,
         vi_payment:       form.vi_payment || null,
         vi_expected_business: form.vi_expected_business || null,
