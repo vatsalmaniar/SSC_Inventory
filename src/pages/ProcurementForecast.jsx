@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import ForecastPOModal from './ForecastPOModal'
-import ForecastPOReviewModal from './ForecastPOReviewModal'
+import '../styles/procurement-forecast.css'
 
 const MONTH_NAMES = { '01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec' }
 const DELIVERED_STATUSES = ['dispatched_fc', 'goods_issued', 'invoice_generated', 'closed']
@@ -31,120 +31,628 @@ function lastDayOf(yyyyMM) {
   return new Date(y, m, 0).getDate()
 }
 
-// SVG Line Chart
-function ForecastLineChart({ items, calcFn, qLabel }) {
-  const rows = items
-    .map(item => ({ ...item, ...calcFn(item.item_code) }))
-    .filter(r => !r.noConfig && (r.qAvg > 0 || r.effectiveStock > 0))
-    .sort((a, b) => {
-      if (a.needsOrder && !b.needsOrder) return -1
-      if (!a.needsOrder && b.needsOrder) return 1
-      const ra = a.minQty > 0 ? a.effectiveStock / a.minQty : 1
-      const rb = b.minQty > 0 ? b.effectiveStock / b.minQty : 1
-      return ra - rb
-    })
-    .slice(0, 20)
+// =================== Brand Selector ===================
+function BrandSelector({ brand, brands, allConfigs, brandItemCount, onChange, onConfigOpen }) {
+  const [open, setOpen] = useState(false)
+  const [filter, setFilter] = useState('')
+  const ref = useRef(null)
 
-  if (rows.length < 2) return null
+  useEffect(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
 
-  const PL = 56, PR = 24, PT = 20, PB = 64
-  const ITEM_W = Math.max(Math.floor(780 / rows.length), 44)
-  const CW = ITEM_W * (rows.length - 1)
-  const CH = 220
-  const W  = PL + CW + PR
-  const H  = PT + CH + PB
-
-  const allVals = rows.flatMap(r => [r.effectiveStock, r.minQty, r.poQty]).filter(v => v > 0)
-  const maxVal  = allVals.length ? Math.ceil(Math.max(...allVals) * 1.15) : 10
-
-  const niceStep = v => { const p = Math.pow(10, Math.floor(Math.log10(v))); const f = v / p; const s = f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10; return s * p }
-  const step   = niceStep(maxVal / 5)
-  const yTicks = Array.from({ length: Math.ceil(maxVal / step) + 1 }, (_, i) => i * step).filter(v => v <= maxVal * 1.05)
-
-  const xOf = i => PL + i * ITEM_W
-  const yOf = v => PT + CH - (Math.min(v, maxVal) / maxVal) * CH
-
-  const pts = arr => arr.map((r, i) => `${xOf(i)},${yOf(r)}`).join(' ')
-  const stockPts = pts(rows.map(r => r.effectiveStock))
-  const minPts   = pts(rows.map(r => r.minQty))
-  const poPts    = pts(rows.map(r => r.poQty))
+  const cfg = brand ? allConfigs[brand] : null
+  const reorderDays   = cfg ? (cfg.lead_time_days||0)+(cfg.transit_days||0)+(cfg.processing_days||0) : 0
+  const replenishDays = cfg ? reorderDays + (cfg.inventory_days||45) : 0
+  const filtered = brands.filter(b => !filter || b.toLowerCase().includes(filter.toLowerCase()))
 
   return (
-    <div style={{ background:'white', border:'1px solid var(--gray-100)', borderRadius:12, padding:'20px 24px', marginBottom:24 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
-        <div>
-          <div style={{ fontSize:14, fontWeight:700, color:'var(--gray-900)' }}>Stock vs Reorder Threshold</div>
-          <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:2 }}>
-            {rows.length} items · {rows.filter(r=>r.needsOrder).length} below reorder level · sorted critical first
+    <div className="card brand-bar" style={{ padding: '10px 14px' }}>
+      <div className="brand-picker" ref={ref}>
+        <button className="brand-btn" onClick={() => setOpen(o => !o)}>
+          <div className="brand-btn-inner">
+            <div className="brand-avatar">{brand ? brand[0].toUpperCase() : '—'}</div>
+            <div>
+              <div className="brand-name">{brand || 'Select a brand'}</div>
+              <div className="brand-sub mono">{brand ? `${brandItemCount} standard items` : `${brands.length} brands available`}</div>
+            </div>
+          </div>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 6 L8 10 L12 6"/></svg>
+        </button>
+        {open && (
+          <div className="brand-menu" onClick={e => e.stopPropagation()}>
+            <div className="brand-menu-search">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
+              <input placeholder="Search brands…" autoFocus value={filter} onChange={e => setFilter(e.target.value)} />
+            </div>
+            {filtered.map(b => {
+              const c = allConfigs[b]
+              const lead = c ? (c.lead_time_days||0)+(c.transit_days||0)+(c.processing_days||0) : null
+              return (
+                <button key={b} className={`brand-menu-item ${b === brand ? 'on' : ''}`} onClick={() => { onChange(b); setOpen(false); setFilter('') }}>
+                  <div className="brand-menu-avatar">{b[0].toUpperCase()}</div>
+                  <div className="brand-menu-info">
+                    <div className="brand-menu-name">{b}</div>
+                    <div className="brand-menu-sub mono">{lead != null ? `${lead}d lead` : 'no config'}</div>
+                  </div>
+                  {b === brand && <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#3DD9D6" strokeWidth="2"><path d="M3 8 L7 12 L13 4"/></svg>}
+                </button>
+              )
+            })}
+            {filtered.length === 0 && <div style={{ padding: '12px', textAlign: 'center', color: 'var(--pf-muted)', fontSize: 12 }}>No matches</div>}
+          </div>
+        )}
+      </div>
+      {brand && cfg && (
+        <div className="brand-meta">
+          <div className="bm-pill bm-reorder">
+            <span className="bm-label">Reorder</span>
+            <span className="bm-val">{reorderDays}d</span>
+          </div>
+          <div className="bm-pill bm-replen">
+            <span className="bm-label">Replenishment</span>
+            <span className="bm-val">{replenishDays}d</span>
           </div>
         </div>
-        <div style={{ display:'flex', gap:20, flexShrink:0 }}>
-          {[['#2563eb','Stock Level','solid'],['#e11d48','Min Qty (Reorder)','dashed'],['#94a3b8','PO Target Qty','dotted']].map(([c,l,d]) => (
-            <div key={l} style={{ display:'flex', alignItems:'center', gap:7, fontSize:11, color:'var(--gray-600)' }}>
-              <svg width="28" height="12" style={{ flexShrink:0 }}>
-                <line x1="0" y1="6" x2="28" y2="6" stroke={c} strokeWidth="2" strokeDasharray={d==='dashed'?'5 3':d==='dotted'?'2 3':'none'} />
-              </svg>
-              {l}
-            </div>
-          ))}
+      )}
+      {brand && !cfg && (
+        <div className="brand-meta">
+          <div className="bm-pill" style={{ borderColor: '#FCD34D', background: 'rgba(245,158,11,0.08)' }}>
+            <span className="bm-label" style={{ color: '#B45309' }}>No config — set lead times to enable forecast</span>
+          </div>
         </div>
-      </div>
-      <div style={{ overflowX:'auto' }}>
-        <svg width={W} height={H} style={{ display:'block', overflow:'visible' }}>
-          {/* Grid */}
-          {yTicks.map(v => (
-            <g key={v}>
-              <line x1={PL} y1={yOf(v)} x2={PL+CW} y2={yOf(v)} stroke="#f1f5f9" strokeWidth={v===0?1:1} />
-              <text x={PL-8} y={yOf(v)+4} textAnchor="end" fontSize={9} fill="#94a3b8" fontFamily="var(--mono)">{v}</text>
-            </g>
-          ))}
-          {/* Axes */}
-          <line x1={PL} y1={PT} x2={PL} y2={PT+CH} stroke="#e2e8f0" strokeWidth={1} />
-          <line x1={PL} y1={PT+CH} x2={PL+CW} y2={PT+CH} stroke="#e2e8f0" strokeWidth={1} />
-
-          {/* PO qty line (lightest, behind) */}
-          <polyline points={poPts} fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="2 4" strokeLinecap="round" strokeLinejoin="round" />
-          {/* Min qty threshold line */}
-          <polyline points={minPts} fill="none" stroke="#e11d48" strokeWidth="1.5" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />
-          {/* Stock line (top, solid) */}
-          <polyline points={stockPts} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-
-          {/* Data points + labels */}
-          {rows.map((r, i) => {
-            const label = r.item_no || r.item_code.slice(-7)
-            const critical = r.needsOrder
-            return (
-              <g key={r.item_code}>
-                {/* Stock dot */}
-                <circle cx={xOf(i)} cy={yOf(r.effectiveStock)} r={4} fill={critical ? '#dc2626' : '#2563eb'} stroke="white" strokeWidth={2} />
-                {/* Min qty dot */}
-                <circle cx={xOf(i)} cy={yOf(r.minQty)} r={3} fill="#e11d48" stroke="white" strokeWidth={1.5} />
-                {/* PO dot */}
-                <circle cx={xOf(i)} cy={yOf(r.poQty)} r={3} fill="#94a3b8" stroke="white" strokeWidth={1.5} />
-                {/* Stock value label above dot */}
-                <text x={xOf(i)} y={yOf(r.effectiveStock) - 8} textAnchor="middle" fontSize={9} fill={critical ? '#dc2626' : '#2563eb'} fontWeight={700} fontFamily="var(--mono)">
-                  {r.effectiveStock}
-                </text>
-                {/* X-axis label — rotated */}
-                <text
-                  x={xOf(i)} y={PT + CH + 14}
-                  textAnchor="end"
-                  fontSize={9}
-                  fill={critical ? '#dc2626' : '#64748b'}
-                  fontWeight={critical ? 700 : 400}
-                  transform={`rotate(-40, ${xOf(i)}, ${PT + CH + 14})`}
-                >
-                  {label}
-                </text>
-              </g>
-            )
-          })}
-        </svg>
+      )}
+      <div className="brand-actions">
+        <button className="btn-ghost" onClick={onConfigOpen} disabled={!brand}>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5 V3.5 M8 12.5 V14.5 M14.5 8 H12.5 M3.5 8 H1.5 M12.6 3.4 L11.2 4.8 M4.8 11.2 L3.4 12.6 M12.6 12.6 L11.2 11.2 M4.8 4.8 L3.4 3.4"/></svg>
+          Configure Lead Times
+        </button>
       </div>
     </div>
   )
 }
 
+// =================== Stock Chart ===================
+function StockChart({ items, brand, cfg, totalStats }) {
+  const [hover, setHover] = useState(null)
+  const [hoverIdx, setHoverIdx] = useState(null)
+  const [filter, setFilter] = useState('all')
+  const [showLines, setShowLines] = useState({ stock: true, min: true, po: true })
+  const svgRef = useRef(null)
+
+  const filtered = filter === 'all' ? items : items.filter(i => i.status === filter)
+  const visible = filtered.slice(0, 60)
+
+  const W = 1000, H = 360, P = { l: 0, r: 64, t: 24, b: 50 }
+  const innerW = W - P.l - P.r, innerH = H - P.t - P.b
+
+  const reorderDays = (cfg?.lead_time_days||0)+(cfg?.transit_days||0)+(cfg?.processing_days||0)
+
+  if (visible.length === 0) {
+    return <div className="sc-empty">No items match this filter.</div>
+  }
+
+  const allVals = visible.flatMap(i => [i.stock, i.minQty, i.poQty])
+  const maxY = Math.max(1, ...allVals) * 1.08
+  const x = i => P.l + (visible.length === 1 ? innerW / 2 : (i / (visible.length - 1)) * innerW)
+  const y = v => P.t + innerH - (v / maxY) * innerH
+
+  const smoothPath = (pts) => {
+    if (pts.length < 2) return ''
+    let d = `M ${pts[0].x} ${pts[0].y}`
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i]
+      const p1 = pts[i]
+      const p2 = pts[i + 1]
+      const p3 = pts[i + 2] || p2
+      d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6}, ${p2.x - (p3.x - p1.x) / 6} ${p2.y - (p3.y - p1.y) / 6}, ${p2.x} ${p2.y}`
+    }
+    return d
+  }
+
+  const stockPts = visible.map((it, i) => ({ x: x(i), y: y(it.stock) }))
+  const minPts = visible.map((it, i) => ({ x: x(i), y: y(it.minQty) }))
+  const poPts = visible.map((it, i) => ({ x: x(i), y: y(it.poQty) }))
+  const stockPath = smoothPath(stockPts)
+  const minPath = smoothPath(minPts)
+  const poPath = smoothPath(poPts)
+  const stockArea = `${stockPath} L ${x(visible.length - 1)} ${y(0)} L ${x(0)} ${y(0)} Z`
+
+  const axisVals = [0, 0.25, 0.5, 0.75, 1].map(p => Math.round(maxY * p / 100) * 100)
+
+  const xLabels = visible.length > 1 ? [
+    { i: 0, label: visible[0].label },
+    { i: Math.floor(visible.length / 4), label: visible[Math.floor(visible.length / 4)].label },
+    { i: Math.floor(visible.length / 2), label: visible[Math.floor(visible.length / 2)].label },
+    { i: Math.floor(visible.length * 3 / 4), label: visible[Math.floor(visible.length * 3 / 4)].label },
+    { i: visible.length - 1, label: visible[visible.length - 1].label },
+  ] : [{ i: 0, label: visible[0].label }]
+
+  const handleMove = (e) => {
+    const rect = svgRef.current.getBoundingClientRect()
+    const px = ((e.clientX - rect.left) / rect.width) * W - P.l
+    const idx = Math.round((px / innerW) * (visible.length - 1))
+    if (idx >= 0 && idx < visible.length) {
+      setHover(visible[idx])
+      setHoverIdx(idx)
+    }
+  }
+
+  const fullList = items
+  const totalDemand = fullList.reduce((a, b) => a + b.qAvg, 0)
+  const totalStock = fullList.reduce((a, b) => a + b.stock, 0)
+  const aboveMin = fullList.filter(v => v.stock >= v.minQty && !v.noConfig).length
+  const coveragePct = fullList.length > 0 ? Math.round((aboveMin / fullList.length) * 100) : 0
+  const avgDaysOfSupply = fullList.length ? Math.round(fullList.reduce((a, b) => a + (b.qAvg > 0 ? (b.stock / b.qAvg) * 30 : 0), 0) / fullList.length) : 0
+  const stockoutRisk = fullList.filter(v => v.qAvg > 0 && (v.stock / v.qAvg) * 30 < reorderDays).length
+
+  return (
+    <div className="sc-wrap">
+      <div className="sc-headline">
+        <div>
+          <div className="sc-eyebrow mono">FORECAST ANALYSIS · {brand}</div>
+          <div className="sc-title">Stock Coverage vs Reorder Threshold</div>
+          <div className="sc-headline-sub">
+            <span className="sc-coverage">{coveragePct}% coverage</span>
+            <span className="sc-dot">·</span>
+            <span>{fullList.length} items · showing {visible.length}</span>
+            <span className="sc-dot">·</span>
+            <span>{stockoutRisk} at stockout risk</span>
+          </div>
+        </div>
+        <div className="sc-controls">
+          <div className="sc-filter-bar">
+            {[
+              { v: 'all', l: 'All' },
+              { v: 'critical', l: 'Critical' },
+              { v: 'ok', l: 'OK' },
+            ].map(f => (
+              <button key={f.v} className={filter === f.v ? 'on' : ''} onClick={() => setFilter(f.v)}>{f.l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="sc-legend">
+        <button className={`scl-item ${showLines.stock ? 'on' : 'off'}`} onClick={() => setShowLines({...showLines, stock: !showLines.stock})}>
+          <span className="scl-swatch scl-stock"/> Current Stock
+        </button>
+        <button className={`scl-item ${showLines.min ? 'on' : 'off'}`} onClick={() => setShowLines({...showLines, min: !showLines.min})}>
+          <span className="scl-swatch scl-min"/> Min Qty (Reorder)
+        </button>
+        <button className={`scl-item ${showLines.po ? 'on' : 'off'}`} onClick={() => setShowLines({...showLines, po: !showLines.po})}>
+          <span className="scl-swatch scl-po"/> PO Target Qty
+        </button>
+      </div>
+
+      <svg
+        className="stock-chart"
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        onMouseMove={handleMove}
+        onMouseLeave={() => { setHover(null); setHoverIdx(null) }}
+      >
+        <defs>
+          <linearGradient id="stockFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#1E54B7" stopOpacity="0.22"/>
+            <stop offset="100%" stopColor="#1E54B7" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+
+        {axisVals.map((v, i) => (
+          <g key={i}>
+            <line x1={P.l} x2={W - P.r} y1={y(v)} y2={y(v)} stroke="#EEF1F5" strokeDasharray={i === 0 ? '0' : '2 4'}/>
+            <text x={W - P.r + 10} y={y(v) + 4} fontSize="11" fill="#94A3B8" fontFamily="Geist Mono, monospace">{v >= 1000 ? (v/1000).toFixed(1) + 'K' : v}</text>
+          </g>
+        ))}
+
+        {showLines.po && <path d={poPath} stroke="#94A3B8" strokeWidth="1.5" fill="none" strokeDasharray="2 4" opacity="0.7"/>}
+        {showLines.min && <path d={minPath} stroke="#EF4444" strokeWidth="1.6" fill="none" strokeDasharray="6 4" opacity="0.85"/>}
+
+        {showLines.stock && (
+          <>
+            <path d={stockArea} fill="url(#stockFill)"/>
+            <path d={stockPath} stroke="#1E54B7" strokeWidth="2.4" fill="none" strokeLinejoin="round"/>
+          </>
+        )}
+
+        {hoverIdx !== null && hover && (
+          <g>
+            <line x1={x(hoverIdx)} x2={x(hoverIdx)} y1={P.t} y2={P.t + innerH} stroke="#94A3B8" strokeDasharray="2 3" strokeWidth="1"/>
+            {showLines.stock && <circle cx={x(hoverIdx)} cy={y(hover.stock)} r="5" fill="#fff" stroke="#1E54B7" strokeWidth="2.5"/>}
+            {showLines.min && <circle cx={x(hoverIdx)} cy={y(hover.minQty)} r="3.5" fill="#fff" stroke="#EF4444" strokeWidth="2"/>}
+            {showLines.po && <circle cx={x(hoverIdx)} cy={y(hover.poQty)} r="3.5" fill="#fff" stroke="#94A3B8" strokeWidth="2"/>}
+          </g>
+        )}
+
+        {xLabels.map((l, i) => (
+          <text key={i} x={x(l.i)} y={H - 16} fontSize="10.5" fill="#94A3B8"
+            textAnchor={i === 0 ? 'start' : i === xLabels.length - 1 ? 'end' : 'middle'}
+            fontFamily="Geist Mono, monospace">{l.label}</text>
+        ))}
+
+        {hover && hoverIdx !== null && (() => {
+          const cx = x(hoverIdx)
+          const tipX = cx > W * 0.6 ? cx - 232 : cx + 16
+          const days = hover.qAvg > 0 ? Math.round((hover.stock / hover.qAvg) * 30) : 0
+          const codeStr = (hover.code || '').length > 28 ? hover.code.slice(0, 26) + '…' : (hover.code || '')
+          return (
+            <g transform={`translate(${tipX}, ${P.t + 8})`}>
+              <rect width="220" height="156" rx="10" fill="#0A2540"/>
+              <text x="14" y="22" fontSize="10" fill="#3DD9D6" fontFamily="Geist Mono, monospace" letterSpacing="0.06em">{hover.label}</text>
+              <text x="14" y="40" fontSize="11.5" fill="#fff" fontWeight="600">{codeStr}</text>
+              <line x1="14" x2="206" y1="50" y2="50" stroke="rgba(255,255,255,0.1)"/>
+              <text x="14" y="68" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">CURRENT STOCK</text>
+              <text x="206" y="68" fontSize="12" fill="#fff" fontWeight="600" textAnchor="end" fontFamily="Geist Mono, monospace">{hover.stock.toLocaleString()}</text>
+              <text x="14" y="84" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">MIN QTY</text>
+              <text x="206" y="84" fontSize="12" fill="#FCA5A5" fontWeight="600" textAnchor="end" fontFamily="Geist Mono, monospace">{hover.minQty.toLocaleString()}</text>
+              <text x="14" y="100" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">PO TARGET</text>
+              <text x="206" y="100" fontSize="12" fill="#94A3B8" fontWeight="600" textAnchor="end" fontFamily="Geist Mono, monospace">{hover.poQty.toLocaleString()}</text>
+              <line x1="14" x2="206" y1="112" y2="112" stroke="rgba(255,255,255,0.1)"/>
+              <text x="14" y="130" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">DAYS OF SUPPLY</text>
+              <text x="206" y="130" fontSize="12" fill={days < reorderDays && reorderDays > 0 ? '#FCA5A5' : '#3DD9D6'} fontWeight="600" textAnchor="end" fontFamily="Geist Mono, monospace">{days}d</text>
+              <text x="14" y="146" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">MONTHLY DEMAND</text>
+              <text x="206" y="146" fontSize="12" fill="#fff" fontWeight="600" textAnchor="end" fontFamily="Geist Mono, monospace">{hover.qAvg.toLocaleString()}</text>
+            </g>
+          )
+        })()}
+      </svg>
+
+      <div className="sc-stats">
+        <div className="sc-stat sc-stat-need">
+          <span>NEED ORDER</span>
+          <span className="mono"><b className="down">{totalStats.needOrder}</b></span>
+          <span className="sc-stat-sub">below reorder level</span>
+        </div>
+        <div className="sc-stat sc-stat-good">
+          <span>SUFFICIENT</span>
+          <span className="mono"><b className="up">{totalStats.sufficient}</b></span>
+          <span className="sc-stat-sub">above reorder level</span>
+        </div>
+        <div className="sc-stat">
+          <span>COVERAGE</span>
+          <span className="mono"><b className={coveragePct < 70 ? 'down' : 'up'}>{coveragePct}%</b></span>
+          <span className="sc-stat-sub">{aboveMin} of {fullList.length} above min</span>
+        </div>
+        <div className="sc-stat">
+          <span>AVG DAYS OF SUPPLY</span>
+          <span className="mono"><b>{avgDaysOfSupply}d</b></span>
+          <span className="sc-stat-sub">target {reorderDays}d</span>
+        </div>
+        <div className="sc-stat">
+          <span>FILL RATIO</span>
+          <span className="mono"><b>{totalDemand > 0 ? (totalStock / totalDemand).toFixed(2) : '—'}×</b></span>
+          <span className="sc-stat-sub">stock ÷ monthly demand</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =================== Items Table ===================
+function StatusPill({ status }) {
+  const map = {
+    critical: { label: 'Order',    cls: 'pill-critical' },
+    noconfig: { label: 'No Cfg',   cls: 'pill-noconfig' },
+    ok:       { label: 'OK',       cls: 'pill-ok' },
+  }
+  const v = map[status] || map.ok
+  return <span className={`pill ${v.cls}`}>{v.label}</span>
+}
+
+function ItemRow({ item, monthsKeys, salesData, stockData, calc, onSalesEdit, onCopySys, onStockEdit, onCopySysStock }) {
+  const c  = calc(item.item_code)
+  const st = stockData[item.item_code] || { kaveri: 0, godawari: 0, manual: null }
+  const sysStock = (st.kaveri || 0) + (st.godawari || 0)
+  const status = c.noConfig ? 'noconfig' : c.needsOrder ? 'critical' : 'ok'
+
+  return (
+    <div className={`it-row it-data status-${status}`}>
+      <div className="it-cell it-code">
+        {item.item_no && <div className="it-id mono">{item.item_no}</div>}
+        <div className="it-name">{item.item_code}</div>
+      </div>
+      <div className="it-sales-months it-sales-cells">
+        {monthsKeys.map(m => {
+          const s = salesData[item.item_code]?.[m] || { sys: 0, manual: null }
+          return (
+            <div key={m} className="it-cell it-month">
+              <div className="it-orig mono">
+                {s.sys > 0 ? s.sys : '—'}
+                {s.sys > 0 && (
+                  <button title="Copy to override" onClick={() => onCopySys(item.item_code, m)}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'var(--pf-muted-2)', padding:'0 0 0 4px', fontSize:11, lineHeight:1 }}>↓</button>
+                )}
+              </div>
+              <input
+                type="number" min="0"
+                className={`it-input mono ${s.manual === null ? 'empty' : ''}`}
+                value={s.manual !== null ? s.manual : ''}
+                placeholder="—"
+                onChange={e => onSalesEdit(item.item_code, m, e.target.value)}
+              />
+            </div>
+          )
+        })}
+      </div>
+      <div className="it-cell it-num mono">{c.qAvg || '—'}</div>
+      <div className="it-cell it-num it-min mono">{c.noConfig ? '—' : c.minQty.toLocaleString()}</div>
+      <div className="it-cell it-num it-po mono">{c.noConfig ? '—' : c.poQty.toLocaleString()}</div>
+      <div className="it-cell it-stock-col">
+        <div className="it-stock-bd mono">
+          {st.kaveri || 0} <span>+</span> {st.godawari || 0}
+          {sysStock > 0 && (
+            <button title="Copy system stock" onClick={() => onCopySysStock(item.item_code)}
+              style={{ background:'none', border:'none', cursor:'pointer', color:'var(--pf-muted-2)', padding:'0 0 0 4px', fontSize:11, lineHeight:1 }}>↓</button>
+          )}
+        </div>
+        <input type="number" min="0"
+          className={`it-input mono ${st.manual === null ? 'empty' : ''}`}
+          value={st.manual !== null ? st.manual : ''}
+          placeholder={String(sysStock)}
+          onChange={e => onStockEdit(item.item_code, e.target.value)}
+          style={{ width: 86, marginTop: 4 }}
+        />
+      </div>
+      <div className="it-cell it-status-col">
+        <StatusPill status={status}/>
+      </div>
+    </div>
+  )
+}
+
+// =================== PO Review Modal ===================
+function POReviewModalNew({ open, onClose, onNext, brand, qLabel, seedItems }) {
+  const [rows, setRows] = useState([])
+  const [filter, setFilter] = useState('')
+
+  useEffect(() => {
+    if (open && seedItems?.length) {
+      setRows(seedItems.map(s => ({ ...s, pendingQty: s.pendingQty || 0, include: true })))
+      setFilter('')
+    }
+  }, [open, seedItems])
+
+  if (!open) return null
+
+  const filteredRows = filter ? rows.filter(r =>
+    (r.item_code || '').toLowerCase().includes(filter.toLowerCase()) ||
+    (r.itemNo || '').toLowerCase().includes(filter.toLowerCase())
+  ) : rows
+  const allChecked = rows.length > 0 && rows.every(r => r.include)
+  const included = rows.filter(r => r.include)
+  const totalSelected = included.length
+  const totalQty = included.reduce((a, r) => a + Math.max(0, r.poQty - (r.pendingQty || 0)), 0)
+  const canNext = included.some(r => Math.max(0, r.poQty - (r.pendingQty || 0)) > 0)
+
+  function setPending(idx, val) {
+    setRows(prev => prev.map((r, i) => i !== idx ? r : { ...r, pendingQty: Math.max(0, parseInt(val) || 0) }))
+  }
+  function toggleOne(item_code) {
+    setRows(prev => prev.map(r => r.item_code !== item_code ? r : { ...r, include: !r.include }))
+  }
+  function toggleAll() {
+    const flag = !allChecked
+    setRows(prev => prev.map(r => ({ ...r, include: flag })))
+  }
+  function handleNext() {
+    const items = included
+      .map(r => ({ ...r, netQty: Math.max(0, r.poQty - (r.pendingQty || 0)) }))
+      .filter(r => r.netQty > 0)
+    if (items.length) onNext(items)
+  }
+
+  return (
+    <div className="pf-modal-scrim" onClick={onClose}>
+      <div className="pf-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <div className="modal-eyebrow mono">{qLabel} · {rows.length} items need reorder</div>
+            <div className="modal-title">{brand} — PO Review</div>
+          </div>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
+          </button>
+        </div>
+
+        <div className="modal-summary">
+          <div className="ms-cell">
+            <div className="ms-label mono">SELECTED</div>
+            <div className="ms-val">{totalSelected}<span className="ms-max">/ {rows.length}</span></div>
+          </div>
+          <div className="ms-cell">
+            <div className="ms-label mono">TOTAL ORDER QTY</div>
+            <div className="ms-val">{totalQty.toLocaleString()}</div>
+          </div>
+          <div className="ms-cell">
+            <div className="ms-label mono">QUARTER</div>
+            <div className="ms-val" style={{ fontSize: 16 }}>{qLabel}</div>
+          </div>
+          <div className="ms-cell">
+            <div className="ms-label mono">BRAND</div>
+            <div className="ms-val" style={{ fontSize: 16 }}>{brand}</div>
+          </div>
+        </div>
+
+        <div className="modal-toolbar">
+          <button className="chk-all" onClick={toggleAll}>
+            <span className={`cb ${allChecked ? 'on' : ''}`}>
+              {allChecked && <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="#fff" strokeWidth="2"><path d="M2.5 6 L5 8.5 L9.5 3.5"/></svg>}
+            </span>
+            Select all
+          </button>
+          <div className="modal-search">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
+            <input placeholder="Filter by item code or ID…" value={filter} onChange={e => setFilter(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="modal-table">
+          <div className="mt-row mt-head">
+            <div className="mt-chk"></div>
+            <div>Item Code</div>
+            <div className="mt-num">Formula Qty</div>
+            <div className="mt-num">Pending PO</div>
+            <div className="mt-num">Order Qty</div>
+          </div>
+          {filteredRows.map(r => {
+            const idx = rows.findIndex(x => x.item_code === r.item_code)
+            const orderQty = Math.max(0, r.poQty - (r.pendingQty || 0))
+            return (
+              <div key={r.item_code} className={`mt-row ${r.include ? '' : 'unchecked'}`}>
+                <div className="mt-chk">
+                  <button onClick={() => toggleOne(r.item_code)}>
+                    <span className={`cb ${r.include ? 'on' : ''}`}>
+                      {r.include && <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="#fff" strokeWidth="2"><path d="M2.5 6 L5 8.5 L9.5 3.5"/></svg>}
+                    </span>
+                  </button>
+                </div>
+                <div className="mt-name">
+                  {r.itemNo && <div className="mt-id mono">{r.itemNo}</div>}
+                  <div className="mt-code">{r.item_code}</div>
+                </div>
+                <div className="mt-num mono">{r.poQty.toLocaleString()}</div>
+                <div className="mt-num">
+                  <input className="mt-input mono" type="number" min="0" value={r.pendingQty || 0}
+                    disabled={!r.include}
+                    onChange={e => setPending(idx, e.target.value)} />
+                </div>
+                <div className="mt-num mono mt-total">{orderQty > 0 ? orderQty.toLocaleString() : <span className="muted">—</span>}</div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="modal-foot">
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={handleNext} disabled={!canNext}>
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 8 L7 12 L13 4"/></svg>
+            Next: Create PO ({totalSelected})
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =================== Lead Time Drawer ===================
+function LeadTimeDrawer({ open, onClose, brand, cfg, onSaved }) {
+  const [lead, setLead] = useState(0)
+  const [transit, setTransit] = useState(0)
+  const [proc, setProc] = useState(0)
+  const [inv, setInv] = useState(45)
+  const [saving, setSaving] = useState(false)
+  const guard = useRef(false)
+
+  useEffect(() => {
+    if (open) {
+      setLead(cfg?.lead_time_days || 0)
+      setTransit(cfg?.transit_days || 0)
+      setProc(cfg?.processing_days || 0)
+      setInv(cfg?.inventory_days || 45)
+    }
+  }, [open, brand, cfg])
+
+  if (!open) return null
+
+  const reorderLevel = lead + transit + proc
+  const replenLevel = reorderLevel + inv
+
+  async function save() {
+    if (guard.current) return
+    guard.current = true; setSaving(true)
+    const { error } = await sb.from('procurement_forecast_config').upsert({
+      brand,
+      lead_time_days: lead,
+      transit_days: transit,
+      processing_days: proc,
+      inventory_days: inv,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'brand' })
+    if (error) { toast('Failed to save: ' + error.message); guard.current = false; setSaving(false); return }
+    toast(`${brand} lead times saved`, 'success')
+    onSaved({ brand, lead_time_days: lead, transit_days: transit, processing_days: proc, inventory_days: inv })
+    guard.current = false; setSaving(false)
+    onClose()
+  }
+
+  return (
+    <div className="pf-drawer-scrim" onClick={onClose}>
+      <div className="pf-drawer" onClick={e => e.stopPropagation()}>
+        <div className="drawer-head">
+          <div>
+            <div className="drawer-eyebrow mono">Configure · {brand}</div>
+            <div className="drawer-title">Lead Times</div>
+            <div className="drawer-sub">Drag sliders to set days. Save when done.</div>
+          </div>
+          <button className="drawer-close" onClick={onClose}>
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
+          </button>
+        </div>
+        <div className="drawer-body">
+          <SliderField label="Supplier Lead Time" value={lead} max={120} onChange={setLead} color="#1E54B7"/>
+          <SliderField label="Transportation Time" value={transit} max={30} onChange={setTransit} color="#7C3AED"/>
+          <SliderField label="Order Processing Time" value={proc} max={14} onChange={setProc} color="#0F766E"/>
+          <SliderField label="Inventory Buffer" value={inv} max={120} onChange={setInv} color="#3DD9D6"/>
+
+          <div className="calc-card">
+            <div className="calc-head mono">CALCULATED LEVELS</div>
+            <div className="calc-bar">
+              <div className="cb-seg" style={{flex: lead || 0.001, background: '#1E54B7'}}/>
+              <div className="cb-seg" style={{flex: transit || 0.001, background: '#7C3AED'}}/>
+              <div className="cb-seg" style={{flex: proc || 0.001, background: '#0F766E'}}/>
+              <div className="cb-seg cb-buffer" style={{flex: inv || 0.001, background: '#3DD9D6'}}/>
+            </div>
+            <div className="calc-legend">
+              <div className="cl-item"><span style={{background:'#1E54B7'}}/>Lead Time</div>
+              <div className="cl-item"><span style={{background:'#7C3AED'}}/>Transit</div>
+              <div className="cl-item"><span style={{background:'#0F766E'}}/>Processing</div>
+              <div className="cl-item"><span style={{background:'#3DD9D6'}}/>Inventory Buffer ({inv}d)</div>
+            </div>
+            <div className="calc-cards">
+              <div className="cc-card cc-reorder">
+                <div className="cc-label mono">REORDER LEVEL</div>
+                <div className="cc-val">{reorderLevel}<span> days</span></div>
+                <div className="cc-formula mono">Lead + Transit + Processing</div>
+              </div>
+              <div className="cc-card cc-replen">
+                <div className="cc-label mono">REPLENISHMENT LEVEL</div>
+                <div className="cc-val">{replenLevel}<span> days</span></div>
+                <div className="cc-formula mono">Reorder + {inv}d inventory</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="drawer-foot">
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Lead Times'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SliderField({ label, value, max, onChange, color }) {
+  return (
+    <div className="sf">
+      <div className="sf-head">
+        <div className="sf-label">{label}</div>
+        <div className="sf-val" style={{color}}>{value}<span className="sf-unit"> days</span></div>
+      </div>
+      <div className="sf-track-wrap">
+        <input type="range" min="0" max={max} value={value} onChange={e => onChange(parseInt(e.target.value))} className="sf-slider" style={{'--c': color, '--p': `${(value/max)*100}%`}}/>
+      </div>
+      <div className="sf-scale mono">
+        <span>0</span><span>{Math.round(max/2)}</span><span>{max}</span>
+      </div>
+    </div>
+  )
+}
+
+// =================== Root Page ===================
 export default function ProcurementForecast() {
   const navigate = useNavigate()
   const { months: QM, label: QLabel } = getPrevQuarter()
@@ -156,7 +664,6 @@ export default function ProcurementForecast() {
   const [brandItems, setBrandItems] = useState([])
   const [salesData, setSalesData]   = useState({})
   const [stockData, setStockData]   = useState({})
-  const [brandConfig, setBrandConfig] = useState(null)
   const [loading, setLoading]       = useState(true)
   const [loadingBrand, setLoadingBrand] = useState(false)
   const [saving, setSaving]         = useState(false)
@@ -171,6 +678,9 @@ export default function ProcurementForecast() {
   const snapshotGuard = useRef(false)
   const [userId, setUserId]                         = useState('')
   const [userRole, setUserRole]                     = useState('')
+  const [cfgOpen, setCfgOpen]                       = useState(false)
+
+  const brandConfig = selectedBrand ? allConfigs[selectedBrand] : null
 
   useEffect(() => { init() }, [])
 
@@ -198,7 +708,6 @@ export default function ProcurementForecast() {
 
   async function selectBrand(brand) {
     setSelectedBrand(brand)
-    setBrandConfig(allConfigs[brand] || null)
     if (!brand) { setBrandItems([]); setSalesData({}); setStockData({}); return }
     setLoadingBrand(true)
     setSalesData({}); setStockData({}); setBrandItems([])
@@ -278,6 +787,31 @@ export default function ProcurementForecast() {
     const needsOrder = !noConfig && effectiveStock < minQty
     return { reorderDays, replenishDays, qAvg: Math.round(qAvg), dailyRate, minQty, poQty, effectiveStock, needsOrder, noConfig }
   }
+
+  // chart-shaped item list (sorted critical first)
+  const chartItems = useMemo(() => {
+    return brandItems.filter(i => !calc(i.item_code).noConfig).map(i => {
+      const c = calc(i.item_code)
+      const status = c.needsOrder ? 'critical' : 'ok'
+      return {
+        label: i.item_no || i.item_code.slice(-7),
+        code: i.item_code,
+        stock: c.effectiveStock,
+        minQty: c.minQty,
+        poQty: c.poQty,
+        qAvg: c.qAvg,
+        status,
+        noConfig: c.noConfig,
+      }
+    }).sort((a, b) => {
+      const order = { critical: 0, noconfig: 1, ok: 2 }
+      if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status]
+      const ra = a.minQty > 0 ? a.stock / a.minQty : 1
+      const rb = b.minQty > 0 ? b.stock / b.minQty : 1
+      return ra - rb
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandItems, salesData, stockData, brandConfig])
 
   async function saveOverrides() {
     if (saveGuard.current) return
@@ -359,221 +893,160 @@ export default function ProcurementForecast() {
   }
 
   const triggeredCount = brandItems.filter(i => calc(i.item_code).needsOrder).length
-  const TH = { padding:'10px 14px', fontSize:11, fontWeight:600, color:'var(--gray-500)', background:'var(--gray-50)', borderBottom:'1px solid var(--gray-100)', whiteSpace:'nowrap', textAlign:'right' }
-  const TD = { padding:'10px 14px', fontSize:13, borderBottom:'1px solid var(--gray-50)', verticalAlign:'middle', textAlign:'right', fontFamily:'var(--mono)', color:'var(--gray-800)' }
-  function StatusChip({ c }) {
-    if (c.noConfig) return <span style={{ fontSize:11, fontWeight:600, color:'#92400e', background:'#fef3c7', padding:'3px 10px', borderRadius:20, whiteSpace:'nowrap' }}>No config</span>
-    if (c.needsOrder) return <span style={{ fontSize:11, fontWeight:600, color:'white', background:'#dc2626', padding:'3px 10px', borderRadius:20, whiteSpace:'nowrap' }}>Order</span>
-    return <span style={{ fontSize:11, fontWeight:600, color:'#166534', background:'#dcfce7', padding:'3px 10px', borderRadius:20, whiteSpace:'nowrap' }}>OK</span>
-  }
+  const noConfigCount = brandItems.filter(i => calc(i.item_code).noConfig).length
+  const sufficientCount = brandItems.length - triggeredCount - noConfigCount
+  const monthLabels = QM.map(m => `${MONTH_NAMES[m.slice(5)]} ${m.slice(2,4)}`)
 
   return (
     <Layout>
-      <div style={{ padding:'28px 32px' }}>
+      <div className="pf-app">
 
-        {/* Header */}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24 }}>
+        <div className="page-head">
           <div>
-            <h1 style={{ fontSize:20, fontWeight:700, color:'var(--gray-900)', margin:0 }}>Procurement Forecast</h1>
-            <span style={{ fontSize:12, color:'var(--gray-500)', marginTop:2, display:'block' }}>Analysing <strong>{QLabel}</strong> · Standard items only</span>
+            <h1 className="page-title">Procurement Forecast</h1>
+            <div className="page-sub">{QLabel} · Standard items only · Auto-calculated reorder & replenishment levels</div>
           </div>
-          <button onClick={() => navigate('/procurement/forecast/config')}
-            style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', border:'1.5px solid var(--gray-200)', borderRadius:7, background:'white', fontSize:13, fontWeight:600, color:'var(--gray-700)', cursor:'pointer' }}>
-            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            Configure Lead Times
-          </button>
-        </div>
-
-        {/* Brand selector */}
-        <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:28 }}>
-          <div style={{ flex:1, maxWidth:360 }}>
-            <select value={selectedBrand} onChange={e => selectBrand(e.target.value)}
-              style={{ width:'100%', padding:'11px 14px', border:'1.5px solid var(--gray-200)', borderRadius:8, fontSize:14, color:'var(--gray-900)', background:'white', outline:'none', cursor:'pointer' }}>
-              <option value="">— Select a brand to analyse —</option>
-              {brands.map(b => <option key={b} value={b}>{b}{allConfigs[b] ? '' : ' (no config)'}</option>)}
-            </select>
-          </div>
-          {selectedBrand && brandConfig && (
-            <div style={{ display:'flex', gap:16, fontSize:12, color:'var(--gray-500)' }}>
-              <span>Reorder: <strong style={{color:'#1d4ed8'}}>{(brandConfig.lead_time_days||0)+(brandConfig.transit_days||0)+(brandConfig.processing_days||0)}d</strong></span>
-              <span>Replenishment: <strong style={{color:'#15803d'}}>{(brandConfig.lead_time_days||0)+(brandConfig.transit_days||0)+(brandConfig.processing_days||0)+(brandConfig.inventory_days||45)}d</strong></span>
+          <div className="page-meta">
+            <div className="meta-pill">
+              <span className="meta-label">Quarter</span>
+              <span className="meta-val">{QLabel}</span>
             </div>
-          )}
-          {selectedBrand && !brandConfig && (
-            <span style={{ fontSize:12, color:'#b45309', background:'#fffbeb', padding:'6px 12px', borderRadius:6, border:'1px solid #fcd34d' }}>
-              No config — <button onClick={() => navigate('/procurement/forecast/config')} style={{background:'none',border:'none',color:'#b45309',fontWeight:700,cursor:'pointer',textDecoration:'underline',fontSize:12}}>Configure now →</button>
-            </span>
-          )}
+            <div className="meta-pill live">
+              <span className="meta-dot"/> Live
+            </div>
+          </div>
         </div>
 
-        {!selectedBrand ? (
-          <div style={{ textAlign:'center', padding:'64px 0', color:'var(--gray-400)' }}>
-            <svg width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" style={{margin:'0 auto 16px', display:'block', opacity:0.3}}><path d="M9 17H7A5 5 0 017 7h2M15 7h2a5 5 0 010 10h-2M8 12h8"/></svg>
-            <div style={{ fontSize:15, fontWeight:600, marginBottom:6 }}>Select a brand to begin</div>
-            <div style={{ fontSize:13 }}>Choose from the dropdown above to load forecast data</div>
+        <BrandSelector
+          brand={selectedBrand}
+          brands={brands}
+          allConfigs={allConfigs}
+          brandItemCount={brandItems.length}
+          onChange={selectBrand}
+          onConfigOpen={() => setCfgOpen(true)}
+        />
+
+        {loading ? (
+          <div className="pf-empty">Loading…</div>
+        ) : !selectedBrand ? (
+          <div className="card pf-empty">
+            <div style={{ fontSize:15, fontWeight:600, marginBottom:6, color:'var(--pf-ink)' }}>Select a brand to begin</div>
+            <div style={{ fontSize:13 }}>Choose a brand from the picker above to load forecast data</div>
           </div>
         ) : loadingBrand ? (
-          <div style={{ textAlign:'center', padding:48, color:'var(--gray-400)' }}>Loading {selectedBrand} data…</div>
+          <div className="card pf-empty">Loading {selectedBrand} data…</div>
         ) : brandItems.length === 0 ? (
-          <div style={{ textAlign:'center', padding:48, color:'var(--gray-400)' }}>No standard items found for {selectedBrand}</div>
+          <div className="card pf-empty">No standard items found for {selectedBrand}</div>
         ) : (
           <>
-            {/* KPI row */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:24 }}>
-              {[
-                { label:'Total Items', value: brandItems.length, color:'var(--gray-900)' },
-                { label:'Need Order', value: triggeredCount, color:'#dc2626' },
-                { label:'Sufficient', value: brandItems.length - triggeredCount, color:'#15803d' },
-                { label:'No Config', value: brandItems.filter(i => calc(i.item_code).noConfig).length, color:'#b45309' },
-              ].map(k => (
-                <div key={k.label} style={{ background:'white', border:'1px solid var(--gray-100)', borderRadius:10, padding:'16px 20px' }}>
-                  <div style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>{k.label}</div>
-                  <div style={{ fontSize:28, fontWeight:700, color:k.color, fontFamily:'var(--mono)' }}>{k.value}</div>
+            <div className="card forecast-card">
+              <StockChart
+                items={chartItems}
+                brand={selectedBrand}
+                cfg={brandConfig}
+                totalStats={{ needOrder: triggeredCount, sufficient: sufficientCount, critical: triggeredCount }}
+              />
+            </div>
+
+            <div className="card items-card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{brandItems.length} standard items · {QLabel}</div>
+                  <div className="card-title">Item-level forecast</div>
                 </div>
-              ))}
-            </div>
-
-            {/* Chart */}
-            <ForecastLineChart items={brandItems} calcFn={calc} qLabel={QLabel} />
-
-            {/* Action bar */}
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-              <div style={{ fontSize:13, color:'var(--gray-600)' }}>
-                {brandItems.length} standard items · {QLabel}
-              </div>
-              <div style={{ display:'flex', gap:10 }}>
-                <button onClick={recordSnapshot} disabled={snapshotting}
-                  style={{ padding:'8px 16px', border:'1.5px solid var(--gray-200)', borderRadius:7, background:'white', fontSize:13, fontWeight:600, color:'var(--gray-600)', cursor:'pointer', opacity:snapshotting?0.6:1, display:'flex', alignItems:'center', gap:6 }}>
-                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  {snapshotting ? 'Recording…' : 'Record Snapshot'}
-                </button>
-                <button onClick={saveOverrides} disabled={saving}
-                  style={{ padding:'8px 16px', border:'1.5px solid var(--gray-200)', borderRadius:7, background:'white', fontSize:13, fontWeight:600, color:'var(--gray-700)', cursor:'pointer', opacity:saving?0.7:1 }}>
-                  {saving ? 'Saving…' : 'Save Overrides'}
-                </button>
-                {triggeredCount > 0 && (
-                  <button onClick={openForecastPO} disabled={loadingForecastPO}
-                    style={{ padding:'8px 16px', background:'var(--blue-700)', color:'white', border:'none', borderRadius:7, fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:6, opacity:loadingForecastPO?0.7:1 }}>
-                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-                    {loadingForecastPO ? 'Loading…' : `Generate PO (${triggeredCount})`}
+                <div className="action-row">
+                  <button className="btn-ghost" onClick={recordSnapshot} disabled={snapshotting}>
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 2 V11 M4 7 L8 11 L12 7 M3 14 H13"/></svg>
+                    {snapshotting ? 'Recording…' : 'Record Snapshot'}
                   </button>
-                )}
+                  <button className="btn-ghost" onClick={saveOverrides} disabled={saving}>
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 8 L7 12 L13 4"/></svg>
+                    {saving ? 'Saving…' : 'Save Overrides'}
+                  </button>
+                  {triggeredCount > 0 && (
+                    <button className="btn-primary" onClick={openForecastPO} disabled={loadingForecastPO}>
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 2 V11 M4 7 L8 11 L12 7"/></svg>
+                      {loadingForecastPO ? 'Loading…' : `Generate PO (${triggeredCount})`}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Table */}
-            <div style={{ overflowX:'auto', border:'1px solid var(--gray-100)', borderRadius:12 }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', minWidth:820 }}>
-                <thead>
-                  <tr style={{ background:'var(--gray-50)' }}>
-                    <th style={{ ...TH, textAlign:'left', position:'sticky', left:0, zIndex:3, background:'var(--gray-50)', minWidth:200, borderRight:'1px solid var(--gray-100)' }}>
-                      <div style={{ fontSize:10, color:'var(--gray-400)', fontWeight:500, marginBottom:1 }}>ERP Code</div>
-                      <div>Item Code</div>
-                    </th>
-                    <th colSpan={3} style={{ ...TH, textAlign:'center', color:'var(--gray-600)', borderRight:'1px solid var(--gray-100)', fontSize:10, letterSpacing:0 }}>
-                      {QLabel} — Sales Qty
-                      <div style={{ fontSize:9, color:'var(--gray-400)', fontWeight:400, marginTop:1 }}>System value → edit to override</div>
-                    </th>
-                    <th style={{ ...TH, textAlign:'center', color:'var(--gray-500)', fontSize:10, letterSpacing:0 }}>Q Avg</th>
-                    <th style={{ ...TH, textAlign:'center', color:'#1d4ed8', fontSize:10, letterSpacing:0 }}>Min Qty</th>
-                    <th style={{ ...TH, textAlign:'center', color:'#15803d', fontSize:10, letterSpacing:0, borderRight:'1px solid var(--gray-100)' }}>PO Qty</th>
-                    <th style={{ ...TH, textAlign:'center', color:'var(--gray-500)', fontSize:10, letterSpacing:0, borderRight:'1px solid var(--gray-100)' }}>
-                      Stock
-                      <div style={{ fontSize:9, fontWeight:400, color:'var(--gray-400)', marginTop:1 }}>Kaveri + Godawari</div>
-                    </th>
-                    <th style={{ ...TH, textAlign:'center', fontSize:10, letterSpacing:0 }}>Status</th>
-                  </tr>
-                  <tr style={{ background:'var(--gray-50)', borderBottom:'1px solid var(--gray-100)' }}>
-                    <th style={{ ...TH, textAlign:'left', position:'sticky', left:0, zIndex:3, background:'var(--gray-50)', borderRight:'1px solid var(--gray-100)', paddingTop:4, paddingBottom:8, fontSize:10, color:'var(--gray-400)', fontWeight:400 }}>
-                      Sticky · sorted by urgency
-                    </th>
-                    {QM.map(m => (
-                      <th key={m} style={{ ...TH, textAlign:'center', fontSize:11, color:'var(--gray-600)', fontWeight:600, paddingTop:4, paddingBottom:8, minWidth:88 }}>
-                        {MONTH_NAMES[m.slice(5)]} '{m.slice(2,4)}
-                      </th>
-                    ))}
-                    <th style={{ paddingBottom:8 }} /><th style={{ paddingBottom:8 }} /><th style={{ paddingBottom:8, borderRight:'1px solid var(--gray-100)' }} />
-                    <th style={{ paddingBottom:8, borderRight:'1px solid var(--gray-100)' }} />
-                    <th style={{ paddingBottom:8 }} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {brandItems.map(item => {
-                    const c  = calc(item.item_code)
-                    const st = stockData[item.item_code] || { kaveri:0, godawari:0, manual:null }
-                    const sysStock = (st.kaveri || 0) + (st.godawari || 0)
-                    const rowBg = c.needsOrder ? '#fef9f9' : 'white'
-                    return (
-                      <tr key={item.item_code} style={{ background:rowBg }}>
-                        {/* Item — sticky */}
-                        <td style={{ ...TD, textAlign:'left', position:'sticky', left:0, background:rowBg, zIndex:1, fontFamily:'inherit', padding:'10px 14px', borderRight:'1px solid var(--gray-100)' }}>
-                          {item.item_no && (
-                            <span style={{ display:'inline-block', background:'#ede9fe', color:'#5b21b6', fontSize:10, fontWeight:600, padding:'1px 7px', borderRadius:4, marginBottom:5, fontFamily:'var(--mono)' }}>
-                              {item.item_no}
-                            </span>
-                          )}
-                          <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-900)', fontFamily:'var(--mono)' }}>{item.item_code}</div>
-                        </td>
-
-                        {/* Month cells — one per month, stacked (sys on top, input below) */}
-                        {QM.map(m => {
-                          const s = salesData[item.item_code]?.[m] || { sys:0, manual:null }
-                          return (
-                            <td key={m} style={{ ...TD, textAlign:'center', padding:'8px 10px', verticalAlign:'middle' }}>
-                              <div style={{ fontSize:11, color:'var(--gray-400)', marginBottom:4, fontFamily:'var(--mono)' }}>
-                                {s.sys > 0 ? s.sys : '—'}
-                                {s.sys > 0 && (
-                                  <button title="Copy to override" onClick={() => copySysToManual(item.item_code, m)}
-                                    style={{ background:'none', border:'none', cursor:'pointer', color:'var(--gray-300)', padding:'0 0 0 4px', fontSize:11, lineHeight:1, verticalAlign:'middle' }}>↓</button>
-                                )}
-                              </div>
-                              <input type="number" min="0" value={s.manual !== null ? s.manual : ''} placeholder="—"
-                                onChange={e => setSalesManual(item.item_code, m, e.target.value)}
-                                style={{ width:64, padding:'4px 8px', border: s.manual !== null ? '1.5px solid #f59e0b' : '1.5px solid var(--gray-200)', borderRadius:6, fontFamily:'var(--mono)', fontSize:12, textAlign:'right', background: s.manual !== null ? '#fffbeb' : '#f9fafb', outline:'none', color: s.manual !== null ? '#92400e' : 'var(--gray-600)', display:'block', margin:'0 auto' }} />
-                            </td>
-                          )
-                        })}
-
-                        {/* Q Avg */}
-                        <td style={{ ...TD, textAlign:'center', fontWeight:600, color:'var(--gray-700)' }}>{c.qAvg || '—'}</td>
-                        {/* Min Qty */}
-                        <td style={{ ...TD, textAlign:'center', fontWeight:700, color: c.noConfig ? 'var(--gray-300)' : '#1d4ed8' }}>{c.noConfig ? '—' : c.minQty}</td>
-                        {/* PO Qty */}
-                        <td style={{ ...TD, textAlign:'center', fontWeight:700, color: c.noConfig ? 'var(--gray-300)' : '#15803d', borderRight:'1px solid var(--gray-100)' }}>{c.noConfig ? '—' : c.poQty}</td>
-
-                        {/* Stock — combined */}
-                        <td style={{ ...TD, textAlign:'center', padding:'8px 10px', borderRight:'1px solid var(--gray-100)' }}>
-                          <div style={{ fontSize:11, color:'var(--gray-400)', marginBottom:4 }}>
-                            {st.kaveri || 0} + {st.godawari || 0}
-                            {sysStock > 0 && (
-                              <button title="Copy system stock" onClick={() => copySysStock(item.item_code)}
-                                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--gray-300)', padding:'0 0 0 4px', fontSize:11, lineHeight:1, verticalAlign:'middle' }}>↓</button>
-                            )}
-                          </div>
-                          <input type="number" min="0" value={st.manual !== null ? st.manual : ''} placeholder={String(sysStock)}
-                            onChange={e => setStockManual(item.item_code, e.target.value)}
-                            style={{ width:72, padding:'4px 8px', border: st.manual !== null ? '1.5px solid #f59e0b' : '1.5px solid var(--gray-200)', borderRadius:6, fontFamily:'var(--mono)', fontSize:12, textAlign:'right', background: st.manual !== null ? '#fffbeb' : '#f9fafb', outline:'none', color: st.manual !== null ? '#92400e' : !c.noConfig && c.needsOrder ? '#dc2626' : !c.noConfig ? '#15803d' : 'var(--gray-700)', fontWeight:700, display:'block', margin:'0 auto' }} />
-                        </td>
-
-                        {/* Status */}
-                        <td style={{ ...TD, textAlign:'center', fontFamily:'inherit' }}><StatusChip c={c} /></td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              <div className="items-table-wrap">
+                <div className="items-table">
+                  <div className="it-row it-head">
+                    <div className="it-cell it-code">
+                      <div className="it-head-l1">ERP Code</div>
+                      <div className="it-head-l2">Item Code · sorted by urgency</div>
+                    </div>
+                    <div className="it-cell-group it-sales-group">
+                      <div className="it-sales-head">
+                        <div className="it-head-l1">{QLabel} — Sales Qty</div>
+                        <div className="it-head-l2 mono">System value · edit to override</div>
+                      </div>
+                      <div className="it-sales-months">
+                        {monthLabels.map(m => <div key={m} className="it-cell it-month" style={{ fontSize: 11, color: 'var(--pf-muted)' }}>{m}</div>)}
+                      </div>
+                    </div>
+                    <div className="it-cell it-num">Q Avg</div>
+                    <div className="it-cell it-num it-min">Min Qty</div>
+                    <div className="it-cell it-num it-po">PO Qty</div>
+                    <div className="it-cell it-stock-col">
+                      <div className="it-head-l1">Stock</div>
+                      <div className="it-head-l2 mono">Kaveri + Godawari</div>
+                    </div>
+                    <div className="it-cell it-status-col">Status</div>
+                  </div>
+                  <div className="it-body">
+                    {brandItems
+                      .slice()
+                      .sort((a, b) => {
+                        const ca = calc(a.item_code), cb = calc(b.item_code)
+                        const oa = ca.noConfig ? 1 : ca.needsOrder ? 0 : 2
+                        const ob = cb.noConfig ? 1 : cb.needsOrder ? 0 : 2
+                        if (oa !== ob) return oa - ob
+                        return a.item_code.localeCompare(b.item_code)
+                      })
+                      .map(item => (
+                        <ItemRow
+                          key={item.item_code}
+                          item={item}
+                          monthsKeys={QM}
+                          salesData={salesData}
+                          stockData={stockData}
+                          calc={calc}
+                          onSalesEdit={setSalesManual}
+                          onCopySys={copySysToManual}
+                          onStockEdit={setStockManual}
+                          onCopySysStock={copySysStock}
+                        />
+                      ))}
+                  </div>
+                </div>
+              </div>
+              <div className="table-foot mono">
+                {brandItems.length} items · {triggeredCount} need order · {sufficientCount} sufficient · {noConfigCount} no config
+              </div>
             </div>
           </>
         )}
       </div>
 
-      <ForecastPOReviewModal
+      <POReviewModalNew
         open={showPOReview}
         onClose={() => setShowPOReview(false)}
         onNext={handleReviewNext}
-        seedItems={reviewItems}
         brand={selectedBrand}
         qLabel={QLabel}
+        seedItems={reviewItems}
+      />
+
+      <LeadTimeDrawer
+        open={cfgOpen}
+        onClose={() => setCfgOpen(false)}
+        brand={selectedBrand}
+        cfg={brandConfig}
+        onSaved={(saved) => setAllConfigs(prev => ({ ...prev, [saved.brand]: { ...prev[saved.brand], ...saved } }))}
       />
 
       <ForecastPOModal
