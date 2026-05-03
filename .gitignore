@@ -9,3 +9,9 @@ dist
 *.xls
 *.csv
 supabase/.temp/
+
+# Cloud design reference folders — local only, never push
+KRA-KPI/
+procurement-forecast/
+CRM/
+crm/

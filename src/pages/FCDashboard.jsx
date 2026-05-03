@@ -3,22 +3,21 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
+import '../styles/orders-redesign.css'
 
-import '../styles/orders.css'
-
-function fmtCr(val) {
-  if (val >= 1e7) return '₹' + (val / 1e7).toFixed(2) + ' Cr'
-  if (val >= 1e5) return '₹' + (val / 1e5).toFixed(2) + ' L'
-  return '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+const STATUS_LABELS = {
+  delivery_created:'Delivery Created', picking:'Picking', packing:'Packing',
+  pi_requested:'PI Requested', pi_generated:'PI Issued', pi_payment_pending:'PI Payment Pending',
+  goods_issued:'Goods Issued', credit_check:'Credit Check', goods_issue_posted:'GI Posted',
+  invoice_generated:'Invoice Generated', delivery_ready:'Delivery Ready',
+  eway_pending:'E-Way Pending', eway_generated:'E-Way Generated', dispatched_fc:'Delivered',
 }
-function statusLabel(s) {
-  return {
-    delivery_created:'Delivery Created', picking:'Picking', packing:'Packing',
-    pi_requested:'PI Requested', pi_generated:'PI Issued', pi_payment_pending:'PI Payment Pending',
-    goods_issued:'With Billing', credit_check:'With Billing', goods_issue_posted:'With Billing',
-    invoice_generated:'Delivery Ready', delivery_ready:'E-Way Pending',
-    eway_generated:'E-Way Done', dispatched_fc:'Delivered',
-  }[s] || s
+const STATUS_COLORS = {
+  delivery_created:'#0F766E', picking:'#14B8A6', packing:'#0D9488',
+  pi_requested:'#B45309', pi_generated:'#92400E', pi_payment_pending:'#78350F',
+  goods_issued:'#D97706', credit_check:'#65A30D', goods_issue_posted:'#16A34A',
+  invoice_generated:'#059669', delivery_ready:'#15803D',
+  eway_pending:'#84CC16', eway_generated:'#22C55E', dispatched_fc:'#047857',
 }
 
 const ACTION_STATUSES  = ['delivery_created','picking','packing']
@@ -26,9 +25,20 @@ const BILLING_STATUSES = ['goods_issued','credit_check','goods_issue_posted','de
 const PI_STATUSES      = ['pi_requested','pi_generated','pi_payment_pending']
 const FC_ALL_STATUSES  = [...ACTION_STATUSES, ...PI_STATUSES, ...BILLING_STATUSES, 'invoice_generated','eway_generated','dispatched_fc']
 
+const PIPELINE_ORDER = [
+  ['delivery_created','Delivery Created'],
+  ['picking','Picking'],
+  ['packing','Packing'],
+  ['pi_requested','PI Phase'],
+  ['goods_issued','With Billing'],
+  ['invoice_generated','Delivery Ready'],
+  ['eway_generated','E-Way / Dispatch'],
+  ['dispatched_fc','Delivered'],
+]
+
 export default function FCDashboard() {
   const navigate = useNavigate()
-  const [user, setUser]     = useState({ name: '', role: '', fc: '' })
+  const [user, setUser] = useState({ name:'', role:'', fc:'' })
   const [orders, setOrders] = useState([])
   const [pendingGrns, setPendingGrns] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -37,20 +47,13 @@ export default function FCDashboard() {
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
-    if (!session) {
-      const { data } = await sb.auth.refreshSession()
-      if (!data?.session) { navigate('/login'); return }
-      session = data.session
-    }
+    if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
-    const name = profile?.name || session.user.email.split('@')[0]
     const role = profile?.role || 'fc_kaveri'
-    const fc   = role === 'fc_kaveri' ? 'Kaveri' : role === 'fc_godawari' ? 'Godawari' : null
+    const fc = role === 'fc_kaveri' ? 'Kaveri' : role === 'fc_godawari' ? 'Godawari' : null
     if (!['fc_kaveri','fc_godawari','ops','admin','management','accounts','demo'].includes(role)) { navigate('/dashboard'); return }
-    setUser({ name, role, fc })
+    setUser({ name: profile?.name || '', role, fc })
     await loadOrders(fc)
-
-    // Pending inward GRNs count
     let grnQ = sb.from('grn').select('id', { count:'exact', head:true }).in('status', ['draft','checking']).eq('is_test', false)
     if (fc) grnQ = grnQ.eq('fulfilment_center', fc)
     const { count: grnCount } = await grnQ
@@ -70,304 +73,252 @@ export default function FCDashboard() {
     setLoading(false)
   }
 
-  const actionOrders  = orders.filter(o => ACTION_STATUSES.includes(o.status))
-  const piOrders      = orders.filter(o => PI_STATUSES.includes(o.status))
+  const actionOrders = orders.filter(o => ACTION_STATUSES.includes(o.status))
+  const piOrders = orders.filter(o => PI_STATUSES.includes(o.status))
   const billingOrders = orders.filter(o => BILLING_STATUSES.includes(o.status))
-  const readyOrders   = orders.filter(o => o.status === 'invoice_generated')
-  const ewayOrders    = orders.filter(o => o.status === 'eway_generated')
-  const delivered     = orders.filter(o => o.status === 'dispatched_fc')
+  const readyOrders = orders.filter(o => o.status === 'invoice_generated')
+  const ewayOrders = orders.filter(o => o.status === 'eway_generated')
+  const delivered = orders.filter(o => o.status === 'dispatched_fc')
+  const inProgress = actionOrders.length + piOrders.length + billingOrders.length + readyOrders.length + ewayOrders.length
 
-  const now = new Date()
-  const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening'
+  // Status funnel buckets (use mapped grouping for cleaner display)
+  const funnel = PIPELINE_ORDER.map(([key, label]) => {
+    let list
+    if (key === 'pi_requested') list = piOrders
+    else if (key === 'goods_issued') list = billingOrders
+    else if (key === 'invoice_generated') list = readyOrders
+    else if (key === 'eway_generated') list = ewayOrders
+    else list = orders.filter(o => o.status === key)
+    return { id: key, label, color: STATUS_COLORS[key], count: list.length }
+  }).filter(s => s.count > 0)
 
-  const PIPELINE = [
-    { label: 'Delivery Created', count: orders.filter(o => o.status === 'delivery_created').length, color: '#7c3aed' },
-    { label: 'Picking',          count: orders.filter(o => o.status === 'picking').length,           color: '#7c3aed' },
-    { label: 'Packing',          count: orders.filter(o => o.status === 'packing').length,           color: '#7c3aed' },
-    { label: 'PI Phase',         count: piOrders.length,     color: '#7e22ce' },
-    { label: 'With Billing',     count: billingOrders.length, color: '#d97706' },
-    { label: 'Delivery Ready',   count: readyOrders.length,  color: '#0891b2' },
-    { label: 'E-Way / Dispatch', count: ewayOrders.length,   color: '#059669' },
-    { label: 'Delivered',        count: delivered.length,    color: '#059669' },
-  ]
-  const pipelineMax = Math.max(...PIPELINE.map(p => p.count), 1)
+  const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' })()
 
   return (
     <Layout pageTitle="Fulfilment Centre" pageKey="fc">
-      <div className="dash-page">
-        <div className="dash-body">
-
-          {/* Header */}
-          <div className="dash-header-row">
-            <div>
-              <div className="dash-greeting">{greeting}, {user.name?.split(' ')[0] || '...'}</div>
-              <div className="dash-date">
-                {user.fc ? `Fulfilment Centre — ${user.fc}` : 'All Fulfilment Centres'} &nbsp;·&nbsp;
-                {now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </div>
-            </div>
-            <button className="od-dash-viewall-btn" onClick={() => navigate('/fc/list')}>
+      <div className="orders-app">
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">{greeting}, {user.name?.split(' ')[0] || ''}</h1>
+            <div className="page-sub">{user.fc ? `Fulfilment Centre — ${user.fc}` : 'All Fulfilment Centres'} · {orders.length} orders FYTD</div>
+          </div>
+          <div className="page-meta">
+            <div className="meta-pill live"><span className="meta-dot"/> Live</div>
+            <button className="btn-ghost" onClick={() => navigate('/fc/grn')}>GRNs</button>
+            <button className="btn-primary" onClick={() => navigate('/fc/list')}>
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8 L7 12 L13 4"/></svg>
               All Orders
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:13, height:13 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </button>
           </div>
+        </div>
 
-          {loading ? (
-            <div className="dash-loading"><div className="loading-spin"/></div>
-          ) : (<>
-
-            {/* Stat tiles */}
-            <div className="dash-tiles">
-
-              {/* Tile 1 — Action Required */}
-              <div className="dash-tile" style={{ background: '#3b0764' }} onClick={() => navigate('/fc/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">Action Required</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value">{actionOrders.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">picking · packing · dispatch</span>
-                  {actionOrders.length > 0 && <span className="dash-tile-badge">Needs FC</span>}
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    <rect x="0"   y="8"  width="60" height="28" rx="6" fill="rgba(255,255,255,0.10)"/>
-                    <rect x="70"  y="0"  width="60" height="36" rx="6" fill="rgba(255,255,255,0.10)"/>
-                    <rect x="140" y="12" width="60" height="24" rx="6" fill="rgba(255,255,255,0.10)"/>
-                    <rect x="210" y="4"  width="60" height="32" rx="6" fill="rgba(255,255,255,0.10)"/>
-                    <rect x="260" y="16" width="40" height="20" rx="6" fill="rgba(255,255,255,0.10)"/>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Tile 2 — With Billing */}
-              <div className="dash-tile" style={{ background: '#78350f' }} onClick={() => navigate('/fc/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">With Billing</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value">{billingOrders.length + readyOrders.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">credit check · invoicing · e-way</span>
-                  {readyOrders.length > 0 && <span className="dash-tile-badge">{readyOrders.length} delivery ready</span>}
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    <circle cx="80"  cy="18" r="48" fill="rgba(255,255,255,0.08)"/>
-                    <circle cx="200" cy="18" r="60" fill="rgba(255,255,255,0.08)"/>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Tile 3 — Delivered */}
-              <div className="dash-tile" style={{ background: '#064e3b' }} onClick={() => navigate('/fc/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">Delivered</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value">{delivered.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">completed this FY</span>
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    {[0,1,2,3,4,5].map(i => {
-                      const h = [14,22,18,30,24,36][i]
-                      return <rect key={i} x={i*50+8} y={36-h} width={34} height={h} rx={5} fill="rgba(255,255,255,0.15)"/>
-                    })}
-                  </svg>
-                </div>
-              </div>
-
-              {/* Tile 4 — PI Phase (light) */}
-              <div className="dash-tile dash-tile-light" onClick={() => navigate('/fc/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">PI Phase</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value" style={{ color: piOrders.length > 0 ? '#7e22ce' : undefined }}>{piOrders.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">with accounts — PI</span>
-                  {piOrders.length > 0 && <span className="dash-tile-badge" style={{ background:'#faf5ff', color:'#7e22ce' }}>Awaiting payment</span>}
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    <circle cx="150" cy="18" r="56" fill="rgba(124,58,237,0.04)"/>
-                    <circle cx="150" cy="18" r="36" fill="rgba(124,58,237,0.04)"/>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Tile 5 — Pending Inward (light) */}
-              <div className="dash-tile dash-tile-light" onClick={() => navigate('/fc/grn')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">Pending Inward</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value" style={{ color: pendingGrns > 0 ? '#b45309' : undefined }}>{pendingGrns}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">GRNs awaiting inspection / confirmation</span>
-                  {pendingGrns > 0 && <span className="dash-tile-badge" style={{ background:'#fffbeb', color:'#b45309' }}>Needs inspection</span>}
-                </div>
-              </div>
-
-              {/* Tile 6 — E-Way / Dispatch (light) */}
-              <div className="dash-tile dash-tile-light" onClick={() => navigate('/fc/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">Ready to Dispatch</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value" style={{ color: ewayOrders.length > 0 ? '#0891b2' : undefined }}>{ewayOrders.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">e-way done · pending dispatch</span>
-                  {ewayOrders.length > 0 && <span className="dash-tile-badge" style={{ background:'#ecfeff', color:'#0891b2' }}>Action needed</span>}
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    {[0,1,2,3,4,5,6,7].map(i => {
-                      const h = [10,18,12,24,16,22,12,26][i]
-                      return <rect key={i} x={i*38+4} y={36-h} width={28} height={h} rx={4} fill="rgba(8,145,178,0.08)"/>
-                    })}
-                  </svg>
-                </div>
-              </div>
-
+        {loading ? (
+          <div className="o-loading">Loading…</div>
+        ) : (
+          <>
+            <div className="kpi-row">
+              <KpiTile variant="hero" tone="deep" label="Action Required" value={actionOrders.length} sub="picking · packing · dispatch" chart="bars" onClick={() => navigate('/fc/list')}/>
+              <KpiTile variant="hero" tone="forest" label="Delivered FYTD" value={delivered.length} sub="completed orders" chart="bars" onClick={() => navigate('/fc/list')}/>
+              <KpiTile variant="hero" tone="teal" label="With Billing" value={billingOrders.length + readyOrders.length} sub={`${readyOrders.length} delivery ready`} chart="line" onClick={() => navigate('/fc/list')}/>
+              <KpiTile label="PI Phase" value={piOrders.length} sub="awaiting payment" accent={piOrders.length > 0 ? 'amber' : null} onClick={() => navigate('/fc/list')}/>
+              <KpiTile label="Pending GRNs" value={pendingGrns} sub="awaiting inspection" accent={pendingGrns > 0 ? 'amber' : null} onClick={() => navigate('/fc/grn')}/>
             </div>
 
-            {/* Mid row */}
-            <div className="dash-mid">
-
-              {/* Pipeline */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">Order Pipeline</div>
-                  <span className="dash-badge">{actionOrders.length + piOrders.length + billingOrders.length + readyOrders.length + ewayOrders.length} in progress</span>
+            <div className="o-anal" style={{ marginTop: 16 }}>
+              <div className="card anal-card">
+                <div className="card-head">
+                  <div>
+                    <div className="card-eyebrow">Pipeline · By Status</div>
+                    <div className="card-title">Order Pipeline</div>
+                  </div>
+                  <span className="trend-pill mono">{inProgress} active</span>
                 </div>
-                <div style={{ padding:'4px 0 0' }}>
-                  {PIPELINE.map((p, i) => {
-                    const pct  = Math.round((p.count / pipelineMax) * 100)
-                    const minW = p.count > 0 ? Math.max(pct, 6) : 0
+                <div className="funnel">
+                  {funnel.length === 0 ? <div className="o-empty">No active orders</div> : funnel.map(s => {
+                    const max = Math.max(...funnel.map(x => x.count))
                     return (
-                      <div key={i} style={{ padding:'10px 18px', borderBottom: i < PIPELINE.length - 1 ? '1px solid #f8fafc' : 'none' }}>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7 }}>
-                          <span style={{ fontSize:12, color: p.count > 0 ? '#334155' : '#94a3b8', fontWeight: p.count > 0 ? 600 : 400 }}>{p.label}</span>
-                          <span style={{ fontSize:14, fontWeight:800, color: p.count > 0 ? '#0f172a' : '#cbd5e1', minWidth:24, textAlign:'right' }}>{p.count}</span>
+                      <div key={s.id} className="funnel-row">
+                        <div className="funnel-label">
+                          <span className="funnel-dot" style={{ background: s.color }}/>
+                          <span className="funnel-name">{s.label}</span>
                         </div>
-                        <div style={{ height:6, background:'#f1f5f9', borderRadius:6 }}>
-                          {p.count > 0 && <div style={{ height:'100%', width: minW + '%', background: p.color, borderRadius:6, transition:'width 0.6s ease', minWidth:8 }} />}
-                        </div>
+                        <div className="funnel-bar-wrap"><div className="funnel-bar" style={{ width: `${(s.count/max)*100}%`, background: s.color }}/></div>
+                        <div className="funnel-val">{s.count}</div>
                       </div>
                     )
                   })}
                 </div>
               </div>
 
-              {/* Action Required list */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">Action Required</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <span className="dash-badge" style={{ background: actionOrders.length > 0 ? '#f5f3ff' : '#f1f5f9', color: actionOrders.length > 0 ? '#7c3aed' : '#94a3b8' }}>{actionOrders.length} orders</span>
-                    <button onClick={() => navigate('/fc/list')} className="dash-icon-btn">
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
-                    </button>
+              <div className="card anal-card">
+                <div className="card-head">
+                  <div>
+                    <div className="card-eyebrow">Distribution · By Stage</div>
+                    <div className="card-title">Stage Mix</div>
                   </div>
+                  <span className="trend-pill mono">{orders.length} total</span>
                 </div>
-                {actionOrders.length === 0
-                  ? <div className="dash-empty">No pending FC action</div>
-                  : actionOrders.slice(0, 8).map(o => (
-                      <div key={o.id} className="dash-list-row" onClick={() => navigate('/fc/' + o.id)}>
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#7c3aed' }}>{o.order_number}</div>
-                          <div className="dash-row-cust">{o.customer_name}</div>
-                        </div>
-                        <div style={{ textAlign:'right', flexShrink:0 }}>
-                          <span className={'pill pill-' + o.status} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
-                          {o.fulfilment_center && <div style={{ fontSize:10, color:'#94a3b8', marginTop:2 }}>{o.fulfilment_center}</div>}
-                        </div>
-                      </div>
-                    ))
-                }
+                <StatusDonut groups={funnel} total={funnel.reduce((s,g) => s + g.count, 0)}/>
               </div>
-
             </div>
 
-            {/* Bottom row */}
-            <div className="dash-bottom">
-
-              {/* PI Phase */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">PI Phase — With Accounts</div>
-                  <span className="dash-badge" style={{ background:'#faf5ff', color:'#7e22ce' }}>{piOrders.length} orders</span>
-                </div>
-                {piOrders.length === 0
-                  ? <div className="dash-empty">No PI orders pending</div>
-                  : piOrders.slice(0, 6).map(o => (
-                      <div key={o.id} className="dash-list-row" onClick={() => navigate('/fc/' + o.id)}>
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#7e22ce' }}>{o.order_number}</div>
-                          <div className="dash-row-cust">{o.customer_name}</div>
-                        </div>
-                        <div style={{ textAlign:'right', flexShrink:0 }}>
-                          <span className={'pill pill-' + o.status} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
-                        </div>
-                      </div>
-                    ))
-                }
-              </div>
-
-              {/* Delivery Ready */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">Ready for Delivery</div>
-                  <span className="dash-badge" style={{ background:'#ecfeff', color:'#0891b2' }}>{readyOrders.length + ewayOrders.length} orders</span>
-                </div>
-                {(readyOrders.length + ewayOrders.length) === 0
-                  ? <div className="dash-empty">No orders ready for delivery</div>
-                  : [...readyOrders, ...ewayOrders].slice(0, 6).map(o => (
-                      <div key={o.id} className="dash-list-row" onClick={() => navigate('/fc/' + o.id)}>
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#0891b2' }}>{o.order_number}</div>
-                          <div className="dash-row-cust">{o.customer_name}</div>
-                        </div>
-                        <div style={{ textAlign:'right', flexShrink:0 }}>
-                          <span className={'pill pill-' + o.status} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
-                        </div>
-                      </div>
-                    ))
-                }
-              </div>
-
-              {/* Recently Delivered */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">Recently Delivered</div>
-                  <span className="dash-badge" style={{ background:'#f0fdf4', color:'#059669' }}>{delivered.length} total</span>
-                </div>
-                {delivered.length === 0
-                  ? <div className="dash-empty">No deliveries yet</div>
-                  : delivered.slice(0, 6).map(o => (
-                      <div key={o.id} className="dash-list-row" onClick={() => navigate('/fc/' + o.id)}>
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#059669' }}>{o.order_number}</div>
-                          <div className="dash-row-cust">{o.customer_name}</div>
-                        </div>
-                        <div style={{ textAlign:'right', flexShrink:0 }}>
-                          <span className="pill pill-dispatched_fc" style={{ fontSize:10 }}>Delivered</span>
-                          {o.fulfilment_center && <div style={{ fontSize:10, color:'#94a3b8', marginTop:2 }}>{o.fulfilment_center}</div>}
-                        </div>
-                      </div>
-                    ))
-                }
-              </div>
-
+            <div className="dash-row-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
+              <ListCard
+                title="Action Required" eyebrow="FC operations · Now"
+                badge={`${actionOrders.length} orders`} badgeColor="#0F766E"
+                items={actionOrders.slice(0, 8)}
+                emptyText="No pending FC action"
+                onClick={(o) => navigate('/fc/' + o.id)}
+              />
+              <ListCard
+                title="PI Phase" eyebrow="With Accounts"
+                badge={`${piOrders.length} orders`} badgeColor="#B45309"
+                items={piOrders.slice(0, 8)}
+                emptyText="No PI orders pending"
+                onClick={(o) => navigate('/fc/' + o.id)}
+              />
+              <ListCard
+                title="Ready for Delivery" eyebrow="Invoiced · E-Way"
+                badge={`${readyOrders.length + ewayOrders.length} orders`} badgeColor="#15803D"
+                items={[...readyOrders, ...ewayOrders].slice(0, 8)}
+                emptyText="No orders ready for delivery"
+                onClick={(o) => navigate('/fc/' + o.id)}
+              />
             </div>
 
-          </>)}
-        </div>
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">Completed · This FY</div>
+                  <div className="card-title">Recently Delivered</div>
+                </div>
+                <span className="trend-pill mono">{delivered.length} delivered</span>
+              </div>
+              <div className="o-list">
+                {delivered.length === 0 ? (
+                  <div className="o-empty">No deliveries yet</div>
+                ) : delivered.slice(0, 8).map(o => (
+                  <div key={o.id} className="o-list-row" onClick={() => navigate('/fc/' + o.id)}>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="o-list-num" style={{ color: '#047857' }}>{o.order_number}</div>
+                      <div className="o-list-cust">{o.customer_name}{o.fulfilment_center ? ` · ${o.fulfilment_center}` : ''}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <StatusPill status={o.status}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </Layout>
+  )
+}
+
+function StatusPill({ status }) {
+  const color = STATUS_COLORS[status] || '#94A3B8'
+  return (
+    <span className="ol-status-pill" style={{ '--stage-color': color }}>
+      <span className="ol-status-dot"/>
+      {STATUS_LABELS[status] || status}
+    </span>
+  )
+}
+
+function ListCard({ title, eyebrow, badge, badgeColor, items, emptyText, onClick }) {
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <div className="card-eyebrow">{eyebrow}</div>
+          <div className="card-title">{title}</div>
+        </div>
+        <span className="trend-pill mono" style={{ color: badgeColor }}>{badge}</span>
+      </div>
+      <div className="o-list">
+        {items.length === 0 ? (
+          <div className="o-empty">{emptyText}</div>
+        ) : items.map(o => (
+          <div key={o.id} className="o-list-row" onClick={() => onClick(o)}>
+            <div style={{ minWidth: 0 }}>
+              <div className="o-list-num">{o.order_number}</div>
+              <div className="o-list-cust">{o.customer_name}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <StatusPill status={o.status}/>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
+  const isHero = variant === 'hero'
+  return (
+    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
+      {isHero && <KpiChart kind={chart}/>}
+      <div className="kt-top">
+        <div className="kt-label">{label}</div>
+        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
+      </div>
+      <div className="kt-value">{value}</div>
+      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
+    </div>
+  )
+}
+function KpiChart({ kind }) {
+  if (kind === 'bars') return (
+    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
+      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
+        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
+      ))}
+    </svg>
+  )
+  if (kind === 'line') return (
+    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
+      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
+    </svg>
+  )
+  return null
+}
+
+function StatusDonut({ groups, total }) {
+  if (!groups.length || !total) return <div className="donut-wrap"><div style={{ color:'var(--o-muted-2)', fontSize:12 }}>No data</div></div>
+  const size = 130, r = size/2 - 8, inner = r - 18, cx = size/2, cy = size/2
+  let angle = -Math.PI/2
+  const arcs = groups.filter(s => s.count > 0).map(s => {
+    const portion = s.count / total
+    const next = angle + portion * 2 * Math.PI
+    const large = portion > 0.5 ? 1 : 0
+    const x0 = cx + r * Math.cos(angle), y0 = cy + r * Math.sin(angle)
+    const x1 = cx + r * Math.cos(next),  y1 = cy + r * Math.sin(next)
+    const ix0 = cx + inner * Math.cos(angle), iy0 = cy + inner * Math.sin(angle)
+    const ix1 = cx + inner * Math.cos(next),  iy1 = cy + inner * Math.sin(next)
+    const path = `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix0} ${iy0} Z`
+    angle = next
+    return { path, color: s.color, label: s.label, count: s.count, pct: Math.round(portion*100) }
+  })
+  return (
+    <div className="donut-wrap">
+      <svg width={size} height={size}>
+        {arcs.map((a, i) => <path key={i} d={a.path} fill={a.color} opacity="0.92"/>)}
+        <text x={cx} y={cy - 2} textAnchor="middle" fontSize="22" fontWeight="600" fill="#0B1B30" fontFamily="Geist Mono, monospace" style={{ letterSpacing: '-0.02em' }}>{total}</text>
+        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="8" fill="#6B7280" letterSpacing="0.06em" fontFamily="Geist Mono, monospace">ACTIVE</text>
+      </svg>
+      <div className="donut-legend">
+        {arcs.slice(0, 6).map((a, i) => (
+          <div key={i} className="dlg-row">
+            <span className="dlg-dot" style={{background: a.color}}/>
+            <span className="dlg-name">{a.label}</span>
+            <span className="dlg-pct mono">{a.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

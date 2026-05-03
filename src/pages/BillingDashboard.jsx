@@ -3,28 +3,28 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
-import '../styles/orders.css'
+import '../styles/orders-redesign.css'
 
-function fmtCr(val) {
-  if (val >= 1e7) return '₹' + (val / 1e7).toFixed(2) + ' Cr'
-  if (val >= 1e5) return '₹' + (val / 1e5).toFixed(2) + ' L'
-  return '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+const STATUS_LABELS = {
+  pi_requested:'PI Requested', pi_generated:'PI Issued', pi_payment_pending:'PI Payment Pending',
+  goods_issued:'Credit Check', credit_check:'GI Posted', goods_issue_posted:'Invoice Pending',
+  invoice_generated:'Invoice Generated', delivery_ready:'E-Way Pending',
+  eway_generated:'E-Way Done', dispatched_fc:'Delivered',
 }
-function statusLabel(s) {
-  return {
-    pi_requested:'PI Requested', pi_generated:'PI Issued', pi_payment_pending:'PI Payment Pending',
-    goods_issued:'Credit Check', credit_check:'GI Posted', goods_issue_posted:'Invoice Gen.',
-    invoice_generated:'Invoice Generated', delivery_ready:'E-Way Pending',
-    eway_generated:'E-Way Done', dispatched_fc:'Delivered',
-  }[s] || s
+const STATUS_COLORS = {
+  pi_requested:'#B45309', pi_generated:'#92400E', pi_payment_pending:'#78350F',
+  goods_issued:'#D97706', credit_check:'#65A30D', goods_issue_posted:'#16A34A',
+  invoice_generated:'#059669', delivery_ready:'#0F766E',
+  eway_generated:'#22C55E', dispatched_fc:'#047857',
 }
 
-const PI_STATUSES      = ['pi_requested','pi_generated','pi_payment_pending']
+const PI_STATUSES = ['pi_requested','pi_generated','pi_payment_pending']
 const BILLING_STATUSES = [...PI_STATUSES,'goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
+const PIPELINE_KEYS = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 
 export default function BillingDashboard() {
   const navigate = useNavigate()
-  const [user, setUser]     = useState({ name: '', role: '' })
+  const [user, setUser] = useState({ name:'', role:'' })
   const [orders, setOrders] = useState([])
   const [purchaseInvCount, setPurchaseInvCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -33,16 +33,11 @@ export default function BillingDashboard() {
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
-    if (!session) {
-      const { data } = await sb.auth.refreshSession()
-      if (!data?.session) { navigate('/login'); return }
-      session = data.session
-    }
+    if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
-    const name = profile?.name || session.user.email.split('@')[0]
     const role = profile?.role || 'accounts'
     if (!['accounts','ops','admin','management','demo'].includes(role)) { navigate('/dashboard'); return }
-    setUser({ name, role })
+    setUser({ name: profile?.name || '', role })
     setLoading(true)
     const { data } = await sb.from('orders')
       .select('id,order_number,customer_name,status,credit_override,order_type,created_at,order_dispatches(id,batch_no,invoice_number,pi_number,pi_required,credit_override)')
@@ -51,320 +46,246 @@ export default function BillingDashboard() {
       .neq('order_type', 'SAMPLE')
       .order('updated_at', { ascending: false })
     setOrders(data || [])
-
-    // Purchase invoices pending action
     const { count: piCount } = await sb.from('purchase_invoices').select('id', { count:'exact', head:true }).in('status', ['three_way_check','invoice_pending']).eq('is_test', false).gte('created_at', FY_START)
     setPurchaseInvCount(piCount || 0)
-
     setLoading(false)
   }
 
-  const piOrders          = orders.filter(o => PI_STATUSES.includes(o.status))
+  const piOrders = orders.filter(o => PI_STATUSES.includes(o.status))
   const creditCheckOrders = orders.filter(o => o.status === 'goods_issued')
-  const giPostedOrders    = orders.filter(o => o.status === 'credit_check')
-  const invoiceOrders     = orders.filter(o => o.status === 'goods_issue_posted')
-  const waitingFCOrders   = orders.filter(o => o.status === 'invoice_generated')
-  const ewayOrders        = orders.filter(o => o.status === 'delivery_ready')
-  const ewayDoneOrders    = orders.filter(o => o.status === 'eway_generated')
-  const deliveredOrders   = orders.filter(o => o.status === 'dispatched_fc')
-  const overrideOrders    = orders.filter(o => o.credit_override === true)
-
+  const giPostedOrders = orders.filter(o => o.status === 'credit_check')
+  const invoiceOrders = orders.filter(o => o.status === 'goods_issue_posted')
+  const waitingFCOrders = orders.filter(o => o.status === 'invoice_generated')
+  const ewayOrders = orders.filter(o => o.status === 'delivery_ready')
+  const ewayDoneOrders = orders.filter(o => o.status === 'eway_generated')
+  const deliveredOrders = orders.filter(o => o.status === 'dispatched_fc')
+  const overrideOrders = orders.filter(o => o.credit_override === true)
   const activeOrders = orders.filter(o => o.status !== 'dispatched_fc')
 
-  const now = new Date()
-  const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening'
+  const funnel = PIPELINE_KEYS.map(k => ({
+    id: k, label: STATUS_LABELS[k], color: STATUS_COLORS[k],
+    count: orders.filter(o => o.status === k).length,
+  })).filter(s => s.count > 0)
 
-  const PIPELINE = [
-    { label: 'PI Phase',          count: piOrders.length,          color: '#7e22ce' },
-    { label: 'Credit Check',      count: creditCheckOrders.length, color: '#d97706' },
-    { label: 'GI Posted',         count: giPostedOrders.length,    color: '#1a4dab' },
-    { label: 'Invoice Pending',   count: invoiceOrders.length,     color: '#0369a1' },
-    { label: 'Waiting for FC',    count: waitingFCOrders.length,   color: '#0891b2' },
-    { label: 'E-Way Pending',     count: ewayOrders.length,        color: '#0f766e' },
-    { label: 'E-Way Done',        count: ewayDoneOrders.length,    color: '#059669' },
-    { label: 'Delivered',         count: deliveredOrders.length,   color: '#059669' },
-  ]
-  const pipelineMax = Math.max(...PIPELINE.map(p => p.count), 1)
-
-  // Action needed = things billing must act on now
   const actionNeeded = [...creditCheckOrders, ...piOrders.filter(o => o.status === 'pi_requested'), ...invoiceOrders, ...ewayOrders]
+
+  const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' })()
 
   return (
     <Layout pageTitle="Billing" pageKey="billing">
-      <div className="dash-page">
-        <div className="dash-body">
-
-          {/* Header */}
-          <div className="dash-header-row">
-            <div>
-              <div className="dash-greeting">{greeting}, {user.name?.split(' ')[0] || '...'}</div>
-              <div className="dash-date">
-                Billing &amp; Accounts &nbsp;·&nbsp;
-                {now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </div>
-            </div>
-            <button className="od-dash-viewall-btn" onClick={() => navigate('/billing/list')}>
+      <div className="orders-app">
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">{greeting}, {user.name?.split(' ')[0] || ''}</h1>
+            <div className="page-sub">Billing & Accounts · {activeOrders.length} active · {deliveredOrders.length} delivered FYTD</div>
+          </div>
+          <div className="page-meta">
+            <div className="meta-pill live"><span className="meta-dot"/> Live</div>
+            <button className="btn-ghost" onClick={() => navigate('/procurement/invoices')}>Purchase Invoices</button>
+            <button className="btn-primary" onClick={() => navigate('/billing/list')}>
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8 L7 12 L13 4"/></svg>
               All Orders
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:13, height:13 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </button>
           </div>
+        </div>
 
-          {loading ? (
-            <div className="dash-loading"><div className="loading-spin"/></div>
-          ) : (<>
-
-            {/* Stat tiles */}
-            <div className="dash-tiles">
-
-              {/* Tile 1 — Credit Check */}
-              <div className="dash-tile" style={{ background: '#78350f' }} onClick={() => navigate('/billing/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">Credit Check</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value">{creditCheckOrders.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">goods issued — awaiting check</span>
-                  {creditCheckOrders.length > 0 && <span className="dash-tile-badge">Action needed</span>}
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    <circle cx="80"  cy="18" r="48" fill="rgba(255,255,255,0.08)"/>
-                    <circle cx="220" cy="18" r="60" fill="rgba(255,255,255,0.08)"/>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Tile 2 — PI Orders */}
-              <div className="dash-tile" style={{ background: '#3b0764' }} onClick={() => navigate('/billing/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">PI Orders</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value">{piOrders.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">PI · payment · confirmation</span>
-                  {piOrders.filter(o => o.status === 'pi_requested').length > 0 && (
-                    <span className="dash-tile-badge">{piOrders.filter(o => o.status === 'pi_requested').length} to issue</span>
-                  )}
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    <rect x="0"   y="10" width="90" height="26" rx="6" fill="rgba(255,255,255,0.10)"/>
-                    <rect x="105" y="4"  width="90" height="32" rx="6" fill="rgba(255,255,255,0.10)"/>
-                    <rect x="210" y="14" width="90" height="22" rx="6" fill="rgba(255,255,255,0.10)"/>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Tile 3 — Invoice Pending */}
-              <div className="dash-tile" style={{ background: '#0c4a6e' }} onClick={() => navigate('/billing/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">Invoice Pending</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value">{invoiceOrders.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">GI posted — awaiting invoice</span>
-                  {invoiceOrders.length > 0 && <span className="dash-tile-badge">Generate invoice</span>}
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    {[0,1,2,3,4,5].map(i => {
-                      const h = [20,28,18,34,24,36][i]
-                      return <rect key={i} x={i*50+8} y={36-h} width={34} height={h} rx={5} fill="rgba(255,255,255,0.15)"/>
-                    })}
-                  </svg>
-                </div>
-              </div>
-
-              {/* Tile 4 — E-Way Pending (light) */}
-              <div className="dash-tile dash-tile-light" onClick={() => navigate('/billing/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">E-Way Pending</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value" style={{ color: ewayOrders.length > 0 ? '#0f766e' : undefined }}>{ewayOrders.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">delivery ready — need e-way</span>
-                  {ewayOrders.length > 0 && <span className="dash-tile-badge" style={{ background:'#f0fdfa', color:'#0f766e' }}>Action needed</span>}
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    {[0,1,2,3,4,5,6,7].map(i => {
-                      const h = [10,18,12,24,16,22,12,26][i]
-                      return <rect key={i} x={i*38+4} y={36-h} width={28} height={h} rx={4} fill="rgba(15,118,110,0.08)"/>
-                    })}
-                  </svg>
-                </div>
-              </div>
-
-              {/* Tile 5 — Purchase Invoices (light) */}
-              <div className="dash-tile dash-tile-light" onClick={() => navigate('/procurement/invoices')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">Purchase Invoices</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value" style={{ color: purchaseInvCount > 0 ? '#854d0e' : undefined }}>{purchaseInvCount}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">pending match or posting</span>
-                  {purchaseInvCount > 0 && <span className="dash-tile-badge" style={{ background:'#fef9c3', color:'#854d0e' }}>Needs action</span>}
-                </div>
-              </div>
-
-              {/* Tile 6 — Credit Overrides (light) */}
-              <div className="dash-tile dash-tile-light" onClick={() => navigate('/billing/list')}>
-                <div className="dash-tile-head">
-                  <div className="dash-tile-label">Credit Overrides</div>
-                  <div className="dash-tile-arrow"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>
-                </div>
-                <div className="dash-tile-value" style={{ color: overrideOrders.length > 0 ? '#dc2626' : undefined }}>{overrideOrders.length}</div>
-                <div className="dash-tile-meta">
-                  <span className="dash-tile-sub">payment pending — take approval</span>
-                  {overrideOrders.length > 0 && <span className="dash-tile-badge" style={{ background:'#fef2f2', color:'#dc2626' }}>⚠️ Review</span>}
-                </div>
-                <div className="dash-tile-chart">
-                  <svg viewBox="0 0 300 36" preserveAspectRatio="none" style={{ height:36 }}>
-                    <circle cx="150" cy="18" r="56" fill="rgba(220,38,38,0.04)"/>
-                    <circle cx="150" cy="18" r="32" fill="rgba(220,38,38,0.04)"/>
-                  </svg>
-                </div>
-              </div>
-
+        {loading ? (
+          <div className="o-loading">Loading…</div>
+        ) : (
+          <>
+            <div className="kpi-row">
+              <KpiTile variant="hero" tone="deep" label="Action Needed" value={actionNeeded.length} sub="credit · invoice · e-way" chart="bars" onClick={() => navigate('/billing/list')}/>
+              <KpiTile variant="hero" tone="forest" label="Delivered FYTD" value={deliveredOrders.length} sub="completed orders" chart="bars" onClick={() => navigate('/billing/list')}/>
+              <KpiTile variant="hero" tone="teal" label="PI Phase" value={piOrders.length} sub={`${piOrders.filter(o=>o.status==='pi_requested').length} to issue`} chart="line" onClick={() => navigate('/billing/list')}/>
+              <KpiTile label="Credit Overrides" value={overrideOrders.length} sub="payment pending" accent={overrideOrders.length > 0 ? 'amber' : null} onClick={() => navigate('/billing/list')}/>
+              <KpiTile label="Purchase Invoices" value={purchaseInvCount} sub="awaiting match" accent={purchaseInvCount > 0 ? 'amber' : null} onClick={() => navigate('/procurement/invoices')}/>
             </div>
 
-            {/* Mid row */}
-            <div className="dash-mid">
-
-              {/* Pipeline */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">Billing Pipeline</div>
-                  <span className="dash-badge">{activeOrders.length} active</span>
+            <div className="o-anal" style={{ marginTop: 16 }}>
+              <div className="card anal-card">
+                <div className="card-head">
+                  <div>
+                    <div className="card-eyebrow">Pipeline · By Status</div>
+                    <div className="card-title">Billing Pipeline</div>
+                  </div>
+                  <span className="trend-pill mono">{activeOrders.length} active</span>
                 </div>
-                <div style={{ padding:'4px 0 0' }}>
-                  {PIPELINE.map((p, i) => {
-                    const pct  = Math.round((p.count / pipelineMax) * 100)
-                    const minW = p.count > 0 ? Math.max(pct, 6) : 0
+                <div className="funnel">
+                  {funnel.length === 0 ? <div className="o-empty">No orders in pipeline</div> : funnel.map(s => {
+                    const max = Math.max(...funnel.map(x => x.count))
                     return (
-                      <div key={i} style={{ padding:'10px 18px', borderBottom: i < PIPELINE.length - 1 ? '1px solid #f8fafc' : 'none' }}>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7 }}>
-                          <span style={{ fontSize:12, color: p.count > 0 ? '#334155' : '#94a3b8', fontWeight: p.count > 0 ? 600 : 400 }}>{p.label}</span>
-                          <span style={{ fontSize:14, fontWeight:800, color: p.count > 0 ? '#0f172a' : '#cbd5e1', minWidth:24, textAlign:'right' }}>{p.count}</span>
+                      <div key={s.id} className="funnel-row">
+                        <div className="funnel-label">
+                          <span className="funnel-dot" style={{ background: s.color }}/>
+                          <span className="funnel-name">{s.label}</span>
                         </div>
-                        <div style={{ height:6, background:'#f1f5f9', borderRadius:6 }}>
-                          {p.count > 0 && <div style={{ height:'100%', width: minW + '%', background: p.color, borderRadius:6, transition:'width 0.6s ease', minWidth:8 }} />}
-                        </div>
+                        <div className="funnel-bar-wrap"><div className="funnel-bar" style={{ width: `${(s.count/max)*100}%`, background: s.color }}/></div>
+                        <div className="funnel-val">{s.count}</div>
                       </div>
                     )
                   })}
                 </div>
               </div>
 
-              {/* Action Needed list */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">Action Needed</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <span className="dash-badge" style={{ background: actionNeeded.length > 0 ? '#fffbeb' : '#f1f5f9', color: actionNeeded.length > 0 ? '#d97706' : '#94a3b8' }}>{actionNeeded.length} orders</span>
-                    <button onClick={() => navigate('/billing/list')} className="dash-icon-btn">
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
-                    </button>
+              <div className="card anal-card">
+                <div className="card-head">
+                  <div>
+                    <div className="card-eyebrow">Distribution · By Stage</div>
+                    <div className="card-title">Stage Mix</div>
                   </div>
+                  <span className="trend-pill mono">{orders.length} total</span>
                 </div>
-                {actionNeeded.length === 0
-                  ? <div className="dash-empty">No pending billing actions</div>
-                  : actionNeeded.slice(0, 8).map(o => (
-                      <div key={o.id} className="dash-list-row" onClick={() => navigate('/billing/' + o.id)}>
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#d97706' }}>{o.order_number}</div>
-                          <div className="dash-row-cust">{o.customer_name}</div>
-                        </div>
-                        <div style={{ textAlign:'right', flexShrink:0 }}>
-                          <span className={'pill pill-' + o.status} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
-                          {o.credit_override && <div style={{ fontSize:10, color:'#dc2626', fontWeight:600, marginTop:2 }}>⚠️ Override</div>}
-                        </div>
-                      </div>
-                    ))
-                }
+                <StatusDonut groups={funnel} total={funnel.reduce((s,g) => s + g.count, 0)} centerLabel="ORDERS"/>
               </div>
-
             </div>
 
-            {/* Bottom row */}
-            <div className="dash-bottom">
-
-              {/* PI Orders */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">PI Orders</div>
-                  <span className="dash-badge" style={{ background:'#faf5ff', color:'#7e22ce' }}>{piOrders.length} orders</span>
-                </div>
-                {piOrders.length === 0
-                  ? <div className="dash-empty">No PI orders in progress</div>
-                  : piOrders.slice(0, 6).map(o => (
-                      <div key={o.id} className="dash-list-row" onClick={() => navigate('/billing/' + o.id)}>
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#7e22ce' }}>{o.order_number}</div>
-                          <div className="dash-row-cust">{o.customer_name}</div>
-                        </div>
-                        <div style={{ textAlign:'right', flexShrink:0 }}>
-                          <span className={'pill pill-' + o.status} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
-                        </div>
-                      </div>
-                    ))
-                }
-              </div>
-
-              {/* Credit Overrides */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">Credit Overrides</div>
-                  <span className="dash-badge" style={{ background: overrideOrders.length > 0 ? '#fef2f2' : '#f1f5f9', color: overrideOrders.length > 0 ? '#dc2626' : '#94a3b8' }}>{overrideOrders.length} orders</span>
-                </div>
-                {overrideOrders.length === 0
-                  ? <div className="dash-empty">No credit overrides</div>
-                  : overrideOrders.slice(0, 6).map(o => (
-                      <div key={o.id} className="dash-list-row" onClick={() => navigate('/billing/' + o.id)}>
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#dc2626' }}>{o.order_number}</div>
-                          <div className="dash-row-cust">{o.customer_name}</div>
-                        </div>
-                        <div style={{ textAlign:'right', flexShrink:0 }}>
-                          <span className={'pill pill-' + o.status} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
-                        </div>
-                      </div>
-                    ))
-                }
-              </div>
-
-              {/* Waiting for FC + E-Way Done */}
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <div className="dash-card-title">Waiting for FC / E-Way Done</div>
-                  <span className="dash-badge">{waitingFCOrders.length + ewayDoneOrders.length} orders</span>
-                </div>
-                {(waitingFCOrders.length + ewayDoneOrders.length) === 0
-                  ? <div className="dash-empty">None at this stage</div>
-                  : [...waitingFCOrders, ...ewayDoneOrders].slice(0, 6).map(o => (
-                      <div key={o.id} className="dash-list-row" onClick={() => navigate('/billing/' + o.id)}>
-                        <div style={{ minWidth:0 }}>
-                          <div style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'#0891b2' }}>{o.order_number}</div>
-                          <div className="dash-row-cust">{o.customer_name}</div>
-                        </div>
-                        <div style={{ textAlign:'right', flexShrink:0 }}>
-                          <span className={'pill pill-' + o.status} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
-                        </div>
-                      </div>
-                    ))
-                }
-              </div>
-
+            <div className="dash-row-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
+              <ListCard title="Action Needed" eyebrow="Credit · Invoice · E-Way" badge={`${actionNeeded.length} orders`} badgeColor="#B45309"
+                items={actionNeeded.slice(0, 8)} emptyText="No pending billing actions"
+                onClick={(o) => navigate('/billing/' + o.id)}/>
+              <ListCard title="PI Orders" eyebrow="Awaiting Payment" badge={`${piOrders.length} orders`} badgeColor="#92400E"
+                items={piOrders.slice(0, 8)} emptyText="No PI orders in progress"
+                onClick={(o) => navigate('/billing/' + o.id)}/>
+              <ListCard title="Credit Overrides" eyebrow="Payment Pending · Review" badge={`${overrideOrders.length} orders`} badgeColor="#B91C1C"
+                items={overrideOrders.slice(0, 8)} emptyText="No credit overrides"
+                onClick={(o) => navigate('/billing/' + o.id)}
+                showOverride/>
             </div>
 
-          </>)}
-        </div>
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">Awaiting FC / E-Way Done</div>
+                  <div className="card-title">Pending Dispatch</div>
+                </div>
+                <span className="trend-pill mono">{waitingFCOrders.length + ewayDoneOrders.length} orders</span>
+              </div>
+              <div className="o-list">
+                {(waitingFCOrders.length + ewayDoneOrders.length) === 0 ? (
+                  <div className="o-empty">None at this stage</div>
+                ) : [...waitingFCOrders, ...ewayDoneOrders].slice(0, 8).map(o => (
+                  <div key={o.id} className="o-list-row" onClick={() => navigate('/billing/' + o.id)}>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="o-list-num" style={{ color: '#0F766E' }}>{o.order_number}</div>
+                      <div className="o-list-cust">{o.customer_name}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <StatusPill status={o.status}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </Layout>
+  )
+}
+
+function StatusPill({ status }) {
+  const color = STATUS_COLORS[status] || '#94A3B8'
+  return (
+    <span className="ol-status-pill" style={{ '--stage-color': color }}>
+      <span className="ol-status-dot"/>
+      {STATUS_LABELS[status] || status}
+    </span>
+  )
+}
+
+function ListCard({ title, eyebrow, badge, badgeColor, items, emptyText, onClick, showOverride }) {
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <div className="card-eyebrow">{eyebrow}</div>
+          <div className="card-title">{title}</div>
+        </div>
+        <span className="trend-pill mono" style={{ color: badgeColor }}>{badge}</span>
+      </div>
+      <div className="o-list">
+        {items.length === 0 ? (
+          <div className="o-empty">{emptyText}</div>
+        ) : items.map(o => (
+          <div key={o.id} className="o-list-row" onClick={() => onClick(o)}>
+            <div style={{ minWidth: 0 }}>
+              <div className="o-list-num">{o.order_number}</div>
+              <div className="o-list-cust">{o.customer_name}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <StatusPill status={o.status}/>
+              {showOverride && o.credit_override && <div style={{ fontSize: 10, color: '#B91C1C', fontWeight: 600, marginTop: 2 }}>⚠ Override</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
+  const isHero = variant === 'hero'
+  return (
+    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
+      {isHero && <KpiChart kind={chart}/>}
+      <div className="kt-top">
+        <div className="kt-label">{label}</div>
+        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
+      </div>
+      <div className="kt-value">{value}</div>
+      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
+    </div>
+  )
+}
+function KpiChart({ kind }) {
+  if (kind === 'bars') return (
+    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
+      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
+        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
+      ))}
+    </svg>
+  )
+  if (kind === 'line') return (
+    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
+      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
+    </svg>
+  )
+  return null
+}
+
+function StatusDonut({ groups, total, centerLabel = 'TOTAL' }) {
+  if (!groups.length || !total) return <div className="donut-wrap"><div style={{ color:'var(--o-muted-2)', fontSize:12 }}>No data</div></div>
+  const size = 130, r = size/2 - 8, inner = r - 18, cx = size/2, cy = size/2
+  let angle = -Math.PI/2
+  const arcs = groups.filter(s => s.count > 0).map(s => {
+    const portion = s.count / total
+    const next = angle + portion * 2 * Math.PI
+    const large = portion > 0.5 ? 1 : 0
+    const x0 = cx + r * Math.cos(angle), y0 = cy + r * Math.sin(angle)
+    const x1 = cx + r * Math.cos(next),  y1 = cy + r * Math.sin(next)
+    const ix0 = cx + inner * Math.cos(angle), iy0 = cy + inner * Math.sin(angle)
+    const ix1 = cx + inner * Math.cos(next),  iy1 = cy + inner * Math.sin(next)
+    const path = `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix0} ${iy0} Z`
+    angle = next
+    return { path, color: s.color, label: s.label, count: s.count, pct: Math.round(portion*100) }
+  })
+  return (
+    <div className="donut-wrap">
+      <svg width={size} height={size}>
+        {arcs.map((a, i) => <path key={i} d={a.path} fill={a.color} opacity="0.92"/>)}
+        <text x={cx} y={cy - 2} textAnchor="middle" fontSize="22" fontWeight="600" fill="#0B1B30" fontFamily="Geist Mono, monospace" style={{ letterSpacing: '-0.02em' }}>{total}</text>
+        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="8" fill="#6B7280" letterSpacing="0.06em" fontFamily="Geist Mono, monospace">{centerLabel}</text>
+      </svg>
+      <div className="donut-legend">
+        {arcs.slice(0, 6).map((a, i) => (
+          <div key={i} className="dlg-row">
+            <span className="dlg-dot" style={{background: a.color}}/>
+            <span className="dlg-name">{a.label}</span>
+            <span className="dlg-pct mono">{a.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

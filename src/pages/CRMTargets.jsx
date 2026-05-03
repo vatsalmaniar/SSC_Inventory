@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
-import '../styles/crm.css'
+import '../styles/crm-redesign.css'
 import { toast } from '../lib/toast'
 
 const TARGET_TYPES = ['REVENUE','VISITS','NEW_LEADS','CONVERSIONS']
 const TARGET_LABELS = { REVENUE:'Revenue (INR)', VISITS:'Field Visits', NEW_LEADS:'New Leads', CONVERSIONS:'Conversions' }
+const TARGET_COLORS = { REVENUE:'#1E54B7', VISITS:'#0F766E', NEW_LEADS:'#0EA5E9', CONVERSIONS:'#22C55E' }
 
 function getPeriods() {
   const periods = []
@@ -17,33 +18,38 @@ function getPeriods() {
   }
   return periods
 }
-
 function formatVal(type, val) {
   if (!val && val !== 0) return '—'
-  if (type === 'REVENUE') return '₹' + Number(val).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+  if (type === 'REVENUE') {
+    if (val >= 1e7) return '₹' + (val/1e7).toFixed(2) + ' Cr'
+    if (val >= 1e5) return '₹' + (val/1e5).toFixed(2) + ' L'
+    return '₹' + Math.round(val).toLocaleString('en-IN')
+  }
   return String(Math.round(val))
 }
-
 function pct(achieved, target) {
   if (!target) return 0
   return Math.min(100, Math.round((achieved / target) * 100))
 }
 
+const _OC = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
+function initials(name) { return (name||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?' }
+
 export default function CRMTargets() {
   const navigate = useNavigate()
-  const [user, setUser]     = useState({ name:'', role:'', id:'' })
+  const [user, setUser] = useState({ name:'', role:'', id:'' })
   const [targets, setTargets] = useState([])
-  const [reps, setReps]     = useState([])
+  const [reps, setReps] = useState([])
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState(() => {
     const d = new Date()
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
   })
-  const [editingCell, setEditingCell] = useState(null) // { repId, type }
+  const [editingCell, setEditingCell] = useState(null)
   const [editVal, setEditVal] = useState('')
   const [saving, setSaving] = useState(false)
   const saveGuard = useRef(false)
-
   const periods = getPeriods()
 
   useEffect(() => { init() }, [])
@@ -59,8 +65,8 @@ export default function CRMTargets() {
     setReps(repsData || [])
   }
 
-  async function loadTargets(silent) {
-    if (!silent) setLoading(true)
+  async function loadTargets() {
+    setLoading(true)
     const { data } = await sb.from('crm_targets').select('*').eq('period', period)
     setTargets(data || [])
     setLoading(false)
@@ -72,8 +78,7 @@ export default function CRMTargets() {
 
   async function saveTarget(repId, type, targetValue, achievedValue) {
     if (saveGuard.current) return
-    saveGuard.current = true
-    setSaving(true)
+    saveGuard.current = true; setSaving(true)
     const existing = getTarget(repId, type)
     if (existing) {
       await sb.from('crm_targets').update({ target_value: targetValue, achieved_value: achievedValue }).eq('id', existing.id)
@@ -86,124 +91,113 @@ export default function CRMTargets() {
   }
 
   const isManager = ['admin','management'].includes(user.role)
-
-  const displayReps = isManager
-    ? reps
-    : reps.filter(r => r.id === user.id)
+  const displayReps = isManager ? reps : reps.filter(r => r.id === user.id)
 
   return (
     <Layout pageTitle="CRM — Targets" pageKey="crm">
-      <div className="crm-page">
-        <div className="crm-body">
-          <div className="crm-page-header">
-            <div>
-              <div className="crm-page-title">Targets & Achieved</div>
-              <div className="crm-page-sub">{period}</div>
-            </div>
-            <div className="crm-header-actions">
-              <select className="crm-filter-select" value={period} onChange={e => setPeriod(e.target.value)}>
-                {periods.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+      <div className="crm-app">
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">Targets & Achieved</h1>
+            <div className="opps-summary">
+              <span><b>{period}</b> period</span>
+              <span className="opps-dot">·</span>
+              <span><b>{displayReps.length}</b> {displayReps.length === 1 ? 'rep' : 'reps'}</span>
             </div>
           </div>
-
-          {loading ? (
-            <div className="crm-loading"><div className="loading-spin"/></div>
-          ) : isManager ? (
-            // Manager view: table of all reps
-            <div className="crm-card">
-              <div className="crm-table-wrap">
-                <table className="crm-table">
-                  <thead>
-                    <tr>
-                      <th>Rep</th>
-                      {TARGET_TYPES.map(t => (
-                        <th key={t} colSpan={2} style={{textAlign:'center'}}>{TARGET_LABELS[t]}</th>
-                      ))}
-                    </tr>
-                    <tr>
-                      <th></th>
-                      {TARGET_TYPES.map(t => (
-                        <>
-                          <th key={t+'_t'} style={{fontSize:10,color:'var(--gray-400)'}}>Target</th>
-                          <th key={t+'_a'} style={{fontSize:10,color:'var(--gray-400)'}}>Achieved</th>
-                        </>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayReps.map(rep => (
-                      <tr key={rep.id} style={{cursor:'default'}}>
-                        <td style={{fontWeight:600}}>{rep.name}</td>
-                        {TARGET_TYPES.map(type => {
-                          const t = getTarget(rep.id, type)
-                          const p = pct(t?.achieved_value || 0, t?.target_value || 0)
-                          const isEditing = editingCell?.repId === rep.id && editingCell?.type === type
-                          return (
-                            <>
-                              <td key={type+'_t'} onClick={() => { if (isManager) { setEditingCell({repId:rep.id,type,field:'target'}); setEditVal(t?.target_value||'') } }}>
-                                {isEditing && editingCell.field === 'target' ? (
-                                  <input type="number" value={editVal} onChange={e => setEditVal(e.target.value)}
-                                    onBlur={() => saveTarget(rep.id, type, editVal, t?.achieved_value || 0)}
-                                    onKeyDown={e => e.key === 'Enter' && saveTarget(rep.id, type, editVal, t?.achieved_value || 0)}
-                                    style={{width:80,padding:'3px 6px',border:'1px solid #1A3A8F',borderRadius:4,fontSize:12}} autoFocus />
-                                ) : (
-                                  <div style={{cursor:'pointer',fontSize:12,color:t?.target_value?'var(--gray-800)':'var(--gray-300)'}}>
-                                    {formatVal(type, t?.target_value) || 'Set target'}
-                                  </div>
-                                )}
-                              </td>
-                              <td key={type+'_a'}>
-                                <div>
-                                  <div style={{fontSize:12,fontWeight:600,color:p>=100?'#15803d':p>=70?'var(--gray-800)':'var(--gray-700)'}}>
-                                    {formatVal(type, t?.achieved_value || 0)}
-                                  </div>
-                                  {t?.target_value > 0 && (
-                                    <div className="crm-progress-bar" style={{width:80}}>
-                                      <div className={'crm-progress-fill' + (p>=100?' over':'')} style={{width:p+'%'}}/>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{padding:'12px 16px',fontSize:11,color:'var(--gray-400)'}}>Click a target value to edit it.</div>
-            </div>
-          ) : (
-            // Rep view: own targets as tiles
-            <div>
-              <div className="crm-summary-row">
-                {TARGET_TYPES.map(type => {
-                  const t = getTarget(user.id, type)
-                  const p = pct(t?.achieved_value || 0, t?.target_value || 0)
-                  return (
-                    <div key={type} className="crm-summary-tile">
-                      <div className="crm-summary-label">{TARGET_LABELS[type]}</div>
-                      <div style={{display:'flex',alignItems:'baseline',gap:6,marginTop:6}}>
-                        <div style={{fontSize:22,fontWeight:800,color:p>=100?'#15803d':'var(--gray-900)'}}>{formatVal(type, t?.achieved_value || 0)}</div>
-                        {t?.target_value > 0 && <div style={{fontSize:13,color:'var(--gray-400)'}}>/ {formatVal(type, t.target_value)}</div>}
-                      </div>
-                      {t?.target_value > 0 && (
-                        <>
-                          <div className="crm-progress-bar">
-                            <div className={'crm-progress-fill' + (p>=100?' over':'')} style={{width:p+'%'}}/>
-                          </div>
-                          <div style={{fontSize:11,color:'var(--gray-400)',marginTop:4}}>{p}% achieved</div>
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+          <div className="page-meta">
+            <select className="filt-select" value={period} onChange={e => setPeriod(e.target.value)}>
+              {periods.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
         </div>
+
+        {loading ? (
+          <div className="crm-loading">Loading targets…</div>
+        ) : isManager ? (
+          <div className="dl-wrap">
+            <div className="dl-row dl-head" style={{ gridTemplateColumns: 'minmax(200px, 1fr) repeat(4, 1fr)' }}>
+              <div>Rep</div>
+              {TARGET_TYPES.map(t => <div key={t} style={{ textAlign: 'center' }}>{TARGET_LABELS[t]}</div>)}
+            </div>
+            <div className="dl-table">
+              {displayReps.map(rep => (
+                <div key={rep.id} className="dl-row" style={{ gridTemplateColumns: 'minmax(200px, 1fr) repeat(4, 1fr)', cursor: 'default', alignItems:'flex-start' }}>
+                  <div className="dl-cell dl-owner">
+                    <div className="dl-owner-avatar" style={{ background: ownerColor(rep.name) }}>{initials(rep.name)}</div>
+                    <span className="dl-owner-name">{rep.name}</span>
+                  </div>
+                  {TARGET_TYPES.map(type => {
+                    const t = getTarget(rep.id, type)
+                    const p = pct(t?.achieved_value || 0, t?.target_value || 0)
+                    const isEditing = editingCell?.repId === rep.id && editingCell?.type === type
+                    const color = TARGET_COLORS[type]
+                    return (
+                      <div key={type} style={{ padding:'4px 6px', minWidth: 0 }}>
+                        <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                          <div style={{ fontSize:10, color:'var(--c-muted)', fontFamily:'Geist Mono, monospace', letterSpacing:'0.04em' }}>TARGET</div>
+                          <div onClick={() => { setEditingCell({repId:rep.id, type, field:'target'}); setEditVal(t?.target_value||'') }} style={{ cursor:'pointer' }}>
+                            {isEditing ? (
+                              <input type="number" value={editVal} onChange={e => setEditVal(e.target.value)}
+                                onBlur={() => saveTarget(rep.id, type, editVal, t?.achieved_value || 0)}
+                                onKeyDown={e => e.key === 'Enter' && saveTarget(rep.id, type, editVal, t?.achieved_value || 0)}
+                                style={{ width:'100%', padding:'4px 8px', border:`1px solid ${color}`, borderRadius:6, fontSize:12, fontFamily:'inherit' }} autoFocus/>
+                            ) : (
+                              <div style={{ fontSize:13, fontWeight:600, color: t?.target_value ? 'var(--c-ink)' : 'var(--c-muted-2)', fontFamily:'Geist Mono, monospace' }}>
+                                {formatVal(type, t?.target_value) || 'Set'}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ fontSize:10, color:'var(--c-muted)', fontFamily:'Geist Mono, monospace', letterSpacing:'0.04em', marginTop: 4 }}>ACHIEVED</div>
+                          <div style={{ fontSize:13, fontWeight:600, color: p >= 100 ? '#047857' : 'var(--c-ink)', fontFamily:'Geist Mono, monospace' }}>
+                            {formatVal(type, t?.achieved_value || 0)}
+                          </div>
+                          {t?.target_value > 0 && (
+                            <div style={{ height:5, background:'var(--c-bg-2)', borderRadius:3, overflow:'hidden' }}>
+                              <div style={{ width:p+'%', height:'100%', background: p >= 100 ? '#047857' : color, transition:'width 0.4s' }}/>
+                            </div>
+                          )}
+                          {t?.target_value > 0 && (
+                            <div style={{ fontSize:10, color:'var(--c-muted-2)', fontFamily:'Geist Mono, monospace' }}>{p}%</div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+            <div style={{ padding:'10px 16px', fontSize:11, color:'var(--c-muted-2)', borderTop:'1px solid var(--c-line)' }}>Click a target value to edit it.</div>
+          </div>
+        ) : (
+          // Rep view: own targets as KPI tiles
+          <div className="kpi-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+            {TARGET_TYPES.map(type => {
+              const t = getTarget(user.id, type)
+              const p = pct(t?.achieved_value || 0, t?.target_value || 0)
+              const color = TARGET_COLORS[type]
+              return (
+                <div key={type} className="kpi-tile">
+                  <div className="kt-top">
+                    <div className="kt-label">{TARGET_LABELS[type]}</div>
+                  </div>
+                  <div style={{ display:'flex', alignItems:'baseline', gap:6 }}>
+                    <div className="kt-value" style={{ color: p >= 100 ? '#047857' : 'var(--c-ink)' }}>{formatVal(type, t?.achieved_value || 0)}</div>
+                    {t?.target_value > 0 && <div style={{ fontSize:13, color:'var(--c-muted)', fontFamily:'Geist Mono, monospace' }}>/ {formatVal(type, t.target_value)}</div>}
+                  </div>
+                  {t?.target_value > 0 && (
+                    <div style={{ marginTop: 'auto' }}>
+                      <div style={{ height:6, background:'var(--c-bg-2)', borderRadius:3, overflow:'hidden' }}>
+                        <div style={{ width:p+'%', height:'100%', background: p >= 100 ? '#047857' : color, transition:'width 0.4s' }}/>
+                      </div>
+                      <div style={{ fontSize:11, color:'var(--c-muted-2)', marginTop:4, fontFamily:'Geist Mono, monospace' }}>{p}% achieved</div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </Layout>
   )

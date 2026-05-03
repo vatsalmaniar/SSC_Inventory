@@ -3,25 +3,26 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
-import '../styles/crm.css'
-import '../styles/orders.css'
+import '../styles/crm-redesign.css'
 
 const SOURCES = ['Call','Visit','WhatsApp','Referral','Exhibition','Other']
 const SCENARIOS = ['NEW_CUST_NEW_PROD','OLD_CUST_NEW_PROD','NEW_CUST_OLD_PROD','DORMANT_REVIVAL']
 const STATUSES = ['New','Contacted','Converted','Not a Fit']
+const STATUS_COLORS = { New:'#1E54B7', Contacted:'#F59E0B', Converted:'#22C55E', 'Not a Fit':'#EF4444' }
+const SCENARIO_LABELS = { NEW_CUST_NEW_PROD:'New Cust · New Prod', OLD_CUST_NEW_PROD:'Old Cust · New Prod', NEW_CUST_OLD_PROD:'New Cust · Old Prod', DORMANT_REVIVAL:'Dormant Revival' }
 
-function scenarioLabel(s) {
-  return { NEW_CUST_NEW_PROD:'New Cust · New Prod', OLD_CUST_NEW_PROD:'Old Cust · New Prod', NEW_CUST_OLD_PROD:'New Cust · Old Prod', DORMANT_REVIVAL:'Dormant Revival' }[s] || s
-}
+const _OC = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
+function initials(name) { return (name||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?' }
 
 export default function CRMLeads() {
   const navigate = useNavigate()
-  const [user, setUser]       = useState({ name:'', role:'', id:'' })
-  const [leads, setLeads]     = useState([])
-  const [reps, setReps]       = useState([])
+  const [user, setUser] = useState({ name:'', role:'', id:'' })
+  const [leads, setLeads] = useState([])
+  const [reps, setReps] = useState([])
   const [principals, setPrincipals] = useState([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch]   = useState('')
+  const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterSource, setFilterSource] = useState('')
   const [filterPrincipal, setFilterPrincipal] = useState('')
@@ -48,8 +49,8 @@ export default function CRMLeads() {
     setLoading(false)
   }
 
-  const q = search.trim().toLowerCase()
   const isManager = ['admin','management'].includes(user.role)
+  const q = search.trim().toLowerCase()
   const filtered = leads
     .filter(l => isManager || l.assigned_rep_id === user.id)
     .filter(l => !q || (l.crm_companies?.company_name||l.freetext_company||'').toLowerCase().includes(q) || (l.contact_name_freetext||'').toLowerCase().includes(q) || (l.product_notes||'').toLowerCase().includes(q))
@@ -62,121 +63,120 @@ export default function CRMLeads() {
   const safePage = Math.min(page, totalPages)
   const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
+  const counts = {
+    New: leads.filter(l => l.status === 'New').length,
+    Contacted: leads.filter(l => l.status === 'Contacted').length,
+    Converted: leads.filter(l => l.status === 'Converted').length,
+    'Not a Fit': leads.filter(l => l.status === 'Not a Fit').length,
+  }
+
   return (
     <Layout pageTitle="CRM — Leads" pageKey="crm">
-      <div className="crm-page">
-        <div className="crm-body">
-          <div className="crm-page-header">
-            <div>
-              <div className="crm-page-title">Leads</div>
-              <div className="crm-page-sub">{filtered.length} leads</div>
-            </div>
-            <div className="crm-header-actions">
-              <button className="new-order-btn" onClick={() => navigate('/crm/leads/new')}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                New Lead
-              </button>
+      <div className="crm-app">
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">Leads</h1>
+            <div className="opps-summary">
+              <span><b>{filtered.length}</b> leads</span>
+              {counts.New > 0 && (<><span className="opps-dot">·</span><span><b>{counts.New}</b> new</span></>)}
+              {counts.Converted > 0 && (<><span className="opps-dot">·</span><span style={{ color:'#047857' }}><b style={{ color:'#047857' }}>{counts.Converted}</b> converted</span></>)}
             </div>
           </div>
-
-          <div className="crm-controls">
-            <div className="crm-search-wrap">
-              <svg className="crm-search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input className="crm-search-input" placeholder="Search company, contact, product..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
-            </div>
-            <select className="crm-filter-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
-              <option value="">All Statuses</option>
-              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <select className="crm-filter-select" value={filterSource} onChange={e => { setFilterSource(e.target.value); setPage(1) }}>
-              <option value="">All Sources</option>
-              {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <select className="crm-filter-select" value={filterPrincipal} onChange={e => { setFilterPrincipal(e.target.value); setPage(1) }}>
-              <option value="">All Principals</option>
-              {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            {isManager && (
-              <select className="crm-filter-select" value={filterRep} onChange={e => { setFilterRep(e.target.value); setPage(1) }}>
-                <option value="">All Reps</option>
-                {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-            )}
+          <div className="page-meta">
+            <button className="btn-primary" onClick={() => navigate('/crm/leads/new')}>
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
+              New Lead
+            </button>
           </div>
+        </div>
 
-          {loading ? (
-            <div className="crm-loading"><div className="loading-spin"/></div>
-          ) : (
-            <div className="crm-card">
-              <div className="crm-table-wrap">
-                <table className="crm-table">
-                  <thead>
-                    <tr>
-                      <th>Company</th>
-                      <th>Contact</th>
-                      <th>Source</th>
-                      <th>Principal</th>
-                      <th>Scenario</th>
-                      <th>Rep</th>
-                      <th>Date</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paged.map(l => (
-                      <tr key={l.id} onClick={() => navigate('/crm/leads/' + l.id)}>
-                        <td><div className="crm-table-name">{l.crm_companies?.company_name || l.freetext_company || '—'}</div></td>
-                        <td>{l.contact_name_freetext || '—'}</td>
-                        <td>{l.source || '—'}</td>
-                        <td>{l.crm_principals?.name || '—'}</td>
-                        <td>{l.scenario_type ? <span className={'crm-scenario-pill crm-scenario-' + l.scenario_type}>{scenarioLabel(l.scenario_type)}</span> : '—'}</td>
-                        <td>{l.profiles?.name || '—'}</td>
-                        <td style={{whiteSpace:'nowrap'}}>{fmtNum(l.created_at)}</td>
-                        <td>
-                          <span style={{fontSize:11,fontWeight:700,borderRadius:4,padding:'2px 7px',
-                            background: l.status==='New'?'#e8f2fc': l.status==='Contacted'?'#fff7ed': l.status==='Converted'?'#f0fdf4':'#fef2f2',
-                            color: l.status==='New'?'#1a4dab': l.status==='Contacted'?'#c2410c': l.status==='Converted'?'#15803d':'#dc2626'
-                          }}>{l.status}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {/* Mobile */}
-              <div className="crm-card-list">
-                {paged.map(l => (
-                  <div key={l.id} className="crm-list-card" onClick={() => navigate('/crm/leads/' + l.id)}>
-                    <div className="crm-list-card-top">
-                      <div>
-                        <div className="crm-list-card-name">{l.crm_companies?.company_name || l.freetext_company || '—'}</div>
-                        <div className="crm-list-card-sub">{l.contact_name_freetext || ''}{l.crm_principals?.name ? ' · ' + l.crm_principals.name : ''}</div>
-                      </div>
-                      <span style={{fontSize:11,fontWeight:700,borderRadius:4,padding:'2px 7px',whiteSpace:'nowrap',
-                        background: l.status==='New'?'#e8f2fc': l.status==='Contacted'?'#fff7ed': l.status==='Converted'?'#f0fdf4':'#fef2f2',
-                        color: l.status==='New'?'#1a4dab': l.status==='Contacted'?'#c2410c': l.status==='Converted'?'#15803d':'#dc2626'
-                      }}>{l.status}</span>
-                    </div>
-                    <div className="crm-list-card-bottom">
-                      {l.scenario_type && <span className={'crm-scenario-pill crm-scenario-' + l.scenario_type}>{scenarioLabel(l.scenario_type)}</span>}
-                      <span style={{fontSize:11,color:'var(--gray-400)'}}>{fmtNum(l.created_at)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {filtered.length === 0 && (
-                <div className="crm-empty"><div className="crm-empty-title">No leads found</div></div>
-              )}
-              {totalPages > 1 && (
-                <div style={{display:'flex',justifyContent:'center',alignItems:'center',gap:8,padding:'16px 0'}}>
-                  <button className="crm-btn crm-btn-sm" disabled={safePage<=1} onClick={()=>setPage(p=>p-1)}>Prev</button>
-                  <span style={{fontSize:12,color:'var(--gray-500)'}}>Page {safePage} of {totalPages} ({filtered.length} results)</span>
-                  <button className="crm-btn crm-btn-sm" disabled={safePage>=totalPages} onClick={()=>setPage(p=>p+1)}>Next</button>
-                </div>
-              )}
-            </div>
+        <div className="opps-filters">
+          <div className="opps-search">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
+            <input placeholder="Search company, contact, product…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}/>
+          </div>
+          <select className="filt-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
+            <option value="">Status: All</option>
+            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select className="filt-select" value={filterSource} onChange={e => { setFilterSource(e.target.value); setPage(1) }}>
+            <option value="">Source: All</option>
+            {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select className="filt-select" value={filterPrincipal} onChange={e => { setFilterPrincipal(e.target.value); setPage(1) }}>
+            <option value="">Principal: All</option>
+            {principals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {isManager && (
+            <select className="filt-select" value={filterRep} onChange={e => { setFilterRep(e.target.value); setPage(1) }}>
+              <option value="">Rep: All</option>
+              {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          )}
+          {(search || filterStatus || filterSource || filterPrincipal || filterRep) && (
+            <button className="opps-clear" onClick={() => { setSearch(''); setFilterStatus(''); setFilterSource(''); setFilterPrincipal(''); setFilterRep(''); setPage(1) }}>Clear</button>
           )}
         </div>
+
+        {loading ? (
+          <div className="crm-loading">Loading leads…</div>
+        ) : (
+          <div className="dl-wrap">
+            <div className="dl-row dl-head" style={{ gridTemplateColumns: 'minmax(0, 1.4fr) 130px 110px minmax(0, 1fr) 110px 100px 130px' }}>
+              <div>Company</div>
+              <div>Contact</div>
+              <div>Source</div>
+              <div>Principal</div>
+              <div>Date</div>
+              <div>Owner</div>
+              <div>Status</div>
+            </div>
+            {filtered.length === 0 ? (
+              <div className="dl-empty">No leads found</div>
+            ) : (
+              <div className="dl-table">
+                {paged.map(l => {
+                  const statusColor = STATUS_COLORS[l.status] || '#94A3B8'
+                  return (
+                    <div key={l.id} className="dl-row dl-data" style={{ gridTemplateColumns: 'minmax(0, 1.4fr) 130px 110px minmax(0, 1fr) 110px 100px 130px' }} onClick={() => navigate('/crm/leads/' + l.id)}>
+                      <div className="dl-cell dl-deal">
+                        <div className="dl-title">{l.crm_companies?.company_name || l.freetext_company || '—'}</div>
+                        {l.product_notes && <div className="dl-deal-meta"><span style={{ overflow:'hidden', textOverflow:'ellipsis' }}>{l.product_notes.length > 40 ? l.product_notes.slice(0,40)+'…' : l.product_notes}</span></div>}
+                      </div>
+                      <div className="dl-cell" style={{ fontSize: 12.5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{l.contact_name_freetext || '—'}</div>
+                      <div className="dl-cell" style={{ fontSize: 12, color: 'var(--c-muted)' }}>{l.source || '—'}</div>
+                      <div className="dl-cell"><span className="dl-pr-tag">{l.crm_principals?.name || '—'}</span></div>
+                      <div className="dl-cell" style={{ fontSize: 12, color: 'var(--c-muted)' }}>{fmtNum(l.created_at)}</div>
+                      <div className="dl-cell">
+                        {l.profiles?.name ? (
+                          <div style={{ display:'flex', alignItems:'center', gap:6, minWidth: 0 }} title={l.profiles.name}>
+                            <div className="dl-owner-avatar" style={{ background: ownerColor(l.profiles.name), width: 22, height: 22, fontSize: 9 }}>{initials(l.profiles.name)}</div>
+                          </div>
+                        ) : <span style={{ color:'var(--c-muted-2)' }}>—</span>}
+                      </div>
+                      <div className="dl-cell">
+                        <span className="dl-stage-pill" style={{ '--stage-color': statusColor }}>
+                          <span className="dl-stage-dot"/>
+                          {l.status}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {filtered.length > 0 && totalPages > 1 && (
+              <div className="dl-foot">
+                <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+                <div style={{ display:'flex', gap:6 }}>
+                  <button className="btn-ghost" disabled={safePage<=1} onClick={() => setPage(p => p - 1)}>Prev</button>
+                  <span style={{ padding: '6px 8px', fontSize: 12 }}>Page {safePage} / {totalPages}</span>
+                  <button className="btn-ghost" disabled={safePage>=totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Layout>
   )

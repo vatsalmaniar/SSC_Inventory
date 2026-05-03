@@ -1,0 +1,321 @@
+/* SSC CRM redesign — cloud-design adapted, scoped under .crm-app */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500;600&display=swap');
+
+.crm-app {
+  --ssc-deep: #0A2540;
+  --ssc-mid: #163E68;
+  --ssc-cyan: #3DD9D6;
+  --ssc-blue: #1E54B7;
+  --c-bg: #F6F7F9;
+  --c-bg-2: #FBFBFD;
+  --c-surface: #FFFFFF;
+  --c-line: #E8EBF0;
+  --c-line-2: #EEF1F5;
+  --c-ink: #0B1B30;
+  --c-muted: #5B6878;
+  --c-muted-2: #94A3B8;
+  --c-good: #10B981;
+  --c-warn: #F59E0B;
+  --c-bad:  #EF4444;
+  --c-radius: 14px;
+  --c-shadow: 0 1px 3px rgba(11,27,48,0.06), 0 1px 2px rgba(11,27,48,0.04);
+
+  /* Stage colors — match COL_STYLES from kanban */
+  --stage-LEAD_CAPTURED:    #6366f1;
+  --stage-CONTACTED:        #0ea5e9;
+  --stage-QUALIFIED:        #8b5cf6;
+  --stage-BOM_RECEIVED:     #a855f7;
+  --stage-QUOTATION_SENT:   #1a4dab;
+  --stage-FOLLOW_UP:        #f59e0b;
+  --stage-FINAL_NEGOTIATION:#d97706;
+  --stage-WON:              #22c55e;
+  --stage-LOST:             #ef4444;
+  --stage-ON_HOLD:          #94a3b8;
+
+  font-family: 'Geist', -apple-system, system-ui, sans-serif;
+  background: var(--c-bg);
+  color: var(--c-ink);
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 24px 28px 48px;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+.crm-app * { box-sizing: border-box; }
+
+/* Prevent kanban width from pushing the whole page sideways */
+.ly-content:has(.crm-app), .ly-main:has(.crm-app) { overflow-x: hidden; min-width: 0; }
+.crm-app .mono { font-family: 'Geist Mono', monospace; }
+
+/* Page header */
+.crm-app .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+.crm-app .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 0; color: var(--c-ink); }
+.crm-app .page-sub { font-size: 13px; color: var(--c-muted); margin-top: 4px; white-space: nowrap; }
+.crm-app .page-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Buttons */
+.crm-app .btn-primary, .crm-app .btn-ghost { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
+.crm-app .btn-primary { background: var(--ssc-deep); color: #fff; border-color: var(--ssc-deep); font-weight: 500; }
+.crm-app .btn-primary:hover { background: #143055; }
+.crm-app .btn-ghost { background: var(--c-surface); color: var(--c-ink); border-color: var(--c-line); }
+.crm-app .btn-ghost:hover { background: var(--c-bg-2); }
+
+/* Cards */
+.crm-app .card { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--c-radius); padding: 18px 20px; box-shadow: var(--c-shadow); }
+.crm-app .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.crm-app .card-eyebrow { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-muted); margin-bottom: 4px; white-space: nowrap; }
+.crm-app .card-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+
+/* Layout grids */
+.crm-app .dash-row-2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 16px; }
+.crm-app .dash-row-2.single { grid-template-columns: 1fr; }
+.crm-app .dash-row-3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 16px; }
+.crm-app .dash-analytics { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 16px; }
+@media (max-width: 900px) {
+  .crm-app .dash-row-2, .crm-app .dash-row-3, .crm-app .dash-analytics { grid-template-columns: 1fr; }
+}
+
+/* KPI hero tiles — SSC palette (no purple/pink) */
+.crm-app .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 4px; }
+@media (max-width: 1100px) { .crm-app .kpi-row { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 600px)  { .crm-app .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+.crm-app .kpi-tile { position: relative; background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 11px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-height: 100px; transition: border-color .15s; overflow: hidden; }
+.crm-app .kpi-tile:hover { border-color: var(--c-muted-2); }
+.crm-app .kpi-tile.accent-bad { border-left: 3px solid #DC2626; }
+.crm-app .kpi-hero { color: #fff; border: 0; }
+.crm-app .kpi-hero.tone-deep   { background: linear-gradient(135deg, #0A2540 0%, #163E68 55%, #1E54B7 100%); }
+.crm-app .kpi-hero.tone-forest { background: linear-gradient(135deg, #064E3B 0%, #065F46 55%, #10B981 100%); }
+.crm-app .kpi-hero.tone-teal   { background: linear-gradient(135deg, #134E4A 0%, #0F766E 55%, #14B8A6 100%); }
+.crm-app .kpi-hero:hover { border: 0; }
+.crm-app .kpi-hero .kt-label { color: rgba(255,255,255,0.75); }
+.crm-app .kpi-hero .kt-value { color: #fff; }
+.crm-app .kpi-hero .kt-sub { color: rgba(255,255,255,0.65); }
+.crm-app .kt-chart { position: absolute; right: 0; bottom: 0; width: 70%; height: 50%; color: #fff; pointer-events: none; }
+.crm-app .kt-top { display: flex; justify-content: space-between; align-items: center; }
+.crm-app .kt-label { font-size: 10px; letter-spacing: 0.04em; color: var(--c-muted); text-transform: uppercase; font-weight: 500; }
+.crm-app .kt-value { font-size: 22px; font-weight: 600; letter-spacing: -0.025em; line-height: 1; color: var(--c-ink); position: relative; z-index: 1; }
+.crm-app .kpi-tile.accent-bad .kt-value { color: #B91C1C; }
+.crm-app .kt-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; position: relative; z-index: 1; margin-top: auto; }
+.crm-app .kt-sub { font-size: 10px; color: var(--c-muted-2); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-app .kt-trend { font-size: 10px; font-weight: 600; flex: none; }
+.crm-app .kt-trend.up { color: #047857; }
+.crm-app .kt-trend.down { color: #B91C1C; }
+.crm-app .kpi-hero .kt-trend.up { color: #6EE7B7; }
+.crm-app .kpi-hero .kt-trend.down { color: #FCA5A5; }
+.crm-app .kt-badge { font-size: 9.5px; font-weight: 600; padding: 3px 7px; border-radius: 5px; background: rgba(245,158,11,0.15); color: #B45309; letter-spacing: 0.02em; flex: none; white-space: nowrap; }
+.crm-app .kt-arrow { width: 22px; height: 22px; border-radius: 6px; background: rgba(255,255,255,0.12); color: #fff; display: grid; place-items: center; }
+
+/* Analytics card chrome */
+.crm-app .analytics-card { display: flex; flex-direction: column; min-height: 280px; padding: 16px; }
+.crm-app .trend-pill { font-size: 10.5px; font-weight: 600; padding: 4px 10px; border-radius: 100px; background: var(--c-bg-2); color: var(--c-ink); letter-spacing: 0.02em; }
+.crm-app .trend-pill.up { background: rgba(16, 185, 129, 0.12); color: #047857; }
+
+/* Win rate gauge */
+.crm-app .gauge-wrap { display: flex; align-items: center; padding: 14px 4px 4px; gap: 12px; flex: 1; }
+.crm-app .gauge-wrap > svg { flex: none; }
+.crm-app .gauge-stats { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1; }
+.crm-app .gs-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.crm-app .gs-row.gs-total { padding-top: 6px; border-top: 1px dashed var(--c-line); margin-top: 2px; }
+.crm-app .gs-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.crm-app .gs-label { color: var(--c-muted); flex: 1; }
+.crm-app .gs-val { font-weight: 600; color: var(--c-ink); font-size: 12.5px; }
+.crm-app .gauge-foot { display: flex; gap: 12px; padding: 10px 0 0; border-top: 1px dashed var(--c-line); margin-top: auto; }
+.crm-app .gf-stat { flex: 1; min-width: 0; }
+.crm-app .gf-label { font-size: 9.5px; color: var(--c-muted-2); letter-spacing: 0.06em; margin-bottom: 3px; }
+.crm-app .gf-val { font-size: 15px; font-weight: 600; color: var(--c-ink); letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Conversion funnel */
+.crm-app .cfunnel-wrap { padding: 8px 0 0; flex: 1; display: flex; align-items: center; justify-content: center; }
+
+/* Donut */
+.crm-app .donut-wrap { display: flex; align-items: center; gap: 12px; padding: 8px 0 0; flex: 1; }
+.crm-app .donut-wrap > svg { flex: none; }
+.crm-app .donut-legend { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.crm-app .dlg-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 6px; align-items: center; font-size: 11.5px; }
+.crm-app .dlg-dot { width: 8px; height: 8px; border-radius: 50%; }
+.crm-app .dlg-name { color: var(--c-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-app .dlg-pct { color: var(--c-muted); font-size: 10.5px; font-weight: 600; }
+
+/* Monthly trend */
+.crm-app .trend-card { padding-bottom: 8px; }
+.crm-app .trend-wrap { padding: 4px 4px 0; }
+.crm-app .trend-legend { display: flex; gap: 18px; padding: 0 4px 8px; }
+.crm-app .tl-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--c-muted); }
+.crm-app .tl-dot { width: 8px; height: 8px; border-radius: 50%; }
+.crm-app .trend-controls { display: inline-flex; padding: 2px; background: var(--c-bg-2); border-radius: 7px; }
+.crm-app .seg-btn { background: transparent; border: 0; padding: 4px 10px; font-size: 11.5px; font-weight: 500; color: var(--c-muted); cursor: pointer; border-radius: 5px; font-family: inherit; }
+.crm-app .seg-btn.active { background: #fff; color: var(--c-ink); box-shadow: 0 1px 2px rgba(11,27,48,0.08); }
+
+/* Leaderboard */
+.crm-app .lb-card { padding: 18px 20px; }
+.crm-app .select-ghost { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 12px; color: var(--c-ink); cursor: pointer; }
+.crm-app .lb-list { display: flex; flex-direction: column; gap: 12px; }
+.crm-app .lb-total { padding: 14px 16px; background: var(--c-bg-2); border-radius: 10px; border: 1px solid var(--c-line); }
+.crm-app .lb-total-label { font-size: 9.5px; letter-spacing: 0.1em; color: var(--c-muted); margin-bottom: 4px; }
+.crm-app .lb-total-val { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; color: var(--c-ink); }
+.crm-app .lb-row { display: grid; grid-template-columns: 24px 30px 1fr auto; gap: 10px; align-items: center; }
+.crm-app .lb-rank { font-size: 11px; color: var(--c-muted-2); text-align: center; }
+.crm-app .lb-avatar { width: 28px; height: 28px; border-radius: 8px; color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 600; }
+.crm-app .lb-info { min-width: 0; }
+.crm-app .lb-name { font-size: 12.5px; font-weight: 500; margin-bottom: 4px; }
+.crm-app .lb-bar-wrap { height: 4px; background: var(--c-bg-2); border-radius: 2px; overflow: hidden; }
+.crm-app .lb-bar { height: 100%; border-radius: 2px; transition: width .4s ease; }
+.crm-app .lb-val { font-size: 12.5px; font-weight: 600; color: var(--c-ink); white-space: nowrap; }
+
+/* Tasks */
+.crm-app .tasks-card { padding: 18px 20px; }
+.crm-app .task-count { font-size: 11px; color: var(--c-muted); background: var(--c-bg-2); padding: 3px 9px; border-radius: 100px; }
+.crm-app .tasks-list { display: flex; flex-direction: column; gap: 2px; }
+.crm-app .task-row { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 8px; cursor: pointer; transition: background .12s; }
+.crm-app .task-row:hover { background: var(--c-bg-2); }
+.crm-app .task-chk { width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--c-line); cursor: pointer; }
+.crm-app .task-chk:hover { border-color: var(--c-good); }
+.crm-app .task-row.prio-high .task-chk { border-color: var(--c-bad); }
+.crm-app .task-row.prio-med  .task-chk { border-color: var(--c-warn); }
+.crm-app .task-body { min-width: 0; }
+.crm-app .task-title { font-size: 13px; font-weight: 500; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-app .task-meta { font-size: 10.5px; color: var(--c-muted-2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-app .task-due { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 6px; font-family: 'Geist Mono', monospace; white-space: nowrap; }
+.crm-app .task-due.due-high { background: rgba(239,68,68,0.10); color: #B91C1C; }
+.crm-app .task-due.due-med  { background: rgba(245,158,11,0.12); color: #B45309; }
+.crm-app .task-due.due-low  { background: var(--c-bg-2); color: var(--c-muted); }
+
+/* Activity chart */
+.crm-app .activity-card { padding: 18px 20px; }
+.crm-app .act-chart { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; height: 180px; align-items: end; padding: 8px 0; }
+.crm-app .act-col { display: flex; flex-direction: column; align-items: center; height: 100%; gap: 6px; }
+.crm-app .act-val { font-size: 10.5px; color: var(--c-muted-2); }
+.crm-app .act-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.crm-app .act-bar { width: 100%; background: #94A3B8; border-radius: 4px 4px 0 0; transition: height .4s ease; min-height: 6px; }
+.crm-app .act-col.today .act-bar { background: var(--ssc-deep); }
+.crm-app .act-col.today .act-val { color: var(--ssc-deep); font-weight: 600; }
+.crm-app .act-day { font-size: 11px; color: var(--c-muted); }
+.crm-app .act-col.today .act-day { color: var(--ssc-deep); font-weight: 600; }
+.crm-app .act-foot { display: flex; justify-content: space-between; padding-top: 12px; margin-top: 14px; border-top: 1px solid var(--c-line); font-size: 12px; color: var(--c-muted); }
+.crm-app .act-trend.up { color: #047857; font-weight: 600; }
+.crm-app .act-trend.down { color: #B91C1C; }
+
+/* Quotes */
+.crm-app .quotes-card { padding: 18px 20px; }
+.crm-app .quotes-list { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+.crm-app .qs-row { display: grid; grid-template-columns: 160px 1fr auto; gap: 12px; align-items: center; }
+.crm-app .qs-left { display: flex; align-items: center; gap: 8px; }
+.crm-app .qs-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.crm-app .qs-label { font-size: 12.5px; }
+.crm-app .qs-mid { height: 4px; background: var(--c-bg-2); border-radius: 2px; overflow: hidden; }
+.crm-app .qs-bar { height: 100%; border-radius: 2px; transition: width .4s ease; }
+.crm-app .qs-right { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.crm-app .qs-count { font-size: 12px; font-weight: 600; min-width: 24px; text-align: right; }
+.crm-app .qs-val { font-size: 11px; color: var(--c-muted); }
+
+/* Funnel */
+.crm-app .funnel { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.crm-app .funnel-row { display: grid; grid-template-columns: 180px 1fr 80px; gap: 12px; align-items: center; }
+.crm-app .funnel-label { display: flex; align-items: center; gap: 8px; }
+.crm-app .funnel-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.crm-app .funnel-name { font-size: 12.5px; font-weight: 500; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-app .funnel-count { font-size: 11px; color: var(--c-muted); background: var(--c-bg-2); padding: 1px 8px; border-radius: 100px; min-width: 28px; text-align: center; }
+.crm-app .funnel-bar-wrap { height: 8px; background: var(--c-bg-2); border-radius: 4px; overflow: hidden; }
+.crm-app .funnel-bar { height: 100%; border-radius: 4px; transition: width .4s ease; min-width: 4px; }
+.crm-app .funnel-val { font-size: 12.5px; text-align: right; color: var(--c-ink); font-weight: 500; font-family: 'Geist Mono', monospace; }
+
+/* ===== Opportunities page ===== */
+.crm-app .opps-summary { font-size: 13px; color: var(--c-muted); margin-top: 6px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.crm-app .opps-summary b { color: var(--c-ink); font-weight: 600; font-family: 'Geist Mono', monospace; }
+.crm-app .opps-dot { color: var(--c-muted-2); }
+.crm-app .opps-overdue { color: #B91C1C; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.crm-app .opps-od-dot { width: 6px; height: 6px; border-radius: 50%; background: #EF4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.18); }
+
+.crm-app .opps-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; }
+.crm-app .view-toggle { display: flex; gap: 2px; background: var(--c-bg-2); border: 1px solid var(--c-line); border-radius: 9px; padding: 3px; }
+.crm-app .view-toggle button { background: transparent; border: 0; padding: 7px 14px; font: inherit; font-size: 12.5px; color: var(--c-muted); cursor: pointer; border-radius: 6px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; }
+.crm-app .view-toggle button:hover { color: var(--c-ink); }
+.crm-app .view-toggle button.on { background: var(--ssc-deep); color: #fff; }
+
+.crm-app .opps-filters { display: flex; gap: 8px; align-items: center; padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 11px; flex-wrap: wrap; margin-top: 12px; }
+.crm-app .opps-search { display: flex; align-items: center; gap: 7px; background: var(--c-bg-2); border: 1px solid var(--c-line); border-radius: 8px; padding: 6px 10px; flex: 1; max-width: 320px; color: var(--c-muted); }
+.crm-app .opps-search:focus-within { border-color: var(--ssc-deep); background: var(--c-surface); }
+.crm-app .opps-search input { border: 0; background: transparent; outline: none; font: inherit; font-size: 12.5px; flex: 1; color: var(--c-ink); }
+.crm-app .filt-select { background: var(--c-bg-2); border: 1px solid var(--c-line); border-radius: 7px; padding: 6px 9px; font: inherit; font-size: 12px; color: var(--c-ink); cursor: pointer; min-width: 120px; }
+.crm-app .filt-select:hover { border-color: var(--c-muted-2); }
+.crm-app .opps-clear { background: transparent; border: 0; color: var(--c-bad); font: inherit; font-size: 12px; cursor: pointer; padding: 4px 10px; border-radius: 6px; }
+.crm-app .opps-clear:hover { background: rgba(239,68,68,0.05); }
+
+/* Kanban Board */
+.crm-app .kb-wrap { overflow-x: auto; overflow-y: hidden; padding-bottom: 12px; margin: 16px -28px 0; padding-left: 28px; padding-right: 28px; scroll-snap-type: x proximity; }
+.crm-app .kb-wrap::-webkit-scrollbar { height: 12px; }
+.crm-app .kb-wrap::-webkit-scrollbar-track { background: var(--c-bg); }
+.crm-app .kb-wrap::-webkit-scrollbar-thumb { background: var(--c-line); border-radius: 6px; border: 2px solid var(--c-bg); }
+.crm-app .kb-board { display: flex; gap: 12px; min-width: min-content; align-items: flex-start; }
+.crm-app .kb-col { flex: 0 0 296px; background: linear-gradient(180deg, color-mix(in srgb, var(--stage-color) 8%, var(--c-bg-2)) 0%, var(--c-bg-2) 100%); border: 1px solid var(--c-line); border-radius: 14px; max-height: calc(100vh - 280px); display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(11,27,48,0.04); }
+.crm-app .kb-col.drag-over { border-color: var(--stage-color); background: linear-gradient(180deg, color-mix(in srgb, var(--stage-color) 18%, var(--c-bg-2)) 0%, var(--c-bg-2) 100%); }
+.crm-app .kb-col-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--c-line); background: rgba(255,255,255,0.5); border-radius: 14px 14px 0 0; backdrop-filter: blur(4px); }
+.crm-app .kb-col-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.crm-app .kb-col-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--stage-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--stage-color) 18%, transparent); flex: none; }
+.crm-app .kb-col-name { font-size: 13px; font-weight: 600; flex: 1; }
+.crm-app .kb-col-count { font-size: 11px; color: var(--c-muted); background: var(--c-surface); padding: 1px 8px; border-radius: 100px; border: 1px solid var(--c-line); min-width: 26px; text-align: center; font-weight: 600; }
+.crm-app .kb-col-meta { display: flex; justify-content: space-between; align-items: center; }
+.crm-app .kb-col-val { font-size: 11px; color: var(--c-muted); font-weight: 500; font-family: 'Geist Mono', monospace; }
+.crm-app .kb-col-body { padding: 10px 8px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; }
+.crm-app .kb-col-body::-webkit-scrollbar { width: 6px; }
+.crm-app .kb-col-body::-webkit-scrollbar-thumb { background: var(--c-line); border-radius: 3px; }
+
+.crm-app .kb-card { position: relative; background: #fff; border: 1px solid var(--c-line); border-radius: 11px; padding: 10px 12px 11px 14px; cursor: grab; box-shadow: 0 1px 2px rgba(11,27,48,0.04); transition: transform .15s, box-shadow .15s, border-color .15s; flex: none; overflow: hidden; }
+.crm-app .kb-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px -2px rgba(11,27,48,0.10); border-color: color-mix(in srgb, var(--stage-color) 50%, var(--c-line)); }
+.crm-app .kb-card:active { cursor: grabbing; }
+.crm-app .kb-card.dragging { opacity: 0.5; }
+.crm-app .kb-card-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--stage-color); }
+.crm-app .kb-card.overdue .kb-card-bar { background: var(--c-bad); }
+.crm-app .kb-card-head { margin-bottom: 6px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.crm-app .kb-principal-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: color-mix(in srgb, var(--stage-color) 14%, transparent); color: color-mix(in srgb, var(--stage-color) 70%, var(--c-ink)); letter-spacing: 0.01em; text-transform: uppercase; }
+.crm-app .kb-tag { font-size: 9.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.04em; text-transform: uppercase; }
+.crm-app .tag-overdue { background: var(--c-bad); color: #fff; }
+.crm-app .kb-card-title { font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--c-ink); margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.crm-app .kb-card-customer { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--c-muted); margin-bottom: 10px; line-height: 1.3; }
+.crm-app .kb-card-customer svg { color: var(--c-muted-2); flex: none; }
+.crm-app .kb-card-foot { display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--c-line-2); }
+.crm-app .kb-card-value { font-size: 13px; font-weight: 700; color: var(--ssc-deep); letter-spacing: -0.01em; font-family: 'Geist Mono', monospace; }
+.crm-app .kb-card-meta { display: flex; align-items: center; gap: 8px; }
+.crm-app .kb-card-date { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--c-muted); }
+.crm-app .kb-card-date.overdue { color: #B91C1C; font-weight: 600; }
+.crm-app .kb-card-avatar { width: 24px; height: 24px; border-radius: 50%; color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 600; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--c-line); }
+.crm-app .kb-empty { font-size: 12px; color: var(--c-muted-2); text-align: center; padding: 20px 10px; font-style: italic; }
+
+/* List view */
+.crm-app .dl-wrap { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--c-radius); overflow: hidden; margin-top: 16px; }
+.crm-app .dl-table { display: flex; flex-direction: column; }
+.crm-app .dl-row { display: grid; grid-template-columns: 1fr 130px 130px 110px 140px 180px; gap: 14px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--c-line-2); }
+.crm-app .dl-head { background: var(--c-bg-2); padding: 10px 18px; position: sticky; top: 0; z-index: 5; font-family: 'Geist Mono', monospace; font-size: 10.5px; color: var(--c-muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500; }
+.crm-app .dl-head .num { text-align: right; }
+.crm-app .dl-data { transition: background .12s; cursor: pointer; }
+.crm-app .dl-data:hover { background: var(--c-bg-2); }
+.crm-app .dl-cell { min-width: 0; }
+.crm-app .dl-deal { display: flex; flex-direction: column; gap: 4px; }
+.crm-app .dl-title { font-size: 13.5px; font-weight: 500; color: var(--c-ink); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-app .dl-deal-meta { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--c-muted); }
+.crm-app .dl-pr-tag { font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 5px; background: var(--c-bg-2); border: 1px solid var(--c-line); color: var(--c-ink); white-space: nowrap; }
+.crm-app .dl-date-main { font-size: 12.5px; font-weight: 500; color: var(--c-ink); }
+.crm-app .dl-date-main.overdue { color: #B91C1C; font-weight: 600; }
+.crm-app .dl-date-sub { font-size: 10.5px; color: var(--c-muted-2); }
+.crm-app .dl-value { text-align: right; font-size: 13.5px; font-weight: 600; color: var(--c-ink); letter-spacing: -0.01em; font-family: 'Geist Mono', monospace; }
+.crm-app .dl-stage-pill { font-size: 11px; font-weight: 500; padding: 4px 9px; border-radius: 5px; background: color-mix(in srgb, var(--stage-color) 12%, transparent); color: color-mix(in srgb, var(--stage-color) 70%, var(--c-ink)); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.crm-app .dl-stage-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--stage-color); flex: none; }
+.crm-app .dl-owner { display: flex; align-items: center; gap: 9px; }
+.crm-app .dl-owner-avatar { width: 26px; height: 26px; border-radius: 50%; color: #fff; display: grid; place-items: center; font-size: 10.5px; font-weight: 600; flex: none; }
+.crm-app .dl-owner-name { font-size: 12.5px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c-ink); }
+.crm-app .dl-empty { padding: 60px 20px; text-align: center; color: var(--c-muted); font-size: 13px; }
+.crm-app .dl-foot { padding: 12px 20px; font-size: 12px; color: var(--c-muted); border-top: 1px solid var(--c-line); display: flex; justify-content: space-between; background: var(--c-bg-2); }
+
+/* Field Visits — same design tokens, table-driven */
+.crm-app .fv-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.crm-app .fv-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+@media (max-width: 700px) { .crm-app .fv-stat-row { grid-template-columns: repeat(2, 1fr); } }
+.crm-app .fv-stat { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 11px; padding: 14px 16px; }
+.crm-app .fv-stat-label { font-size: 10px; letter-spacing: 0.06em; color: var(--c-muted); font-family: 'Geist Mono', monospace; text-transform: uppercase; margin-bottom: 4px; }
+.crm-app .fv-stat-val { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.crm-app .fv-stat-sub { font-size: 11px; color: var(--c-muted-2); margin-top: 4px; font-family: 'Geist Mono', monospace; }
+
+/* Empty / loading */
+.crm-app .crm-empty { padding: 60px 20px; text-align: center; color: var(--c-muted); }
+.crm-app .crm-empty-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--c-ink); }
+.crm-app .crm-loading { padding: 60px 20px; text-align: center; color: var(--c-muted); }

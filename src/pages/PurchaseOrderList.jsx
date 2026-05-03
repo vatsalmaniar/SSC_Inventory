@@ -4,59 +4,57 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
-import '../styles/orders.css'
+import '../styles/orders-redesign.css'
 
-const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
-function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
-function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7,whiteSpace:'nowrap'}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
+const REP_PALETTE = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return REP_PALETTE[Math.abs(h)%REP_PALETTE.length] }
+function initials(name) { return (name||'').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?' }
 
 const PO_STATUS_LABELS = {
   draft:'PO Created', pending_approval:'Pending Approval', approved:'PO Approved', placed:'Order Placed',
   acknowledged:'Acknowledgement', delivery_confirmation:'Delivery Confirmation',
   material_received:'Material Received', closed:'Closed', cancelled:'Cancelled',
 }
-
-function statusLabel(s) { return PO_STATUS_LABELS[s] || s }
-
-function pillStatus(po) { return po.status }
-
+const PO_STATUS_COLORS = {
+  draft:'#94A3B8', pending_approval:'#F59E0B', approved:'#1E54B7', placed:'#0EA5E9',
+  acknowledged:'#0F766E', delivery_confirmation:'#D97706',
+  material_received:'#22C55E', closed:'#047857', cancelled:'#EF4444',
+}
 function poValue(po) { return po.total_amount || 0 }
-
-const FILTERS = [
-  { key: 'all',        label: 'All' },
-  { key: 'po',         label: 'PO' },
-  { key: 'cpo',        label: 'PCO' },
-  { key: 'open',       label: 'Open' },
-  { key: 'approval',   label: 'Pending Approval' },
-  { key: 'placed',     label: 'Order Placed' },
-  { key: 'delivery',   label: 'Delivery Confirmation' },
-  { key: 'received',   label: 'Material Received' },
-  { key: 'closed',     label: 'Closed' },
-  { key: 'cancelled',  label: 'Cancelled' },
-]
-
-const TIMELINES = [
-  { key: 'all',    label: 'All Time' },
-  { key: 'today',  label: 'Today' },
-  { key: 'week',   label: 'This Week' },
-  { key: 'month',  label: 'This Month' },
-  { key: 'year',   label: 'This Year' },
-  { key: 'custom', label: 'Custom' },
-]
-
 function isCPO(po) { return !!(po.order_number && po.order_number.includes('/CO')) }
 
+const FILTERS = [
+  { key:'all', label:'All' },
+  { key:'po', label:'PO' },
+  { key:'cpo', label:'PCO' },
+  { key:'open', label:'Open' },
+  { key:'approval', label:'Pending Approval', tone:'warn' },
+  { key:'placed', label:'Order Placed' },
+  { key:'delivery', label:'Delivery Confirmation' },
+  { key:'received', label:'Material Received' },
+  { key:'closed', label:'Closed' },
+  { key:'cancelled', label:'Cancelled', tone:'danger' },
+]
+const TIMELINES = [
+  { key:'all', label:'All Time' },
+  { key:'today', label:'Today' },
+  { key:'week', label:'This Week' },
+  { key:'month', label:'This Month' },
+  { key:'year', label:'This Year' },
+  { key:'custom', label:'Custom' },
+]
+
 function matchFilter(po, f) {
-  if (f === 'all')        return true
-  if (f === 'po')         return !isCPO(po)
-  if (f === 'cpo')        return isCPO(po)
-  if (f === 'open')       return !['material_received','closed','cancelled'].includes(po.status)
-  if (f === 'approval')   return po.status === 'pending_approval'
-  if (f === 'placed')     return ['approved','placed','acknowledged'].includes(po.status)
-  if (f === 'delivery')   return po.status === 'delivery_confirmation'
-  if (f === 'received')   return po.status === 'material_received'
-  if (f === 'closed')     return po.status === 'closed'
-  if (f === 'cancelled')  return po.status === 'cancelled'
+  if (f === 'all') return true
+  if (f === 'po') return !isCPO(po)
+  if (f === 'cpo') return isCPO(po)
+  if (f === 'open') return !['material_received','closed','cancelled'].includes(po.status)
+  if (f === 'approval') return po.status === 'pending_approval'
+  if (f === 'placed') return ['approved','placed','acknowledged'].includes(po.status)
+  if (f === 'delivery') return po.status === 'delivery_confirmation'
+  if (f === 'received') return po.status === 'material_received'
+  if (f === 'closed') return po.status === 'closed'
+  if (f === 'cancelled') return po.status === 'cancelled'
   return false
 }
 
@@ -68,62 +66,58 @@ function inTimeline(po, t, customFrom, customTo, dateMode) {
   } else {
     dateStr = po.po_date || po.created_at
   }
-  const d = new Date(dateStr)
-  d.setHours(0, 0, 0, 0)
-  const now = new Date(); now.setHours(0, 0, 0, 0)
+  const d = new Date(dateStr); d.setHours(0,0,0,0)
+  const now = new Date(); now.setHours(0,0,0,0)
   if (t === 'all') return true
   if (t === 'today') return d.getTime() === now.getTime()
-  if (t === 'week') {
-    const start = new Date(now); start.setDate(now.getDate() - now.getDay())
-    return d >= start
-  }
+  if (t === 'week') { const start = new Date(now); start.setDate(now.getDate() - now.getDay()); return d >= start }
   if (t === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-  if (t === 'year')  return d.getFullYear() === now.getFullYear()
+  if (t === 'year') return d.getFullYear() === now.getFullYear()
   if (t === 'custom') {
     if (customFrom) { const f = new Date(customFrom); f.setHours(0,0,0,0); if (d < f) return false }
-    if (customTo)   { const t2 = new Date(customTo);  t2.setHours(0,0,0,0); if (d > t2) return false }
+    if (customTo) { const t2 = new Date(customTo); t2.setHours(0,0,0,0); if (d > t2) return false }
     return true
   }
   return true
 }
 
+function fmtCr(val) {
+  if (!val) return '₹0'
+  if (val >= 1e7) return '₹' + (val/1e7).toFixed(2) + ' Cr'
+  if (val >= 1e5) return '₹' + (val/1e5).toFixed(2) + ' L'
+  return '₹' + Math.round(val).toLocaleString('en-IN')
+}
+
 export default function PurchaseOrderList() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [user, setUser]       = useState({ name: '', avatar: '', role: '' })
-  const [pos, setPos]         = useState([])
+  const [user, setUser] = useState({ name:'', role:'' })
+  const [pos, setPos] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter]     = useState(location.state?.filter || 'all')
+  const [filter, setFilter] = useState(location.state?.filter || 'all')
   const [timeline, setTimeline] = useState(location.state?.timeline || 'all')
   const [customFrom, setCustomFrom] = useState('')
-  const [customTo, setCustomTo]     = useState('')
-  const [dateMode, setDateMode]     = useState('po')
-  const [search, setSearch]     = useState('')
-  const [page, setPage]         = useState(1)
+  const [customTo, setCustomTo] = useState('')
+  const [dateMode, setDateMode] = useState('po')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const [showTest, setShowTest] = useState(false)
-
   const PAGE_SIZE = 50
 
   useEffect(() => { init() }, [])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
-    if (!session) {
-      const { data } = await sb.auth.refreshSession()
-      if (!data?.session) { navigate('/login'); return }
-      session = data.session
-    }
+    if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
-    const name   = profile?.name || session.user.email.split('@')[0]
-    const role   = profile?.role || 'sales'
+    const role = profile?.role || 'sales'
     if (!['ops','admin','management','demo'].includes(role)) { navigate('/dashboard'); return }
-    const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    setUser({ name, avatar, role })
+    setUser({ name: profile?.name || '', role })
     await loadPos(false)
   }
 
-  async function loadPos(testMode = false, silent) {
-    if (!silent) setLoading(true)
+  async function loadPos(testMode = false) {
+    setLoading(true)
     const { data } = await sb.from('purchase_orders')
       .select('id,po_number,status,total_amount,vendor_name,vendor_id,order_number,fulfilment_center,submitted_by_name,created_at,po_date,expected_delivery,po_items(id)')
       .gte('created_at', FY_START).eq('is_test', testMode)
@@ -133,23 +127,16 @@ export default function PurchaseOrderList() {
   }
 
   const timelineOrders = pos.filter(po => inTimeline(po, timeline, customFrom, customTo, dateMode))
-
-  const counts = FILTERS.reduce((acc, { key }) => {
-    acc[key] = timelineOrders.filter(po => matchFilter(po, key)).length
-    return acc
-  }, {})
-
+  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = timelineOrders.filter(po => matchFilter(po, key)).length; return acc }, {})
   const q = search.trim().toLowerCase()
   const filtered = timelineOrders
     .filter(po => matchFilter(po, filter))
     .filter(po => !q || po.po_number?.toLowerCase().includes(q) || po.vendor_name?.toLowerCase().includes(q) || po.order_number?.toLowerCase().includes(q) || po.submitted_by_name?.toLowerCase().includes(q))
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const safePage   = Math.min(page, totalPages)
-  const paginated  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
-
+  const safePage = Math.min(page, totalPages)
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
   const sumTotal = filtered.filter(po => po.status !== 'cancelled').reduce((s, po) => s + poValue(po), 0)
-
   const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'POs'
   const timelineLabel = timeline === 'custom'
     ? (customFrom || customTo ? `${customFrom || ''}–${customTo || ''}` : 'Custom')
@@ -158,16 +145,12 @@ export default function PurchaseOrderList() {
 
   function downloadSummary() {
     const rows = filtered.map(po => ({
-      'PO #':             po.po_number,
-      'Vendor':           po.vendor_name || '',
-      'Linked Order':     po.order_number || '',
-      'PO Date':          fmt(po.po_date),
-      'Expected Delivery':po.expected_delivery ? fmt(po.expected_delivery) : '',
-      'Submitted By':     po.submitted_by_name || '',
-      'Items':            (po.po_items || []).length,
-      'Value (₹)':        poValue(po),
-      'Centre':           po.fulfilment_center || '',
-      'Status':           statusLabel(po.status),
+      'PO #': po.po_number, 'Vendor': po.vendor_name || '',
+      'Linked Order': po.order_number || '', 'PO Date': fmt(po.po_date),
+      'Expected Delivery': po.expected_delivery ? fmt(po.expected_delivery) : '',
+      'Submitted By': po.submitted_by_name || '', 'Items': (po.po_items || []).length,
+      'Value (₹)': poValue(po), 'Centre': po.fulfilment_center || '',
+      'Status': PO_STATUS_LABELS[po.status] || po.status,
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -177,266 +160,194 @@ export default function PurchaseOrderList() {
 
   return (
     <Layout pageTitle="Purchase Orders" pageKey="procurement">
-    <div className="od-list-page">
-      <div className="od-list-body">
-
-        {/* Header */}
-        <div className="od-list-header">
+      <div className="orders-app">
+        <div className="page-head">
           <div>
-            <div className="od-list-title">Purchase Orders</div>
+            <h1 className="page-title">Purchase Orders</h1>
+            <div className="o-summary">
+              <span><b>{filtered.length}</b> {activeFilterLabel.toLowerCase()}</span>
+              <span className="o-sep">·</span>
+              <span><b>{fmtCr(sumTotal)}</b> total value</span>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="page-meta">
             {user.role === 'admin' && (
-              <label style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:12,color:showTest ? '#b45309' : 'var(--gray-500)',fontWeight:showTest ? 600 : 400,background:showTest ? '#fef3c7' : 'transparent',border:showTest ? '1px solid #fde68a' : '1px solid var(--gray-200)',borderRadius:8,padding:'6px 12px',transition:'all 0.15s'}}>
-                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); loadPos(e.target.checked) }} style={{accentColor:'#b45309',width:13,height:13}} />
+              <label className={`o-test-toggle ${showTest ? 'on' : ''}`}>
+                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); loadPos(e.target.checked) }} style={{accentColor:'#B45309',width:13,height:13}}/>
                 Test Mode
               </label>
             )}
-            <div className="od-download-group">
-              <button className="od-download-btn" onClick={downloadSummary} title="Download summary Excel">
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width: 14, height: 14 }}>
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
+            <div className="o-dl-group">
+              <button className="o-dl-btn" onClick={downloadSummary} title="Summary Excel">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Summary
               </button>
             </div>
-            <button className="new-order-btn" onClick={() => navigate('/procurement/po/new')}>
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
+            <button className="btn-primary" onClick={() => navigate('/procurement/po/new')}>
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
               New PO
             </button>
           </div>
         </div>
 
-        <div className="od-stat-grid">
-          <div className="od-stat-card od-stat-blue">
-            <div className="od-stat-card-top">
-              <div className="od-stat-label">{FILTERS.find(f => f.key === filter)?.label || 'POs'}</div>
-              <div className="od-stat-icon">
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
-              </div>
-            </div>
-            <div className="od-stat-val">{filtered.length}</div>
-            <div className="od-stat-sub">matching POs</div>
-          </div>
-          <div className="od-stat-card od-stat-navy">
-            <div className="od-stat-card-top">
-              <div className="od-stat-label">Total Value</div>
-              <div className="od-stat-icon">
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg>
-              </div>
-            </div>
-            <div className="od-stat-val" style={{ fontSize: sumTotal >= 1e7 ? 22 : sumTotal >= 1e5 ? 26 : 32 }}>
-              {sumTotal >= 1e7 ? '₹' + (sumTotal/1e7).toFixed(2) + ' Cr' : sumTotal >= 1e5 ? '₹' + (sumTotal/1e5).toFixed(1) + 'L' : '₹' + sumTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </div>
-            <div className="od-stat-sub">across filtered POs</div>
-          </div>
-          <div className="od-stat-card od-stat-amber" onClick={() => { setFilter('approval'); setPage(1) }} style={{ cursor:'pointer' }}>
-            <div className="od-stat-card-top">
-              <div className="od-stat-label">Pending Approval</div>
-              <div className="od-stat-icon">
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              </div>
-            </div>
-            <div className="od-stat-val">{counts.approval}</div>
-            <div className="od-stat-sub">awaiting approval</div>
-          </div>
-          <div className="od-stat-card od-stat-red" onClick={() => { setFilter('delivery'); setPage(1) }} style={{ cursor:'pointer' }}>
-            <div className="od-stat-card-top">
-              <div className="od-stat-label">Delivery Pending</div>
-              <div className="od-stat-icon">
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>
-              </div>
-            </div>
-            <div className="od-stat-val">{counts.delivery}</div>
-            <div className="od-stat-sub">awaiting delivery</div>
-          </div>
+        <div className="kpi-row">
+          <KpiTile variant="hero" tone="deep" label={activeFilterLabel} value={filtered.length} sub="matching POs" chart="line"/>
+          <KpiTile variant="hero" tone="forest" label="Total Value" value={fmtCr(sumTotal)} sub="across filtered" chart="bars"/>
+          <KpiTile variant="hero" tone="teal" label="Open POs" value={counts.open || 0} sub="in progress" chart="bars" onClick={() => { setFilter('open'); setPage(1) }}/>
+          <KpiTile label="Pending Approval" value={counts.approval || 0} sub="awaiting approval" accent={(counts.approval || 0) > 0 ? 'amber' : null} onClick={() => { setFilter('approval'); setPage(1) }}/>
+          <KpiTile label="Delivery Pending" value={counts.delivery || 0} sub="awaiting delivery" onClick={() => { setFilter('delivery'); setPage(1) }}/>
         </div>
 
-        <div className="od-timeline-bar">
+        <div className="o-timeline">
           {TIMELINES.map(({ key, label }) => (
-            <button
-              key={key}
-              className={'od-timeline-btn' + (timeline === key ? ' active' : '')}
-              onClick={() => { setTimeline(key); setPage(1) }}
-            >
-              {label}
-            </button>
+            <button key={key} className={timeline === key ? 'on' : ''} onClick={() => { setTimeline(key); setPage(1) }}>{label}</button>
           ))}
           {timeline === 'custom' && (
-            <div className="od-custom-range">
-              <span className="od-range-label">From</span>
-              <input type="date" className="od-range-input" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
-              <span className="od-range-label">To</span>
-              <input type="date" className="od-range-input" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0,10)} />
-              {(customFrom || customTo) && (
-                <button className="od-range-clear" onClick={() => { setCustomFrom(''); setCustomTo('') }}>Clear</button>
-              )}
+            <div className="o-timeline-custom">
+              <span>From</span>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}/>
+              <span>To</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0,10)}/>
+              {(customFrom || customTo) && <button className="o-search-clear" onClick={() => { setCustomFrom(''); setCustomTo('') }} style={{ marginLeft: 6, fontSize: 11, color: 'var(--o-bad)' }}>Clear</button>}
             </div>
           )}
         </div>
 
-        {/* Search + Filter bar */}
-        <div className="od-list-controls">
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%' }}>
-          <div className="od-search-wrap">
-            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="od-search-icon">
-              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-            </svg>
-            <input
-              className="od-search-input"
-              placeholder="Search PO number, vendor, order..."
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1) }}
-            />
+        <div className="o-toolbar">
+          <div className="o-search">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
+            <input placeholder="Search PO number, vendor, order…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}/>
             {search && (
-              <button className="od-search-clear" onClick={() => setSearch('')}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width: 14, height: 14 }}>
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
+              <button className="o-search-clear" onClick={() => setSearch('')}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             )}
           </div>
-          <div style={{ display:'flex', borderRadius:8, border:'1px solid var(--gray-200)', overflow:'hidden', background:'#f9fafb', flexShrink:0 }}>
-            <button onClick={() => { setDateMode('po'); setPage(1) }}
-              style={{ padding:'6px 12px', fontSize:12, fontWeight: dateMode === 'po' ? 700 : 400, background: dateMode === 'po' ? 'white' : 'transparent', color: dateMode === 'po' ? 'var(--gray-900)' : 'var(--gray-500)', border:'none', cursor:'pointer', fontFamily:'var(--font)', boxShadow: dateMode === 'po' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', margin: dateMode === 'po' ? 2 : 0, borderRadius: dateMode === 'po' ? 6 : 0 }}
-            >PO Date</button>
-            <button onClick={() => { setDateMode('expected'); setPage(1) }}
-              style={{ padding:'6px 12px', fontSize:12, fontWeight: dateMode === 'expected' ? 700 : 400, background: dateMode === 'expected' ? 'white' : 'transparent', color: dateMode === 'expected' ? 'var(--gray-900)' : 'var(--gray-500)', border:'none', cursor:'pointer', fontFamily:'var(--font)', boxShadow: dateMode === 'expected' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', margin: dateMode === 'expected' ? 2 : 0, borderRadius: dateMode === 'expected' ? 6 : 0 }}
-            >Expected Delivery</button>
-          </div>
-          </div>
-          <div className="filter-bar" style={{ margin: 0, padding: 0 }}>
-            {FILTERS.map(({ key, label }) => (
-              <button
-                key={key}
-                className={'filter-chip' + (filter === key ? ' active' : '') + (key === 'approval' || key === 'delivery' ? ' filter-chip-warn' : '') + (key === 'cancelled' ? ' filter-chip-danger' : '')}
-                onClick={() => { setFilter(key); setPage(1) }}
-              >
-                {label}{counts[key] > 0 ? ` (${counts[key]})` : ''}
-              </button>
-            ))}
+          <div className="o-datemode">
+            <button className={dateMode === 'po' ? 'on' : ''} onClick={() => { setDateMode('po'); setPage(1) }}>PO Date</button>
+            <button className={dateMode === 'expected' ? 'on' : ''} onClick={() => { setDateMode('expected'); setPage(1) }}>Expected Delivery</button>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="od-table-card">
-          {loading ? (
-            <div className="loading-state" style={{ padding: 40 }}><div className="loading-spin" /></div>
-          ) : filtered.length === 0 ? (
-            <div className="orders-empty" style={{ border: 'none' }}>
-              <div className="orders-empty-icon">
-                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                  <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
-                  <rect x="9" y="3" width="6" height="4" rx="1"/>
-                </svg>
+        <div className="o-filter-row">
+          {FILTERS.map(({ key, label, tone }) => (
+            <button key={key} className={`o-chip ${filter === key ? 'on' : ''} ${tone || ''}`} onClick={() => { setFilter(key); setPage(1) }}>
+              {label}
+              {counts[key] > 0 && <span className="o-chip-n">{counts[key]}</span>}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="o-loading">Loading POs…</div>
+        ) : (
+          <div className="ol-wrap">
+            <div className="ol-row ol-head" style={{ gridTemplateColumns: '140px minmax(0, 1.4fr) 110px minmax(0, 1fr) auto 140px' }}>
+              <div>PO #</div>
+              <div>Vendor</div>
+              <div>PO Date</div>
+              <div>Submitted By</div>
+              <div className="ol-numgroup">
+                <div className="num num-label" style={{ textAlign:'right' }}>Items</div>
+                <div className="num num-label" style={{ textAlign:'right' }}>Value</div>
               </div>
-              <div className="orders-empty-title">No purchase orders found</div>
-              <div className="orders-empty-sub">{search ? 'Try a different search term.' : 'Nothing here right now.'}</div>
+              <div className="num">Status</div>
             </div>
-          ) : (
-            <>
-              {/* Desktop table */}
-              <div className="orders-table-wrap" style={{ border: 'none', borderRadius: 0 }}>
-                <table className="orders-table">
-                  <thead>
-                    <tr>
-                      <th>PO #</th>
-                      <th>Vendor</th>
-                      <th>PO Date</th>
-                      <th>Submitted By</th>
-                      <th>Items</th>
-                      <th style={{ textAlign: 'right' }}>Value (₹)</th>
-                      <th style={{ textAlign: 'right' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginated.map(po => {
-                      const ps = pillStatus(po)
-                      return (
-                        <tr key={po.id} onClick={() => navigate('/procurement/po/' + po.id)}>
-                          <td className="order-num-cell">
-                            {po.po_number}
-                            {po.order_number && <div style={{ fontSize:11, color:'var(--gray-400)', fontFamily:'var(--mono)', marginTop:2 }}>{po.order_number}</div>}
-                          </td>
-                          <td className="customer-cell">{po.vendor_name || '—'}</td>
-                          <td>
-                            {fmt(po.po_date)}
-                            {po.expected_delivery && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>Exp: {fmt(po.expected_delivery)}</div>}
-                          </td>
-                          <td><OwnerChip name={po.submitted_by_name} /></td>
-                          <td>{(po.po_items || []).length}</td>
-                          <td className="amount-cell">{poValue(po).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                          <td className="status-cell">
-                            <span className={'pill pill-' + ps}>{statusLabel(ps)}</span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+            {filtered.length === 0 ? (
+              <div className="ol-empty">
+                <div className="ol-empty-title">No purchase orders found</div>
+                <div style={{ fontSize: 13, color: 'var(--o-muted)' }}>{search ? 'Try a different search term.' : 'Nothing here right now.'}</div>
               </div>
-
-              {/* Mobile cards */}
-              <div style={{ padding: '0 4px 4px' }}>
-                {paginated.map((po, i) => (
-                  <div key={po.id} className="order-card" style={{ animationDelay: i * 0.03 + 's' }} onClick={() => navigate('/procurement/po/' + po.id)}>
-                    <div className="order-card-top">
-                      <div>
-                        <div className="order-num">{po.po_number}</div>
-                        <div className="order-customer">{po.vendor_name || '—'}</div>
-                        <div className="order-date" style={{display:'flex',alignItems:'center',gap:6,marginTop:2}}>{fmt(po.po_date)} · <OwnerChip name={po.submitted_by_name} /></div>
-                        {po.expected_delivery && <div className="order-date" style={{ color:'var(--gray-500)' }}>Expected: {fmt(po.expected_delivery)}</div>}
-                        {po.order_number && <div className="order-date" style={{ color:'var(--gray-400)', fontFamily:'var(--mono)' }}>Order: {po.order_number}</div>}
+            ) : (
+              <div className="ol-table">
+                {paginated.map(po => {
+                  const color = PO_STATUS_COLORS[po.status] || '#94A3B8'
+                  return (
+                    <div key={po.id} className="ol-row ol-data" style={{ gridTemplateColumns: '140px minmax(0, 1.4fr) 110px minmax(0, 1fr) auto 140px' }} onClick={() => navigate('/procurement/po/' + po.id)}>
+                      <div className="ol-cell">
+                        <div className="ol-num">{po.po_number}</div>
+                        {po.order_number && <div className="ol-date-sub">{po.order_number}</div>}
                       </div>
-                      <span className={'pill pill-' + pillStatus(po)}>{statusLabel(po.status)}</span>
+                      <div className="ol-cell ol-cust" title={po.vendor_name}>{po.vendor_name || '—'}</div>
+                      <div className="ol-cell">
+                        <div className="ol-date">{fmt(po.po_date)}</div>
+                        {po.expected_delivery && <div className="ol-date-sub">Exp: {fmt(po.expected_delivery)}</div>}
+                      </div>
+                      <div className="ol-cell">
+                        {po.submitted_by_name ? (
+                          <div className="ol-owner" title={po.submitted_by_name}>
+                            <div className="ol-owner-avatar" style={{background: ownerColor(po.submitted_by_name)}}>{initials(po.submitted_by_name)}</div>
+                            <span className="ol-owner-name">{po.submitted_by_name}</span>
+                          </div>
+                        ) : <span style={{color:'var(--o-muted-2)'}}>—</span>}
+                      </div>
+                      <div className="ol-numgroup">
+                        <div className="ol-items">{(po.po_items || []).length}</div>
+                        <div className="ol-val">₹{poValue(po).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                      </div>
+                      <div className="ol-cell ol-status-cell">
+                        <span className="ol-status-pill" style={{ '--stage-color': color }}>
+                          <span className="ol-status-dot"/>
+                          {PO_STATUS_LABELS[po.status] || po.status}
+                        </span>
+                      </div>
                     </div>
-                    <div className="order-card-bottom">
-                      <span className="order-items-count">
-                        {(po.po_items || []).length} item{(po.po_items || []).length !== 1 ? 's' : ''}
-                      </span>
-                      <span className="order-total">₹{poValue(po).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {filtered.length > 0 && (
+              <div className="ol-foot">
+                <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+                {totalPages > 1 && (
+                  <div className="ol-pages">
+                    <button className="ol-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                      const show = totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                      const ellipsis = !show && Math.abs(p - safePage) === 2
+                      if (show) return <button key={p} className={`ol-page-btn ${p === safePage ? 'on' : ''}`} onClick={() => setPage(p)}>{p}</button>
+                      if (ellipsis) return <span key={'e'+p} style={{ padding:'5px 4px', color:'var(--o-muted-2)' }}>…</span>
+                      return null
+                    })}
+                    <button className="ol-page-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>Next ›</button>
                   </div>
-                ))}
+                )}
               </div>
-
-              {/* Pagination */}
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', borderTop:'1px solid var(--gray-100)', gap:8, flexWrap:'wrap' }}>
-                <span style={{ fontSize:12, color:'var(--gray-500)' }}>
-                  Showing {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} POs
-                </span>
-                <div style={{ display:'flex', gap:4 }}>
-                  <button
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={safePage === 1}
-                    style={{ padding:'5px 10px', borderRadius:6, border:'1px solid var(--gray-200)', background:'white', cursor: safePage === 1 ? 'default' : 'pointer', color: safePage === 1 ? 'var(--gray-300)' : 'var(--gray-700)', fontSize:13, fontFamily:'var(--font)' }}
-                  >‹ Prev</button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
-                    const show = totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
-                    const ellipsis = !show && Math.abs(p - safePage) === 2
-                    if (show) return (
-                      <button key={p} onClick={() => setPage(p)}
-                        style={{ padding:'5px 10px', borderRadius:6, border:'1px solid', borderColor: p === safePage ? '#1a4dab' : 'var(--gray-200)', background: p === safePage ? '#1a4dab' : 'white', color: p === safePage ? 'white' : 'var(--gray-700)', fontWeight: p === safePage ? 700 : 400, fontSize:13, cursor:'pointer', fontFamily:'var(--font)' }}
-                      >{p}</button>
-                    )
-                    if (ellipsis) return <span key={'e'+p} style={{ padding:'5px 2px', color:'var(--gray-400)', fontSize:13, lineHeight:'28px' }}>…</span>
-                    return null
-                  })}
-                  <button
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={safePage === totalPages}
-                    style={{ padding:'5px 10px', borderRadius:6, border:'1px solid var(--gray-200)', background:'white', cursor: safePage === totalPages ? 'default' : 'pointer', color: safePage === totalPages ? 'var(--gray-300)' : 'var(--gray-700)', fontSize:13, fontFamily:'var(--font)' }}
-                  >Next ›</button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
+            )}
+          </div>
+        )}
       </div>
-    </div>
     </Layout>
   )
+}
+
+function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
+  const isHero = variant === 'hero'
+  return (
+    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
+      {isHero && <KpiChart kind={chart}/>}
+      <div className="kt-top">
+        <div className="kt-label">{label}</div>
+        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
+      </div>
+      <div className="kt-value">{value}</div>
+      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
+    </div>
+  )
+}
+function KpiChart({ kind }) {
+  if (kind === 'bars') return (
+    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
+      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
+        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
+      ))}
+    </svg>
+  )
+  if (kind === 'line') return (
+    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
+      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
+    </svg>
+  )
+  return null
 }

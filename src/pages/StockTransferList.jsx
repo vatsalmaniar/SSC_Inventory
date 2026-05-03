@@ -3,35 +3,29 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
-import '../styles/orders.css'
+import '../styles/orders-redesign.css'
 
-const STATUS_LABELS = { draft: 'Draft', dispatched: 'In Transit', received: 'Received', cancelled: 'Cancelled' }
-const STATUS_COLORS = {
-  draft:      { bg: '#fef3c7', fg: '#92400e' },
-  dispatched: { bg: '#dbeafe', fg: '#1e40af' },
-  received:   { bg: '#d1fae5', fg: '#065f46' },
-  cancelled:  { bg: '#fee2e2', fg: '#991b1b' },
-}
+const STATUS_LABELS = { draft:'Draft', dispatched:'In Transit', received:'Received', cancelled:'Cancelled' }
+const STATUS_COLORS = { draft:'#94A3B8', dispatched:'#1E54B7', received:'#22C55E', cancelled:'#EF4444' }
 
 const FILTERS = [
-  { key: 'all',        label: 'All' },
-  { key: 'draft',      label: 'Draft' },
-  { key: 'dispatched', label: 'In Transit' },
-  { key: 'received',   label: 'Received' },
-  { key: 'cancelled',  label: 'Cancelled' },
+  { key:'all', label:'All' },
+  { key:'draft', label:'Draft' },
+  { key:'dispatched', label:'In Transit' },
+  { key:'received', label:'Received' },
+  { key:'cancelled', label:'Cancelled', tone:'danger' },
 ]
-
 const PAGE_SIZE = 50
 
 export default function StockTransferList() {
   const navigate = useNavigate()
-  const [userRole, setUserRole]   = useState('')
+  const [userRole, setUserRole] = useState('')
   const [transfers, setTransfers] = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [filter, setFilter]       = useState('all')
-  const [search, setSearch]       = useState('')
-  const [testMode, setTestMode]   = useState(false)
-  const [page, setPage]           = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [testMode, setTestMode] = useState(false)
+  const [page, setPage] = useState(1)
 
   useEffect(() => { init() }, [])
 
@@ -42,150 +36,171 @@ export default function StockTransferList() {
     const role = profile?.role || 'sales'
     if (!['ops','admin','management','fc_kaveri','fc_godawari','demo'].includes(role)) { navigate('/dashboard'); return }
     setUserRole(role)
-    await loadTransfers(role === 'demo' ? true : false)
+    await loadTransfers(role === 'demo')
   }
 
   async function loadTransfers(test) {
     setLoading(true)
-    const { data, error } = await sb.from('stock_transfers')
+    const { data } = await sb.from('stock_transfers')
       .select('*, stock_transfer_items(id)')
-      .eq('is_test', test)
-      .gte('created_at', FY_START)
-      .order('created_at', { ascending: false })
-    if (error) console.error('Transfer load error:', error)
+      .eq('is_test', test).gte('created_at', FY_START).order('created_at', { ascending: false })
     setTransfers(data || [])
     setLoading(false)
   }
 
-  function matchFilter(t, f) {
-    if (f === 'all') return true
-    return t.status === f
-  }
+  function matchFilter(t, f) { return f === 'all' ? true : t.status === f }
+  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = transfers.filter(t => matchFilter(t, key)).length; return acc }, {})
 
-  const counts = FILTERS.reduce((acc, { key }) => {
-    acc[key] = transfers.filter(t => matchFilter(t, key)).length
-    return acc
-  }, {})
-
-  const filtered = transfers.filter(t => {
-    if (!matchFilter(t, filter)) return false
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      return (t.transfer_number || '').toLowerCase().includes(q)
-        || (t.source_fc || '').toLowerCase().includes(q)
-        || (t.destination_fc || '').toLowerCase().includes(q)
-    }
-    return true
-  })
+  const q = search.trim().toLowerCase()
+  const filtered = transfers.filter(t => matchFilter(t, filter))
+    .filter(t => !q || (t.transfer_number || '').toLowerCase().includes(q) || (t.source_fc || '').toLowerCase().includes(q) || (t.destination_fc || '').toLowerCase().includes(q))
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const safePage = Math.min(page, totalPages)
+  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   const isAdmin = userRole === 'admin'
   const canCreate = ['ops','admin','management','fc_kaveri','fc_godawari'].includes(userRole)
 
   return (
     <Layout pageTitle="Stock Transfers" pageKey="fc">
-      <div style={{ padding: '24px 32px', maxWidth: 1280, margin: '0 auto' }}>
-
-        {/* Header */}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 18 }}>
+      <div className="orders-app">
+        <div className="page-head">
           <div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--gray-900)' }}>Stock Transfers</div>
-            <div style={{ fontSize: 13, color: 'var(--gray-500)', marginTop: 2 }}>Move stock between Kaveri & Godawari</div>
+            <h1 className="page-title">Stock Transfers</h1>
+            <div className="o-summary">
+              <span><b>{filtered.length}</b> transfers</span>
+              <span className="o-sep">·</span>
+              <span>Move stock between Kaveri & Godawari</span>
+            </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap: 10 }}>
+          <div className="page-meta">
             {isAdmin && (
-              <label style={{ display:'inline-flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12, color: testMode ? '#b45309' : 'var(--gray-500)', fontWeight: testMode ? 600 : 400, background: testMode ? '#fef3c7' : 'transparent', border: testMode ? '1px solid #fde68a' : '1px solid var(--gray-200)', borderRadius:8, padding:'6px 12px' }}>
-                <input type="checkbox" checked={testMode} onChange={e => { setTestMode(e.target.checked); loadTransfers(e.target.checked) }} style={{ accentColor:'#b45309', width:13, height:13 }} />
+              <label className={`o-test-toggle ${testMode ? 'on' : ''}`}>
+                <input type="checkbox" checked={testMode} onChange={e => { setTestMode(e.target.checked); loadTransfers(e.target.checked) }} style={{accentColor:'#B45309',width:13,height:13}}/>
                 Test Mode
               </label>
             )}
             {canCreate && (
-              <button onClick={() => navigate('/fc/transfers/new')} className="new-order-btn">
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14 }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <button className="btn-primary" onClick={() => navigate('/fc/transfers/new')}>
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
                 New Transfer
               </button>
             )}
           </div>
         </div>
 
-        {/* Search */}
-        <div style={{ marginBottom: 14 }}>
-          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
-            placeholder="Search by transfer # or FC..."
-            style={{ width: '100%', padding: '10px 14px', border: '1.5px solid var(--gray-200)', borderRadius: 8, fontSize: 14, outline: 'none' }} />
+        <div className="kpi-row">
+          <KpiTile variant="hero" tone="deep" label="Total Transfers" value={transfers.length} sub="this FY" chart="line"/>
+          <KpiTile variant="hero" tone="forest" label="Received" value={counts.received} sub="completed" chart="bars" onClick={() => setFilter('received')}/>
+          <KpiTile variant="hero" tone="teal" label="In Transit" value={counts.dispatched} sub="dispatched" chart="bars" onClick={() => setFilter('dispatched')}/>
+          <KpiTile label="Draft" value={counts.draft} sub="not yet dispatched" accent={counts.draft > 0 ? 'amber' : null} onClick={() => setFilter('draft')}/>
+          <KpiTile label="Cancelled" value={counts.cancelled} sub="cancelled" onClick={() => setFilter('cancelled')}/>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display:'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-          {FILTERS.map(f => (
-            <button key={f.key} onClick={() => { setFilter(f.key); setPage(1) }}
-              style={{
-                padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                border: '1px solid', cursor: 'pointer',
-                background: filter === f.key ? 'var(--blue-700)' : 'white',
-                color: filter === f.key ? 'white' : 'var(--gray-600)',
-                borderColor: filter === f.key ? 'var(--blue-700)' : 'var(--gray-200)',
-              }}>
-              {f.label} <span style={{ opacity: 0.7, marginLeft: 4 }}>{counts[f.key] || 0}</span>
+        <div className="o-toolbar">
+          <div className="o-search">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
+            <input placeholder="Search transfer # or FC…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}/>
+            {search && (
+              <button className="o-search-clear" onClick={() => setSearch('')}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="o-filter-row">
+          {FILTERS.map(({ key, label, tone }) => (
+            <button key={key} className={`o-chip ${filter === key ? 'on' : ''} ${tone || ''}`} onClick={() => { setFilter(key); setPage(1) }}>
+              {label}
+              {counts[key] > 0 && <span className="o-chip-n">{counts[key]}</span>}
             </button>
           ))}
         </div>
 
-        {/* Table */}
-        <div style={{ background: 'white', border: '1px solid var(--gray-100)', borderRadius: 10, overflow: 'hidden' }}>
-          {loading ? (
-            <div style={{ padding: 60, textAlign: 'center', color: 'var(--gray-400)' }}>Loading...</div>
-          ) : pageRows.length === 0 ? (
-            <div style={{ padding: 60, textAlign: 'center', color: 'var(--gray-400)' }}>
-              No transfers yet. {canCreate && <span style={{ display:'block', marginTop: 8, fontSize: 13 }}>Click "New Transfer" to create one.</span>}
+        {loading ? (
+          <div className="o-loading">Loading transfers…</div>
+        ) : (
+          <div className="ol-wrap">
+            <div className="ol-row ol-head" style={{ gridTemplateColumns: '180px minmax(0, 1.4fr) 100px 110px 130px' }}>
+              <div>Transfer #</div>
+              <div>Route</div>
+              <div className="num">Items</div>
+              <div>Created</div>
+              <div className="num">Status</div>
             </div>
-          ) : (
-            <table style={{ width:'100%', borderCollapse:'collapse' }}>
-              <thead>
-                <tr style={{ background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-100)' }}>
-                  <th style={{ padding:'10px 14px', fontSize:11, fontWeight:600, color:'var(--gray-500)', textAlign:'left' }}>Transfer #</th>
-                  <th style={{ padding:'10px 14px', fontSize:11, fontWeight:600, color:'var(--gray-500)', textAlign:'left' }}>Route</th>
-                  <th style={{ padding:'10px 14px', fontSize:11, fontWeight:600, color:'var(--gray-500)', textAlign:'right' }}>Items</th>
-                  <th style={{ padding:'10px 14px', fontSize:11, fontWeight:600, color:'var(--gray-500)', textAlign:'left' }}>Status</th>
-                  <th style={{ padding:'10px 14px', fontSize:11, fontWeight:600, color:'var(--gray-500)', textAlign:'left' }}>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map(t => {
-                  const c = STATUS_COLORS[t.status] || STATUS_COLORS.draft
-                  return (
-                    <tr key={t.id} onClick={() => navigate('/fc/transfers/' + t.id)}
-                      style={{ borderBottom:'1px solid var(--gray-50)', cursor:'pointer' }}
-                      onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
-                      onMouseLeave={e => e.currentTarget.style.background='white'}>
-                      <td style={{ padding:'12px 14px', fontSize:13, fontWeight:600, color:'var(--gray-900)', fontFamily:'var(--mono)' }}>{t.transfer_number || '—'}</td>
-                      <td style={{ padding:'12px 14px', fontSize:13, color:'var(--gray-700)' }}>
-                        {t.source_fc} <span style={{ color:'var(--gray-300)', margin:'0 6px' }}>→</span> {t.destination_fc}
-                      </td>
-                      <td style={{ padding:'12px 14px', fontSize:13, color:'var(--gray-700)', textAlign:'right' }}>{(t.stock_transfer_items || []).length}</td>
-                      <td style={{ padding:'12px 14px' }}>
-                        <span style={{ background: c.bg, color: c.fg, padding:'3px 10px', borderRadius:6, fontSize:11, fontWeight:600 }}>{STATUS_LABELS[t.status] || t.status}</span>
-                      </td>
-                      <td style={{ padding:'12px 14px', fontSize:12, color:'var(--gray-500)' }}>{fmt(t.created_at)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap: 10, marginTop: 16 }}>
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} style={{ padding:'6px 12px', border:'1px solid var(--gray-200)', borderRadius:6, background:'white', cursor: page === 1 ? 'default' : 'pointer', opacity: page === 1 ? 0.4 : 1 }}>Prev</button>
-            <span style={{ fontSize: 13, color: 'var(--gray-500)' }}>Page {page} of {totalPages}</span>
-            <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} style={{ padding:'6px 12px', border:'1px solid var(--gray-200)', borderRadius:6, background:'white', cursor: page === totalPages ? 'default' : 'pointer', opacity: page === totalPages ? 0.4 : 1 }}>Next</button>
+            {pageRows.length === 0 ? (
+              <div className="ol-empty">
+                <div className="ol-empty-title">No transfers yet</div>
+                {canCreate && <div style={{ fontSize: 13, color: 'var(--o-muted)' }}>Click "New Transfer" to create one.</div>}
+              </div>
+            ) : (
+              <div className="ol-table">
+                {pageRows.map(t => (
+                  <div key={t.id} className="ol-row ol-data" style={{ gridTemplateColumns: '180px minmax(0, 1.4fr) 100px 110px 130px' }} onClick={() => navigate('/fc/transfers/' + t.id)}>
+                    <div className="ol-cell">
+                      <div className="ol-num">{t.transfer_number || '—'}</div>
+                    </div>
+                    <div className="ol-cell ol-cust">
+                      {t.source_fc} <span style={{ color:'var(--o-muted-2)', margin:'0 6px' }}>→</span> {t.destination_fc}
+                    </div>
+                    <div className="ol-cell ol-items">{(t.stock_transfer_items || []).length}</div>
+                    <div className="ol-cell ol-date">{fmt(t.created_at)}</div>
+                    <div className="ol-cell ol-status-cell">
+                      <span className="ol-status-pill" style={{ '--stage-color': STATUS_COLORS[t.status] || '#94A3B8' }}>
+                        <span className="ol-status-dot"/>
+                        {STATUS_LABELS[t.status] || t.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {filtered.length > 0 && totalPages > 1 && (
+              <div className="ol-foot">
+                <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+                <div className="ol-pages">
+                  <button className="ol-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
+                  <span style={{ padding: '5px 10px', fontSize: 13, color: 'var(--o-muted)' }}>Page {safePage} of {totalPages}</span>
+                  <button className="ol-page-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>Next ›</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
     </Layout>
   )
+}
+
+function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
+  const isHero = variant === 'hero'
+  return (
+    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
+      {isHero && <KpiChart kind={chart}/>}
+      <div className="kt-top">
+        <div className="kt-label">{label}</div>
+        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
+      </div>
+      <div className="kt-value">{value}</div>
+      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
+    </div>
+  )
+}
+function KpiChart({ kind }) {
+  if (kind === 'bars') return (
+    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
+      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
+        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
+      ))}
+    </svg>
+  )
+  if (kind === 'line') return (
+    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
+      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
+    </svg>
+  )
+  return null
 }

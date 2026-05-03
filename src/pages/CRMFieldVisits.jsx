@@ -6,8 +6,9 @@ import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
 import '../styles/orders.css'
+import '../styles/crm-redesign.css'
 
-const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
+const _OC = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
 function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7,whiteSpace:'nowrap'}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
 
@@ -202,124 +203,109 @@ export default function CRMFieldVisits() {
 
   return (
     <Layout pageTitle="CRM — Field Visits" pageKey="crm">
-      <div className="crm-page">
-        <div className="crm-body">
-          <div className="crm-page-header">
-            <div>
-              <div className="crm-page-title">Field Visits</div>
-              <div className="crm-page-sub">{filtered.length} visits</div>
-            </div>
-            <div className="crm-header-actions">
-              <div style={{display:'flex',gap:0,border:'1px solid var(--gray-200)',borderRadius:8,overflow:'hidden'}}>
-                <button className={'crm-btn crm-btn-sm' + (viewScope==='mine'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none'}} onClick={() => setViewScope('mine')}>My View</button>
-                <button className={'crm-btn crm-btn-sm' + (viewScope==='team'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => setViewScope('team')}>Team</button>
-                <button className={'crm-btn crm-btn-sm' + (viewScope==='all'?' crm-btn-primary':'')} style={{borderRadius:0,border:'none',borderLeft:'1px solid var(--gray-200)'}} onClick={() => setViewScope('all')}>All</button>
-              </div>
-              <button className="new-order-btn" onClick={openModal}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Log Visit
-              </button>
+      <div className="crm-app">
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">Field Visits</h1>
+            <div className="opps-summary">
+              <span><b>{filtered.length}</b> visits</span>
             </div>
           </div>
-
-          <div className="crm-controls">
-            <div className="crm-search-wrap">
-              <svg className="crm-search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input className="crm-search-input" placeholder="Search company, purpose..." value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
-            {isManager && (
-              <select className="crm-filter-select" value={filterRep} onChange={e => setFilterRep(e.target.value)}>
-                <option value="">All Reps</option>
-                {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-            )}
+          <div className="page-meta">
+            <button className="btn-primary" onClick={openModal}>
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
+              Log Visit
+            </button>
           </div>
+        </div>
 
-          {loading ? (
-            <div className="crm-loading"><div className="loading-spin"/></div>
-          ) : filtered.length === 0 ? (
-            <div className="crm-empty"><div className="crm-empty-title">No visits found</div></div>
-          ) : (
-            <div className="crm-card">
-              <div className="crm-table-wrap">
-                <table className="crm-table crm-deals-table">
-                  <thead>
-                    <tr>
-                      <th style={{width:'26%'}}>Company</th>
-                      <th style={{width:'12%'}}>Type</th>
-                      <th style={{width:'10%'}}>Date</th>
-                      <th style={{width:'20%'}}>Opportunity</th>
-                      <th style={{width:'18%'}}>Next Action</th>
-                      <th style={{width:'14%'}}>Rep</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(v => {
-                      const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
-                      const typeBg = v.visit_type==='SOLO'?'#f1f5f9':v.visit_type==='JOINT_PRINCIPAL'?'#e8f2fc':'#f5f3ff'
-                      const typeColor = v.visit_type==='SOLO'?'#475569':v.visit_type==='JOINT_PRINCIPAL'?'#1a4dab':'#6d28d9'
-                      return (
-                        <tr key={v.id} onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}>
-                          <td>
-                            <div className="crm-deal-name">{v.company_freetext || '—'}</div>
-                            {v.purpose && <div className="crm-deal-company">{v.purpose.length > 50 ? v.purpose.slice(0,50)+'…' : v.purpose}</div>}
-                          </td>
-                          <td>
-                            <span style={{ fontSize:10, fontWeight:700, borderRadius:4, padding:'3px 8px', background:typeBg, color:typeColor, whiteSpace:'nowrap' }}>{VISIT_TYPE_LABELS[v.visit_type]}</span>
-                          </td>
-                          <td><div className="crm-deal-date">{fmtNum(v.visit_date)}</div></td>
-                          <td>
-                            {oppName ? <span style={{ fontSize:12, color:'#1a4dab', fontWeight:600 }}>{oppName}</span> : <span style={{color:'var(--gray-300)'}}>—</span>}
-                            {v.visit_type==='JOINT_PRINCIPAL' && v.crm_principals?.name && (
-                              <div style={{ fontSize:10, color:'#64748b', marginTop:2 }}>with {v.crm_principals.name}{v.principal_rep_name ? ' · ' + v.principal_rep_name : ''}</div>
-                            )}
-                          </td>
-                          <td>
-                            {v.next_action ? (
-                              <div>
-                                <div style={{ fontSize:12, color:'var(--gray-700)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical' }}>{v.next_action}</div>
-                                {v.next_action_date && <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:2 }}>{fmtNum(v.next_action_date)}</div>}
-                              </div>
-                            ) : <span style={{color:'var(--gray-300)'}}>—</span>}
-                          </td>
-                          <td><OwnerChip name={v.profiles?.name} /></td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {/* Mobile */}
-              <div className="crm-card-list">
-                {filtered.map(v => {
-                  const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
-                  const typeBg = v.visit_type==='SOLO'?'#f1f5f9':v.visit_type==='JOINT_PRINCIPAL'?'#e8f2fc':'#f5f3ff'
-                  const typeColor = v.visit_type==='SOLO'?'#475569':v.visit_type==='JOINT_PRINCIPAL'?'#1a4dab':'#6d28d9'
-                  return (
-                    <div key={v.id} className="crm-list-card" onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}>
-                      <div className="crm-list-card-top">
-                        <div style={{flex:1,minWidth:0}}>
-                          <div className="crm-list-card-name">{v.company_freetext || '—'}</div>
-                          <div className="crm-list-card-sub">{oppName || ''}{v.purpose ? (oppName ? ' · ' : '') + v.purpose.slice(0,50) : ''}</div>
-                        </div>
-                        <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
-                          <span style={{ fontSize:10, fontWeight:700, borderRadius:4, padding:'2px 8px', background:typeBg, color:typeColor }}>{VISIT_TYPE_LABELS[v.visit_type]}</span>
-                          <span style={{ fontSize:11, color:'var(--gray-500)' }}>{fmtNum(v.visit_date)}</span>
-                        </div>
-                      </div>
-                      <div className="crm-list-card-bottom">
-                        <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                          {v.next_action && <span style={{ fontSize:11, color:'#1a4dab', fontWeight:500 }}>{v.next_action.slice(0,40)}</span>}
-                        </div>
-                        {v.profiles?.name && <OwnerChip name={v.profiles.name} />}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+        <div className="opps-bar">
+          <div className="view-toggle">
+            <button className={viewScope==='mine' ? 'on' : ''} onClick={() => setViewScope('mine')}>My View</button>
+            <button className={viewScope==='team' ? 'on' : ''} onClick={() => setViewScope('team')}>Team</button>
+            <button className={viewScope==='all' ? 'on' : ''} onClick={() => setViewScope('all')}>All</button>
+          </div>
+        </div>
+
+        <div className="opps-filters">
+          <div className="opps-search">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
+            <input placeholder="Search company, purpose…" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          {isManager && (
+            <select className="filt-select" value={filterRep} onChange={e => setFilterRep(e.target.value)}>
+              <option value="">All Reps</option>
+              {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          )}
+          {(search || filterRep) && (
+            <button className="opps-clear" onClick={() => { setSearch(''); setFilterRep('') }}>Clear</button>
           )}
         </div>
+
+        {loading ? (
+          <div className="crm-loading">Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div className="dl-wrap"><div className="dl-empty">No visits found</div></div>
+        ) : (
+          <div className="dl-wrap">
+            <div className="dl-row dl-head" style={{ gridTemplateColumns: '1.6fr 130px 120px 1.4fr 1fr 160px' }}>
+              <div>Company</div>
+              <div>Type</div>
+              <div>Date</div>
+              <div>Opportunity</div>
+              <div>Next Action</div>
+              <div>Rep</div>
+            </div>
+            <div className="dl-table">
+              {filtered.map(v => {
+                const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
+                const typeColor = v.visit_type==='SOLO' ? '#475569' : v.visit_type==='JOINT_PRINCIPAL' ? '#1a4dab' : '#0F766E'
+                return (
+                  <div key={v.id} className="dl-row dl-data"
+                    style={{ gridTemplateColumns: '1.6fr 130px 120px 1.4fr 1fr 160px' }}
+                    onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}>
+                    <div className="dl-cell dl-deal">
+                      <div className="dl-title">{v.company_freetext || '—'}</div>
+                      {v.purpose && <div className="dl-deal-meta"><span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{v.purpose.length > 50 ? v.purpose.slice(0,50)+'…' : v.purpose}</span></div>}
+                    </div>
+                    <div className="dl-cell">
+                      <span className="dl-stage-pill" style={{ '--stage-color': typeColor }}>
+                        <span className="dl-stage-dot"/>
+                        {VISIT_TYPE_LABELS[v.visit_type]}
+                      </span>
+                    </div>
+                    <div className="dl-cell">
+                      <div className="dl-date-main">{fmtNum(v.visit_date)}</div>
+                    </div>
+                    <div className="dl-cell">
+                      {oppName ? <span style={{ fontSize: 12.5, color: 'var(--ssc-blue)', fontWeight: 600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>{oppName}</span> : <span style={{color:'var(--c-muted-2)'}}>—</span>}
+                      {v.visit_type==='JOINT_PRINCIPAL' && v.crm_principals?.name && (
+                        <div className="dl-date-sub">with {v.crm_principals.name}{v.principal_rep_name ? ' · ' + v.principal_rep_name : ''}</div>
+                      )}
+                    </div>
+                    <div className="dl-cell">
+                      {v.next_action ? (
+                        <>
+                          <div className="dl-date-main" style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{v.next_action}</div>
+                          {v.next_action_date && <div className="dl-date-sub">{fmtNum(v.next_action_date)}</div>}
+                        </>
+                      ) : <span style={{color:'var(--c-muted-2)'}}>—</span>}
+                    </div>
+                    <div className="dl-cell dl-owner">
+                      {v.profiles?.name ? (
+                        <>
+                          <div className="dl-owner-avatar" style={{background: ownerColor(v.profiles.name)}}>{v.profiles.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>
+                          <span className="dl-owner-name">{v.profiles.name}</span>
+                        </>
+                      ) : <span style={{color:'var(--c-muted-2)'}}>—</span>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Visit Detail Popup ── */}
