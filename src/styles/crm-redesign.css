@@ -274,7 +274,7 @@
 .crm-app .kb-card-customer { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--c-muted); margin-bottom: 10px; line-height: 1.3; }
 .crm-app .kb-card-customer svg { color: var(--c-muted-2); flex: none; }
 .crm-app .kb-card-foot { display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--c-line-2); }
-.crm-app .kb-card-value { font-size: 13px; font-weight: 700; color: var(--ssc-deep); letter-spacing: -0.01em; font-family: 'Geist Mono', monospace; }
+.crm-app .kb-card-value { font-size: 13px; font-weight: 600; color: var(--ssc-deep); letter-spacing: -0.01em; font-family: 'Geist Mono', monospace; }
 .crm-app .kb-card-meta { display: flex; align-items: center; gap: 8px; }
 .crm-app .kb-card-date { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--c-muted); }
 .crm-app .kb-card-date.overdue { color: #B91C1C; font-weight: 600; }

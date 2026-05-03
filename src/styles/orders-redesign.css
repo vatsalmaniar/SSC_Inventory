@@ -194,9 +194,9 @@
 .orders-app .o-list-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--o-line-2); cursor: pointer; }
 .orders-app .o-list-row:last-child { border-bottom: 0; }
 .orders-app .o-list-row:hover { background: var(--o-bg-2); margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-radius: 6px; }
-.orders-app .o-list-num { font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 700; color: var(--ssc-blue); }
+.orders-app .o-list-num { font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; color: var(--ssc-blue); }
 .orders-app .o-list-cust { font-size: 13px; font-weight: 500; color: var(--o-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
-.orders-app .o-list-val { font-size: 13px; font-weight: 700; font-family: 'Geist Mono', monospace; }
+.orders-app .o-list-val { font-size: 13px; font-weight: 600; font-family: 'Geist Mono', monospace; }
 .orders-app .o-list-status { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-top: 3px; display: inline-block; font-family: 'Geist Mono', monospace; text-transform: uppercase; letter-spacing: 0.04em; }
 .orders-app .o-empty { padding: 32px 0; text-align: center; color: var(--o-muted-2); font-size: 13px; }
 
@@ -249,6 +249,14 @@
 .orders-app .o-search-clear { background: transparent; border: 0; cursor: pointer; color: var(--o-muted-2); padding: 0; }
 .orders-app .o-search-clear:hover { color: var(--o-ink); }
 
+/* Filter dropdowns */
+.orders-app .filt-select { background: var(--o-bg-2); border: 1px solid var(--o-line); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 12.5px; color: var(--o-ink); cursor: pointer; min-width: 130px; outline: none; }
+.orders-app .filt-select:hover { border-color: var(--o-muted-2); }
+.orders-app .filt-select:focus { border-color: var(--ssc-deep); background: var(--o-surface); }
+
+.orders-app .opps-clear { background: transparent; border: 0; color: var(--o-bad); font: inherit; font-size: 12px; cursor: pointer; padding: 4px 10px; border-radius: 6px; }
+.orders-app .opps-clear:hover { background: rgba(239,68,68,0.05); }
+
 /* Test mode toggle */
 .orders-app .o-test-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; font-size: 12px; cursor: pointer; border: 1px solid var(--o-line); background: var(--o-surface); color: var(--o-muted); }
 .orders-app .o-test-toggle.on { background: rgba(245,158,11,0.10); border-color: #FCD34D; color: #B45309; font-weight: 600; }
@@ -270,7 +278,7 @@
 .orders-app .ol-data:hover { background: var(--o-bg-2); }
 .orders-app .ol-cell { min-width: 0; }
 .orders-app .ol-num { font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 600; color: var(--ssc-blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.orders-app .ol-sample-tag { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: 6px; background: rgba(124,58,237,0.10); color: #6D28D9; letter-spacing: 0.04em; vertical-align: middle; }
+.orders-app .ol-sample-tag { display: inline-block; font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; margin-left: 6px; background: rgba(124,58,237,0.10); color: #6D28D9; letter-spacing: 0.04em; vertical-align: middle; }
 .orders-app .ol-cust { font-size: 13px; font-weight: 500; color: var(--o-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .orders-app .ol-date { font-size: 12.5px; color: var(--o-ink); white-space: nowrap; }
 .orders-app .ol-date.delivered { color: #047857; font-weight: 600; }
