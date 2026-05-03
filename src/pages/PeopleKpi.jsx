@@ -531,7 +531,6 @@ function SingleEmployee({ emp, assignments, teams, months, monthIdx, setMonthIdx
             <RadialGauge value={m.total} max={m.max} size={188}/>
             <div className="hero-score-side">
               <div className="mini-stat"><div className="mini-stat-label">YTD avg</div><div className="mini-stat-val">{ytd.toFixed(1)}<span className="mini-stat-max">/{m.max}</span></div></div>
-              <div className="mini-stat"><div className="mini-stat-label">Annual CTC</div><div className="mini-stat-val">{fmtInr(emp.ctc)}</div></div>
               <div className="mini-stat"><div className="mini-stat-label">Annual target</div><div className="mini-stat-val">{fmtInrCeil(emp.target)}</div></div>
               <div className="mini-stat"><div className="mini-stat-label">Monthly target</div><div className="mini-stat-val">{fmtInrCeil(m.monthlyTarget)}</div></div>
             </div>
