@@ -192,6 +192,16 @@ export default function CRMOpportunities() {
 }
 
 function KanbanView({ opps, navigate, onMoveStage }) {
+  const wheelHandler = (e) => {
+    // Translate vertical wheel into horizontal scroll for kanban
+    if (e.deltaY === 0 || e.shiftKey) return
+    const el = e.currentTarget
+    const max = el.scrollWidth - el.clientWidth
+    if (max <= 0) return
+    if ((e.deltaY > 0 && el.scrollLeft >= max) || (e.deltaY < 0 && el.scrollLeft <= 0)) return
+    el.scrollLeft += e.deltaY
+    e.preventDefault()
+  }
   const [dragId, setDragId] = useState(null)
   const [overCol, setOverCol] = useState(null)
   const allCols = [...STAGES, ...TERMINAL]
@@ -202,7 +212,7 @@ function KanbanView({ opps, navigate, onMoveStage }) {
   function onDrop(e, stage) { e.preventDefault(); setOverCol(null); if (dragId) onMoveStage(dragId, stage) }
 
   return (
-    <div className="kb-wrap">
+    <div className="kb-wrap" onWheel={wheelHandler}>
       <div className="kb-board">
         {allCols.map(stage => {
           const cards = opps.filter(o => o.stage === stage)

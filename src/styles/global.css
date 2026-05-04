@@ -44,6 +44,15 @@ html, body { min-height: 100%; font-family: var(--font); color: var(--gray-900);
 .amt     { font-family: 'Geist Mono', monospace; font-weight: 600; font-variant-numeric: tabular-nums; }
 .id-code { font-family: 'Geist Mono', monospace; font-weight: 600; letter-spacing: 0.01em; }
 
+/* Apply tabular-nums to ANY element using mono font — makes digit columns align */
+[style*="Geist Mono"],
+[style*="var(--mono)"],
+.mono,
+[class*="-num"],
+[class*="-val"],
+[class*="-amount"],
+[class*="-mono"] { font-variant-numeric: tabular-nums; }
+
 /* ── TOPBAR (shared: accounts + sales) ── */
 .topbar {
   background: var(--blue-800);
