@@ -488,7 +488,7 @@ export default function OrderDetail() {
     setShowDispatchModal(false)
     setDispatchType('full')
     setSaving(true)
-    const isPIOrder = order.credit_terms === 'Against PI' || order.credit_terms === 'Advance'
+    const isPIOrder = (order.credit_terms === 'Against PI' || order.credit_terms === 'Advance') && order.order_type !== 'SAMPLE'
     const rpcCalls = (order.order_items || [])
       .filter(item => item.qty - (item.dispatched_qty || 0) > 0)
       .map(item => sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: item.qty - (item.dispatched_qty || 0) }))
@@ -547,7 +547,7 @@ export default function OrderDetail() {
     }
     setShowPartialModal(false)
     setSaving(true)
-    const isPIOrder = order.credit_terms === 'Against PI' || order.credit_terms === 'Advance'
+    const isPIOrder = (order.credit_terms === 'Against PI' || order.credit_terms === 'Advance') && order.order_type !== 'SAMPLE'
     const partialRpcCalls = selected.map(item => sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: parseFloat(item.dispatchQty) }))
     const partialRpcResults = await Promise.all(partialRpcCalls)
     const partialFailed = partialRpcResults.find(r => r.error)
