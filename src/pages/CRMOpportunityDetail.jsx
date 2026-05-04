@@ -2042,23 +2042,21 @@ export default function CRMOpportunityDetail() {
         const convSubtotal = sampleItems.reduce((s,i) => s + (parseFloat(i.total_price)||0), 0)
         const convGrandTotal = convSubtotal + (parseFloat(sampleFreight)||0)
         return (
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
-            onClick={e => { if (e.target===e.currentTarget) setShowConvertModal(false) }}>
-            <div style={{ background:'#f8fafc', borderRadius:14, width:'100%', maxWidth:820, maxHeight:'92vh', overflowY:'auto', boxShadow:'0 24px 64px rgba(0,0,0,0.25)', display:'flex', flexDirection:'column' }}>
+          <div className="od-drawer-scrim" onClick={e => { if (e.target===e.currentTarget) setShowConvertModal(false) }}>
+            <div className="od-drawer" style={{ width: 'min(820px, 95vw)', background: '#F6F7F9' }}>
 
               {/* Header */}
-              <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, background:'white', borderRadius:'14px 14px 0 0' }}>
+              <div className="od-drawer-head" style={{ background: '#FFFFFF' }}>
                 <div>
-                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <div style={{ width:10, height:10, borderRadius:'50%', background:'#15803d' }} />
-                    <div style={{ fontSize:16, fontWeight:700, color:'#0f172a' }}>Convert to Order</div>
-                  </div>
-                  <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>{sampleCustomer?.customer_name} · {opp.opportunity_name || opp.product_notes}</div>
+                  <div className="od-drawer-eyebrow"><span style={{ color: '#10B981' }}>●</span> {sampleCustomer?.customer_name}</div>
+                  <div className="od-drawer-title">Convert to Order</div>
+                  <div className="od-drawer-sub">{opp.opportunity_name || opp.product_notes}</div>
                 </div>
-                <button onClick={() => setShowConvertModal(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+                <button className="od-drawer-close" onClick={() => setShowConvertModal(false)} aria-label="Close">
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
+                </button>
               </div>
-
-              <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:12, overflowY:'auto' }}>
+              <div className="od-drawer-body" style={{ background: '#F6F7F9', display:'flex', flexDirection:'column', gap:12 }}>
 
                 {/* Customer Info */}
                 <div className="no-card" style={{ margin:0 }}>
@@ -2210,13 +2208,13 @@ export default function CRMOpportunityDetail() {
               </div>
 
               {/* Footer */}
-              <div style={{ padding:'14px 24px', borderTop:'1px solid #e2e8f0', display:'flex', gap:10, justifyContent:'flex-end', flexShrink:0, background:'white', borderRadius:'0 0 14px 14px' }}>
+              <div className="od-drawer-foot" style={{ background: '#FFFFFF' }}>
                 <button onClick={() => setShowConvertModal(false)}
-                  style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>
+                  style={{ padding: '9px 18px', border: '1px solid #E8EBF0', borderRadius: 9, background: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Geist, sans-serif', color: '#0B1B30' }}>
                   Cancel
                 </button>
                 <button onClick={submitConvertOrder} disabled={submittingSample}
-                  style={{ padding:'10px 24px', border:'none', borderRadius:8, background:'#15803d', color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)' }}>
+                  style={{ padding: '9px 22px', border: 'none', borderRadius: 9, background: '#10B981', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Geist, sans-serif' }}>
                   {submittingSample ? 'Placing Order…' : 'Place Order'}
                 </button>
               </div>
@@ -2231,20 +2229,22 @@ export default function CRMOpportunityDetail() {
         const sampleSubtotal = sampleItems.reduce((s,i) => s + (parseFloat(i.total_price)||0), 0)
         const sampleGrandTotal = sampleSubtotal + (parseFloat(sampleFreight)||0)
         return (
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
-            onClick={e => { if (e.target===e.currentTarget) setShowSampleModal(false) }}>
-            <div style={{ background:'#f8fafc', borderRadius:14, width:'100%', maxWidth:820, maxHeight:'92vh', overflowY:'auto', boxShadow:'0 24px 64px rgba(0,0,0,0.25)', display:'flex', flexDirection:'column' }}>
+          <div className="od-drawer-scrim" onClick={e => { if (e.target===e.currentTarget) setShowSampleModal(false) }}>
+            <div className="od-drawer" style={{ width: 'min(820px, 95vw)', background: '#F6F7F9' }}>
 
               {/* Header */}
-              <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, background:'white', borderRadius:'14px 14px 0 0' }}>
+              <div className="od-drawer-head" style={{ background: '#FFFFFF' }}>
                 <div>
-                  <div style={{ fontSize:16, fontWeight:700, color:'#0f172a' }}>Sample Request</div>
-                  <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>{sampleCustomer?.customer_name} · Opp: {opp.opportunity_name || opp.product_notes}</div>
+                  <div className="od-drawer-eyebrow">{sampleCustomer?.customer_name}</div>
+                  <div className="od-drawer-title">Sample Request</div>
+                  <div className="od-drawer-sub">Opp: {opp.opportunity_name || opp.product_notes}</div>
                 </div>
-                <button onClick={() => setShowSampleModal(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+                <button className="od-drawer-close" onClick={() => setShowSampleModal(false)} aria-label="Close">
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
+                </button>
               </div>
 
-              <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:12, overflowY:'auto' }}>
+              <div className="od-drawer-body" style={{ background: '#F6F7F9', display:'flex', flexDirection:'column', gap:12 }}>
 
                 {/* ── Customer Info card ── */}
                 <div className="no-card" style={{ margin:0 }}>
@@ -2393,13 +2393,13 @@ export default function CRMOpportunityDetail() {
               </div>
 
               {/* Footer */}
-              <div style={{ padding:'14px 24px', borderTop:'1px solid #e2e8f0', display:'flex', gap:10, justifyContent:'flex-end', flexShrink:0, background:'white', borderRadius:'0 0 14px 14px' }}>
+              <div className="od-drawer-foot" style={{ background: '#FFFFFF' }}>
                 <button onClick={() => setShowSampleModal(false)}
-                  style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>
+                  style={{ padding: '9px 18px', border: '1px solid #E8EBF0', borderRadius: 9, background: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Geist, sans-serif', color: '#0B1B30' }}>
                   Cancel
                 </button>
                 <button onClick={submitSample} disabled={submittingSample}
-                  style={{ padding:'10px 24px', border:'none', borderRadius:8, background:'#16a34a', color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>
+                  style={{ padding: '9px 22px', border: 'none', borderRadius: 9, background: '#10B981', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Geist, sans-serif' }}>
                   {submittingSample ? 'Submitting…' : 'Submit Sample Request'}
                 </button>
               </div>
