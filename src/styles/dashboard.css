@@ -168,8 +168,44 @@
 .hd-stat-trend.warn { background: rgba(245,158,11,0.12); color: #B45309; }
 .hd-stat-trend.neu  { background: #F6F7F9; color: #5B6878; }
 
+/* ── Module KPI tiles (matches Orders/FC/CRM dashboards) ── */
+.hd-module-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
+@media (max-width: 1100px) { .hd-module-kpis { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px)  { .hd-module-kpis { grid-template-columns: 1fr; } }
+
+.hd-kpi-tile {
+  position: relative;
+  background: white; border: 1px solid #E8EBF0; border-radius: 11px;
+  padding: 14px 16px; min-height: 110px;
+  display: flex; flex-direction: column; gap: 8px;
+  cursor: pointer; overflow: hidden;
+  transition: border-color .15s;
+}
+.hd-kpi-tile:hover { border-color: #94A3B8; }
+.hd-kpi-tile.hd-accent-amber { border-left: 3px solid #B45309; }
+
+.hd-kpi-hero { color: #fff; border: 0; }
+.hd-kpi-hero.hd-tone-deep   { background: linear-gradient(135deg, #0A2540 0%, #163E68 55%, #1E54B7 100%); }
+.hd-kpi-hero.hd-tone-forest { background: linear-gradient(135deg, #064E3B 0%, #065F46 55%, #10B981 100%); }
+.hd-kpi-hero.hd-tone-teal   { background: linear-gradient(135deg, #134E4A 0%, #0F766E 55%, #14B8A6 100%); }
+.hd-kpi-hero .hd-kpi-label { color: rgba(255,255,255,0.75); }
+.hd-kpi-hero .hd-kpi-value { color: #fff; }
+.hd-kpi-hero .hd-kpi-sub   { color: rgba(255,255,255,0.7); }
+.hd-kpi-hero .hd-kpi-arrow { background: rgba(255,255,255,0.12); color: #fff; }
+
+.hd-kpi-chart { position: absolute; right: 0; bottom: 0; width: 70%; height: 50%; color: #fff; pointer-events: none; }
+
+.hd-kpi-top { display: flex; justify-content: space-between; align-items: center; }
+.hd-kpi-label { font-size: 10.5px; letter-spacing: 0.04em; color: #5B6878; text-transform: uppercase; font-weight: 500; }
+.hd-kpi-value { font-family: 'Geist Mono', monospace; font-size: 24px; font-weight: 600; letter-spacing: -0.025em; line-height: 1; color: #0B1B30; position: relative; z-index: 1; font-variant-numeric: tabular-nums; }
+.hd-kpi-tile.hd-accent-amber .hd-kpi-value { color: #B45309; }
+.hd-kpi-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; position: relative; z-index: 1; margin-top: auto; }
+.hd-kpi-sub { font-family: 'Geist Mono', monospace; font-size: 10.5px; color: #94A3B8; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hd-kpi-badge { font-family: 'Geist Mono', monospace; font-size: 9.5px; font-weight: 600; padding: 3px 7px; border-radius: 5px; background: rgba(245,158,11,0.15); color: #B45309; letter-spacing: 0.02em; flex: none; white-space: nowrap; }
+.hd-kpi-arrow { width: 22px; height: 22px; border-radius: 6px; background: #F6F7F9; color: #5B6878; display: grid; place-items: center; flex: none; }
+
 /* ── App grid ── */
-.hd-apps-section { margin-top: 0; }
+.hd-apps-section { margin-top: 8px; }
 .hd-section-label {
   font-family: 'Geist Mono', monospace;
   font-size: 10.5px; font-weight: 500; text-transform: uppercase;
