@@ -38,6 +38,12 @@
 
 html, body { min-height: 100%; font-family: var(--font); color: var(--gray-900); }
 
+/* ── Numeric / identifier utility classes (use everywhere for visual consistency) ── */
+.num     { font-family: 'Geist Mono', monospace; font-weight: 500; font-variant-numeric: tabular-nums; }
+.num-bold,
+.amt     { font-family: 'Geist Mono', monospace; font-weight: 600; font-variant-numeric: tabular-nums; }
+.id-code { font-family: 'Geist Mono', monospace; font-weight: 600; letter-spacing: 0.01em; }
+
 /* ── TOPBAR (shared: accounts + sales) ── */
 .topbar {
   background: var(--blue-800);

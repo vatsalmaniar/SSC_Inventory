@@ -48,3 +48,32 @@ export function esc(str) {
   if (!str && str !== 0) return ''
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
 }
+
+// ── Money formatters ──
+// Compact: ₹12.50 L / ₹1.25 Cr — for KPI tiles, hero numbers
+export function fmtMoneyShort(val) {
+  if (val == null || val === '' || isNaN(val)) return '—'
+  const n = Number(val)
+  if (n === 0) return '₹0'
+  if (Math.abs(n) >= 1e7) return '₹' + (n / 1e7).toFixed(2) + ' Cr'
+  if (Math.abs(n) >= 1e5) return '₹' + (n / 1e5).toFixed(2) + ' L'
+  return '₹' + Math.round(n).toLocaleString('en-IN')
+}
+
+// Standard: ₹1,25,000 — for tables, list cells, totals (no decimals)
+export function fmtMoney(val) {
+  if (val == null || val === '' || isNaN(val)) return '—'
+  return '₹' + Math.round(Number(val)).toLocaleString('en-IN')
+}
+
+// Full: ₹1,25,000.50 — for invoices, receipts (2 decimals)
+export function fmtMoneyFull(val) {
+  if (val == null || val === '' || isNaN(val)) return '—'
+  return '₹' + Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// Plain number with Indian comma format (no ₹)
+export function fmtN(val) {
+  if (val == null || val === '' || isNaN(val)) return '—'
+  return Number(val).toLocaleString('en-IN')
+}
