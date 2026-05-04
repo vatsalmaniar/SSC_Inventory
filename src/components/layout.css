@@ -52,7 +52,7 @@
 }
 .ly-logo-text {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: #0e2d6a;
   letter-spacing: -0.3px;
 }
@@ -68,11 +68,12 @@
   padding-top: 12px;
 }
 .ly-nav-label {
+  font-family: 'Geist Mono', monospace;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: #b0b9d0;
+  letter-spacing: 0.08em;
+  color: #94A3B8;
   padding: 0 8px;
   margin-bottom: 4px;
   margin-top: 8px;
@@ -99,7 +100,7 @@
 .ly-nav-item:hover { background: #f4f6fb; color: #1e2d5a; }
 .ly-nav-item.active {
   background: #eef2fd;
-  color: #1a4dab;
+  color: #0A2540;
   font-weight: 600;
 }
 .ly-nav-item.active::before {
@@ -109,7 +110,7 @@
   top: 6px;
   bottom: 6px;
   width: 3px;
-  background: #1a4dab;
+  background: #0A2540;
   border-radius: 0 3px 3px 0;
 }
 .ly-nav-item.soon { opacity: 0.55; cursor: default; }
@@ -130,7 +131,7 @@
   background: #fef3c7;
   color: #92400e;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   border-radius: 5px;
   padding: 2px 6px;
   text-transform: uppercase;
@@ -148,7 +149,7 @@
   background: #0e2d6a;
   color: white;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -184,7 +185,7 @@
 }
 .ly-collapse-btn:hover {
   background: #f0f2f8;
-  color: #1a4dab;
+  color: #0A2540;
 }
 
 /* ── Collapsed sidebar ── */
@@ -309,7 +310,7 @@
 }
 .ly-topbar-hamburger:hover {
   background: #eaeffa;
-  color: #1a4dab;
+  color: #0A2540;
 }
 .ly-topbar-app {
   font-size: 13px;
@@ -347,7 +348,7 @@
   background: #0e2d6a;
   color: white;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -375,7 +376,7 @@
   min-width: 16px; height: 16px;
   background: #ef4444;
   color: white;
-  font-size: 10px; font-weight: 700;
+  font-size: 10px; font-weight: 600;
   border-radius: 10px;
   padding: 0 4px;
   display: flex; align-items: center; justify-content: center;
@@ -396,11 +397,11 @@
 .ly-notif-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 16px;
-  font-size: 13px; font-weight: 700; color: #1e2d5a;
+  font-size: 13px; font-weight: 600; color: #1e2d5a;
   border-bottom: 1px solid #f0f2f8;
 }
 .ly-notif-markread {
-  font-size: 11px; font-weight: 600; color: #1a4dab;
+  font-size: 11px; font-weight: 600; color: #0A2540;
   background: none; border: none; cursor: pointer;
 }
 .ly-notif-markread:hover { text-decoration: underline; }

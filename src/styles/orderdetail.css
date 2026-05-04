@@ -368,21 +368,34 @@
 .od-btn-danger:hover { background: #fff1f2; }
 
 /* ── Cancel / popup modals ── */
-.od-cancel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.15s ease; }
-.od-cancel-modal   { background: white; border-radius: var(--radius); width: 100%; max-width: 400px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: slideUp 0.2s ease; }
-.od-cancel-title   { font-size: 16px; font-weight: 600; color: var(--gray-900); margin-bottom: 6px; }
-.od-cancel-sub     { font-size: 13px; color: var(--gray-500); margin-bottom: 4px; }
-.od-cancel-textarea { width: 100%; border: 1px solid var(--gray-200); border-radius: 8px; padding: 10px 12px; font-family: var(--font); font-size: 13px; color: var(--gray-900); outline: none; resize: vertical; min-height: 80px; box-sizing: border-box; margin-top: 12px; }
-.od-cancel-textarea:focus { border-color: var(--red-text); }
+/* Right-side drawer (slides in from right) — used by dispatch / partial dispatch */
+.od-drawer-scrim { position: fixed; inset: 0; background: rgba(11,27,48,0.45); z-index: 200; display: flex; justify-content: flex-end; backdrop-filter: blur(2px); animation: fadeIn 0.15s ease; font-family: 'Geist', sans-serif; }
+.od-drawer { width: min(560px, 95vw); height: 100vh; background: #FFF; display: flex; flex-direction: column; box-shadow: 0 12px 32px -8px rgba(11,27,48,0.18); animation: od-drawer-in 0.22s ease; overflow: hidden; color: #0B1B30; }
+@keyframes od-drawer-in { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.od-drawer-head { display: flex; justify-content: space-between; padding: 22px 28px 16px; border-bottom: 1px solid #E8EBF0; flex-shrink: 0; }
+.od-drawer-eyebrow { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6878; }
+.od-drawer-title { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; color: #0B1B30; }
+.od-drawer-sub { font-size: 13px; color: #5B6878; margin-top: 4px; }
+.od-drawer-close { background: transparent; border: 1px solid #E8EBF0; border-radius: 9px; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+.od-drawer-close:hover { background: #F6F7F9; }
+.od-drawer-body { flex: 1; overflow-y: auto; padding: 20px 28px; }
+.od-drawer-foot { padding: 14px 28px; border-top: 1px solid #E8EBF0; background: #FBFBFD; display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0; }
+
+.od-cancel-overlay { position: fixed; inset: 0; background: rgba(11,27,48,0.45); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.15s ease; backdrop-filter: blur(2px); font-family: 'Geist', sans-serif; }
+.od-cancel-modal   { background: white; border-radius: 14px; width: 100%; max-width: 400px; padding: 22px 24px; box-shadow: 0 12px 32px -8px rgba(11,27,48,0.18), 0 4px 12px rgba(11,27,48,0.06); animation: slideUp 0.2s ease; color: #0B1B30; }
+.od-cancel-title   { font-size: 18px; font-weight: 600; color: #0B1B30; margin-bottom: 4px; letter-spacing: -0.01em; }
+.od-cancel-sub     { font-size: 13px; color: #5B6878; margin-bottom: 4px; }
+.od-cancel-textarea { width: 100%; border: 1px solid #E8EBF0; border-radius: 8px; padding: 10px 12px; font-family: 'Geist', sans-serif; font-size: 13px; color: #0B1B30; outline: none; resize: vertical; min-height: 80px; box-sizing: border-box; margin-top: 12px; }
+.od-cancel-textarea:focus { border-color: #0A2540; }
 .od-cancel-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
 
 /* Dispatch choice buttons */
 .od-dispatch-choice-btn {
   flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center;
-  padding: 20px 16px; border: 2px solid var(--gray-200); border-radius: var(--radius);
-  background: white; cursor: pointer; transition: all 0.15s; font-family: var(--font);
+  padding: 20px 16px; border: 1px solid #E8EBF0; border-radius: 12px;
+  background: white; cursor: pointer; transition: all 0.15s; font-family: 'Geist', sans-serif;
 }
-.od-dispatch-choice-btn:hover { border-color: #0e2d6a; background: var(--blue-50); }
+.od-dispatch-choice-btn:hover { border-color: #0A2540; background: #FBFBFD; box-shadow: 0 1px 3px rgba(11,27,48,0.06); }
 
 /* Partial pipeline state */
 .od-pipeline-partial .od-pipe-stage.active { background: #92400e; color: white; }

@@ -31,11 +31,11 @@ export default function ItemMaster() {
     setUserRole(profile?.role || 'sales')
 
     const [brandsRes, catsRes] = await Promise.all([
-      sb.from('items').select('brand').not('brand', 'is', null).order('brand'),
-      sb.from('items').select('category').not('category', 'is', null).order('category'),
+      sb.rpc('get_all_brands'),
+      sb.rpc('get_all_categories'),
     ])
-    setBrands([...new Set((brandsRes.data || []).map(r => r.brand).filter(Boolean))].sort())
-    setCategories([...new Set((catsRes.data || []).map(r => r.category).filter(Boolean))].sort())
+    setBrands((brandsRes.data || []).map(r => r.brand).filter(Boolean))
+    setCategories((catsRes.data || []).map(r => r.category).filter(Boolean))
 
     await loadItems({ p: 1 })
     setLoading(false)

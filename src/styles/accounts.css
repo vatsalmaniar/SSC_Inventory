@@ -1,8 +1,12 @@
-.acc-page { min-height: 100vh; background: #fafafa; }
-.acc-body  { max-width: 720px; margin: 0 auto; padding: 28px 20px 60px; }
+.acc-page { min-height: 100vh; background: #F6F7F9; font-family: 'Geist', -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; color: #0B1B30; line-height: 1.45; }
+.acc-page, .acc-page * { font-family: 'Geist', -apple-system, system-ui, sans-serif; }
+.acc-page .mono { font-family: 'Geist Mono', monospace; }
+.acc-page [style*="font-weight: 700"], .acc-page [style*="font-weight:700"] { font-weight: 600 !important; }
+.acc-page [style*="font-weight: 800"], .acc-page [style*="font-weight:800"] { font-weight: 700 !important; }
+.acc-body  { max-width: 760px; margin: 0 auto; padding: 24px 28px 48px; }
 
-.acc-page-title { font-size: 20px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; letter-spacing: -0.3px; }
-.acc-page-sub   { font-size: 13px; color: var(--gray-500); margin-bottom: 24px; }
+.acc-page-title { font-size: 22px; font-weight: 600; color: #0B1B30; margin-bottom: 4px; letter-spacing: -0.02em; }
+.acc-page-sub   { font-size: 13px; color: #5B6878; margin-bottom: 16px; }
 
 /* ── Warehouse status ── */
 .acc-status-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
@@ -15,7 +19,7 @@
 /* ── How strip ── */
 .acc-how-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
 .acc-how-item  { background: white; border: 1px solid var(--gray-200); border-radius: var(--radius-sm); padding: 14px 12px; text-align: center; }
-.acc-how-num   { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-50); color: var(--blue-800); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; }
+.acc-how-num   { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-50); color: var(--blue-800); font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; }
 .acc-how-label { font-size: 12px; color: var(--gray-600); line-height: 1.4; }
 .acc-how-label strong { display: block; color: var(--gray-900); font-weight: 600; font-size: 13px; margin-bottom: 2px; }
 

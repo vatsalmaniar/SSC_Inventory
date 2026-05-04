@@ -167,10 +167,10 @@
 .pf-app .pf-empty { padding: 60px 20px; text-align: center; color: var(--pf-muted-2); }
 
 /* PO Modal */
-.pf-modal-scrim { position: fixed; inset: 0; background: rgba(11,27,48,0.45); display: grid; place-items: center; z-index: 100; backdrop-filter: blur(2px); animation: pf-fade .15s; padding: 24px; font-family: 'Geist', sans-serif; }
+.pf-modal-scrim { position: fixed; inset: 0; background: rgba(11,27,48,0.45); display: flex; justify-content: flex-end; z-index: 100; backdrop-filter: blur(2px); animation: pf-fade .15s; font-family: 'Geist', sans-serif; }
 @keyframes pf-fade { from { opacity: 0; } to { opacity: 1; } }
-.pf-modal { width: min(880px, 100%); max-height: 90vh; background: #FFF; border-radius: 16px; box-shadow: 0 12px 32px -8px rgba(11,27,48,0.18); display: flex; flex-direction: column; overflow: hidden; animation: pf-slide-up .22s ease; color: #0B1B30; }
-@keyframes pf-slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.pf-modal { width: min(880px, 95vw); height: 100vh; background: #FFF; border-radius: 0; box-shadow: 0 12px 32px -8px rgba(11,27,48,0.18); display: flex; flex-direction: column; overflow: hidden; animation: pf-slide-l .22s ease; color: #0B1B30; }
+@keyframes pf-slide-l { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 .pf-modal .modal-head { display: flex; justify-content: space-between; padding: 22px 26px 16px; }
 .pf-modal .modal-eyebrow { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6878; font-family: 'Geist Mono', monospace; }
 .pf-modal .modal-title { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }

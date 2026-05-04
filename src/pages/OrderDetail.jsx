@@ -1661,115 +1661,132 @@ if (match) {
 
       {/* ── Dispatch Modal: FC Center + Full/Partial ── */}
       {showDispatchModal && (
-        <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowDispatchModal(false) }}>
-          <div className="od-cancel-modal" style={{ maxWidth: 460 }}>
-            <div className="od-cancel-title">Create Delivery</div>
-            <div className="od-cancel-sub">Select fulfilment center and dispatch type</div>
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', marginBottom: 8 }}>Fulfilment Center</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {['Kaveri', 'Godawari'].map(c => (
-                  <button key={c} onClick={() => setFcCenter(c)}
-                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid ' + (fcCenter === c ? '#0e2d6a' : 'var(--gray-200)'), background: fcCenter === c ? '#0e2d6a' : 'white', color: fcCenter === c ? 'white' : 'var(--gray-700)', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                    {c}
+        <div className="od-drawer-scrim" onClick={e => { if (e.target === e.currentTarget) setShowDispatchModal(false) }}>
+          <div className="od-drawer">
+            <div className="od-drawer-head">
+              <div>
+                <div className="od-drawer-eyebrow">Order · {order.order_number}</div>
+                <div className="od-drawer-title">Create Delivery</div>
+                <div className="od-drawer-sub">Select fulfilment center and dispatch type</div>
+              </div>
+              <button className="od-drawer-close" onClick={() => setShowDispatchModal(false)} aria-label="Close">
+                <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
+              </button>
+            </div>
+            <div className="od-drawer-body">
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontFamily: 'Geist Mono, monospace', fontSize: 10.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5B6878', marginBottom: 8 }}>Fulfilment Center</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {['Kaveri', 'Godawari'].map(c => (
+                    <button key={c} onClick={() => setFcCenter(c)}
+                      style={{ flex: 1, padding: '11px 0', borderRadius: 9, border: '1px solid ' + (fcCenter === c ? '#0A2540' : '#E8EBF0'), background: fcCenter === c ? '#0A2540' : 'white', color: fcCenter === c ? 'white' : '#0B1B30', fontFamily: 'Geist, sans-serif', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all .15s' }}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'Geist Mono, monospace', fontSize: 10.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5B6878', marginBottom: 8 }}>Dispatch Type</div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button className="od-dispatch-choice-btn" onClick={fullyDispatch} disabled={saving}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#10B981',marginBottom:8}}>
+                      <path d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#0B1B30' }}>Full Delivery</div>
+                    <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4 }}>Send entire order to FC for delivery</div>
                   </button>
-                ))}
+                  <button className="od-dispatch-choice-btn" onClick={openPartialDispatch} disabled={saving}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#F59E0B',marginBottom:8}}>
+                      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                    </svg>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#0B1B30' }}>Partial Delivery</div>
+                    <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4 }}>Select items and qty to send now</div>
+                  </button>
+                </div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-              <button className="od-dispatch-choice-btn" onClick={fullyDispatch} disabled={saving}>
-                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#166534',marginBottom:8}}>
-                  <path d="M5 13l4 4L19 7"/>
-                </svg>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--gray-900)' }}>Full Delivery</div>
-                <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 4 }}>Send entire order to FC for delivery</div>
-              </button>
-              <button className="od-dispatch-choice-btn" onClick={openPartialDispatch} disabled={saving}>
-                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#92400e',marginBottom:8}}>
-                  <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-                </svg>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--gray-900)' }}>Partial Delivery</div>
-                <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 4 }}>Select items and quantities to send now</div>
-              </button>
-            </div>
-            <div style={{ marginTop: 16, textAlign: 'right' }}>
+            <div className="od-drawer-foot">
               <button className="od-btn" onClick={() => setShowDispatchModal(false)}>Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Partial Dispatch Modal ── */}
+      {/* ── Partial Dispatch Drawer ── */}
       {showPartialModal && (
-        <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowPartialModal(false) }}>
-          <div className="od-cancel-modal" style={{ maxWidth: 620, width: '100%' }}>
-            <div className="od-cancel-title">{isNextBatch ? 'Next Batch Dispatch' : 'Partial Dispatch'}</div>
-            <div className="od-cancel-sub">Select items and enter the quantity to dispatch now. Remaining qty will stay pending.</div>
-
-            {/* FC Centre selector — always shown for next batch, required */}
-            {isNextBatch && (
-              <div style={{marginTop:16,padding:'14px 16px',background:'#f0fdf4',border:'1px solid #86efac',borderRadius:10}}>
-                <div style={{fontSize:12,fontWeight:700,color:'#166534',textTransform:'uppercase',letterSpacing:'0.6px',marginBottom:8}}>Fulfilment Centre for this Batch</div>
-                <div style={{display:'flex',gap:10}}>
-                  {['Kaveri','Godawari'].map(c => (
-                    <button key={c} onClick={() => setFcCenter(c)}
-                      style={{flex:1,padding:'10px 0',borderRadius:8,border:'2px solid',fontFamily:'var(--font)',fontSize:13,fontWeight:700,cursor:'pointer',
-                        borderColor: fcCenter === c ? '#16a34a' : 'var(--gray-200)',
-                        background:  fcCenter === c ? '#dcfce7' : 'white',
-                        color:       fcCenter === c ? '#166534' : 'var(--gray-600)'}}>
-                      {c}
-                    </button>
-                  ))}
-                </div>
-                {order.fulfilment_center && fcCenter !== order.fulfilment_center && (
-                  <div style={{fontSize:11,color:'#92400e',marginTop:8,fontWeight:600}}>
-                    ⚠ Changing from {order.fulfilment_center} to {fcCenter} for this batch
-                  </div>
-                )}
+        <div className="od-drawer-scrim" onClick={e => { if (e.target === e.currentTarget) setShowPartialModal(false) }}>
+          <div className="od-drawer" style={{ width: 'min(720px, 95vw)' }}>
+            <div className="od-drawer-head">
+              <div>
+                <div className="od-drawer-eyebrow">Order · {order.order_number}</div>
+                <div className="od-drawer-title">{isNextBatch ? 'Next Batch Dispatch' : 'Partial Dispatch'}</div>
+                <div className="od-drawer-sub">Select items and qty to dispatch now. Remaining qty stays pending.</div>
               </div>
-            )}
-
-            <div style={{ overflowX: 'auto', marginTop: 16 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--gray-200)' }}>
-                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Select</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Item Code</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Total Qty</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Dispatched</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Dispatch Now</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {partialItems.map((item, i) => {
-                    const remaining = item.qty - (item.dispatched_qty || 0)
-                    return (
-                      <tr key={item.id} style={{ borderBottom: '1px solid var(--gray-100)', background: item.checked ? 'var(--blue-50)' : 'white' }}>
-                        <td style={{ padding: '10px' }}>
-                          <input type="checkbox" checked={item.checked}
-                            onChange={e => setPartialItems(prev => prev.map((p,j) => j===i ? {...p, checked: e.target.checked} : p))}
-                            style={{ width: 16, height: 16, cursor: 'pointer' }} disabled={remaining <= 0} />
-                        </td>
-                        <td style={{ padding: '10px', fontFamily: 'var(--mono)', fontWeight: 600, color: 'var(--blue-800)' }}>{item.item_code}</td>
-                        <td style={{ padding: '10px', textAlign: 'center' }}>{item.qty}</td>
-                        <td style={{ padding: '10px', textAlign: 'center', color: item.dispatched_qty > 0 ? '#16a34a' : 'var(--gray-400)' }}>{item.dispatched_qty || 0}</td>
-                        <td style={{ padding: '10px', textAlign: 'center' }}>
-                          {remaining <= 0 ? (
-                            <span style={{ fontSize: 11, color: '#166534', fontWeight: 600 }}>Done</span>
-                          ) : (
-                            <input type="number" min="0" max={remaining} value={item.dispatchQty}
-                              onChange={e => setPartialItems(prev => prev.map((p,j) => j===i ? {...p, dispatchQty: e.target.value} : p))}
-                              disabled={!item.checked}
-                              style={{ width: 70, border: '1px solid var(--gray-200)', borderRadius: 6, padding: '5px 8px', textAlign: 'center', fontFamily: 'var(--font)', fontSize: 13, outline: 'none', background: item.checked ? 'white' : 'var(--gray-50)' }} />
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              <button className="od-drawer-close" onClick={() => setShowPartialModal(false)} aria-label="Close">
+                <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
+              </button>
             </div>
-            <div className="od-cancel-actions" style={{ marginTop: 20 }}>
+            <div className="od-drawer-body">
+              {isNextBatch && (
+                <div style={{ marginBottom: 16, padding: '14px 16px', background: '#FBFBFD', border: '1px solid #E8EBF0', borderRadius: 10 }}>
+                  <div style={{ fontFamily: 'Geist Mono, monospace', fontSize: 10.5, fontWeight: 500, color: '#5B6878', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Fulfilment Centre for this Batch</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {['Kaveri','Godawari'].map(c => (
+                      <button key={c} onClick={() => setFcCenter(c)}
+                        style={{ flex: 1, padding: '10px 0', borderRadius: 9, border: '1px solid ' + (fcCenter === c ? '#0A2540' : '#E8EBF0'), background: fcCenter === c ? '#0A2540' : 'white', color: fcCenter === c ? 'white' : '#0B1B30', fontFamily: 'Geist, sans-serif', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                  {order.fulfilment_center && fcCenter !== order.fulfilment_center && (
+                    <div style={{ fontSize: 11, color: '#B45309', marginTop: 8, fontWeight: 500 }}>
+                      ⚠ Changing from {order.fulfilment_center} to {fcCenter} for this batch
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ overflowX: 'auto', border: '1px solid #E8EBF0', borderRadius: 10 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#FBFBFD', borderBottom: '1px solid #E8EBF0' }}>
+                      <th style={{ padding: '10px', textAlign: 'left', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sel</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Item Code</th>
+                      <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total</th>
+                      <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Done</th>
+                      <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dispatch Now</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {partialItems.map((item, i) => {
+                      const remaining = item.qty - (item.dispatched_qty || 0)
+                      return (
+                        <tr key={item.id} style={{ borderBottom: '1px solid #EEF1F5', background: item.checked ? '#FBFBFD' : 'white' }}>
+                          <td style={{ padding: '10px' }}>
+                            <input type="checkbox" checked={item.checked}
+                              onChange={e => setPartialItems(prev => prev.map((p,j) => j===i ? {...p, checked: e.target.checked} : p))}
+                              style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#0A2540' }} disabled={remaining <= 0} />
+                          </td>
+                          <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12.5, fontWeight: 600, color: '#1E54B7' }}>{item.item_code}</td>
+                          <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace' }}>{item.qty}</td>
+                          <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', color: item.dispatched_qty > 0 ? '#10B981' : '#94A3B8' }}>{item.dispatched_qty || 0}</td>
+                          <td style={{ padding: '10px', textAlign: 'center' }}>
+                            {remaining <= 0 ? (
+                              <span style={{ fontSize: 10, color: '#047857', fontWeight: 500, fontFamily: 'Geist Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Done</span>
+                            ) : (
+                              <input type="number" min="0" max={remaining} value={item.dispatchQty}
+                                onChange={e => setPartialItems(prev => prev.map((p,j) => j===i ? {...p, dispatchQty: e.target.value} : p))}
+                                disabled={!item.checked}
+                                style={{ width: 70, border: '1px solid #E8EBF0', borderRadius: 6, padding: '5px 8px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 13, outline: 'none', background: item.checked ? 'white' : '#F6F7F9' }} />
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="od-drawer-foot">
               <button className="od-btn" onClick={() => setShowPartialModal(false)}>Cancel</button>
               <button className="od-btn od-btn-approve" onClick={confirmPartialItems} disabled={saving}>
                 {saving ? 'Saving...' : 'Confirm Delivery →'}

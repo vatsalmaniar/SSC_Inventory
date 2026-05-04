@@ -1722,42 +1722,52 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
     {/* ── Delivery Confirmation Modal — per-item dates ── */}
     {showDeliveryModal && (
-      <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowDeliveryModal(false) }}>
-        <div className="od-cancel-modal" style={{ maxWidth:650 }}>
-          <div className="od-cancel-title">Update Delivery Dates</div>
-          <div className="od-cancel-sub">Update expected delivery dates per item. All changes will be logged.</div>
-          <div style={{ marginTop:16, maxHeight:400, overflowY:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-              <thead>
-                <tr style={{ background:'var(--gray-50)' }}>
-                  <th style={{ padding:'8px', textAlign:'left', fontSize:11, color:'var(--gray-500)', fontWeight:600 }}>Item Code</th>
-                  <th style={{ padding:'8px', textAlign:'center', fontSize:11, color:'var(--gray-500)', fontWeight:600 }}>Qty</th>
-                  <th style={{ padding:'8px', textAlign:'center', fontSize:11, color:'var(--gray-500)', fontWeight:600 }}>Current Date</th>
-                  <th style={{ padding:'8px', textAlign:'center', fontSize:11, color:'var(--gray-500)', fontWeight:600 }}>New Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {deliveryItemDates.map((item, idx) => (
-                  <tr key={item.id} style={{ borderBottom:'1px solid var(--gray-100)' }}>
-                    <td style={{ padding:'8px', fontFamily:'var(--mono)', fontSize:11 }}>{item.item_code}</td>
-                    <td style={{ padding:'8px', textAlign:'center' }}>{item.qty}</td>
-                    <td style={{ padding:'8px', textAlign:'center', color:'var(--gray-500)', fontSize:11 }}>{item.original_date ? fmtShort(item.original_date) : '—'}</td>
-                    <td style={{ padding:'8px', textAlign:'center' }}>
-                      <input type="date" value={item.new_date || ''} onChange={e => {
-                        setDeliveryItemDates(prev => { const n = [...prev]; n[idx] = { ...n[idx], new_date: e.target.value }; return n })
-                      }} style={{ padding:'4px 6px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:12, fontFamily:'var(--font)' }} />
-                    </td>
+      <div className="od-drawer-scrim" onClick={e => { if (e.target === e.currentTarget) setShowDeliveryModal(false) }}>
+        <div className="od-drawer" style={{ width: 'min(720px, 95vw)' }}>
+          <div className="od-drawer-head">
+            <div>
+              <div className="od-drawer-eyebrow">PO · {po?.po_number || ''}</div>
+              <div className="od-drawer-title">Update Delivery Dates</div>
+              <div className="od-drawer-sub">Update expected delivery dates per item. All changes will be logged.</div>
+            </div>
+            <button className="od-drawer-close" onClick={() => setShowDeliveryModal(false)} aria-label="Close">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
+            </button>
+          </div>
+          <div className="od-drawer-body">
+            <div style={{ border: '1px solid #E8EBF0', borderRadius: 10, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ background: '#FBFBFD', borderBottom: '1px solid #E8EBF0' }}>
+                    <th style={{ padding: '10px', textAlign: 'left', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Item Code</th>
+                    <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Qty</th>
+                    <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Current</th>
+                    <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>New Date</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {deliveryItemDates.map((item, idx) => (
+                    <tr key={item.id} style={{ borderBottom: '1px solid #EEF1F5' }}>
+                      <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12, fontWeight: 600, color: '#1E54B7' }}>{item.item_code}</td>
+                      <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace' }}>{item.qty}</td>
+                      <td style={{ padding: '10px', textAlign: 'center', color: '#5B6878', fontSize: 11 }}>{item.original_date ? fmtShort(item.original_date) : '—'}</td>
+                      <td style={{ padding: '10px', textAlign: 'center' }}>
+                        <input type="date" value={item.new_date || ''} onChange={e => {
+                          setDeliveryItemDates(prev => { const n = [...prev]; n[idx] = { ...n[idx], new_date: e.target.value }; return n })
+                        }} style={{ padding: '5px 8px', border: '1px solid #E8EBF0', borderRadius: 6, fontSize: 12, fontFamily: 'Geist, sans-serif' }} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <label style={{ fontFamily: 'Geist Mono, monospace', fontSize: 10.5, fontWeight: 500, color: '#5B6878', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Note / Reason</label>
+              <textarea value={deliveryReason} onChange={e => setDeliveryReason(e.target.value)} placeholder="e.g. Vendor confirmed revised delivery schedule via email"
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 13, fontFamily: 'Geist, sans-serif', color: '#0B1B30', minHeight: 80, resize: 'vertical', outline: 'none' }} />
+            </div>
           </div>
-          <div style={{ marginTop:12 }}>
-            <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', display:'block', marginBottom:4 }}>Note / Reason</label>
-            <textarea value={deliveryReason} onChange={e => setDeliveryReason(e.target.value)} placeholder="e.g. Vendor confirmed revised delivery schedule via email"
-              style={{ width:'100%', padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', minHeight:60, resize:'vertical' }} />
-          </div>
-          <div className="od-cancel-actions" style={{ marginTop:20 }}>
+          <div className="od-drawer-foot">
             <button className="od-btn" onClick={() => setShowDeliveryModal(false)}>Cancel</button>
             <button className="od-btn od-btn-approve" onClick={saveDeliveryDates} disabled={saving}>
               {saving ? 'Saving…' : 'Save Delivery Dates'}
