@@ -5,6 +5,7 @@ import { toast } from '../lib/toast'
 import { fmtTs } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
+import '../styles/orderdetail.css'
 
 const STAGES = [
   { key: 'prospecting',   label: 'Prospecting'        },

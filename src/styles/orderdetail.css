@@ -1,4 +1,15 @@
-.od-page { min-height: 100vh; background: #F6F7F9; font-family: 'Geist', -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.od-page, .c360-page, .crm-page { min-height: 100vh; background: #F6F7F9; font-family: 'Geist', -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; color: #0B1B30; line-height: 1.45; }
+.od-page, .od-page *, .c360-page, .c360-page *, .crm-page, .crm-page * { font-family: 'Geist', -apple-system, system-ui, sans-serif; }
+.od-page .mono, .c360-page .mono, .crm-page .mono,
+.od-page [style*="var(--mono)"], .c360-page [style*="var(--mono)"], .crm-page [style*="var(--mono)"],
+.od-page [class*="mono"], .c360-page [class*="mono"], .crm-page [class*="mono"] { font-family: 'Geist Mono', monospace; }
+/* Tone down inline 700/800 weights to 600/700 (new design uses lighter weights) */
+.od-page [style*="font-weight: 700"], .od-page [style*="font-weight:700"],
+.c360-page [style*="font-weight: 700"], .c360-page [style*="font-weight:700"],
+.crm-page [style*="font-weight: 700"], .crm-page [style*="font-weight:700"] { font-weight: 600 !important; }
+.od-page [style*="font-weight: 800"], .od-page [style*="font-weight:800"],
+.c360-page [style*="font-weight: 800"], .c360-page [style*="font-weight:800"],
+.crm-page [style*="font-weight: 800"], .crm-page [style*="font-weight:800"] { font-weight: 700 !important; }
 .od-body  { max-width: 1280px; margin: 0 auto; padding: 24px 28px 48px; }
 
 /* ── Header ── */

@@ -7,6 +7,7 @@ import { toast } from '../lib/toast'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
+import '../styles/orderdetail.css'
 
 const INDUSTRIES = ['Textile','Pharma','Elevator','EV','Solar','Plastic','Packaging','Metal','Water','Refrigeration','Machine Tool','Crane','Infrastructure','FMCG','Energy','Automobile','Power Electronics','Datacenters','Road Construction','Cement','Tyre','Petroleum','Chemical']
 const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
