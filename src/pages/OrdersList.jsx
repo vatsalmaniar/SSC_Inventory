@@ -237,13 +237,16 @@ export default function OrdersList() {
   }
 
   async function downloadDetailed() {
-    const ExcelJS = (await import('exceljs')).default
+    if (!filtered.length) { alert('No orders to export. Adjust filters and try again.'); return }
+    let ExcelJS
+    try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
     const uniqueNames = [...new Set(filtered.map(o => o.customer_name).filter(Boolean))]
     const custIdMap = {}
     if (uniqueNames.length) {
       const { data } = await sb.from('customers').select('customer_id,customer_name').in('customer_name', uniqueNames)
       ;(data || []).forEach(c => { custIdMap[c.customer_name] = c.customer_id || '' })
     }
+    try {
     const wb = new ExcelJS.Workbook()
     wb.creator = 'SSC ERP'; wb.created = new Date()
     const ws = wb.addWorksheet('Orders Detailed', { views: [{ state: 'frozen', ySplit: 1 }] })
@@ -352,6 +355,7 @@ export default function OrdersList() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = fileName + '_Detailed.xlsx'
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
   }
 
   return (
