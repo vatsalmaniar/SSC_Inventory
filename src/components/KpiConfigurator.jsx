@@ -183,7 +183,8 @@ function HeroProductsTab({ onSaved }) {
   const fy = currentFyLabel()
   const [rows, setRows] = useState([])
   const [brands, setBrands] = useState([])
-  const [categories, setCategories] = useState([])
+  const [allCategories, setAllCategories] = useState([])           // every category in the catalog
+  const [brandCats, setBrandCats] = useState({})                   // { brand: Set<category> }
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
@@ -194,20 +195,59 @@ function HeroProductsTab({ onSaved }) {
   const [actorName, setActorName] = useState('')
 
   useEffect(() => {
+    async function loadAllItems() {
+      // Pull all items in pages of 1000 (Supabase default limit) so brands +
+      // brand→category map are complete even on large catalogues.
+      const out = []
+      let from = 0
+      while (true) {
+        const { data, error } = await sb.from('items')
+          .select('brand,category')
+          .eq('is_active', true)
+          .range(from, from + 999)
+        if (error || !data || data.length === 0) break
+        out.push(...data)
+        if (data.length < 1000) break
+        from += 1000
+      }
+      return out
+    }
+
     Promise.all([
       sb.from('kpi_hero_products').select('*').order('month_start', { ascending: false }),
-      sb.from('items').select('brand,category').eq('is_active', true),
+      loadAllItems(),
       sb.auth.getSession().then(({ data }) => sb.from('profiles').select('name').eq('id', data?.session?.user?.id || '').single()),
-    ]).then(([hp, it, p]) => {
+    ]).then(([hp, items, p]) => {
       setRows(hp.data || [])
-      const bSet = new Set(), cSet = new Set()
-      ;(it.data || []).forEach(r => { if (r.brand) bSet.add(r.brand); if (r.category) cSet.add(r.category) })
+      const bSet = new Set(), cSet = new Set(), bcMap = {}
+      items.forEach(r => {
+        if (r.brand) bSet.add(r.brand)
+        if (r.category) cSet.add(r.category)
+        if (r.brand && r.category) {
+          ;(bcMap[r.brand] = bcMap[r.brand] || new Set()).add(r.category)
+        }
+      })
       setBrands([...bSet].sort())
-      setCategories([...cSet].sort())
+      setAllCategories([...cSet].sort())
+      setBrandCats(bcMap)
       setActorName(p.data?.name || '')
       setLoading(false)
     })
   }, [])
+
+  // When brand changes, restrict categories to ones that exist for that brand.
+  // 'Any brand' shows the full category list.
+  const visibleCategories = pickBrand
+    ? [...(brandCats[pickBrand] || new Set())].sort()
+    : allCategories
+
+  // If the picked category becomes invalid for the new brand, clear it.
+  useEffect(() => {
+    if (pickCategory && pickBrand && !visibleCategories.includes(pickCategory)) {
+      setPickCategory('')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickBrand])
 
   const months = (() => {
     const now = new Date()
@@ -272,7 +312,7 @@ function HeroProductsTab({ onSaved }) {
           <select value={pickCategory} onChange={e => setPickCategory(e.target.value)}
             style={{ padding: '9px 10px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 13, outline: 'none', background: '#FFF' }}>
             <option value="">— Any category —</option>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            {visibleCategories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <button onClick={add} disabled={monthRows.length >= 5}
             style={{ padding: '9px 14px', background: monthRows.length >= 5 ? '#E8EBF0' : '#0A2540', color: monthRows.length >= 5 ? '#94A3B8' : '#FFF', border: 0, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: monthRows.length >= 5 ? 'default' : 'pointer' }}>
