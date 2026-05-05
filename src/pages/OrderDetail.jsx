@@ -867,7 +867,7 @@ if (match) {
             )}
 
             {order.status === 'dispatched_fc' && (
-              <div className="od-pending-banner" style={{background:'#f0fdf4',border:'1px solid #bbf7d0',color:'#166534'}}>
+              <div className="od-pending-banner od-banner-success">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 <div>
                   <div className="od-pending-banner-label">Delivered{order.fulfilment_center ? ` · ${order.fulfilment_center}` : ''}</div>
