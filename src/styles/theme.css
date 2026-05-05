@@ -59,6 +59,36 @@ html[data-theme="dark"] .kpi-app {
   --kshadow-lg: 0 12px 32px -8px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.4);
 }
 
+/* Flip the global gray scale inside detail/page wrappers — many pages
+   (CustomerDetail, VendorDetail, ItemDetail, plus generic .loading-state)
+   use var(--gray-N) directly in CSS and inline styles. Inverting these
+   tokens within the wrapper makes everything readable in dark mode. */
+html[data-theme="dark"] .c360-page,
+html[data-theme="dark"] .crm-page,
+html[data-theme="dark"] .no-page,
+html[data-theme="dark"] .acc-page,
+html[data-theme="dark"] .od-page,
+html[data-theme="dark"] .orders-app,
+html[data-theme="dark"] .crm-app,
+html[data-theme="dark"] .pf-app,
+html[data-theme="dark"] .kpi-app,
+html[data-theme="dark"] .hd-content {
+  --gray-50:  #1A2236;
+  --gray-100: #232C44;
+  --gray-200: #2A3349;
+  --gray-300: #3A4664;
+  --gray-400: #6B7794;
+  --gray-500: #94A3B8;
+  --gray-600: #CBD5E1;
+  --gray-700: #E2E8F0;
+  --gray-800: #ECEEF3;
+  --gray-900: #F1F5F9;
+}
+
+/* Loading text — in dark mode make sure spinner + label are visible */
+html[data-theme="dark"] .loading-state { color: #94A3B8 !important; }
+html[data-theme="dark"] .loading-spin { border-color: #2A3349 !important; border-top-color: #3DD9D6 !important; }
+
 /* Smooth transitions on theme change (only for color, not layout) */
 .orders-app, .orders-app *, .crm-app, .crm-app *,
 .kpi-app, .kpi-app *, .od-page, .od-page *,
@@ -113,6 +143,152 @@ html[data-theme="dark"] .c360-page .c360-table-sub,
 html[data-theme="dark"] .c360-page .c360-list-card-sub { color: #94A3B8 !important; }
 
 html[data-theme="dark"] .c360-page tr:hover td { background: #232C44 !important; }
+
+/* c360 stat tiles — strong override (some installs see them stay white on first paint) */
+html[data-theme="dark"] .c360-page .c360-stats { border-top-color: #2A3349 !important; }
+html[data-theme="dark"] .c360-page .c360-stat,
+html[data-theme="dark"] .c360-page .c360-stats > .c360-stat { background: #232C44 !important; border: 1px solid #2A3349 !important; }
+html[data-theme="dark"] .c360-page .c360-stat-value.accent { color: #3DD9D6 !important; }
+html[data-theme="dark"] .c360-page .c360-stat-value.green  { color: #10B981 !important; }
+html[data-theme="dark"] .c360-page .c360-badge-blue  { background: rgba(61,217,214,0.12) !important; color: #3DD9D6 !important; }
+html[data-theme="dark"] .c360-page .c360-badge-green { background: rgba(16,185,129,0.15) !important; color: #6EE7B7 !important; }
+html[data-theme="dark"] .c360-page .c360-badge-amber { background: rgba(245,158,11,0.15) !important; color: #FBBF24 !important; }
+html[data-theme="dark"] .c360-page .c360-badge-red   { background: rgba(239,68,68,0.15) !important;  color: #FCA5A5 !important; }
+html[data-theme="dark"] .c360-page .c360-badge-gray  { background: #2A3349 !important; color: #94A3B8 !important; }
+
+/* c360 action buttons (Back / Edit / Download / Cancel) — white in base CSS */
+html[data-theme="dark"] .c360-page .c360-btn { background: #232C44 !important; color: #E5E9F0 !important; border-color: #2A3349 !important; }
+html[data-theme="dark"] .c360-page .c360-btn:hover { background: #2A3349 !important; }
+html[data-theme="dark"] .c360-page .c360-btn-primary { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
+html[data-theme="dark"] .c360-page .c360-btn-primary:hover { background: #2DC8C5 !important; }
+html[data-theme="dark"] .c360-page .c360-btn-approve { background: #10B981 !important; color: #0A2540 !important; border-color: #10B981 !important; }
+html[data-theme="dark"] .c360-page .c360-btn-danger { background: #232C44 !important; color: #FCA5A5 !important; border-color: rgba(239,68,68,0.4) !important; }
+html[data-theme="dark"] .c360-page .c360-btn-danger:hover { background: rgba(239,68,68,0.12) !important; }
+html[data-theme="dark"] .c360-page .c360-btn-amber { background: rgba(245,158,11,0.12) !important; color: #FBBF24 !important; border-color: rgba(245,158,11,0.4) !important; }
+
+/* ── Order Detail (.od-page) — buttons, pipe, batch, items table ── */
+html[data-theme="dark"] .od-page .od-btn { background: #232C44 !important; color: #E5E9F0 !important; border-color: #2A3349 !important; }
+html[data-theme="dark"] .od-page .od-btn:hover { background: #2A3349 !important; }
+html[data-theme="dark"] .od-page .od-btn-primary { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-btn-danger { background: #232C44 !important; color: #FCA5A5 !important; border-color: rgba(239,68,68,0.4) !important; }
+html[data-theme="dark"] .od-page .od-btn-danger:hover { background: rgba(239,68,68,0.12) !important; }
+
+/* Pipeline stages */
+html[data-theme="dark"] .od-page .od-pipe-stage { background: #1A2236 !important; color: #94A3B8 !important; border-color: #2A3349 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #3DD9D6 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active::after,
+html[data-theme="dark"] .od-page .od-pipe-stage.active::before { border-left-color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.done { background: #232C44 !important; color: #E5E9F0 !important; }
+
+/* Batch toggle buttons */
+html[data-theme="dark"] .od-page .od-batch-btn { background: #232C44 !important; color: #94A3B8 !important; border-color: #2A3349 !important; }
+html[data-theme="dark"] .od-page .od-batch-btn:hover { background: #2A3349 !important; color: #E5E9F0 !important; }
+html[data-theme="dark"] .od-page .od-batch-btn.active { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
+
+/* Edit field inputs */
+html[data-theme="dark"] .od-page .od-edit-field input,
+html[data-theme="dark"] .od-page .od-edit-field select,
+html[data-theme="dark"] .od-page .od-edit-field textarea { background: #232C44 !important; color: #E5E9F0 !important; border-color: #2A3349 !important; }
+
+/* Items table */
+html[data-theme="dark"] .od-page .od-items-table thead th { background: #232C44 !important; color: #94A3B8 !important; border-bottom-color: #2A3349 !important; }
+html[data-theme="dark"] .od-page .od-items-table tbody td { color: #E5E9F0 !important; border-color: #2A3349 !important; }
+html[data-theme="dark"] .od-page .od-items-table tbody tr:hover td { background: #232C44 !important; }
+
+/* Timeline dots & rail */
+html[data-theme="dark"] .od-page .od-tl-rail { background: #2A3349 !important; }
+html[data-theme="dark"] .od-page .od-tl-dot { background: #232C44 !important; color: #94A3B8 !important; }
+html[data-theme="dark"] .od-page .od-tl-dot.edited { background: rgba(245,158,11,0.15) !important; color: #FBBF24 !important; }
+
+/* Status badges & cancelled banner */
+html[data-theme="dark"] .od-page .od-status-badge.cancelled,
+html[data-theme="dark"] .od-page .od-cancelled-banner { background: rgba(239,68,68,0.12) !important; color: #FCA5A5 !important; border-color: rgba(239,68,68,0.4) !important; }
+
+/* Generic od cards/value text — make sure dark text inside is light */
+html[data-theme="dark"] .od-page,
+html[data-theme="dark"] .od-page .od-card,
+html[data-theme="dark"] .od-page .od-side-card,
+html[data-theme="dark"] .od-page .od-header { color: #E5E9F0 !important; }
+html[data-theme="dark"] .od-page .od-batch-card { background: #1A2236 !important; }
+
+/* Pipeline stages — base CSS uses dark navy for active and pale blue for done,
+   both invisible/jarring on dark. Repaint with cyan accent + dark surfaces. */
+html[data-theme="dark"] .od-page .od-pipe-stage { background: #1A2236 !important; color: #94A3B8 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.done { background: #232C44 !important; color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.done::after  { border-left-color: #232C44 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.done::before { border-left-color: #2A3349 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #3DD9D6 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active::after  { border-left-color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active::before { border-left-color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active { background: #10B981 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active::after  { border-left-color: #10B981 !important; }
+html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active::before { border-left-color: #10B981 !important; }
+html[data-theme="dark"] .od-page .od-pipeline-cancelled .od-pipe-stage.active { background: rgba(239,68,68,0.2) !important; color: #FCA5A5 !important; }
+html[data-theme="dark"] .od-page .od-pipeline-cancelled .od-pipe-stage.active::after  { border-left-color: rgba(239,68,68,0.2) !important; }
+html[data-theme="dark"] .od-page .od-pipeline-cancelled .od-pipe-stage.active::before { border-left-color: rgba(239,68,68,0.4) !important; }
+
+/* Item code / customer name links — keep them clickable-blue but visible on dark */
+html[data-theme="dark"] [style*="color:#1a4dab"],
+html[data-theme="dark"] [style*="color: #1a4dab"],
+html[data-theme="dark"] [style*="rgb(26, 77, 171)"],
+html[data-theme="dark"] [style*="rgb(26,77,171)"] { color: #3DD9D6 !important; }
+/* The customer-name link in OrderDetail is rendered via inline style; match
+   the actual <span> that wraps the name inside .od-detail-field */
+html[data-theme="dark"] .od-page .od-detail-field .val span[style*="cursor"],
+html[data-theme="dark"] .od-page .od-detail-field .val span[style*="underline"] { color: #3DD9D6 !important; }
+
+/* Notes field (yellow sticky-note look) — repaint to amber-tinted dark */
+html[data-theme="dark"] .od-page .od-notes-val,
+html[data-theme="dark"] .no-page .no-notes-val { background: rgba(245,158,11,0.10) !important; border-color: rgba(245,158,11,0.35) !important; color: #FBBF24 !important; }
+
+/* Pipeline outer bar bg (was white) and the inactive chevron arrows
+   (::after / ::before are pure CSS so we have to repaint them too) */
+html[data-theme="dark"] .od-page .od-pipeline-bar { background: #1A2236 !important; border-color: #2A3349 !important; box-shadow: none !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage::after  { border-left-color: #1A2236 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage::before { border-left-color: #2A3349 !important; }
+
+/* Low-value reason banner (red sticky note style) */
+html[data-theme="dark"] [style*="background:#fef2f2"],
+html[data-theme="dark"] [style*="background: #fef2f2"],
+html[data-theme="dark"] [style*="rgb(254, 242, 242)"],
+html[data-theme="dark"] [style*="rgb(254,242,242)"] { background: rgba(239,68,68,0.10) !important; border-color: rgba(239,68,68,0.35) !important; color: #FCA5A5 !important; }
+html[data-theme="dark"] [style*="color:#991b1b"],
+html[data-theme="dark"] [style*="color: #991b1b"],
+html[data-theme="dark"] [style*="rgb(153, 27, 27)"],
+html[data-theme="dark"] [style*="rgb(153,27,27)"] { color: #FCA5A5 !important; }
+
+/* Hard sweep: every kpi tile (hero + plain) on every list/dashboard page
+   gets the dark surface with a colored left-border accent for hero tones.
+   Stronger selector than the base linear-gradient rule so it always wins. */
+html[data-theme="dark"] .orders-app .kpi-tile,
+html[data-theme="dark"] .crm-app .kpi-tile,
+html[data-theme="dark"] .pf-app .kpi-tile,
+html[data-theme="dark"] .kpi-app .kpi-tile {
+  background: #1A2236 !important;
+  background-image: none !important;
+  color: #E5E9F0 !important;
+  border: 1px solid #2A3349 !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero,
+html[data-theme="dark"] .crm-app .kpi-tile.kpi-hero,
+html[data-theme="dark"] .pf-app .kpi-tile.kpi-hero,
+html[data-theme="dark"] .kpi-app .kpi-tile.kpi-hero { border-left: 3px solid #3DD9D6 !important; }
+html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero.tone-forest,
+html[data-theme="dark"] .crm-app .kpi-tile.kpi-hero.tone-forest { border-left-color: #10B981 !important; }
+html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero.tone-teal,
+html[data-theme="dark"] .crm-app .kpi-tile.kpi-hero.tone-teal { border-left-color: #14B8A6 !important; }
+
+html[data-theme="dark"] .orders-app .kpi-tile .kt-label,
+html[data-theme="dark"] .crm-app .kpi-tile .kt-label { color: #94A3B8 !important; }
+html[data-theme="dark"] .orders-app .kpi-tile .kt-value,
+html[data-theme="dark"] .crm-app .kpi-tile .kt-value { color: #F1F5F9 !important; }
+html[data-theme="dark"] .orders-app .kpi-tile .kt-sub,
+html[data-theme="dark"] .crm-app .kpi-tile .kt-sub { color: #94A3B8 !important; }
+html[data-theme="dark"] .orders-app .kpi-tile .kt-arrow,
+html[data-theme="dark"] .crm-app .kpi-tile .kt-arrow { background: #232C44 !important; color: #94A3B8 !important; }
+html[data-theme="dark"] .orders-app .kpi-tile .kt-chart,
+html[data-theme="dark"] .crm-app .kpi-tile .kt-chart { color: #3DD9D6 !important; opacity: 0.4; }
 
 /* Procurement Forecast surfaces */
 html[data-theme="dark"] .pf-app .card,
