@@ -598,6 +598,21 @@ html[data-theme="dark"] .ly-user-fullname { color: #E5E9F0; }
 /* Topbar */
 html[data-theme="dark"] .ly-topbar { background: #0F172A; border-bottom-color: #2A3349; }
 
+/* Bell + notifications dropdown */
+html[data-theme="dark"] .ly-bell-btn { background: #1A2236 !important; border-color: #2A3349 !important; color: #94A3B8 !important; }
+html[data-theme="dark"] .ly-bell-btn:hover { background: #232C44 !important; color: #E5E9F0 !important; }
+html[data-theme="dark"] .ly-bell-badge { border-color: #0F172A !important; }
+html[data-theme="dark"] .ly-notif-dropdown { background: #1A2236 !important; border-color: #2A3349 !important; box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important; }
+html[data-theme="dark"] .ly-notif-header { color: #E5E9F0 !important; border-bottom-color: #2A3349 !important; }
+html[data-theme="dark"] .ly-notif-markread { color: #818CF8 !important; }
+html[data-theme="dark"] .ly-notif-empty { color: #94A3B8 !important; }
+html[data-theme="dark"] .ly-notif-item { border-bottom-color: #2A3349 !important; }
+html[data-theme="dark"] .ly-notif-item:hover { background: #232C44 !important; }
+html[data-theme="dark"] .ly-notif-item.unread { background: rgba(129,140,248,0.08) !important; }
+html[data-theme="dark"] .ly-notif-item.unread:hover { background: rgba(129,140,248,0.14) !important; }
+html[data-theme="dark"] .ly-notif-msg { color: #E5E9F0 !important; }
+html[data-theme="dark"] .ly-notif-time { color: #94A3B8 !important; }
+
 /* In dark mode: flatten the bright gradient hero tiles into dark surfaces
    with a colored left-border accent (much easier on the eyes). */
 html[data-theme="dark"] .kpi-hero,
