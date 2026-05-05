@@ -70,8 +70,11 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/accounts" element={<Accounts />} />
-          <Route path="/sales" element={<Sales />} />
+          <Route path="/uploads" element={<Accounts />} />
+          <Route path="/inventory" element={<Sales />} />
+          {/* Legacy redirects for old links */}
+          <Route path="/accounts" element={<Navigate to="/uploads" replace />} />
+          <Route path="/sales" element={<Navigate to="/inventory" replace />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/list" element={<OrdersList />} />
           <Route path="/orders/new" element={<NewOrder />} />

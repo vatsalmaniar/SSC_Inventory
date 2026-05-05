@@ -10,7 +10,7 @@ const APPS = [
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> },
   { key:'customer360', label:'Customer 360', desc:'Accounts & profiles', path:'/customers', roles:['sales','ops','admin','management'], color:{ bg:'#f0fdfa', icon:'#0f766e' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> },
-  { key:'inventory', label:'Inventory', desc:'Stock & availability', path:'/sales', roles:['sales','admin','management','ops'], color:{ bg:'#f0fdf4', icon:'#15803d' },
+  { key:'inventory', label:'Inventory', desc:'Stock & availability', path:'/inventory', roles:['sales','admin','management','ops'], color:{ bg:'#f0fdf4', icon:'#15803d' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg> },
   { key:'orders', label:'Orders', desc:'Create & track orders', path:'/orders', roles:['all'], color:{ bg:'#fffbeb', icon:'#b45309' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg> },
@@ -26,7 +26,7 @@ const APPS = [
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg> },
   { key:'people', label:'People', desc:'KRA / KPI & team', path:'/people/kpi', roles:['sales','ops','admin','management','accounts','fc_kaveri','fc_godawari'], color:{ bg:'#ecfeff', icon:'#0e7490' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> },
-  { key:'upload', label:'Upload', desc:'Sync inventory data', path:'/accounts', roles:['admin','accounts'], color:{ bg:'#e8f2fc', icon:'#1a4dab' },
+  { key:'upload', label:'Upload', desc:'Sync inventory data', path:'/uploads', roles:['admin','accounts'], color:{ bg:'#e8f2fc', icon:'#1a4dab' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> },
   { key:'users', label:'Users', desc:'Manage users & emails', path:'/admin/users', roles:['admin'], color:{ bg:'#f1f5f9', icon:'#475569' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 15a6 6 0 00-6 6h12a6 6 0 00-6-6z"/><circle cx="12" cy="8" r="4"/></svg> },
@@ -148,7 +148,7 @@ export default function Dashboard() {
   if (role(['sales','admin','management','ops'])) {
     moduleKpis.push({
       key:'inventory', label:'Inventory · Low Stock', value: m.invLow + m.invZero, sub:`${m.invZero} out of stock`, accent: (m.invLow + m.invZero) > 0 ? 'amber' : null,
-      path:'/sales', icon:'box'
+      path:'/inventory', icon:'box'
     })
   }
 

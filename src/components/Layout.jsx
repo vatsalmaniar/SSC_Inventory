@@ -87,7 +87,7 @@ const NAV_ITEMS = [
   {
     key: 'inventory',
     label: 'Inventory',
-    path: '/sales',
+    path: '/inventory',
     roles: ['sales', 'admin', 'management', 'ops'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg>,
     section: '360',
@@ -116,7 +116,7 @@ const NAV_ITEMS = [
   {
     key: 'upload',
     label: 'Upload',
-    path: '/accounts',
+    path: '/uploads',
     roles: ['admin', 'accounts'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
     section: 'Upload',
