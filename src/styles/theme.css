@@ -665,7 +665,13 @@ html[data-theme="dark"] .ly-nav-section.ly-nav-bottom { border-top-color: #3C3C3
 html[data-theme="dark"] .ly-user-fullname { color: #D4D4D4; }
 
 /* Topbar */
-html[data-theme="dark"] .ly-topbar { background: #181818; border-bottom-color: #3C3C3C; }
+html[data-theme="dark"] .ly-topbar { background: #181818 !important; border-bottom-color: #3C3C3C !important; }
+html[data-theme="dark"] html, html[data-theme="dark"] body, html[data-theme="dark"] #root, html[data-theme="dark"] .ly-wrap, html[data-theme="dark"] .ly-main { background: #181818 !important; }
+html[data-theme="dark"] .ly-topbar-app  { color: #FFFFFF !important; }
+html[data-theme="dark"] .ly-topbar-sep  { color: #6A6A6A !important; }
+html[data-theme="dark"] .ly-topbar-page { color: #FFFFFF !important; }
+html[data-theme="dark"] .ly-topbar-hamburger { background: #2D2D2D !important; border-color: #3C3C3C !important; color: #D4D4D4 !important; }
+html[data-theme="dark"] .ly-topbar-hamburger:hover { background: #3C3C3C !important; color: #FFFFFF !important; }
 
 /* User chip (top-right "Vatsal Maniar" pill) */
 html[data-theme="dark"] .ly-user-chip { background: #252526 !important; border-color: #3C3C3C !important; }
