@@ -228,6 +228,29 @@ html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active { ba
 html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active::after  { border-left-color: #FBBF24 !important; }
 html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active::before { border-left-color: #F59E0B !important; }
 
+/* Dispatch tile (Pending / Shipped strips above the items table) */
+html[data-theme="dark"] .od-page .od-dispatch-tile { border-color: #2A3349 !important; background: #1A2236 !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-pending { border-color: rgba(245,158,11,0.4) !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched { border-color: rgba(16,185,129,0.4) !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-pending .od-dispatch-tile-header { background: rgba(245,158,11,0.10) !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-dispatch-tile-header { background: rgba(16,185,129,0.10) !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-pending .od-dispatch-tile-label { color: #FBBF24 !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-dispatch-tile-label { color: #6EE7B7 !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-pending .od-dispatch-tile-count { background: rgba(245,158,11,0.15) !important; color: #FBBF24 !important; border-color: rgba(245,158,11,0.4) !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-dispatch-tile-count { background: rgba(16,185,129,0.15) !important; color: #6EE7B7 !important; border-color: rgba(16,185,129,0.4) !important; }
+/* Inline-styled count chips inside the headers (rgb(209, 250, 229) bg / rgb(6, 95, 70) text) */
+html[data-theme="dark"] [style*="rgb(209, 250, 229)"],
+html[data-theme="dark"] [style*="rgb(209,250,229)"] { background: rgba(16,185,129,0.15) !important; }
+html[data-theme="dark"] [style*="color: rgb(6, 95, 70)"],
+html[data-theme="dark"] [style*="rgb(6, 95, 70)"] { color: #6EE7B7 !important; }
+html[data-theme="dark"] [style*="rgb(22, 101, 52)"],
+html[data-theme="dark"] [style*="color: rgb(22, 101, 52)"] { color: #6EE7B7 !important; }
+
+/* Batch done card — was washed-out pale green that hid the table text */
+html[data-theme="dark"] .od-page .od-batch-card.od-batch-done { background: #1A2236 !important; border-color: rgba(16,185,129,0.3) !important; }
+html[data-theme="dark"] .od-page .od-batch-card.od-batch-done * { opacity: 1 !important; }
+html[data-theme="dark"] .od-page .od-batch-pill { background: rgba(245,158,11,0.15) !important; color: #FBBF24 !important; }
+
 /* Pipeline stages — base CSS uses dark navy for active and pale blue for done,
    both invisible/jarring on dark. Repaint with cyan accent + dark surfaces. */
 html[data-theme="dark"] .od-page .od-pipe-stage { background: #1A2236 !important; color: #94A3B8 !important; }
@@ -599,8 +622,12 @@ html[data-theme="dark"] .ly-user-fullname { color: #E5E9F0; }
 html[data-theme="dark"] .ly-topbar { background: #0F172A; border-bottom-color: #2A3349; }
 
 /* Bell + notifications dropdown */
+html[data-theme="dark"] .ly-topbar .ly-bell-wrap .ly-bell-btn,
 html[data-theme="dark"] .ly-bell-btn { background: #1A2236 !important; border-color: #2A3349 !important; color: #94A3B8 !important; }
+html[data-theme="dark"] .ly-topbar .ly-bell-wrap .ly-bell-btn:hover,
 html[data-theme="dark"] .ly-bell-btn:hover { background: #232C44 !important; color: #E5E9F0 !important; }
+html[data-theme="dark"] .ly-bell-btn svg { color: #94A3B8 !important; }
+html[data-theme="dark"] .ly-bell-btn svg path { stroke: currentColor !important; }
 html[data-theme="dark"] .ly-bell-badge { border-color: #0F172A !important; }
 html[data-theme="dark"] .ly-notif-dropdown { background: #1A2236 !important; border-color: #2A3349 !important; box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important; }
 html[data-theme="dark"] .ly-notif-header { color: #E5E9F0 !important; border-bottom-color: #2A3349 !important; }
