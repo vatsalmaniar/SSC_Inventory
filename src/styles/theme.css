@@ -273,6 +273,21 @@ html[data-theme="dark"] [style*="color: #065f46"],
 html[data-theme="dark"] [style*="rgb(6, 95, 70)"],
 html[data-theme="dark"] [style*="rgb(6,95,70)"] { color: #6EE7B7 !important; }
 
+/* Brute-force the dispatched / shipped table row in dark mode — it gets an
+   inline pale-green bg AND inline ink colors that blend together. Force
+   every cell to read clearly. */
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody tr,
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody td { background: transparent !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody td,
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody td * { color: #E5E9F0 !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody td .mono,
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody td span[style*="underline"] { color: #818CF8 !important; }
+/* Restore meaningful accents within the row */
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody td:nth-child(6),  /* Dispatched count */
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody td:nth-child(7) { color: #6EE7B7 !important; }
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody td:nth-child(7) span,
+html[data-theme="dark"] .od-page .od-dispatch-tile-dispatched .od-items-table tbody td:nth-child(7) * { color: #6EE7B7 !important; }
+
 /* Pipeline stages — base CSS uses dark navy for active and pale blue for done,
    both invisible/jarring on dark. Repaint with cyan accent + dark surfaces. */
 html[data-theme="dark"] .od-page .od-pipe-stage { background: #1A2236 !important; color: #94A3B8 !important; }
