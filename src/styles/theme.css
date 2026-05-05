@@ -211,6 +211,23 @@ html[data-theme="dark"] .od-page .od-side-card,
 html[data-theme="dark"] .od-page .od-header { color: #E5E9F0 !important; }
 html[data-theme="dark"] .od-page .od-batch-card { background: #1A2236 !important; }
 
+/* Full / Partial dispatch choice cards — base CSS is white-on-white */
+html[data-theme="dark"] .od-dispatch-choice-btn { background: #232C44 !important; border-color: #2A3349 !important; color: #E5E9F0 !important; }
+html[data-theme="dark"] .od-dispatch-choice-btn:hover { background: #2A3349 !important; border-color: #818CF8 !important; box-shadow: 0 0 0 3px rgba(129,140,248,0.10) !important; }
+html[data-theme="dark"] .od-dispatch-choice-btn > div[style*="color: rgb(11, 27, 48)"],
+html[data-theme="dark"] .od-dispatch-choice-btn > div[style*="rgb(11, 27, 48)"] { color: #E5E9F0 !important; }
+html[data-theme="dark"] .od-dispatch-choice-btn > div[style*="color: rgb(91, 104, 120)"],
+html[data-theme="dark"] .od-dispatch-choice-btn > div[style*="rgb(91, 104, 120)"] { color: #94A3B8 !important; }
+/* Belt-and-braces: anything inside the choice button that's still navy/muted ink */
+html[data-theme="dark"] .od-dispatch-choice-btn div { color: inherit; }
+html[data-theme="dark"] .od-dispatch-choice-btn > div:nth-of-type(1) { color: #E5E9F0 !important; }
+html[data-theme="dark"] .od-dispatch-choice-btn > div:nth-of-type(2) { color: #94A3B8 !important; }
+
+/* Partial pipeline state colour */
+html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active { background: #FBBF24 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active::after  { border-left-color: #FBBF24 !important; }
+html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active::before { border-left-color: #F59E0B !important; }
+
 /* Pipeline stages — base CSS uses dark navy for active and pale blue for done,
    both invisible/jarring on dark. Repaint with cyan accent + dark surfaces. */
 html[data-theme="dark"] .od-page .od-pipe-stage { background: #1A2236 !important; color: #94A3B8 !important; }
