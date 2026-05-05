@@ -995,11 +995,16 @@ html[data-theme="dark"] .hd-app-card .hd-app-icon-box {
 }
 html[data-theme="dark"] .hd-app-card .hd-app-icon-box svg { filter: brightness(1.7) saturate(1.1); }
 
+/* Light/dark logo swap */
+.ly-logo-icon .ly-logo-dark { display: none; }
+html[data-theme="dark"] .ly-logo-icon .ly-logo-light { display: none; }
+html[data-theme="dark"] .ly-logo-icon .ly-logo-dark { display: block; }
+
 /* Logo: keep the white card visible in dark mode (clean brand card on dark
    sidebar). No filter — the PNG has a white background so inverting just
    makes a solid block. */
-html[data-theme="dark"] .ly-logo-icon { background: white !important; border-radius: 6px; padding: 4px; }
-html[data-theme="dark"] .ly-collapsed-logo { background: white !important; border-radius: 6px; }
+html[data-theme="dark"] .ly-logo-icon { background: transparent !important; padding: 0 !important; }
+html[data-theme="dark"] .ly-collapsed-logo { background: transparent !important; }
 
 /* Wider sweep for dark-blue inline text — anything close to navy gets neutralised */
 html[data-theme="dark"] [style*="color:#0A2540"],
