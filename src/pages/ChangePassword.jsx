@@ -51,12 +51,32 @@ export default function ChangePassword() {
 
   async function copyPwd() {
     try {
-      await navigator.clipboard.writeText(newPwd)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2500)
-    } catch {
-      setError('Could not copy to clipboard. Please copy manually.')
-    }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(newPwd)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2500)
+        return
+      }
+    } catch {}
+
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = newPwd
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      if (ok) {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2500)
+        return
+      }
+    } catch {}
+
+    setError('Could not copy automatically. Tap the password above to select it, then long-press → Copy.')
   }
 
   async function handleSubmit() {
