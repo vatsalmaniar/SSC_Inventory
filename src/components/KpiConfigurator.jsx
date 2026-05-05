@@ -182,27 +182,26 @@ function ScoreLadder({ def, rows, maxPts }) {
 function HeroProductsTab({ onSaved }) {
   const fy = currentFyLabel()
   const [rows, setRows] = useState([])
-  const [brands, setBrands] = useState([])
-  const [allCategories, setAllCategories] = useState([])           // every category in the catalog
-  const [brandCats, setBrandCats] = useState({})                   // { brand: Set<category> }
+  const [items, setItems] = useState([])               // full catalogue cache
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
   })
-  const [pickBrand, setPickBrand] = useState('')
-  const [pickCategory, setPickCategory] = useState('')
+  const [pickBrand,       setPickBrand]       = useState('')
+  const [pickCategory,    setPickCategory]    = useState('')
+  const [pickSubcategory, setPickSubcategory] = useState('')
+  const [pickSeries,      setPickSeries]      = useState('')
   const [loading, setLoading] = useState(true)
   const [actorName, setActorName] = useState('')
 
   useEffect(() => {
     async function loadAllItems() {
-      // Pull all items in pages of 1000 (Supabase default limit) so brands +
-      // brand→category map are complete even on large catalogues.
+      // Page through items 1000 at a time so the option lists are complete.
       const out = []
       let from = 0
       while (true) {
         const { data, error } = await sb.from('items')
-          .select('brand,category')
+          .select('brand,category,subcategory,series')
           .eq('is_active', true)
           .range(from, from + 999)
         if (error || !data || data.length === 0) break
@@ -217,37 +216,29 @@ function HeroProductsTab({ onSaved }) {
       sb.from('kpi_hero_products').select('*').order('month_start', { ascending: false }),
       loadAllItems(),
       sb.auth.getSession().then(({ data }) => sb.from('profiles').select('name').eq('id', data?.session?.user?.id || '').single()),
-    ]).then(([hp, items, p]) => {
+    ]).then(([hp, its, p]) => {
       setRows(hp.data || [])
-      const bSet = new Set(), cSet = new Set(), bcMap = {}
-      items.forEach(r => {
-        if (r.brand) bSet.add(r.brand)
-        if (r.category) cSet.add(r.category)
-        if (r.brand && r.category) {
-          ;(bcMap[r.brand] = bcMap[r.brand] || new Set()).add(r.category)
-        }
-      })
-      setBrands([...bSet].sort())
-      setAllCategories([...cSet].sort())
-      setBrandCats(bcMap)
+      setItems(its)
       setActorName(p.data?.name || '')
       setLoading(false)
     })
   }, [])
 
-  // When brand changes, restrict categories to ones that exist for that brand.
-  // 'Any brand' shows the full category list.
-  const visibleCategories = pickBrand
-    ? [...(brandCats[pickBrand] || new Set())].sort()
-    : allCategories
+  // Cascading option lists — each level filters by the picks above it.
+  const distinct = (key, filter) => {
+    const out = new Set()
+    items.forEach(it => { if (filter(it) && it[key]) out.add(it[key]) })
+    return [...out].sort()
+  }
+  const brands       = distinct('brand',       () => true)
+  const categories   = distinct('category',    it => !pickBrand || it.brand === pickBrand)
+  const subcategories= distinct('subcategory', it => (!pickBrand || it.brand === pickBrand) && (!pickCategory || it.category === pickCategory))
+  const seriesList   = distinct('series',      it => (!pickBrand || it.brand === pickBrand) && (!pickCategory || it.category === pickCategory) && (!pickSubcategory || it.subcategory === pickSubcategory))
 
-  // If the picked category becomes invalid for the new brand, clear it.
-  useEffect(() => {
-    if (pickCategory && pickBrand && !visibleCategories.includes(pickCategory)) {
-      setPickCategory('')
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickBrand])
+  // Clear lower picks if they're no longer valid after the parent changes.
+  useEffect(() => { if (pickCategory && !categories.includes(pickCategory)) setPickCategory('') }, [pickBrand]) // eslint-disable-line
+  useEffect(() => { if (pickSubcategory && !subcategories.includes(pickSubcategory)) setPickSubcategory('') }, [pickBrand, pickCategory]) // eslint-disable-line
+  useEffect(() => { if (pickSeries && !seriesList.includes(pickSeries)) setPickSeries('') }, [pickBrand, pickCategory, pickSubcategory]) // eslint-disable-line
 
   const months = (() => {
     const now = new Date()
@@ -263,18 +254,25 @@ function HeroProductsTab({ onSaved }) {
   const monthRows = rows.filter(it => it.month_start.slice(0, 10) === selectedMonth)
 
   async function add() {
-    if (!pickBrand && !pickCategory) { toast('Pick at least Brand or Category'); return }
+    if (!pickCategory) { toast('Category is required'); return }
     if (monthRows.length >= 5) { toast('Max 5 hero entries per month — remove one first'); return }
-    const dup = monthRows.some(r => (r.brand || '') === pickBrand && (r.category || '') === pickCategory)
+    const dup = monthRows.some(r =>
+      (r.brand || '')       === pickBrand &&
+      (r.category || '')    === pickCategory &&
+      (r.subcategory || '') === pickSubcategory &&
+      (r.series || '')      === pickSeries
+    )
     if (dup) { toast('Already added for this month'); return }
     const { error } = await sb.from('kpi_hero_products').insert({
       month_start: selectedMonth,
-      brand:    pickBrand    || null,
-      category: pickCategory || null,
+      brand:       pickBrand       || null,
+      category:    pickCategory    || null,
+      subcategory: pickSubcategory || null,
+      series:      pickSeries      || null,
       added_by: actorName,
     })
     if (error) { toast(friendlyError(error)); return }
-    toast('Added', 'success'); setPickBrand(''); setPickCategory(''); reload()
+    toast('Added', 'success'); setPickBrand(''); setPickCategory(''); setPickSubcategory(''); setPickSeries(''); reload()
   }
   async function remove(id) {
     const { error } = await sb.from('kpi_hero_products').delete().eq('id', id)
@@ -296,7 +294,7 @@ function HeroProductsTab({ onSaved }) {
       </div>
 
       <div style={{ background: '#FBFBFD', border: '1px solid #E8EBF0', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 1fr 100px', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr 1fr 90px', gap: 10, alignItems: 'flex-start' }}>
           <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
             style={{ padding: '9px 10px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 13, outline: 'none', background: '#FFF' }}>
             {months.map(m => {
@@ -311,11 +309,21 @@ function HeroProductsTab({ onSaved }) {
           </select>
           <select value={pickCategory} onChange={e => setPickCategory(e.target.value)}
             style={{ padding: '9px 10px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 13, outline: 'none', background: '#FFF' }}>
-            <option value="">— Any category —</option>
-            {visibleCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            <option value="">Category *</option>
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <button onClick={add} disabled={monthRows.length >= 5}
-            style={{ padding: '9px 14px', background: monthRows.length >= 5 ? '#E8EBF0' : '#0A2540', color: monthRows.length >= 5 ? '#94A3B8' : '#FFF', border: 0, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: monthRows.length >= 5 ? 'default' : 'pointer' }}>
+          <select value={pickSubcategory} onChange={e => setPickSubcategory(e.target.value)}
+            style={{ padding: '9px 10px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 13, outline: 'none', background: '#FFF' }}>
+            <option value="">— Any sub-category —</option>
+            {subcategories.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={pickSeries} onChange={e => setPickSeries(e.target.value)}
+            style={{ padding: '9px 10px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 13, outline: 'none', background: '#FFF' }}>
+            <option value="">— Any series —</option>
+            {seriesList.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button onClick={add} disabled={monthRows.length >= 5 || !pickCategory}
+            style={{ padding: '9px 14px', background: (monthRows.length >= 5 || !pickCategory) ? '#E8EBF0' : '#0A2540', color: (monthRows.length >= 5 || !pickCategory) ? '#94A3B8' : '#FFF', border: 0, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: (monthRows.length >= 5 || !pickCategory) ? 'default' : 'pointer' }}>
             Add
           </button>
         </div>
@@ -330,18 +338,22 @@ function HeroProductsTab({ onSaved }) {
             <tr style={{ background: '#FBFBFD', borderBottom: '1px solid #E8EBF0' }}>
               <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 600, color: '#5B6878', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.4px', fontFamily: 'Geist Mono, monospace' }}>Brand</th>
               <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 600, color: '#5B6878', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.4px', fontFamily: 'Geist Mono, monospace' }}>Category</th>
+              <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 600, color: '#5B6878', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.4px', fontFamily: 'Geist Mono, monospace' }}>Sub-category</th>
+              <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 600, color: '#5B6878', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.4px', fontFamily: 'Geist Mono, monospace' }}>Series</th>
               <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 600, color: '#5B6878', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.4px', fontFamily: 'Geist Mono, monospace' }}>Added by</th>
               <th style={{ width: 80 }}/>
             </tr>
           </thead>
           <tbody>
             {monthRows.length === 0 && (
-              <tr><td colSpan={4} style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>No hero entries for this month yet.</td></tr>
+              <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>No hero entries for this month yet.</td></tr>
             )}
             {monthRows.map(it => (
               <tr key={it.id} style={{ borderBottom: '1px solid #EEF1F5' }}>
                 <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{it.brand || <span style={{ color: '#94A3B8', fontWeight: 400 }}>Any</span>}</td>
                 <td style={{ padding: '12px 14px', fontSize: 13 }}>{it.category || <span style={{ color: '#94A3B8' }}>Any</span>}</td>
+                <td style={{ padding: '12px 14px', fontSize: 13 }}>{it.subcategory || <span style={{ color: '#94A3B8' }}>Any</span>}</td>
+                <td style={{ padding: '12px 14px', fontSize: 13 }}>{it.series || <span style={{ color: '#94A3B8' }}>Any</span>}</td>
                 <td style={{ padding: '12px 14px', fontSize: 12, color: '#5B6878' }}>{it.added_by || '—'}</td>
                 <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                   <button onClick={() => remove(it.id)} style={{ padding: '5px 10px', background: 'white', border: '1.5px solid #fecaca', borderRadius: 5, fontSize: 12, fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>Remove</button>

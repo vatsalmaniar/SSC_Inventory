@@ -84,24 +84,21 @@ export const AUTO_FETCHERS = {
 
   hero_products_count: async ({ profileName, fyStart, fyEnd, monthRanges, heroByMonth }) => {
     if (!profileName) return {}
-    // heroByMonth shape: { 'YYYY-MM-DD': [{ brand, category }, ...] }
+    // heroByMonth shape: { 'YYYY-MM-DD': [{ brand, category, subcategory, series }, ...] }
     const allPairs = Object.values(heroByMonth || {}).flat()
     if (allPairs.length === 0) return {}
 
-    // Pre-compute the union of brands + categories across the FY so the items
-    // query is bounded. Empty/null values mean "match anything" on that field.
-    const brandUnion    = Array.from(new Set(allPairs.map(p => p.brand).filter(Boolean)))
+    // Resolve the FY's hero filters to a set of matching item_codes via the
+    // items table. The category union is used to bound the query; brand/sub/
+    // series are then matched in JS so multi-field nullability is consistent.
     const categoryUnion = Array.from(new Set(allPairs.map(p => p.category).filter(Boolean)))
-
-    // Find all item_codes that match any of the FY's hero (brand, category) pairs.
-    let q = sb.from('items').select('item_code, brand, category')
-    if (brandUnion.length    > 0) q = q.in('brand',    brandUnion)
-    if (categoryUnion.length > 0) q = q.or(categoryUnion.map(c => `category.eq.${c}`).join(','))
+    let q = sb.from('items').select('item_code, brand, category, subcategory, series')
+    if (categoryUnion.length > 0) q = q.in('category', categoryUnion)
     const { data: matchingItems } = await q
     if (!matchingItems || matchingItems.length === 0) return {}
 
     const itemMeta = new Map()
-    matchingItems.forEach(it => itemMeta.set(it.item_code, { brand: it.brand, category: it.category }))
+    matchingItems.forEach(it => itemMeta.set(it.item_code, { brand: it.brand, category: it.category, subcategory: it.subcategory, series: it.series }))
     const codes = [...itemMeta.keys()]
     if (codes.length === 0) return {}
 
@@ -112,9 +109,11 @@ export const AUTO_FETCHERS = {
       .gte('orders.created_at', fyStart).lt('orders.created_at', fyEnd)
 
     const matches = (pair, meta) =>
-      (!pair.brand    || pair.brand    === meta.brand) &&
-      (!pair.category || pair.category === meta.category) &&
-      (pair.brand || pair.category)  // ignore empty (any/any) entries
+      (!pair.brand       || pair.brand       === meta.brand) &&
+      (!pair.category    || pair.category    === meta.category) &&
+      (!pair.subcategory || pair.subcategory === meta.subcategory) &&
+      (!pair.series      || pair.series      === meta.series) &&
+      (pair.brand || pair.category || pair.subcategory || pair.series)
 
     const distinctOrdersPerMonth = {}
     ;(data || []).forEach(r => {
