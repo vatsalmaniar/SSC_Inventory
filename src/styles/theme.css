@@ -667,6 +667,11 @@ html[data-theme="dark"] .ly-user-fullname { color: #D4D4D4; }
 /* Topbar */
 html[data-theme="dark"] .ly-topbar { background: #181818; border-bottom-color: #3C3C3C; }
 
+/* User chip (top-right "Vatsal Maniar" pill) */
+html[data-theme="dark"] .ly-user-chip { background: #252526 !important; border-color: #3C3C3C !important; }
+html[data-theme="dark"] .ly-user-name { color: #D4D4D4 !important; }
+html[data-theme="dark"] .ly-user-avatar { background: #818CF8 !important; color: #181818 !important; }
+
 /* Bell + notifications dropdown */
 html[data-theme="dark"] .ly-topbar .ly-bell-wrap .ly-bell-btn,
 html[data-theme="dark"] .ly-bell-btn { background: #252526 !important; border-color: #3C3C3C !important; color: #858585 !important; }
