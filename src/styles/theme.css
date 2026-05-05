@@ -705,6 +705,29 @@ html[data-theme="dark"] [style*="background: #f8fafc"],
 html[data-theme="dark"] [style*="background:rgb(248, 250, 252)"],
 html[data-theme="dark"] [style*="background: rgb(248, 250, 252)"] { background: #2D2D2D !important; }
 
+/* KPI configurator inline boxes — #FBFBFD (light surface), #E8EBF0 (border) */
+html[data-theme="dark"] [style*="rgb(251, 251, 253)"],
+html[data-theme="dark"] [style*="#FBFBFD"],
+html[data-theme="dark"] [style*="#fbfbfd"] { background: #252526 !important; }
+html[data-theme="dark"] [style*="rgb(232, 235, 240)"],
+html[data-theme="dark"] [style*="#E8EBF0"],
+html[data-theme="dark"] [style*="#e8ebf0"] { border-color: #3C3C3C !important; }
+html[data-theme="dark"] [style*="rgb(238, 241, 245)"] { border-color: #3C3C3C !important; }
+/* Common inline ink colors that should flip in dark mode */
+html[data-theme="dark"] [style*="rgb(11, 27, 48)"],
+html[data-theme="dark"] [style*="#0B1B30"],
+html[data-theme="dark"] [style*="#0b1b30"] { color: #FFFFFF !important; }
+html[data-theme="dark"] [style*="rgb(91, 104, 120)"],
+html[data-theme="dark"] [style*="#5B6878"],
+html[data-theme="dark"] [style*="#5b6878"] { color: #858585 !important; }
+html[data-theme="dark"] [style*="rgb(148, 163, 184)"],
+html[data-theme="dark"] [style*="#94A3B8"],
+html[data-theme="dark"] [style*="#94a3b8"] { color: #6A6A6A !important; }
+/* Number / select inputs inside configurator (white bg by default) */
+html[data-theme="dark"] .kpi-app input[type="number"],
+html[data-theme="dark"] .kpi-app input[type="text"],
+html[data-theme="dark"] .kpi-app select { background: #2D2D2D !important; border-color: #3C3C3C !important; color: #D4D4D4 !important; }
+
 /* Bell + notifications dropdown */
 html[data-theme="dark"] .ly-topbar .ly-bell-wrap .ly-bell-btn,
 html[data-theme="dark"] .ly-bell-btn { background: #252526 !important; border-color: #3C3C3C !important; color: #858585 !important; }
