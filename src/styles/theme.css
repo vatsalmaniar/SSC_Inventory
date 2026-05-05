@@ -672,6 +672,22 @@ html[data-theme="dark"] .ly-user-chip { background: #252526 !important; border-c
 html[data-theme="dark"] .ly-user-name { color: #D4D4D4 !important; }
 html[data-theme="dark"] .ly-user-avatar { background: #818CF8 !important; color: #181818 !important; }
 
+/* Profile dropdown — dark mode */
+html[data-theme="dark"] .ly-user-menu { background: #252526 !important; border-color: #3C3C3C !important; box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important; }
+html[data-theme="dark"] .ly-user-menu-head { border-bottom-color: #3C3C3C !important; }
+html[data-theme="dark"] .ly-user-avatar-lg { background: #818CF8 !important; color: #181818 !important; }
+html[data-theme="dark"] .ly-user-menu-name { color: #FFFFFF !important; }
+html[data-theme="dark"] .ly-user-menu-role { color: #858585 !important; }
+html[data-theme="dark"] .ly-user-menu-section { border-bottom-color: #3C3C3C !important; }
+html[data-theme="dark"] .ly-user-menu-label { color: #858585 !important; }
+html[data-theme="dark"] .ly-user-menu-input { background: #2D2D2D !important; border-color: #3C3C3C !important; color: #D4D4D4 !important; }
+html[data-theme="dark"] .ly-user-menu-input:focus { border-color: #818CF8 !important; background: #2D2D2D !important; }
+html[data-theme="dark"] .ly-user-menu-save { background: #818CF8 !important; color: #181818 !important; }
+html[data-theme="dark"] .ly-user-menu-save:hover:not(:disabled) { background: #6366F1 !important; }
+html[data-theme="dark"] .ly-user-menu-item { color: #D4D4D4 !important; }
+html[data-theme="dark"] .ly-user-menu-item:hover { background: #2D2D2D !important; }
+html[data-theme="dark"] .ly-user-menu-logout { color: #FCA5A5 !important; }
+
 /* Bell + notifications dropdown */
 html[data-theme="dark"] .ly-topbar .ly-bell-wrap .ly-bell-btn,
 html[data-theme="dark"] .ly-bell-btn { background: #252526 !important; border-color: #3C3C3C !important; color: #858585 !important; }

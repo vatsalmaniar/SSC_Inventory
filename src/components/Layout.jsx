@@ -127,6 +127,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
   const navigate  = useNavigate()
   const location  = useLocation()
   const bellRef   = useRef(null)
+  const userMenuRef = useRef(null)
   const searchRef = useRef(null)
   const searchInputRef = useRef(null)
   const searchTimer = useRef(null)
@@ -135,6 +136,9 @@ export default function Layout({ children, pageTitle, pageKey }) {
   })
   const [notifs, setNotifs]       = useState([])
   const [showNotifs, setShowNotifs] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [nameSaving, setNameSaving] = useState(false)
   const [collapsedSubs, setCollapsedSubs] = useState({})
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return sessionStorage.getItem('ly_sidebar_collapsed') === 'true' } catch { return false }
@@ -176,14 +180,34 @@ export default function Layout({ children, pageTitle, pageKey }) {
     })
   }, [])
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e) {
       if (bellRef.current && !bellRef.current.contains(e.target)) setShowNotifs(false)
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setShowUserMenu(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // Seed the display-name draft when the menu opens
+  useEffect(() => {
+    if (showUserMenu) setNameDraft(user.name || '')
+  }, [showUserMenu, user.name])
+
+  async function saveDisplayName() {
+    const next = nameDraft.trim()
+    if (!next || next === user.name) return
+    setNameSaving(true)
+    const { error } = await sb.from('profiles').update({ name: next }).eq('id', user.id)
+    setNameSaving(false)
+    if (error) { alert('Could not save: ' + error.message); return }
+    const avatar = next.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    const updated = { ...user, name: next, avatar }
+    setUser(updated)
+    try { sessionStorage.setItem('ly_user', JSON.stringify(updated)) } catch {}
+    setShowUserMenu(false)
+  }
 
   // Realtime: live notification updates
   useRealtimeSubscription(`notifications-${user.id}`, {
@@ -438,26 +462,6 @@ export default function Layout({ children, pageTitle, pageKey }) {
           })}
         </div>
 
-        <div className="ly-nav-section ly-nav-bottom">
-          {!sidebarCollapsed && <div className="ly-nav-label">Account</div>}
-          {!sidebarCollapsed && (
-            <div className="ly-nav-item ly-nav-user">
-              <div className="ly-user-dot">{user.avatar}</div>
-              <span className="ly-user-fullname">{user.name || '...'}</span>
-            </div>
-          )}
-          {sidebarCollapsed && (
-            <div className="ly-nav-item ly-nav-user" title={user.name}>
-              <div className="ly-user-dot">{user.avatar}</div>
-            </div>
-          )}
-          <button className="ly-nav-item" onClick={signOut} style={{ color:'#dc2626' }} title={sidebarCollapsed ? 'Logout' : ''}>
-            <span className="ly-nav-icon">
-              <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            </span>
-            {!sidebarCollapsed && 'Logout'}
-          </button>
-        </div>
 
       </aside>
 
@@ -702,9 +706,40 @@ export default function Layout({ children, pageTitle, pageKey }) {
               )}
             </div>
 
-            <div className="ly-user-chip">
-              <div className="ly-user-avatar">{user.avatar || '?'}</div>
-              <span className="ly-user-name">{user.name || '...'}</span>
+            <div className="ly-user-wrap" ref={userMenuRef}>
+              <button className="ly-user-chip" onClick={() => setShowUserMenu(v => !v)}>
+                <div className="ly-user-avatar">{user.avatar || '?'}</div>
+                <span className="ly-user-name">{user.name || '...'}</span>
+              </button>
+              {showUserMenu && (
+                <div className="ly-user-menu">
+                  <div className="ly-user-menu-head">
+                    <div className="ly-user-avatar-lg">{user.avatar || '?'}</div>
+                    <div>
+                      <div className="ly-user-menu-name">{user.name || '...'}</div>
+                      <div className="ly-user-menu-role">{user.role || ''}</div>
+                    </div>
+                  </div>
+                  <div className="ly-user-menu-section">
+                    <label className="ly-user-menu-label">Display name</label>
+                    <input
+                      className="ly-user-menu-input"
+                      value={nameDraft}
+                      onChange={e => setNameDraft(e.target.value)}
+                      placeholder="Your name"
+                    />
+                    <button
+                      className="ly-user-menu-save"
+                      disabled={!nameDraft.trim() || nameDraft.trim() === user.name || nameSaving}
+                      onClick={saveDisplayName}
+                    >{nameSaving ? 'Saving…' : 'Save'}</button>
+                  </div>
+                  <button className="ly-user-menu-item ly-user-menu-logout" onClick={signOut}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" width="14" height="14"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    Log out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </header>
