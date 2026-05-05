@@ -121,7 +121,7 @@ export default function PeopleKpi() {
       sb.from('kpi_teams').select('*').eq('is_active', true).order('name'),
       sb.from('kpi_assignments').select('*, profiles(id,name,role)').eq('fy_label', fy).eq('is_active', true),
       sb.from('kpi_thresholds').select('*').eq('fy_label', fy),
-      sb.from('kpi_hero_products').select('month_start, item_code'),
+      sb.from('kpi_hero_products').select('month_start, brand, category'),
       sb.from('kpi_definitions').select('*').eq('is_active', true).order('sort_order'),
       sb.from('kpi_kra_categories').select('*').order('sort_order'),
     ])
@@ -131,7 +131,7 @@ export default function PeopleKpi() {
     const tmap = {}; (thRes.data || []).forEach(t => { (tmap[t.team_id] ||= {})[t.kpi_key] = t })
     setThresholdsByTeam(tmap)
 
-    const hmap = {}; (hpRes.data || []).forEach(r => { (hmap[r.month_start.slice(0, 10)] ||= []).push(r.item_code) })
+    const hmap = {}; (hpRes.data || []).forEach(r => { (hmap[r.month_start.slice(0, 10)] ||= []).push({ brand: r.brand || null, category: r.category || null }) })
     setHeroByMonth(hmap)
 
     const dmap = {}; (dRes.data || []).forEach(d => { (dmap[d.team_id] ||= []).push(d) })

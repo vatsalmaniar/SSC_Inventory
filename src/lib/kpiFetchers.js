@@ -11,7 +11,7 @@
 //     fyStart: ISO date string — first month_start of the FY
 //     fyEnd:   ISO date string — exclusive upper bound (first month_start of next FY)
 //     monthRanges: [{ key: 'YYYY-MM-DD', start: Date, end: Date }] — defines bucket bounds
-//     heroByMonth: { 'YYYY-MM-DD': [item_codes...] } — hero products per month
+//     heroByMonth: { 'YYYY-MM-DD': [{brand, category}...] } — hero brand/category pairs per month
 //     monthlyTarget (only for derived ones): numeric
 //   }
 //
@@ -84,24 +84,47 @@ export const AUTO_FETCHERS = {
 
   hero_products_count: async ({ profileName, fyStart, fyEnd, monthRanges, heroByMonth }) => {
     if (!profileName) return {}
-    // Collect every hero item_code across the FY; query once.
-    const allItems = Array.from(new Set(
-      Object.values(heroByMonth || {}).flat()
-    ))
-    if (allItems.length === 0) return {}
+    // heroByMonth shape: { 'YYYY-MM-DD': [{ brand, category }, ...] }
+    const allPairs = Object.values(heroByMonth || {}).flat()
+    if (allPairs.length === 0) return {}
+
+    // Pre-compute the union of brands + categories across the FY so the items
+    // query is bounded. Empty/null values mean "match anything" on that field.
+    const brandUnion    = Array.from(new Set(allPairs.map(p => p.brand).filter(Boolean)))
+    const categoryUnion = Array.from(new Set(allPairs.map(p => p.category).filter(Boolean)))
+
+    // Find all item_codes that match any of the FY's hero (brand, category) pairs.
+    let q = sb.from('items').select('item_code, brand, category')
+    if (brandUnion.length    > 0) q = q.in('brand',    brandUnion)
+    if (categoryUnion.length > 0) q = q.or(categoryUnion.map(c => `category.eq.${c}`).join(','))
+    const { data: matchingItems } = await q
+    if (!matchingItems || matchingItems.length === 0) return {}
+
+    const itemMeta = new Map()
+    matchingItems.forEach(it => itemMeta.set(it.item_code, { brand: it.brand, category: it.category }))
+    const codes = [...itemMeta.keys()]
+    if (codes.length === 0) return {}
+
     const { data } = await sb.from('order_items')
       .select('item_code, orders!inner(id, account_owner, status, is_test, created_at)')
-      .in('item_code', allItems)
+      .in('item_code', codes)
       .eq('orders.account_owner', profileName).neq('orders.status', 'cancelled').eq('orders.is_test', false)
       .gte('orders.created_at', fyStart).lt('orders.created_at', fyEnd)
-    // For each row, only count if its item_code is in the hero list FOR THAT month
-    const distinctOrdersPerMonth = {}  // key -> Set of order ids
+
+    const matches = (pair, meta) =>
+      (!pair.brand    || pair.brand    === meta.brand) &&
+      (!pair.category || pair.category === meta.category) &&
+      (pair.brand || pair.category)  // ignore empty (any/any) entries
+
+    const distinctOrdersPerMonth = {}
     ;(data || []).forEach(r => {
       const created = new Date(r.orders?.created_at)
       const k = bucketKey(created, monthRanges)
       if (!k) return
       const heroForMonth = heroByMonth?.[k] || []
-      if (!heroForMonth.includes(r.item_code)) return
+      const meta = itemMeta.get(r.item_code)
+      if (!meta) return
+      if (!heroForMonth.some(p => matches(p, meta))) return
       if (!distinctOrdersPerMonth[k]) distinctOrdersPerMonth[k] = new Set()
       distinctOrdersPerMonth[k].add(r.orders.id)
     })

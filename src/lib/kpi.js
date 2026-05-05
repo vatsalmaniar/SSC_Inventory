@@ -7,7 +7,7 @@ export const KPI_DEFS = [
   { key: 'field_visits',      kra: 'R', label: 'Field Visits',              unit: 'count',  format: 'int',  source: 'auto+manual', help: 'Solo + joint SSC-team visits. Admin can override.' },
   { key: 'principal_visits',  kra: 'R', label: 'Joint Visit with Principal',unit: 'count',  format: 'int',  source: 'auto+manual', help: 'Visits with principal rep. Admin can override.' },
   { key: 'lost_orders',       kra: 'R', label: 'Lost Orders Highlighted',   unit: 'count',  format: 'int',  source: 'manual',  help: 'Lost / no-go orders reported by salesperson' },
-  { key: 'hero_products',     kra: 'I', label: 'Hero Products Sold',        unit: 'count',  format: 'int',  source: 'auto+manual', help: 'Orders containing this month\'s hero products. Admin can override.' },
+  { key: 'hero_products',     kra: 'I', label: 'Hero Products Sold',        unit: 'count',  format: 'int',  source: 'auto+manual', help: 'Orders containing items matching the month\'s hero brand/category. Admin can override.' },
   { key: 'sales_ideas',       kra: 'I', label: 'Sales Ideas Submitted',     unit: 'count',  format: 'int',  source: 'manual',  help: 'Internal sales improvement ideas submitted' },
   { key: 'complaints',        kra: 'M', label: 'Customer Complaints',       unit: 'count',  format: 'int',  source: 'manual',  help: 'Complaints received (0 = best)' },
 ]

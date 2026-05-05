@@ -181,22 +181,29 @@ function ScoreLadder({ def, rows, maxPts }) {
 // ── Hero Products tab ──
 function HeroProductsTab({ onSaved }) {
   const fy = currentFyLabel()
-  const [items, setItems] = useState([])
+  const [rows, setRows] = useState([])
+  const [brands, setBrands] = useState([])
+  const [categories, setCategories] = useState([])
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
   })
-  const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState(null)
+  const [pickBrand, setPickBrand] = useState('')
+  const [pickCategory, setPickCategory] = useState('')
   const [loading, setLoading] = useState(true)
   const [actorName, setActorName] = useState('')
 
   useEffect(() => {
     Promise.all([
       sb.from('kpi_hero_products').select('*').order('month_start', { ascending: false }),
+      sb.from('items').select('brand,category').eq('is_active', true),
       sb.auth.getSession().then(({ data }) => sb.from('profiles').select('name').eq('id', data?.session?.user?.id || '').single()),
-    ]).then(([hp, p]) => {
-      setItems(hp.data || [])
+    ]).then(([hp, it, p]) => {
+      setRows(hp.data || [])
+      const bSet = new Set(), cSet = new Set()
+      ;(it.data || []).forEach(r => { if (r.brand) bSet.add(r.brand); if (r.category) cSet.add(r.category) })
+      setBrands([...bSet].sort())
+      setCategories([...cSet].sort())
       setActorName(p.data?.name || '')
       setLoading(false)
     })
@@ -213,19 +220,21 @@ function HeroProductsTab({ onSaved }) {
     return out
   })()
 
-  const monthItems = items.filter(it => it.month_start.slice(0, 10) === selectedMonth)
+  const monthRows = rows.filter(it => it.month_start.slice(0, 10) === selectedMonth)
 
-  async function fetchItems(q) {
-    if (!q || q.length < 2) return []
-    const { data } = await sb.from('items').select('item_code,item_no,brand').or(`item_code.ilike.%${q}%,item_no.ilike.%${q}%`).eq('is_active', true).limit(20)
-    return data || []
-  }
   async function add() {
-    if (!selected) { toast('Pick an item from the dropdown'); return }
-    if (monthItems.length >= 5) { toast('Max 5 hero products per month — remove one first'); return }
-    const { error } = await sb.from('kpi_hero_products').insert({ month_start: selectedMonth, item_code: selected.item_code, added_by: actorName })
+    if (!pickBrand && !pickCategory) { toast('Pick at least Brand or Category'); return }
+    if (monthRows.length >= 5) { toast('Max 5 hero entries per month — remove one first'); return }
+    const dup = monthRows.some(r => (r.brand || '') === pickBrand && (r.category || '') === pickCategory)
+    if (dup) { toast('Already added for this month'); return }
+    const { error } = await sb.from('kpi_hero_products').insert({
+      month_start: selectedMonth,
+      brand:    pickBrand    || null,
+      category: pickCategory || null,
+      added_by: actorName,
+    })
     if (error) { toast(friendlyError(error)); return }
-    toast('Added', 'success'); setSearch(''); setSelected(null); reload()
+    toast('Added', 'success'); setPickBrand(''); setPickCategory(''); reload()
   }
   async function remove(id) {
     const { error } = await sb.from('kpi_hero_products').delete().eq('id', id)
@@ -234,7 +243,7 @@ function HeroProductsTab({ onSaved }) {
   }
   async function reload() {
     const { data } = await sb.from('kpi_hero_products').select('*').order('month_start', { ascending: false })
-    setItems(data || []); onSaved?.()
+    setRows(data || []); onSaved?.()
   }
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8' }}>Loading…</div>
@@ -243,11 +252,11 @@ function HeroProductsTab({ onSaved }) {
     <div style={{ padding: '20px 28px', overflow: 'auto' }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: '#0B1B30' }}>Hero Products by Month</div>
-        <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4, fontFamily: 'Geist Mono, monospace' }}>FY 20{fy.split('-')[0]}–20{fy.split('-')[1]} · pick up to 5 per month</div>
+        <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4, fontFamily: 'Geist Mono, monospace' }}>FY 20{fy.split('-')[0]}–20{fy.split('-')[1]} · pick brand + category · up to 5 per month</div>
       </div>
 
       <div style={{ background: '#FBFBFD', border: '1px solid #E8EBF0', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 100px', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 1fr 100px', gap: 10, alignItems: 'flex-start' }}>
           <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
             style={{ padding: '9px 10px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 13, outline: 'none', background: '#FFF' }}>
             {months.map(m => {
@@ -255,25 +264,23 @@ function HeroProductsTab({ onSaved }) {
               return <option key={k} value={k}>{MONTHS_LABELS[m.getMonth()]} {String(m.getFullYear()).slice(2)}</option>
             })}
           </select>
-          <Typeahead
-            value={search} onChange={v => { setSearch(v); if (!v.trim()) setSelected(null) }}
-            onSelect={item => { setSelected(item); setSearch(item.item_code) }}
-            placeholder="Search item code..." fetchFn={fetchItems} strictSelect
-            renderItem={item => (
-              <div>
-                <span style={{ fontWeight: 600, fontFamily: 'Geist Mono, monospace', fontSize: 12 }}>{item.item_code}</span>
-                {item.item_no && <span style={{ color: '#94A3B8', marginLeft: 8, fontSize: 11 }}>{item.item_no}</span>}
-                {item.brand && <span style={{ color: '#94A3B8', marginLeft: 6, fontSize: 11 }}>· {item.brand}</span>}
-              </div>
-            )}
-          />
-          <button onClick={add} disabled={monthItems.length >= 5}
-            style={{ padding: '9px 14px', background: monthItems.length >= 5 ? '#E8EBF0' : '#0A2540', color: monthItems.length >= 5 ? '#94A3B8' : '#FFF', border: 0, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: monthItems.length >= 5 ? 'default' : 'pointer' }}>
+          <select value={pickBrand} onChange={e => setPickBrand(e.target.value)}
+            style={{ padding: '9px 10px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 13, outline: 'none', background: '#FFF' }}>
+            <option value="">— Any brand —</option>
+            {brands.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <select value={pickCategory} onChange={e => setPickCategory(e.target.value)}
+            style={{ padding: '9px 10px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 13, outline: 'none', background: '#FFF' }}>
+            <option value="">— Any category —</option>
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <button onClick={add} disabled={monthRows.length >= 5}
+            style={{ padding: '9px 14px', background: monthRows.length >= 5 ? '#E8EBF0' : '#0A2540', color: monthRows.length >= 5 ? '#94A3B8' : '#FFF', border: 0, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: monthRows.length >= 5 ? 'default' : 'pointer' }}>
             Add
           </button>
         </div>
-        <div style={{ fontSize: 11, color: monthItems.length >= 5 ? '#92400e' : '#5B6878', marginTop: 8, fontWeight: monthItems.length >= 5 ? 600 : 400 }}>
-          {monthItems.length} of 5 selected for {MONTHS_LABELS[new Date(selectedMonth).getMonth()]} {String(new Date(selectedMonth).getFullYear()).slice(2)}
+        <div style={{ fontSize: 11, color: monthRows.length >= 5 ? '#92400e' : '#5B6878', marginTop: 8, fontWeight: monthRows.length >= 5 ? 600 : 400 }}>
+          {monthRows.length} of 5 selected for {MONTHS_LABELS[new Date(selectedMonth).getMonth()]} {String(new Date(selectedMonth).getFullYear()).slice(2)}
         </div>
       </div>
 
@@ -281,18 +288,20 @@ function HeroProductsTab({ onSaved }) {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#FBFBFD', borderBottom: '1px solid #E8EBF0' }}>
-              <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 600, color: '#5B6878', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.4px', fontFamily: 'Geist Mono, monospace' }}>Item Code</th>
+              <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 600, color: '#5B6878', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.4px', fontFamily: 'Geist Mono, monospace' }}>Brand</th>
+              <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 600, color: '#5B6878', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.4px', fontFamily: 'Geist Mono, monospace' }}>Category</th>
               <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 600, color: '#5B6878', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.4px', fontFamily: 'Geist Mono, monospace' }}>Added by</th>
               <th style={{ width: 80 }}/>
             </tr>
           </thead>
           <tbody>
-            {monthItems.length === 0 && (
-              <tr><td colSpan={3} style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>No hero products for this month yet.</td></tr>
+            {monthRows.length === 0 && (
+              <tr><td colSpan={4} style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>No hero entries for this month yet.</td></tr>
             )}
-            {monthItems.map(it => (
+            {monthRows.map(it => (
               <tr key={it.id} style={{ borderBottom: '1px solid #EEF1F5' }}>
-                <td style={{ padding: '12px 14px', fontFamily: 'Geist Mono, monospace', fontWeight: 600, fontSize: 13 }}>{it.item_code}</td>
+                <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{it.brand || <span style={{ color: '#94A3B8', fontWeight: 400 }}>Any</span>}</td>
+                <td style={{ padding: '12px 14px', fontSize: 13 }}>{it.category || <span style={{ color: '#94A3B8' }}>Any</span>}</td>
                 <td style={{ padding: '12px 14px', fontSize: 12, color: '#5B6878' }}>{it.added_by || '—'}</td>
                 <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                   <button onClick={() => remove(it.id)} style={{ padding: '5px 10px', background: 'white', border: '1.5px solid #fecaca', borderRadius: 5, fontSize: 12, fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>Remove</button>
