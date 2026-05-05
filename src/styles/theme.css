@@ -87,7 +87,7 @@ html[data-theme="dark"] .hd-content {
 
 /* Loading text — in dark mode make sure spinner + label are visible */
 html[data-theme="dark"] .loading-state { color: #94A3B8 !important; }
-html[data-theme="dark"] .loading-spin { border-color: #2A3349 !important; border-top-color: #3DD9D6 !important; }
+html[data-theme="dark"] .loading-spin { border-color: #2A3349 !important; border-top-color: #818CF8 !important; }
 
 /* Smooth transitions on theme change (only for color, not layout) */
 .orders-app, .orders-app *, .crm-app, .crm-app *,
@@ -148,9 +148,9 @@ html[data-theme="dark"] .c360-page tr:hover td { background: #232C44 !important;
 html[data-theme="dark"] .c360-page .c360-stats { border-top-color: #2A3349 !important; }
 html[data-theme="dark"] .c360-page .c360-stat,
 html[data-theme="dark"] .c360-page .c360-stats > .c360-stat { background: #232C44 !important; border: 1px solid #2A3349 !important; }
-html[data-theme="dark"] .c360-page .c360-stat-value.accent { color: #3DD9D6 !important; }
+html[data-theme="dark"] .c360-page .c360-stat-value.accent { color: #818CF8 !important; }
 html[data-theme="dark"] .c360-page .c360-stat-value.green  { color: #10B981 !important; }
-html[data-theme="dark"] .c360-page .c360-badge-blue  { background: rgba(61,217,214,0.12) !important; color: #3DD9D6 !important; }
+html[data-theme="dark"] .c360-page .c360-badge-blue  { background: rgba(129,140,248,0.12) !important; color: #818CF8 !important; }
 html[data-theme="dark"] .c360-page .c360-badge-green { background: rgba(16,185,129,0.15) !important; color: #6EE7B7 !important; }
 html[data-theme="dark"] .c360-page .c360-badge-amber { background: rgba(245,158,11,0.15) !important; color: #FBBF24 !important; }
 html[data-theme="dark"] .c360-page .c360-badge-red   { background: rgba(239,68,68,0.15) !important;  color: #FCA5A5 !important; }
@@ -159,8 +159,8 @@ html[data-theme="dark"] .c360-page .c360-badge-gray  { background: #2A3349 !impo
 /* c360 action buttons (Back / Edit / Download / Cancel) — white in base CSS */
 html[data-theme="dark"] .c360-page .c360-btn { background: #232C44 !important; color: #E5E9F0 !important; border-color: #2A3349 !important; }
 html[data-theme="dark"] .c360-page .c360-btn:hover { background: #2A3349 !important; }
-html[data-theme="dark"] .c360-page .c360-btn-primary { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
-html[data-theme="dark"] .c360-page .c360-btn-primary:hover { background: #2DC8C5 !important; }
+html[data-theme="dark"] .c360-page .c360-btn-primary { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
+html[data-theme="dark"] .c360-page .c360-btn-primary:hover { background: #6366F1 !important; }
 html[data-theme="dark"] .c360-page .c360-btn-approve { background: #10B981 !important; color: #0A2540 !important; border-color: #10B981 !important; }
 html[data-theme="dark"] .c360-page .c360-btn-danger { background: #232C44 !important; color: #FCA5A5 !important; border-color: rgba(239,68,68,0.4) !important; }
 html[data-theme="dark"] .c360-page .c360-btn-danger:hover { background: rgba(239,68,68,0.12) !important; }
@@ -169,21 +169,21 @@ html[data-theme="dark"] .c360-page .c360-btn-amber { background: rgba(245,158,11
 /* ── Order Detail (.od-page) — buttons, pipe, batch, items table ── */
 html[data-theme="dark"] .od-page .od-btn { background: #232C44 !important; color: #E5E9F0 !important; border-color: #2A3349 !important; }
 html[data-theme="dark"] .od-page .od-btn:hover { background: #2A3349 !important; }
-html[data-theme="dark"] .od-page .od-btn-primary { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-btn-primary { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
 html[data-theme="dark"] .od-page .od-btn-danger { background: #232C44 !important; color: #FCA5A5 !important; border-color: rgba(239,68,68,0.4) !important; }
 html[data-theme="dark"] .od-page .od-btn-danger:hover { background: rgba(239,68,68,0.12) !important; }
 
 /* Pipeline stages */
 html[data-theme="dark"] .od-page .od-pipe-stage { background: #1A2236 !important; color: #94A3B8 !important; border-color: #2A3349 !important; }
-html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #3DD9D6 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #818CF8 !important; color: #0A2540 !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.active::after,
-html[data-theme="dark"] .od-page .od-pipe-stage.active::before { border-left-color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active::before { border-left-color: #818CF8 !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.done { background: #232C44 !important; color: #E5E9F0 !important; }
 
 /* Batch toggle buttons */
 html[data-theme="dark"] .od-page .od-batch-btn { background: #232C44 !important; color: #94A3B8 !important; border-color: #2A3349 !important; }
 html[data-theme="dark"] .od-page .od-batch-btn:hover { background: #2A3349 !important; color: #E5E9F0 !important; }
-html[data-theme="dark"] .od-page .od-batch-btn.active { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-batch-btn.active { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
 
 /* Edit field inputs */
 html[data-theme="dark"] .od-page .od-edit-field input,
@@ -214,12 +214,12 @@ html[data-theme="dark"] .od-page .od-batch-card { background: #1A2236 !important
 /* Pipeline stages — base CSS uses dark navy for active and pale blue for done,
    both invisible/jarring on dark. Repaint with cyan accent + dark surfaces. */
 html[data-theme="dark"] .od-page .od-pipe-stage { background: #1A2236 !important; color: #94A3B8 !important; }
-html[data-theme="dark"] .od-page .od-pipe-stage.done { background: #232C44 !important; color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.done { background: #232C44 !important; color: #818CF8 !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.done::after  { border-left-color: #232C44 !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.done::before { border-left-color: #2A3349 !important; }
-html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #3DD9D6 !important; color: #0A2540 !important; }
-html[data-theme="dark"] .od-page .od-pipe-stage.active::after  { border-left-color: #3DD9D6 !important; }
-html[data-theme="dark"] .od-page .od-pipe-stage.active::before { border-left-color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #818CF8 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active::after  { border-left-color: #818CF8 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active::before { border-left-color: #818CF8 !important; }
 html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active { background: #10B981 !important; color: #0A2540 !important; }
 html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active::after  { border-left-color: #10B981 !important; }
 html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active::before { border-left-color: #10B981 !important; }
@@ -231,11 +231,11 @@ html[data-theme="dark"] .od-page .od-pipeline-cancelled .od-pipe-stage.active::b
 html[data-theme="dark"] [style*="color:#1a4dab"],
 html[data-theme="dark"] [style*="color: #1a4dab"],
 html[data-theme="dark"] [style*="rgb(26, 77, 171)"],
-html[data-theme="dark"] [style*="rgb(26,77,171)"] { color: #3DD9D6 !important; }
+html[data-theme="dark"] [style*="rgb(26,77,171)"] { color: #818CF8 !important; }
 /* The customer-name link in OrderDetail is rendered via inline style; match
    the actual <span> that wraps the name inside .od-detail-field */
 html[data-theme="dark"] .od-page .od-detail-field .val span[style*="cursor"],
-html[data-theme="dark"] .od-page .od-detail-field .val span[style*="underline"] { color: #3DD9D6 !important; }
+html[data-theme="dark"] .od-page .od-detail-field .val span[style*="underline"] { color: #818CF8 !important; }
 
 /* Notes field (yellow sticky-note look) — repaint to amber-tinted dark */
 html[data-theme="dark"] .od-page .od-notes-val,
@@ -273,7 +273,7 @@ html[data-theme="dark"] .kpi-app .kpi-tile {
 html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero,
 html[data-theme="dark"] .crm-app .kpi-tile.kpi-hero,
 html[data-theme="dark"] .pf-app .kpi-tile.kpi-hero,
-html[data-theme="dark"] .kpi-app .kpi-tile.kpi-hero { border-left: 3px solid #3DD9D6 !important; }
+html[data-theme="dark"] .kpi-app .kpi-tile.kpi-hero { border-left: 3px solid #818CF8 !important; }
 html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero.tone-forest,
 html[data-theme="dark"] .crm-app .kpi-tile.kpi-hero.tone-forest { border-left-color: #10B981 !important; }
 html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero.tone-teal,
@@ -288,7 +288,7 @@ html[data-theme="dark"] .crm-app .kpi-tile .kt-sub { color: #94A3B8 !important; 
 html[data-theme="dark"] .orders-app .kpi-tile .kt-arrow,
 html[data-theme="dark"] .crm-app .kpi-tile .kt-arrow { background: #232C44 !important; color: #94A3B8 !important; }
 html[data-theme="dark"] .orders-app .kpi-tile .kt-chart,
-html[data-theme="dark"] .crm-app .kpi-tile .kt-chart { color: #3DD9D6 !important; opacity: 0.4; }
+html[data-theme="dark"] .crm-app .kpi-tile .kt-chart { color: #818CF8 !important; opacity: 0.4; }
 
 /* Procurement Forecast surfaces */
 html[data-theme="dark"] .pf-app .card,
@@ -338,12 +338,12 @@ html[data-theme="dark"] .pf-drawer .cc-val { color: #F1F5F9 !important; }
 
 /* Forecast brand dropdown items */
 html[data-theme="dark"] .pf-app .brand-menu-item { color: #E5E9F0 !important; }
-html[data-theme="dark"] .pf-app .brand-menu-item.on { background: rgba(61,217,214,0.10) !important; }
+html[data-theme="dark"] .pf-app .brand-menu-item.on { background: rgba(129,140,248,0.10) !important; }
 html[data-theme="dark"] .pf-app .brand-menu-search { background: #232C44 !important; border-color: #2A3349 !important; }
 html[data-theme="dark"] .pf-app .brand-menu-search input { background: transparent !important; border: 0 !important; color: #E5E9F0 !important; }
-html[data-theme="dark"] .pf-app .it-num.it-min { color: #3DD9D6 !important; }
+html[data-theme="dark"] .pf-app .it-num.it-min { color: #818CF8 !important; }
 html[data-theme="dark"] .pf-app .it-num.it-po { color: #6EE7B7 !important; }
-html[data-theme="dark"] .pf-app .it-id { background: rgba(61,217,214,0.12) !important; color: #3DD9D6 !important; }
+html[data-theme="dark"] .pf-app .it-id { background: rgba(129,140,248,0.12) !important; color: #818CF8 !important; }
 
 html[data-theme="dark"] .pf-app .page-sub,
 html[data-theme="dark"] .pf-app .card-eyebrow,
@@ -371,7 +371,7 @@ html[data-theme="dark"] .pf-app .bm-pill { background: #232C44 !important; borde
 html[data-theme="dark"] .pf-app .sc-filter-bar button.on,
 html[data-theme="dark"] .pf-app .btn-primary,
 html[data-theme="dark"] .pf-modal .btn-primary,
-html[data-theme="dark"] .pf-drawer .btn-primary { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
+html[data-theme="dark"] .pf-drawer .btn-primary { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
 
 /* KPI dashboard surfaces */
 html[data-theme="dark"] .kpi-app .card,
@@ -386,7 +386,7 @@ html[data-theme="dark"] .kpi-drawer .drawer-tabs { background: #1A2236 !importan
 
 html[data-theme="dark"] .kpi-app .tp-row:hover,
 html[data-theme="dark"] .kpi-drawer .drawer-tab:hover { background: #232C44 !important; }
-html[data-theme="dark"] .kpi-app .tp-row.selected { background: rgba(61,217,214,0.10) !important; box-shadow: inset 2px 0 0 #3DD9D6 !important; }
+html[data-theme="dark"] .kpi-app .tp-row.selected { background: rgba(129,140,248,0.10) !important; box-shadow: inset 2px 0 0 #818CF8 !important; }
 
 html[data-theme="dark"] .kpi-app .page-title,
 html[data-theme="dark"] .kpi-app .tp-title,
@@ -571,8 +571,8 @@ html[data-theme="dark"] .ly-logo-row { border-bottom-color: #2A3349; }
 html[data-theme="dark"] .ly-logo-text { color: #E5E9F0; }
 html[data-theme="dark"] .ly-nav-item { color: #94A3B8; }
 html[data-theme="dark"] .ly-nav-item:hover { background: #1A2236; color: #E5E9F0; }
-html[data-theme="dark"] .ly-nav-item.active { background: rgba(61,217,214,0.10); color: #3DD9D6; }
-html[data-theme="dark"] .ly-nav-item.active::before { background: #3DD9D6; }
+html[data-theme="dark"] .ly-nav-item.active { background: rgba(129,140,248,0.10); color: #818CF8; }
+html[data-theme="dark"] .ly-nav-item.active::before { background: #818CF8; }
 html[data-theme="dark"] .ly-collapse-btn { background: #1A2236; border-color: #2A3349; color: #94A3B8; }
 html[data-theme="dark"] .ly-collapse-btn:hover { background: #232C44; color: #E5E9F0; }
 html[data-theme="dark"] .ly-nav-section.ly-nav-bottom { border-top-color: #2A3349; }
@@ -592,7 +592,7 @@ html[data-theme="dark"] .hd-kpi-hero {
   box-shadow: none !important;
 }
 html[data-theme="dark"] .kpi-hero.tone-deep,
-html[data-theme="dark"] .hd-kpi-hero.hd-tone-deep   { border-left-color: #3DD9D6 !important; }
+html[data-theme="dark"] .hd-kpi-hero.hd-tone-deep   { border-left-color: #818CF8 !important; }
 html[data-theme="dark"] .kpi-hero.tone-forest,
 html[data-theme="dark"] .hd-kpi-hero.hd-tone-forest { border-left-color: #10B981 !important; }
 html[data-theme="dark"] .kpi-hero.tone-teal,
@@ -607,7 +607,7 @@ html[data-theme="dark"] .hd-kpi-hero .hd-kpi-sub { color: #94A3B8 !important; }
 html[data-theme="dark"] .kpi-hero .kt-arrow,
 html[data-theme="dark"] .hd-kpi-hero .hd-kpi-arrow { background: #232C44 !important; color: #94A3B8 !important; }
 html[data-theme="dark"] .kpi-hero .kt-chart,
-html[data-theme="dark"] .hd-kpi-hero .hd-kpi-chart { color: #3DD9D6 !important; opacity: 0.4; }
+html[data-theme="dark"] .hd-kpi-hero .hd-kpi-chart { color: #818CF8 !important; opacity: 0.4; }
 
 /* Catch any remaining white-bg classes inside dark-mode wrappers */
 html[data-theme="dark"] .orders-app [class*="-card"]:not([class*="hero"]),
@@ -671,12 +671,12 @@ html[data-theme="dark"] .orders-app .view-toggle button.on,
 html[data-theme="dark"] .crm-app .view-toggle button.on,
 html[data-theme="dark"] .orders-app .o-timeline button.on,
 html[data-theme="dark"] .orders-app .o-datemode button.on,
-html[data-theme="dark"] .orders-app .ol-page-btn.on { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; font-weight: 600 !important; }
+html[data-theme="dark"] .orders-app .ol-page-btn.on { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; font-weight: 600 !important; }
 
 html[data-theme="dark"] .orders-app .btn-primary,
-html[data-theme="dark"] .crm-app .btn-primary { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
+html[data-theme="dark"] .crm-app .btn-primary { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
 html[data-theme="dark"] .orders-app .btn-primary:hover,
-html[data-theme="dark"] .crm-app .btn-primary:hover { background: #2DC8C5 !important; }
+html[data-theme="dark"] .crm-app .btn-primary:hover { background: #6366F1 !important; }
 
 /* Inline-style hardcoded dark colors → flip to light text in dark mode */
 html[data-theme="dark"] [style*="color:#0B1B30"],
@@ -746,7 +746,7 @@ html[data-theme="dark"] [style*="color: var(--blue-700)"],
 html[data-theme="dark"] [style*="color:var(--blue-800)"],
 html[data-theme="dark"] [style*="color: var(--blue-800)"],
 html[data-theme="dark"] [style*="color:var(--blue-600)"],
-html[data-theme="dark"] [style*="color: var(--blue-600)"] { color: #3DD9D6 !important; }
+html[data-theme="dark"] [style*="color: var(--blue-600)"] { color: #818CF8 !important; }
 
 /* White / very-light backgrounds in inline styles → dark surface */
 html[data-theme="dark"] [style*="background:white"],
@@ -868,16 +868,25 @@ html[data-theme="dark"] .theme-toggle:hover { background: #1A2236; color: #E5E9F
 /* Dashboard hover fixes (legacy nav/topnav had hardcoded light hover bg) */
 html[data-theme="dark"] .hd-nav-item:hover,
 html[data-theme="dark"] .hd-topnav-item:hover { background: #1A2236 !important; color: #E5E9F0 !important; }
-html[data-theme="dark"] .hd-app-card:hover .hd-app-arrow { color: #3DD9D6 !important; }
+html[data-theme="dark"] .hd-app-card:hover .hd-app-arrow { color: #818CF8 !important; }
 html[data-theme="dark"] .hd-stat:hover,
 html[data-theme="dark"] .hd-app-card:hover,
-html[data-theme="dark"] .hd-kpi-tile:hover { border-color: #3DD9D6 !important; background: #232C44 !important; }
+html[data-theme="dark"] .hd-kpi-tile:hover { border-color: #818CF8 !important; background: #232C44 !important; }
 
 /* Reinforce dashboard key figures (override accent variants like amber) */
 html[data-theme="dark"] .hd-kpi-tile.hd-accent-amber .hd-kpi-value { color: #FBBF24 !important; }
 html[data-theme="dark"] .hd-stat-num,
 html[data-theme="dark"] .hd-kpi-value { color: #F1F5F9 !important; }
 html[data-theme="dark"] .hd-kpi-hero .hd-kpi-value { color: #F1F5F9 !important; }
+
+/* App icon boxes on home dashboard — base CSS uses pastel inline backgrounds
+   that read as bright white on dark. Override the inline bg + brighten the
+   icon glyph so each app keeps its colour identity but on a dark surface. */
+html[data-theme="dark"] .hd-app-card .hd-app-icon-box {
+  background: #232C44 !important;
+  box-shadow: inset 0 0 0 1px #2A3349;
+}
+html[data-theme="dark"] .hd-app-card .hd-app-icon-box svg { filter: brightness(1.7) saturate(1.1); }
 
 /* Logo: keep the white card visible in dark mode (clean brand card on dark
    sidebar). No filter — the PNG has a white background so inverting just

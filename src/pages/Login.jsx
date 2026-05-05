@@ -25,6 +25,15 @@ export default function Login() {
   const usernameRef = useRef(null)
   const totpRef     = useRef(null)
 
+  // Login page has its own dual-tone design; dark theme would render the
+  // white right-panel inputs unreadably. Force light while on /login,
+  // restore the saved preference on unmount.
+  useEffect(() => {
+    const saved = document.documentElement.getAttribute('data-theme')
+    document.documentElement.removeAttribute('data-theme')
+    return () => { if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark') }
+  }, [])
+
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
       if (data?.session) handleSession(data.session)
