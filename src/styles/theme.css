@@ -1000,10 +1000,10 @@ html[data-theme="dark"] .hd-app-card .hd-app-icon-box {
 }
 html[data-theme="dark"] .hd-app-card .hd-app-icon-box svg { filter: brightness(1.7) saturate(1.1); }
 
-/* Light/dark logo swap */
-.ly-logo-icon .ly-logo-dark { display: none; }
-html[data-theme="dark"] .ly-logo-icon .ly-logo-light { display: none; }
-html[data-theme="dark"] .ly-logo-icon .ly-logo-dark { display: block; }
+/* Light/dark logo swap (covers both expanded .ly-logo-icon and collapsed .ly-collapsed-logo) */
+.ly-logo-dark { display: none; }
+html[data-theme="dark"] .ly-logo-light { display: none; }
+html[data-theme="dark"] .ly-logo-dark { display: block; }
 
 /* Logo: keep the white card visible in dark mode (clean brand card on dark
    sidebar). No filter — the PNG has a white background so inverting just
