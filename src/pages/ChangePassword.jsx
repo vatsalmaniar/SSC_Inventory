@@ -56,6 +56,11 @@ export default function ChangePassword() {
     const { error: updateErr } = await sb.auth.updateUser({ password: newPwd })
     if (updateErr) {
       const msg = updateErr.message || 'Failed to update password.'
+      if (/re-?authentication|reauth|aal/i.test(msg)) {
+        await sb.auth.signOut()
+        navigate('/login', { state: { notice: 'Please log in again to change your password.' } })
+        return
+      }
       if (/leaked|breach|pwned/i.test(msg)) {
         setError('This password has appeared in a known data breach. Please choose another.')
       } else if (/weak|requirements/i.test(msg)) {
