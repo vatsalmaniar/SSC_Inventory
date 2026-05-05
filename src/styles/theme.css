@@ -251,6 +251,28 @@ html[data-theme="dark"] .od-page .od-batch-card.od-batch-done { background: #1A2
 html[data-theme="dark"] .od-page .od-batch-card.od-batch-done * { opacity: 1 !important; }
 html[data-theme="dark"] .od-page .od-batch-pill { background: rgba(245,158,11,0.15) !important; color: #FBBF24 !important; }
 
+/* Shipped row gets inline style={{background:'#f0fdf4'}} — pale green pulls
+   row text into invisibility on dark. Repaint via rgb() match. */
+html[data-theme="dark"] [style*="background:#f0fdf4"],
+html[data-theme="dark"] [style*="background: #f0fdf4"],
+html[data-theme="dark"] [style*="rgb(240, 253, 244)"],
+html[data-theme="dark"] [style*="rgb(240,253,244)"] { background: rgba(16,185,129,0.08) !important; }
+/* Inline dark green used in 'Done' / dispatched count cells */
+html[data-theme="dark"] [style*="color:#166534"],
+html[data-theme="dark"] [style*="color: #166534"],
+html[data-theme="dark"] [style*="rgb(22, 101, 52)"],
+html[data-theme="dark"] [style*="rgb(22,101,52)"] { color: #6EE7B7 !important; }
+/* Inline dark orange used for pending qty */
+html[data-theme="dark"] [style*="color:#c2410c"],
+html[data-theme="dark"] [style*="color: #c2410c"],
+html[data-theme="dark"] [style*="rgb(194, 65, 12)"],
+html[data-theme="dark"] [style*="rgb(194,65,12)"] { color: #FDBA74 !important; }
+/* Inline dark green used in dispatch-history bullet circles */
+html[data-theme="dark"] [style*="color:#065f46"],
+html[data-theme="dark"] [style*="color: #065f46"],
+html[data-theme="dark"] [style*="rgb(6, 95, 70)"],
+html[data-theme="dark"] [style*="rgb(6,95,70)"] { color: #6EE7B7 !important; }
+
 /* Pipeline stages — base CSS uses dark navy for active and pale blue for done,
    both invisible/jarring on dark. Repaint with cyan accent + dark surfaces. */
 html[data-theme="dark"] .od-page .od-pipe-stage { background: #1A2236 !important; color: #94A3B8 !important; }
