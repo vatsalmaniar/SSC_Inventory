@@ -10,17 +10,22 @@ html[data-theme="dark"] { color-scheme: dark; }
    All redesign stylesheets read color tokens from these vars (and inline
    styles use var(--o-ink) etc.). Overriding the vars in dark mode flips
    surfaces, ink and lines everywhere at once. */
+/* Trial: VS Code-style neutral grays on .orders-app only.
+   If approved, propagate the same palette to .crm-app / .pf-app / .kpi-app
+   and the body/sidebar overrides below. */
 html[data-theme="dark"] .orders-app {
-  --o-bg: #0F172A;
-  --o-bg-2: #232C44;
-  --o-surface: #1A2236;
-  --o-line: #2A3349;
-  --o-line-2: #2A3349;
-  --o-ink: #E5E9F0;
-  --o-muted: #94A3B8;
-  --o-muted-2: #6B7794;
-  --o-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --o-bg: #1E1E1E;
+  --o-bg-2: #2D2D2D;
+  --o-surface: #252526;
+  --o-line: #3C3C3C;
+  --o-line-2: #3C3C3C;
+  --o-ink: #D4D4D4;
+  --o-muted: #858585;
+  --o-muted-2: #6A6A6A;
+  --o-shadow: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
 }
+/* Match the orders page outer surface + per-pages inside */
+html[data-theme="dark"] .orders-app { background: #1E1E1E !important; }
 html[data-theme="dark"] .crm-app {
   --c-bg: #0F172A;
   --c-bg-2: #232C44;
@@ -1079,3 +1084,73 @@ html[data-theme="dark"] .orders-app .gs-label,
 html[data-theme="dark"] .orders-app .gs-val,
 html[data-theme="dark"] .orders-app .dlg-name,
 html[data-theme="dark"] .orders-app .dlg-pct { color: #E5E9F0 !important; }
+
+/* ══════════ VS CODE NEUTRAL GREY TRIAL — .orders-app only ══════════
+   Loaded last so it beats the slate-blue rules earlier in the file.
+   Applies to Orders Dashboard, Orders List, FC, Procurement, Billing
+   list/dashboard pages (they all share the .orders-app wrapper). */
+html[data-theme="dark"] .orders-app,
+html[data-theme="dark"] .orders-app .card,
+html[data-theme="dark"] .orders-app .kpi-tile,
+html[data-theme="dark"] .orders-app .rep-panel,
+html[data-theme="dark"] .orders-app .ol-wrap,
+html[data-theme="dark"] .orders-app .cust-table,
+html[data-theme="dark"] .orders-app .anal-card,
+html[data-theme="dark"] .orders-app .o-anal,
+html[data-theme="dark"] .orders-app [class*="-card"]:not([class*="hero"]) {
+  background-color: #1E1E1E !important;
+  border-color: #3C3C3C !important;
+}
+html[data-theme="dark"] .orders-app .card,
+html[data-theme="dark"] .orders-app .kpi-tile,
+html[data-theme="dark"] .orders-app .rep-panel,
+html[data-theme="dark"] .orders-app .ol-wrap,
+html[data-theme="dark"] .orders-app .anal-card { background-color: #252526 !important; }
+
+/* Inner surfaces: header strips, sticky rows, footers, hovers */
+html[data-theme="dark"] .orders-app .ol-row.ol-head,
+html[data-theme="dark"] .orders-app .cust-row.cust-head,
+html[data-theme="dark"] .orders-app .ol-foot,
+html[data-theme="dark"] .orders-app .rp-foot,
+html[data-theme="dark"] .orders-app .rp-row:hover,
+html[data-theme="dark"] .orders-app .ol-data:hover,
+html[data-theme="dark"] .orders-app .cust-data:hover,
+html[data-theme="dark"] .orders-app tr:hover td,
+html[data-theme="dark"] .orders-app .o-chip:hover,
+html[data-theme="dark"] .orders-app .filt-select:hover,
+html[data-theme="dark"] .orders-app .ol-page-btn:hover { background-color: #2D2D2D !important; }
+
+html[data-theme="dark"] .orders-app .o-chip,
+html[data-theme="dark"] .orders-app .filt-select,
+html[data-theme="dark"] .orders-app .ol-page-btn,
+html[data-theme="dark"] .orders-app .o-search,
+html[data-theme="dark"] .orders-app .o-search input,
+html[data-theme="dark"] .orders-app .btn-ghost,
+html[data-theme="dark"] .orders-app .o-test-toggle { background-color: #2D2D2D !important; border-color: #3C3C3C !important; color: #D4D4D4 !important; }
+
+/* KPI hero tiles: keep the indigo left-border, neutral surface */
+html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero,
+html[data-theme="dark"] .orders-app .kpi-tile { background-color: #252526 !important; background-image: none !important; border: 1px solid #3C3C3C !important; box-shadow: none !important; }
+html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero { border-left: 3px solid #818CF8 !important; }
+html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero.tone-forest { border-left-color: #10B981 !important; }
+html[data-theme="dark"] .orders-app .kpi-tile.kpi-hero.tone-teal   { border-left-color: #14B8A6 !important; }
+
+/* Text colors: neutralise the blue-tinted ink */
+html[data-theme="dark"] .orders-app,
+html[data-theme="dark"] .orders-app * { color: #D4D4D4; }
+html[data-theme="dark"] .orders-app .page-sub,
+html[data-theme="dark"] .orders-app .o-summary,
+html[data-theme="dark"] .orders-app .card-eyebrow,
+html[data-theme="dark"] .orders-app .kt-label,
+html[data-theme="dark"] .orders-app .kt-sub,
+html[data-theme="dark"] .orders-app .ol-cell-sub,
+html[data-theme="dark"] .orders-app .cust-cell-sub,
+html[data-theme="dark"] .orders-app .rp-foot-label,
+html[data-theme="dark"] .orders-app .rp-sub,
+html[data-theme="dark"] .orders-app .rp-rank { color: #858585 !important; }
+html[data-theme="dark"] .orders-app .page-title,
+html[data-theme="dark"] .orders-app .kt-value,
+html[data-theme="dark"] .orders-app .card-title { color: #FFFFFF !important; }
+
+/* Trend pill / indicator chips */
+html[data-theme="dark"] .orders-app .trend-pill { background-color: #2D2D2D !important; color: #D4D4D4 !important; border-color: #3C3C3C !important; }
