@@ -73,9 +73,7 @@ export default function ChangePassword() {
       return
     }
 
-    const { error: profileErr } = await sb.from('profiles')
-      .update({ password_changed_at: new Date().toISOString(), must_change_password: false })
-      .eq('id', profile.id)
+    const { error: profileErr } = await sb.rpc('mark_password_changed')
 
     if (profileErr) {
       setError('Password changed, but failed to update profile. Please contact admin.')
