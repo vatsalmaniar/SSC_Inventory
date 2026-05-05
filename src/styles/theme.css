@@ -688,6 +688,17 @@ html[data-theme="dark"] .ly-user-menu-item { color: #D4D4D4 !important; }
 html[data-theme="dark"] .ly-user-menu-item:hover { background: #2D2D2D !important; }
 html[data-theme="dark"] .ly-user-menu-logout { color: #FCA5A5 !important; }
 
+/* Global search dropdown — rows use inline JS bg ('white' / '#f8fafc' on hover).
+   Catch the rgb() forms so dark theme can recolour them. */
+html[data-theme="dark"] [style*="background:white"],
+html[data-theme="dark"] [style*="background: white"],
+html[data-theme="dark"] [style*="background:rgb(255, 255, 255)"],
+html[data-theme="dark"] [style*="background: rgb(255, 255, 255)"] { background: #252526 !important; }
+html[data-theme="dark"] [style*="background:#f8fafc"],
+html[data-theme="dark"] [style*="background: #f8fafc"],
+html[data-theme="dark"] [style*="background:rgb(248, 250, 252)"],
+html[data-theme="dark"] [style*="background: rgb(248, 250, 252)"] { background: #2D2D2D !important; }
+
 /* Bell + notifications dropdown */
 html[data-theme="dark"] .ly-topbar .ly-bell-wrap .ly-bell-btn,
 html[data-theme="dark"] .ly-bell-btn { background: #252526 !important; border-color: #3C3C3C !important; color: #858585 !important; }
