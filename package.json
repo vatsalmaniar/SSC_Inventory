@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hcaptcha/react-hcaptcha": "^2.0.2",
     "@supabase/supabase-js": "^2.49.4",
     "exceljs": "^4.4.0",
     "html2pdf.js": "^0.14.0",

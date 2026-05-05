@@ -1,7 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import HCaptcha from '@hcaptcha/react-hcaptcha'
 import { sb } from '../lib/supabase'
 import '../styles/login.css'
+
+const HCAPTCHA_SITE_KEY = '3eb698c2-27c4-46b8-bc52-6aa0e778a0cc'
+
+const IS_LOCALHOST = typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+   window.location.hostname === '127.0.0.1' ||
+   window.location.hostname.startsWith('192.168.') ||
+   window.location.hostname.startsWith('10.'))
 
 export default function Login() {
   const navigate = useNavigate()
@@ -24,6 +33,9 @@ export default function Login() {
 
   const usernameRef = useRef(null)
   const totpRef     = useRef(null)
+  const captchaRef  = useRef(null)
+  const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaFailed, setCaptchaFailed] = useState(false)
 
   // Login page has its own dual-tone design; dark theme would render the
   // white right-panel inputs unreadably. Force light while on /login,
@@ -92,7 +104,13 @@ export default function Login() {
     setError('')
 
     const email = u + '@ssccontrol.com'
-    const { data, error: authErr } = await sb.auth.signInWithPassword({ email, password: p })
+    const { data, error: authErr } = await sb.auth.signInWithPassword({
+      email,
+      password: p,
+      options: captchaToken ? { captchaToken } : undefined,
+    })
+    captchaRef.current?.resetCaptcha()
+    setCaptchaToken('')
 
     if (authErr) {
       sb.from('login_audit').insert({
@@ -280,7 +298,27 @@ export default function Login() {
               </div>
             </div>
 
-            <button className="submit-btn" onClick={doLogin} disabled={loading}>
+            {!IS_LOCALHOST && (
+              <div style={{ display:'flex', justifyContent:'center', margin:'8px 0 16px', minHeight:78 }}>
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={HCAPTCHA_SITE_KEY}
+                  onVerify={t => { setCaptchaToken(t); setCaptchaFailed(false) }}
+                  onExpire={() => setCaptchaToken('')}
+                  onError={() => { setCaptchaFailed(true); setCaptchaToken('') }}
+                  onChalExpired={() => setCaptchaToken('')}
+                  size="normal"
+                />
+              </div>
+            )}
+
+            {captchaFailed && (
+              <div style={{ fontSize:12, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:6, padding:'8px 12px', marginBottom:12 }}>
+                CAPTCHA service unavailable — you can still sign in. If problems persist, contact admin.
+              </div>
+            )}
+
+            <button className="submit-btn" onClick={doLogin} disabled={loading || (!IS_LOCALHOST && !captchaToken && !captchaFailed)}>
               {loading ? <><div className="spinner"/><span>Signing in...</span></> : <span>Sign in</span>}
             </button>
 
