@@ -1,0 +1,794 @@
+/* ══════════════════════════════════════
+   THEME — light (default) + dark mode
+   Toggle by setting data-theme="dark" on <html>
+══════════════════════════════════════ */
+
+html { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
+
+/* ── CSS variable overrides per app wrapper ──
+   All redesign stylesheets read color tokens from these vars (and inline
+   styles use var(--o-ink) etc.). Overriding the vars in dark mode flips
+   surfaces, ink and lines everywhere at once. */
+html[data-theme="dark"] .orders-app {
+  --o-bg: #0F172A;
+  --o-bg-2: #232C44;
+  --o-surface: #1A2236;
+  --o-line: #2A3349;
+  --o-line-2: #2A3349;
+  --o-ink: #E5E9F0;
+  --o-muted: #94A3B8;
+  --o-muted-2: #6B7794;
+  --o-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+}
+html[data-theme="dark"] .crm-app {
+  --c-bg: #0F172A;
+  --c-bg-2: #232C44;
+  --c-surface: #1A2236;
+  --c-line: #2A3349;
+  --c-line-2: #2A3349;
+  --c-ink: #E5E9F0;
+  --c-muted: #94A3B8;
+  --c-muted-2: #6B7794;
+  --c-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+}
+html[data-theme="dark"] .pf-app {
+  --pf-bg: #0F172A;
+  --pf-bg-2: #232C44;
+  --pf-surface: #1A2236;
+  --pf-line: #2A3349;
+  --pf-line-2: #2A3349;
+  --pf-ink: #E5E9F0;
+  --pf-muted: #94A3B8;
+  --pf-muted-2: #6B7794;
+  --pf-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --pf-shadow-lg: 0 12px 32px -8px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.4);
+}
+html[data-theme="dark"] .kpi-app {
+  --kbg: #0F172A;
+  --kbg-2: #232C44;
+  --ksurface: #1A2236;
+  --kline: #2A3349;
+  --kline-2: #2A3349;
+  --kink: #E5E9F0;
+  --kink-2: #CBD5E1;
+  --kmuted: #94A3B8;
+  --kmuted-2: #6B7794;
+  --kshadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --kshadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --kshadow-lg: 0 12px 32px -8px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.4);
+}
+
+/* Smooth transitions on theme change (only for color, not layout) */
+.orders-app, .orders-app *, .crm-app, .crm-app *,
+.kpi-app, .kpi-app *, .od-page, .od-page *,
+.c360-page, .c360-page *, .crm-page, .crm-page *,
+.no-page, .no-page *, .acc-page, .acc-page *,
+.hd-content, .hd-content *, .ly-sidebar, .ly-sidebar *,
+.ly-topbar, .ly-topbar *, .ly-content {
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.12s ease;
+}
+
+/* ══════════ DARK MODE ══════════ */
+
+html[data-theme="dark"] body { background: #0B1220; color: #E5E9F0; }
+
+/* App wrappers (page surfaces) */
+html[data-theme="dark"] .orders-app,
+html[data-theme="dark"] .crm-app,
+html[data-theme="dark"] .pf-app,
+html[data-theme="dark"] .kpi-app,
+html[data-theme="dark"] .od-page,
+html[data-theme="dark"] .c360-page,
+html[data-theme="dark"] .crm-page,
+html[data-theme="dark"] .no-page,
+html[data-theme="dark"] .acc-page,
+html[data-theme="dark"] .ly-content:has(.hd-content),
+html[data-theme="dark"] .ly-main:has(.hd-content) {
+  background: #0F172A;
+  color: #E5E9F0;
+}
+
+/* Customer 360 / Vendor 360 / Item 360 detail pages (.c360-page) */
+html[data-theme="dark"] .c360-page .c360-hero,
+html[data-theme="dark"] .c360-page .c360-stat,
+html[data-theme="dark"] .c360-page .c360-card,
+html[data-theme="dark"] .c360-page .c360-section,
+html[data-theme="dark"] .c360-page .c360-tab-content,
+html[data-theme="dark"] .c360-page .c360-table-wrap,
+html[data-theme="dark"] .c360-page .c360-empty,
+html[data-theme="dark"] .c360-page .c360-list-card { background: #1A2236 !important; border-color: #2A3349 !important; color: #E5E9F0 !important; }
+
+html[data-theme="dark"] .c360-page .c360-hero-name,
+html[data-theme="dark"] .c360-page .c360-stat-value,
+html[data-theme="dark"] .c360-page .c360-card-title,
+html[data-theme="dark"] .c360-page .c360-section-title,
+html[data-theme="dark"] .c360-page .c360-table-name,
+html[data-theme="dark"] .c360-page .c360-list-card-name { color: #F1F5F9 !important; }
+
+html[data-theme="dark"] .c360-page .c360-stat-label,
+html[data-theme="dark"] .c360-page .c360-meta,
+html[data-theme="dark"] .c360-page .c360-section-sub,
+html[data-theme="dark"] .c360-page .c360-table-sub,
+html[data-theme="dark"] .c360-page .c360-list-card-sub { color: #94A3B8 !important; }
+
+html[data-theme="dark"] .c360-page tr:hover td { background: #232C44 !important; }
+
+/* Procurement Forecast surfaces */
+html[data-theme="dark"] .pf-app .card,
+html[data-theme="dark"] .pf-app .brand-bar,
+html[data-theme="dark"] .pf-app .meta-pill,
+html[data-theme="dark"] .pf-app .brand-btn,
+html[data-theme="dark"] .pf-app .brand-menu,
+html[data-theme="dark"] .pf-app .calc-card,
+html[data-theme="dark"] .pf-app .cc-card,
+html[data-theme="dark"] .pf-app .impact-box,
+html[data-theme="dark"] .pf-app .items-table-wrap,
+html[data-theme="dark"] .pf-app .it-row.it-head,
+html[data-theme="dark"] .pf-app .sc-stats,
+html[data-theme="dark"] .pf-app .sc-stat,
+html[data-theme="dark"] .pf-app .table-foot,
+html[data-theme="dark"] .pf-modal,
+html[data-theme="dark"] .pf-modal .modal-summary,
+html[data-theme="dark"] .pf-modal .ms-cell,
+html[data-theme="dark"] .pf-modal .modal-toolbar,
+html[data-theme="dark"] .pf-modal .modal-table,
+html[data-theme="dark"] .pf-modal .mt-row.mt-head,
+html[data-theme="dark"] .pf-modal .modal-foot,
+html[data-theme="dark"] .pf-modal .modal-search,
+html[data-theme="dark"] .pf-drawer,
+html[data-theme="dark"] .pf-drawer .drawer-foot,
+html[data-theme="dark"] .pf-drawer .drawer-head { background: #1A2236 !important; border-color: #2A3349 !important; color: #E5E9F0 !important; }
+
+html[data-theme="dark"] .pf-app .it-data:hover,
+html[data-theme="dark"] .pf-app .brand-menu-item:hover,
+html[data-theme="dark"] .pf-modal .mt-row:hover { background: #232C44 !important; }
+
+html[data-theme="dark"] .pf-app .page-title,
+html[data-theme="dark"] .pf-app .card-title,
+html[data-theme="dark"] .pf-app .sc-title,
+html[data-theme="dark"] .pf-app .brand-name,
+html[data-theme="dark"] .pf-app .brand-menu-name,
+html[data-theme="dark"] .pf-app .brand-menu-search input,
+html[data-theme="dark"] .pf-app .it-name,
+html[data-theme="dark"] .pf-app .it-stock-total,
+html[data-theme="dark"] .pf-app .sc-stat b,
+html[data-theme="dark"] .pf-modal .modal-title,
+html[data-theme="dark"] .pf-modal .ms-val,
+html[data-theme="dark"] .pf-modal .mt-code,
+html[data-theme="dark"] .pf-drawer .drawer-title,
+html[data-theme="dark"] .pf-drawer .sf-val,
+html[data-theme="dark"] .pf-drawer .cc-val { color: #F1F5F9 !important; }
+
+/* Forecast brand dropdown items */
+html[data-theme="dark"] .pf-app .brand-menu-item { color: #E5E9F0 !important; }
+html[data-theme="dark"] .pf-app .brand-menu-item.on { background: rgba(61,217,214,0.10) !important; }
+html[data-theme="dark"] .pf-app .brand-menu-search { background: #232C44 !important; border-color: #2A3349 !important; }
+html[data-theme="dark"] .pf-app .brand-menu-search input { background: transparent !important; border: 0 !important; color: #E5E9F0 !important; }
+html[data-theme="dark"] .pf-app .it-num.it-min { color: #3DD9D6 !important; }
+html[data-theme="dark"] .pf-app .it-num.it-po { color: #6EE7B7 !important; }
+html[data-theme="dark"] .pf-app .it-id { background: rgba(61,217,214,0.12) !important; color: #3DD9D6 !important; }
+
+html[data-theme="dark"] .pf-app .page-sub,
+html[data-theme="dark"] .pf-app .card-eyebrow,
+html[data-theme="dark"] .pf-app .meta-label,
+html[data-theme="dark"] .pf-app .brand-sub,
+html[data-theme="dark"] .pf-app .sc-eyebrow,
+html[data-theme="dark"] .pf-app .sc-headline-sub,
+html[data-theme="dark"] .pf-app .it-orig,
+html[data-theme="dark"] .pf-app .sc-stat span:first-child,
+html[data-theme="dark"] .pf-app .sc-stat-sub,
+html[data-theme="dark"] .pf-modal .modal-eyebrow,
+html[data-theme="dark"] .pf-modal .ms-label,
+html[data-theme="dark"] .pf-drawer .drawer-eyebrow,
+html[data-theme="dark"] .pf-drawer .drawer-sub,
+html[data-theme="dark"] .pf-drawer .calc-head,
+html[data-theme="dark"] .pf-drawer .cc-label,
+html[data-theme="dark"] .pf-drawer .cc-formula { color: #94A3B8 !important; }
+
+/* Forecast inputs/buttons */
+html[data-theme="dark"] .pf-app .it-input,
+html[data-theme="dark"] .pf-modal .mt-input { background: #1A2236 !important; border-color: #FCD34D !important; color: #FCD34D !important; }
+html[data-theme="dark"] .pf-app .it-input.empty { border-color: #2A3349 !important; background: #232C44 !important; color: #94A3B8 !important; }
+html[data-theme="dark"] .pf-app .sc-filter-bar,
+html[data-theme="dark"] .pf-app .bm-pill { background: #232C44 !important; border-color: #2A3349 !important; color: #E5E9F0 !important; }
+html[data-theme="dark"] .pf-app .sc-filter-bar button.on,
+html[data-theme="dark"] .pf-app .btn-primary,
+html[data-theme="dark"] .pf-modal .btn-primary,
+html[data-theme="dark"] .pf-drawer .btn-primary { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
+
+/* KPI dashboard surfaces */
+html[data-theme="dark"] .kpi-app .card,
+html[data-theme="dark"] .kpi-app .team-panel,
+html[data-theme="dark"] .kpi-app .hero,
+html[data-theme="dark"] .kpi-app .tp-foot-cell,
+html[data-theme="dark"] .kpi-app .meta-pill,
+html[data-theme="dark"] .kpi-drawer,
+html[data-theme="dark"] .kpi-drawer .drawer-head,
+html[data-theme="dark"] .kpi-drawer .drawer-foot,
+html[data-theme="dark"] .kpi-drawer .drawer-tabs { background: #1A2236 !important; border-color: #2A3349 !important; color: #E5E9F0 !important; }
+
+html[data-theme="dark"] .kpi-app .tp-row:hover,
+html[data-theme="dark"] .kpi-drawer .drawer-tab:hover { background: #232C44 !important; }
+html[data-theme="dark"] .kpi-app .tp-row.selected { background: rgba(61,217,214,0.10) !important; box-shadow: inset 2px 0 0 #3DD9D6 !important; }
+
+html[data-theme="dark"] .kpi-app .page-title,
+html[data-theme="dark"] .kpi-app .tp-title,
+html[data-theme="dark"] .kpi-app .tp-name,
+html[data-theme="dark"] .kpi-app .tp-score-val,
+html[data-theme="dark"] .kpi-app .tp-foot-val,
+html[data-theme="dark"] .kpi-app .hero-name,
+html[data-theme="dark"] .kpi-app .card-title,
+html[data-theme="dark"] .kpi-drawer .drawer-title { color: #F1F5F9 !important; }
+
+html[data-theme="dark"] .kpi-app .page-sub,
+html[data-theme="dark"] .kpi-app .tp-sub,
+html[data-theme="dark"] .kpi-app .tp-role,
+html[data-theme="dark"] .kpi-app .meta-label,
+html[data-theme="dark"] .kpi-app .tp-foot-label,
+html[data-theme="dark"] .kpi-app .hero-meta,
+html[data-theme="dark"] .kpi-app .card-eyebrow,
+html[data-theme="dark"] .kpi-drawer .drawer-eyebrow,
+html[data-theme="dark"] .kpi-drawer .drawer-sub { color: #94A3B8 !important; }
+
+/* Layout content padding area too */
+html[data-theme="dark"] .ly-content { background: #0F172A; }
+
+/* Cards and surfaces */
+html[data-theme="dark"] .orders-app .card,
+html[data-theme="dark"] .orders-app .kpi-tile:not(.kpi-hero),
+html[data-theme="dark"] .orders-app .rep-panel,
+html[data-theme="dark"] .orders-app .ol-wrap,
+html[data-theme="dark"] .orders-app .cust-table,
+html[data-theme="dark"] .crm-app .card,
+html[data-theme="dark"] .crm-app .kpi-tile:not(.kpi-hero),
+html[data-theme="dark"] .crm-app .dl-wrap,
+html[data-theme="dark"] .od-card,
+html[data-theme="dark"] .od-side-card,
+html[data-theme="dark"] .od-header,
+html[data-theme="dark"] .no-card,
+html[data-theme="dark"] .acc-status-card,
+html[data-theme="dark"] .acc-detect-card,
+html[data-theme="dark"] .acc-preview-card,
+html[data-theme="dark"] .hd-stat,
+html[data-theme="dark"] .hd-app-card,
+html[data-theme="dark"] .hd-kpi-tile:not(.hd-kpi-hero) {
+  background: #1A2236 !important;
+  border-color: #2A3349 !important;
+  color: #E5E9F0;
+}
+
+/* Subtle / striped backgrounds */
+html[data-theme="dark"] .orders-app .ol-row.ol-head,
+html[data-theme="dark"] .orders-app .cust-row.cust-head,
+html[data-theme="dark"] .crm-app .dl-head,
+html[data-theme="dark"] .orders-app .ol-foot,
+html[data-theme="dark"] .crm-app .dl-foot,
+html[data-theme="dark"] .od-cancel-modal,
+html[data-theme="dark"] .od-drawer,
+html[data-theme="dark"] .od-drawer-foot,
+html[data-theme="dark"] .od-drawer-head,
+html[data-theme="dark"] .pf-modal,
+html[data-theme="dark"] .pf-drawer { background: #1A2236 !important; color: #E5E9F0; border-color: #2A3349 !important; }
+
+html[data-theme="dark"] .ol-data:hover,
+html[data-theme="dark"] .dl-data:hover,
+html[data-theme="dark"] .cust-data:hover { background: #232C44 !important; }
+
+/* Inputs / selects / textareas */
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  background: #1A2236 !important;
+  border-color: #2A3349 !important;
+  color: #E5E9F0 !important;
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder { color: #6B7794 !important; }
+
+/* Borders fix-up */
+html[data-theme="dark"] .orders-app .ol-row,
+html[data-theme="dark"] .orders-app .cust-row,
+html[data-theme="dark"] .crm-app .dl-row,
+html[data-theme="dark"] .od-card-header,
+html[data-theme="dark"] .od-batch-card { border-color: #2A3349 !important; }
+
+/* Text color overrides — preserve accents (blue/green/red) but neutralize ink */
+html[data-theme="dark"] .orders-app,
+html[data-theme="dark"] .crm-app,
+html[data-theme="dark"] .od-page,
+html[data-theme="dark"] .c360-page,
+html[data-theme="dark"] .crm-page,
+html[data-theme="dark"] .no-page,
+html[data-theme="dark"] .acc-page,
+html[data-theme="dark"] .hd-content { color: #E5E9F0; }
+
+html[data-theme="dark"] .orders-app .o-summary b,
+html[data-theme="dark"] .orders-app .ol-num,
+html[data-theme="dark"] .orders-app .ol-cust,
+html[data-theme="dark"] .orders-app .ol-owner-name,
+html[data-theme="dark"] .orders-app .ol-date,
+html[data-theme="dark"] .orders-app .ol-pending,
+html[data-theme="dark"] .orders-app .ol-items,
+html[data-theme="dark"] .orders-app .o-list-cust,
+html[data-theme="dark"] .orders-app .ol-val,
+html[data-theme="dark"] .orders-app .o-list-cust,
+html[data-theme="dark"] .orders-app .o-list-val,
+html[data-theme="dark"] .orders-app .o-list-num,
+html[data-theme="dark"] .orders-app .cust-name,
+html[data-theme="dark"] .orders-app .cust-num,
+html[data-theme="dark"] .orders-app .lb-name,
+html[data-theme="dark"] .orders-app .lb-val,
+html[data-theme="dark"] .orders-app .lb-total-val,
+html[data-theme="dark"] .orders-app .rp-name,
+html[data-theme="dark"] .orders-app .rp-val,
+html[data-theme="dark"] .orders-app .rp-foot-val,
+html[data-theme="dark"] .orders-app .rp-title,
+html[data-theme="dark"] .orders-app .gf-val,
+html[data-theme="dark"] .orders-app .gs-val,
+html[data-theme="dark"] .orders-app .funnel-val,
+html[data-theme="dark"] .orders-app .funnel-name,
+html[data-theme="dark"] .orders-app .qs-count,
+html[data-theme="dark"] .orders-app .sc-stat b,
+html[data-theme="dark"] .orders-app .task-title,
+html[data-theme="dark"] .orders-app .dl-title,
+html[data-theme="dark"] .orders-app .dl-value,
+html[data-theme="dark"] .orders-app .kt-value,
+html[data-theme="dark"] .orders-app .card-title,
+html[data-theme="dark"] .orders-app .page-title,
+html[data-theme="dark"] .orders-app .sc-coverage,
+html[data-theme="dark"] .crm-app .page-title,
+html[data-theme="dark"] .crm-app .card-title,
+html[data-theme="dark"] .crm-app .dl-title,
+html[data-theme="dark"] .crm-app .dl-value,
+html[data-theme="dark"] .crm-app .dl-cust,
+html[data-theme="dark"] .crm-app .dl-owner-name,
+html[data-theme="dark"] .crm-app .dl-date-main,
+html[data-theme="dark"] .crm-app .lb-name,
+html[data-theme="dark"] .crm-app .lb-val,
+html[data-theme="dark"] .crm-app .lb-total-val,
+html[data-theme="dark"] .crm-app .gs-val,
+html[data-theme="dark"] .crm-app .gf-val,
+html[data-theme="dark"] .crm-app .funnel-name,
+html[data-theme="dark"] .crm-app .funnel-val,
+html[data-theme="dark"] .crm-app .qs-count,
+html[data-theme="dark"] .crm-app .task-title,
+html[data-theme="dark"] .crm-app .kt-value,
+html[data-theme="dark"] .crm-app .kb-card-title,
+html[data-theme="dark"] .crm-app .kb-col-name,
+html[data-theme="dark"] .crm-app .kb-card-value,
+html[data-theme="dark"] .od-card-title,
+html[data-theme="dark"] .od-header-title,
+html[data-theme="dark"] .od-detail-field .val,
+html[data-theme="dark"] .od-side-val-big,
+html[data-theme="dark"] .no-page-title,
+html[data-theme="dark"] .acc-page-title,
+html[data-theme="dark"] .hd-greeting,
+html[data-theme="dark"] .hd-stat-num,
+html[data-theme="dark"] .hd-app-name,
+html[data-theme="dark"] .hd-kpi-value:not(.hd-kpi-hero .hd-kpi-value) { color: #F1F5F9 !important; }
+
+html[data-theme="dark"] .orders-app .page-sub,
+html[data-theme="dark"] .crm-app .page-sub,
+html[data-theme="dark"] .orders-app .o-summary,
+html[data-theme="dark"] .orders-app .card-eyebrow,
+html[data-theme="dark"] .crm-app .card-eyebrow,
+html[data-theme="dark"] .orders-app .kt-label,
+html[data-theme="dark"] .crm-app .kt-label,
+html[data-theme="dark"] .od-header-eyebrow,
+html[data-theme="dark"] .od-header-num,
+html[data-theme="dark"] .od-detail-field label,
+html[data-theme="dark"] .od-side-card-title,
+html[data-theme="dark"] .od-side-sub,
+html[data-theme="dark"] .no-page-sub,
+html[data-theme="dark"] .acc-page-sub,
+html[data-theme="dark"] .hd-date,
+html[data-theme="dark"] .hd-stat-lbl,
+html[data-theme="dark"] .hd-app-desc,
+html[data-theme="dark"] .hd-section-label,
+html[data-theme="dark"] .hd-kpi-label,
+html[data-theme="dark"] .hd-kpi-sub { color: #94A3B8 !important; }
+
+/* Sidebar (Layout) */
+html[data-theme="dark"] .ly-sidebar { background: #0F172A; border-right-color: #2A3349; }
+html[data-theme="dark"] .ly-logo-row { border-bottom-color: #2A3349; }
+html[data-theme="dark"] .ly-logo-text { color: #E5E9F0; }
+html[data-theme="dark"] .ly-nav-item { color: #94A3B8; }
+html[data-theme="dark"] .ly-nav-item:hover { background: #1A2236; color: #E5E9F0; }
+html[data-theme="dark"] .ly-nav-item.active { background: rgba(61,217,214,0.10); color: #3DD9D6; }
+html[data-theme="dark"] .ly-nav-item.active::before { background: #3DD9D6; }
+html[data-theme="dark"] .ly-collapse-btn { background: #1A2236; border-color: #2A3349; color: #94A3B8; }
+html[data-theme="dark"] .ly-collapse-btn:hover { background: #232C44; color: #E5E9F0; }
+html[data-theme="dark"] .ly-nav-section.ly-nav-bottom { border-top-color: #2A3349; }
+html[data-theme="dark"] .ly-user-fullname { color: #E5E9F0; }
+
+/* Topbar */
+html[data-theme="dark"] .ly-topbar { background: #0F172A; border-bottom-color: #2A3349; }
+
+/* In dark mode: flatten the bright gradient hero tiles into dark surfaces
+   with a colored left-border accent (much easier on the eyes). */
+html[data-theme="dark"] .kpi-hero,
+html[data-theme="dark"] .hd-kpi-hero {
+  background: #1A2236 !important;
+  color: #E5E9F0 !important;
+  border: 1px solid #2A3349 !important;
+  border-left: 3px solid !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] .kpi-hero.tone-deep,
+html[data-theme="dark"] .hd-kpi-hero.hd-tone-deep   { border-left-color: #3DD9D6 !important; }
+html[data-theme="dark"] .kpi-hero.tone-forest,
+html[data-theme="dark"] .hd-kpi-hero.hd-tone-forest { border-left-color: #10B981 !important; }
+html[data-theme="dark"] .kpi-hero.tone-teal,
+html[data-theme="dark"] .hd-kpi-hero.hd-tone-teal   { border-left-color: #14B8A6 !important; }
+
+html[data-theme="dark"] .kpi-hero .kt-label,
+html[data-theme="dark"] .hd-kpi-hero .hd-kpi-label { color: #94A3B8 !important; }
+html[data-theme="dark"] .kpi-hero .kt-value,
+html[data-theme="dark"] .hd-kpi-hero .hd-kpi-value { color: #F1F5F9 !important; }
+html[data-theme="dark"] .kpi-hero .kt-sub,
+html[data-theme="dark"] .hd-kpi-hero .hd-kpi-sub { color: #94A3B8 !important; }
+html[data-theme="dark"] .kpi-hero .kt-arrow,
+html[data-theme="dark"] .hd-kpi-hero .hd-kpi-arrow { background: #232C44 !important; color: #94A3B8 !important; }
+html[data-theme="dark"] .kpi-hero .kt-chart,
+html[data-theme="dark"] .hd-kpi-hero .hd-kpi-chart { color: #3DD9D6 !important; opacity: 0.4; }
+
+/* Catch any remaining white-bg classes inside dark-mode wrappers */
+html[data-theme="dark"] .orders-app [class*="-card"]:not([class*="hero"]),
+html[data-theme="dark"] .crm-app [class*="-card"]:not([class*="hero"]),
+html[data-theme="dark"] .pf-app [class*="-card"],
+html[data-theme="dark"] .kpi-app [class*="-card"],
+html[data-theme="dark"] .od-page [class*="-card"],
+html[data-theme="dark"] .c360-page [class*="-card"],
+html[data-theme="dark"] .crm-page [class*="-card"],
+html[data-theme="dark"] .no-page [class*="-card"],
+html[data-theme="dark"] .acc-page [class*="-card"],
+html[data-theme="dark"] .hd-content [class*="-card"]:not(.hd-app-soon),
+html[data-theme="dark"] .orders-app [class*="-tile"]:not([class*="hero"]),
+html[data-theme="dark"] .crm-app [class*="-tile"]:not([class*="hero"]),
+html[data-theme="dark"] .hd-content [class*="-tile"]:not([class*="hero"]) { background: #1A2236 !important; border-color: #2A3349 !important; }
+
+/* Status pills — keep their accent backgrounds in dark mode (already semi-transparent) */
+html[data-theme="dark"] .ol-status-pill,
+html[data-theme="dark"] .dl-stage-pill { background: color-mix(in srgb, var(--stage-color) 24%, transparent); color: color-mix(in srgb, var(--stage-color) 90%, white); }
+
+/* Drawer scrim a bit darker */
+html[data-theme="dark"] .od-drawer-scrim,
+html[data-theme="dark"] .od-cancel-overlay,
+html[data-theme="dark"] .pf-modal-scrim,
+html[data-theme="dark"] .pf-drawer-scrim,
+html[data-theme="dark"] .kpi-drawer-scrim { background: rgba(0,0,0,0.55); }
+
+/* Tag/badge fix-ups */
+html[data-theme="dark"] .ol-sample-tag { background: rgba(124,58,237,0.20); color: #C4B5FD; }
+html[data-theme="dark"] .dl-pr-tag { background: #1A2236; border-color: #2A3349; color: #E5E9F0; }
+
+/* Filter chips, dropdowns, buttons — fix borders + bg in dark mode */
+html[data-theme="dark"] .orders-app .filt-select,
+html[data-theme="dark"] .crm-app .filt-select,
+html[data-theme="dark"] .orders-app .o-chip,
+html[data-theme="dark"] .orders-app .o-search,
+html[data-theme="dark"] .crm-app .opps-search,
+html[data-theme="dark"] .orders-app .o-toolbar,
+html[data-theme="dark"] .crm-app .opps-filters,
+html[data-theme="dark"] .orders-app .o-timeline,
+html[data-theme="dark"] .orders-app .o-datemode,
+html[data-theme="dark"] .orders-app .view-toggle,
+html[data-theme="dark"] .crm-app .view-toggle,
+html[data-theme="dark"] .orders-app .ol-page-btn,
+html[data-theme="dark"] .orders-app .o-test-toggle,
+html[data-theme="dark"] .orders-app .btn-ghost,
+html[data-theme="dark"] .crm-app .btn-ghost {
+  background: #1A2236 !important;
+  border-color: #2A3349 !important;
+  color: #E5E9F0 !important;
+}
+
+html[data-theme="dark"] .orders-app .o-chip:hover,
+html[data-theme="dark"] .orders-app .filt-select:hover,
+html[data-theme="dark"] .crm-app .filt-select:hover,
+html[data-theme="dark"] .orders-app .ol-page-btn:hover,
+html[data-theme="dark"] .orders-app .btn-ghost:hover { background: #232C44 !important; border-color: #3A4664 !important; }
+
+html[data-theme="dark"] .orders-app .o-chip.on,
+html[data-theme="dark"] .orders-app .view-toggle button.on,
+html[data-theme="dark"] .crm-app .view-toggle button.on,
+html[data-theme="dark"] .orders-app .o-timeline button.on,
+html[data-theme="dark"] .orders-app .o-datemode button.on,
+html[data-theme="dark"] .orders-app .ol-page-btn.on { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; font-weight: 600 !important; }
+
+html[data-theme="dark"] .orders-app .btn-primary,
+html[data-theme="dark"] .crm-app .btn-primary { background: #3DD9D6 !important; color: #0A2540 !important; border-color: #3DD9D6 !important; }
+html[data-theme="dark"] .orders-app .btn-primary:hover,
+html[data-theme="dark"] .crm-app .btn-primary:hover { background: #2DC8C5 !important; }
+
+/* Inline-style hardcoded dark colors → flip to light text in dark mode */
+html[data-theme="dark"] [style*="color:#0B1B30"],
+html[data-theme="dark"] [style*="color: #0B1B30"],
+html[data-theme="dark"] [style*="color:#0f172a"],
+html[data-theme="dark"] [style*="color: #0f172a"],
+html[data-theme="dark"] [style*="color:#0F172A"],
+html[data-theme="dark"] [style*="color: #0F172A"],
+html[data-theme="dark"] [style*="color:#0e2d6a"],
+html[data-theme="dark"] [style*="color: #0e2d6a"],
+html[data-theme="dark"] [style*="color:#0d1f4c"],
+html[data-theme="dark"] [style*="color: #0d1f4c"],
+html[data-theme="dark"] [style*="color:#1e2d5a"],
+html[data-theme="dark"] [style*="color: #1e2d5a"],
+html[data-theme="dark"] [style*="color:#1f2937"],
+html[data-theme="dark"] [style*="color: #1f2937"],
+html[data-theme="dark"] [style*="color:#111827"],
+html[data-theme="dark"] [style*="color: #111827"],
+html[data-theme="dark"] [style*="color:#374151"],
+html[data-theme="dark"] [style*="color: #374151"],
+html[data-theme="dark"] [style*="color:var(--gray-900)"],
+html[data-theme="dark"] [style*="color: var(--gray-900)"],
+html[data-theme="dark"] [style*="color:var(--gray-800)"],
+html[data-theme="dark"] [style*="color: var(--gray-800)"],
+html[data-theme="dark"] [style*="color:var(--gray-700)"],
+html[data-theme="dark"] [style*="color: var(--gray-700)"] { color: #F1F5F9 !important; }
+
+/* Mid grays in inline styles → muted blue-gray */
+html[data-theme="dark"] [style*="color:#5B6878"],
+html[data-theme="dark"] [style*="color: #5B6878"],
+html[data-theme="dark"] [style*="color:#475569"],
+html[data-theme="dark"] [style*="color: #475569"],
+html[data-theme="dark"] [style*="color:#64748b"],
+html[data-theme="dark"] [style*="color: #64748b"],
+html[data-theme="dark"] [style*="color:var(--gray-600)"],
+html[data-theme="dark"] [style*="color: var(--gray-600)"],
+html[data-theme="dark"] [style*="color:var(--gray-500)"],
+html[data-theme="dark"] [style*="color: var(--gray-500)"] { color: #94A3B8 !important; }
+
+/* Light grays / muted-2 inline → softer */
+html[data-theme="dark"] [style*="color:#94A3B8"],
+html[data-theme="dark"] [style*="color: #94A3B8"],
+html[data-theme="dark"] [style*="color:#9ba3af"],
+html[data-theme="dark"] [style*="color: #9ba3af"],
+html[data-theme="dark"] [style*="color:#9ca3af"],
+html[data-theme="dark"] [style*="color: #9ca3af"],
+html[data-theme="dark"] [style*="color:var(--gray-400)"],
+html[data-theme="dark"] [style*="color: var(--gray-400)"],
+html[data-theme="dark"] [style*="color:var(--gray-300)"],
+html[data-theme="dark"] [style*="color: var(--gray-300)"] { color: #6B7794 !important; }
+
+/* Blue text in inline (1A4DAB / 1E54B7 / 1d4ed8 / 2563eb / blue-700/800) → cyan */
+html[data-theme="dark"] [style*="color:#1A4DAB"],
+html[data-theme="dark"] [style*="color: #1A4DAB"],
+html[data-theme="dark"] [style*="color:#1a4dab"],
+html[data-theme="dark"] [style*="color: #1a4dab"],
+html[data-theme="dark"] [style*="color:#1E54B7"],
+html[data-theme="dark"] [style*="color: #1E54B7"],
+html[data-theme="dark"] [style*="color:#1e54b7"],
+html[data-theme="dark"] [style*="color: #1e54b7"],
+html[data-theme="dark"] [style*="color:#1d4ed8"],
+html[data-theme="dark"] [style*="color: #1d4ed8"],
+html[data-theme="dark"] [style*="color:#2563eb"],
+html[data-theme="dark"] [style*="color: #2563eb"],
+html[data-theme="dark"] [style*="color:var(--blue-700)"],
+html[data-theme="dark"] [style*="color: var(--blue-700)"],
+html[data-theme="dark"] [style*="color:var(--blue-800)"],
+html[data-theme="dark"] [style*="color: var(--blue-800)"],
+html[data-theme="dark"] [style*="color:var(--blue-600)"],
+html[data-theme="dark"] [style*="color: var(--blue-600)"] { color: #3DD9D6 !important; }
+
+/* White / very-light backgrounds in inline styles → dark surface */
+html[data-theme="dark"] [style*="background:white"],
+html[data-theme="dark"] [style*="background: white"],
+html[data-theme="dark"] [style*="background:#fff"],
+html[data-theme="dark"] [style*="background: #fff"],
+html[data-theme="dark"] [style*="background:#FFF"],
+html[data-theme="dark"] [style*="background: #FFF"],
+html[data-theme="dark"] [style*="background:#FFFFFF"],
+html[data-theme="dark"] [style*="background: #FFFFFF"],
+html[data-theme="dark"] [style*="background:#fafafa"],
+html[data-theme="dark"] [style*="background: #fafafa"],
+html[data-theme="dark"] [style*="background:#f8fafc"],
+html[data-theme="dark"] [style*="background: #f8fafc"] { background: #1A2236 !important; }
+
+/* Light gray backgrounds inline → slightly lighter dark surface */
+html[data-theme="dark"] [style*="background:#f1f5f9"],
+html[data-theme="dark"] [style*="background: #f1f5f9"],
+html[data-theme="dark"] [style*="background:#f9fafb"],
+html[data-theme="dark"] [style*="background: #f9fafb"],
+html[data-theme="dark"] [style*="background:var(--gray-50)"],
+html[data-theme="dark"] [style*="background: var(--gray-50)"],
+html[data-theme="dark"] [style*="background:var(--gray-100)"],
+html[data-theme="dark"] [style*="background: var(--gray-100)"] { background: #232C44 !important; }
+
+/* Borders in inline that are pale gray → dark border */
+html[data-theme="dark"] [style*="border:1px solid #e2e8f0"],
+html[data-theme="dark"] [style*="border: 1px solid #e2e8f0"],
+html[data-theme="dark"] [style*="border:1px solid #e8ecf3"],
+html[data-theme="dark"] [style*="border: 1px solid #e8ecf3"],
+html[data-theme="dark"] [style*="border:1px solid #f1f5f9"],
+html[data-theme="dark"] [style*="border: 1px solid #f1f5f9"],
+html[data-theme="dark"] [style*="border:1px solid #E8EBF0"],
+html[data-theme="dark"] [style*="border: 1px solid #E8EBF0"],
+html[data-theme="dark"] [style*="border:1px solid var(--gray-200)"],
+html[data-theme="dark"] [style*="border: 1px solid var(--gray-200)"],
+html[data-theme="dark"] [style*="border:1px solid var(--gray-100)"],
+html[data-theme="dark"] [style*="border: 1px solid var(--gray-100)"] { border-color: #2A3349 !important; }
+
+/* Tables/list — bottom border + alt rows in dark */
+html[data-theme="dark"] table { color: #E5E9F0; }
+html[data-theme="dark"] th { background: #1A2236 !important; color: #94A3B8 !important; border-color: #2A3349 !important; }
+html[data-theme="dark"] td { border-color: #2A3349 !important; color: #E5E9F0; }
+html[data-theme="dark"] tr:hover td { background: #232C44 !important; }
+
+/* ════════ DARK MODE — universal text-color sweep ════════
+   Many pages have inline color hex values that don't match my targeted
+   attribute selectors. This blanket rule forces all text to light by
+   default. Inline `color: ...` still wins for accents (greens/reds/blues
+   for badges and chart points) because of higher specificity.
+   We use a low-specificity * selector + the parent uses inherit. */
+html[data-theme="dark"] .orders-app,
+html[data-theme="dark"] .crm-app,
+html[data-theme="dark"] .pf-app,
+html[data-theme="dark"] .kpi-app,
+html[data-theme="dark"] .od-page,
+html[data-theme="dark"] .c360-page,
+html[data-theme="dark"] .crm-page,
+html[data-theme="dark"] .no-page,
+html[data-theme="dark"] .acc-page,
+html[data-theme="dark"] .hd-content,
+html[data-theme="dark"] .ly-sidebar,
+html[data-theme="dark"] .ly-topbar { color: #E5E9F0; }
+
+/* Force any inline dark / black text to light (catch ALL dark inline colors) */
+html[data-theme="dark"] [style*="color:#0"],
+html[data-theme="dark"] [style*="color: #0"],
+html[data-theme="dark"] [style*="color:#1"],
+html[data-theme="dark"] [style*="color: #1"],
+html[data-theme="dark"] [style*="color:#2"],
+html[data-theme="dark"] [style*="color: #2"],
+html[data-theme="dark"] [style*="color:#3"],
+html[data-theme="dark"] [style*="color: #3"],
+html[data-theme="dark"] [style*="color:#4"],
+html[data-theme="dark"] [style*="color: #4"],
+html[data-theme="dark"] [style*="color:rgb(0"],
+html[data-theme="dark"] [style*="color: rgb(0"] { color: #E5E9F0 !important; }
+
+/* Re-allow accent colors inline (those starting with bright hex) — these match
+   greens (#10B, #15, #16, #22, #06, #07), reds (#EF, #DC, #B9), ambers (#F5, #D9, #B4, #92),
+   purples (#8B, #A8, #7C), and blues (#1E54B7 = #1E5...) — keep these visible */
+html[data-theme="dark"] [style*="color:#3DD"],
+html[data-theme="dark"] [style*="color: #3DD"],
+html[data-theme="dark"] [style*="color:#10B981"],
+html[data-theme="dark"] [style*="color: #10B981"],
+html[data-theme="dark"] [style*="color:#22C"],
+html[data-theme="dark"] [style*="color: #22C"],
+html[data-theme="dark"] [style*="color:#0F76"],
+html[data-theme="dark"] [style*="color: #0F76"],
+html[data-theme="dark"] [style*="color:#0EA"],
+html[data-theme="dark"] [style*="color: #0EA"],
+html[data-theme="dark"] [style*="color:#06B"],
+html[data-theme="dark"] [style*="color: #06B"],
+html[data-theme="dark"] [style*="color:#04785"],
+html[data-theme="dark"] [style*="color: #04785"],
+html[data-theme="dark"] [style*="color:#16653"],
+html[data-theme="dark"] [style*="color: #16653"],
+html[data-theme="dark"] [style*="color:#15803"],
+html[data-theme="dark"] [style*="color: #15803"],
+html[data-theme="dark"] [style*="color:#16a34"],
+html[data-theme="dark"] [style*="color: #16a34"],
+html[data-theme="dark"] [style*="color:#3DD9"] { color: revert !important; }
+
+/* Theme toggle button (in topbar) */
+.theme-toggle {
+  width: 36px; height: 36px; border-radius: 9px;
+  background: transparent; border: 1px solid #E8EBF0;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; color: #5B6878;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  padding: 0;
+}
+.theme-toggle:hover { background: #F6F7F9; color: #0B1B30; }
+.theme-toggle svg { width: 17px; height: 17px; }
+
+html[data-theme="dark"] .theme-toggle { border-color: #2A3349; color: #94A3B8; }
+html[data-theme="dark"] .theme-toggle:hover { background: #1A2236; color: #E5E9F0; }
+
+/* Dashboard hover fixes (legacy nav/topnav had hardcoded light hover bg) */
+html[data-theme="dark"] .hd-nav-item:hover,
+html[data-theme="dark"] .hd-topnav-item:hover { background: #1A2236 !important; color: #E5E9F0 !important; }
+html[data-theme="dark"] .hd-app-card:hover .hd-app-arrow { color: #3DD9D6 !important; }
+html[data-theme="dark"] .hd-stat:hover,
+html[data-theme="dark"] .hd-app-card:hover,
+html[data-theme="dark"] .hd-kpi-tile:hover { border-color: #3DD9D6 !important; background: #232C44 !important; }
+
+/* Reinforce dashboard key figures (override accent variants like amber) */
+html[data-theme="dark"] .hd-kpi-tile.hd-accent-amber .hd-kpi-value { color: #FBBF24 !important; }
+html[data-theme="dark"] .hd-stat-num,
+html[data-theme="dark"] .hd-kpi-value { color: #F1F5F9 !important; }
+html[data-theme="dark"] .hd-kpi-hero .hd-kpi-value { color: #F1F5F9 !important; }
+
+/* Logo: keep the white card visible in dark mode (clean brand card on dark
+   sidebar). No filter — the PNG has a white background so inverting just
+   makes a solid block. */
+html[data-theme="dark"] .ly-logo-icon { background: white !important; border-radius: 6px; padding: 4px; }
+html[data-theme="dark"] .ly-collapsed-logo { background: white !important; border-radius: 6px; }
+
+/* Wider sweep for dark-blue inline text — anything close to navy gets neutralised */
+html[data-theme="dark"] [style*="color:#0A2540"],
+html[data-theme="dark"] [style*="color: #0A2540"],
+html[data-theme="dark"] [style*="color:#0B1B30"],
+html[data-theme="dark"] [style*="color: #0B1B30"],
+html[data-theme="dark"] [style*="color:#0e2d6a"],
+html[data-theme="dark"] [style*="color: #0e2d6a"],
+html[data-theme="dark"] [style*="color:#163E68"],
+html[data-theme="dark"] [style*="color:#1a2d5a"],
+html[data-theme="dark"] [style*="color:#1e2d5a"],
+html[data-theme="dark"] [style*="color:#1a4dab"],
+html[data-theme="dark"] [style*="color:#1E54B7"] { color: #E5E9F0 !important; }
+
+/* Common chart/value classes that often hold dark navy ink */
+html[data-theme="dark"] .donut-center,
+html[data-theme="dark"] .donut-pct,
+html[data-theme="dark"] .donut-label,
+html[data-theme="dark"] .donut-value,
+html[data-theme="dark"] .pipe-count,
+html[data-theme="dark"] .pipe-label,
+html[data-theme="dark"] .perf-value,
+html[data-theme="dark"] .perf-label,
+html[data-theme="dark"] .rep-name,
+html[data-theme="dark"] .rep-value,
+html[data-theme="dark"] .mix-label,
+html[data-theme="dark"] .mix-value,
+html[data-theme="dark"] .card-title,
+html[data-theme="dark"] .card-eyebrow,
+html[data-theme="dark"] .ord-card h2,
+html[data-theme="dark"] .ord-card h3,
+html[data-theme="dark"] .ord-card .num,
+html[data-theme="dark"] .ord-card strong { color: #E5E9F0 !important; }
+
+/* SVG chart text — fill is an attribute, not CSS color, so attribute selectors
+   miss it. Repaint navy fills inside dashboard chart wrappers. */
+html[data-theme="dark"] .donut-wrap svg text[fill="#0B1B30"],
+html[data-theme="dark"] .gauge-wrap svg text[fill="#0B1B30"],
+html[data-theme="dark"] .orders-app svg text[fill="#0B1B30"],
+html[data-theme="dark"] .crm-app svg text[fill="#0B1B30"],
+html[data-theme="dark"] .pf-app svg text[fill="#0B1B30"],
+html[data-theme="dark"] .kpi-app svg text[fill="#0B1B30"],
+html[data-theme="dark"] .hd-content svg text[fill="#0B1B30"] { fill: #F1F5F9 !important; }
+html[data-theme="dark"] .donut-wrap svg text[fill="#6B7280"],
+html[data-theme="dark"] .gauge-wrap svg text[fill="#6B7280"],
+html[data-theme="dark"] .orders-app svg text[fill="#6B7280"],
+html[data-theme="dark"] .crm-app svg text[fill="#6B7280"],
+html[data-theme="dark"] .pf-app svg text[fill="#6B7280"],
+html[data-theme="dark"] .kpi-app svg text[fill="#6B7280"],
+html[data-theme="dark"] .hd-content svg text[fill="#6B7280"] { fill: #94A3B8 !important; }
+html[data-theme="dark"] .donut-wrap svg text tspan[fill="#6B7280"] { fill: #94A3B8 !important; }
+
+/* Trend / funnel axis ticks (CRM uses #9CA3AF for axis labels) */
+html[data-theme="dark"] .orders-app svg text[fill="#9CA3AF"],
+html[data-theme="dark"] .crm-app svg text[fill="#9CA3AF"],
+html[data-theme="dark"] .pf-app svg text[fill="#9CA3AF"],
+html[data-theme="dark"] .kpi-app svg text[fill="#9CA3AF"],
+html[data-theme="dark"] .hd-content svg text[fill="#9CA3AF"] { fill: #6B7794 !important; }
+
+/* Sales rep hover — base CSS uses --o-bg-2 which resolves to a near-white tint */
+html[data-theme="dark"] .orders-app .rp-row:hover,
+html[data-theme="dark"] .orders-app .rp-foot { background: #232C44 !important; }
+html[data-theme="dark"] .orders-app .rp-foot { border-top-color: #2A3349 !important; }
+html[data-theme="dark"] .orders-app .rp-foot-label,
+html[data-theme="dark"] .orders-app .rp-sub,
+html[data-theme="dark"] .orders-app .rp-rank { color: #94A3B8 !important; }
+html[data-theme="dark"] .orders-app .rp-name,
+html[data-theme="dark"] .orders-app .rp-val,
+html[data-theme="dark"] .orders-app .rp-foot-val,
+html[data-theme="dark"] .orders-app .rp-title { color: #E5E9F0 !important; }
+html[data-theme="dark"] .orders-app .rp-bar { background: #2A3349 !important; }
+
+/* Donut "total" pill / chip badge often shown above the mix chart */
+html[data-theme="dark"] .orders-app .trend-pill,
+html[data-theme="dark"] .orders-app .donut-total,
+html[data-theme="dark"] .orders-app .anal-total,
+html[data-theme="dark"] .orders-app .card-head .pill,
+html[data-theme="dark"] .crm-app .trend-pill { background: #232C44 !important; color: #E5E9F0 !important; border-color: #2A3349 !important; }
+
+/* Gauge legend rows */
+html[data-theme="dark"] .orders-app .gs-label,
+html[data-theme="dark"] .orders-app .gs-val,
+html[data-theme="dark"] .orders-app .dlg-name,
+html[data-theme="dark"] .orders-app .dlg-pct { color: #E5E9F0 !important; }

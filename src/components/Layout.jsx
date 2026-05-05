@@ -654,6 +654,8 @@ export default function Layout({ children, pageTitle, pageKey }) {
           </div>
 
           <div className="ly-topbar-right">
+            {/* Theme toggle */}
+            <ThemeToggle/>
             {/* Bell */}
             <div className="ly-bell-wrap" ref={bellRef}>
               <button
@@ -721,5 +723,29 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
       </div>
     </div>
+  )
+}
+
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.getAttribute('data-theme') === 'dark')
+  function toggle() {
+    const next = !dark
+    setDark(next)
+    if (next) {
+      document.documentElement.setAttribute('data-theme', 'dark')
+      localStorage.setItem('ssc-theme', 'dark')
+    } else {
+      document.documentElement.removeAttribute('data-theme')
+      localStorage.setItem('ssc-theme', 'light')
+    }
+  }
+  return (
+    <button className="theme-toggle" onClick={toggle} title={dark ? 'Switch to light mode' : 'Switch to dark mode'} aria-label="Toggle theme">
+      {dark ? (
+        <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      ) : (
+        <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      )}
+    </button>
   )
 }
