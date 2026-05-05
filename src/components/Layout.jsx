@@ -354,13 +354,13 @@ export default function Layout({ children, pageTitle, pageKey }) {
         <div className="ly-logo-row">
           {sidebarCollapsed ? (
             <button className="ly-collapsed-logo" onClick={toggleSidebar} title="Expand sidebar">
-              <img src="/ssc-favicon.png" alt="SSC" />
+              <img className="ly-logo-light" src="/ssc-favicon.png" alt="SSC" />
+              <img className="ly-logo-dark"  src="/ssc-favicon-dark.png" alt="SSC" />
             </button>
           ) : (
             <>
               <div className="ly-logo-icon">
-                <img className="ly-logo-light" src="/logo/ssc-60-years.png" alt="SSC Control" />
-                <img className="ly-logo-dark"  src="/logo/ssc-60-years-dark.png" alt="SSC Control" />
+                <img src="/logo/ssc-60-years.png" alt="SSC Control" />
               </div>
               <button className="ly-collapse-btn" onClick={toggleSidebar} title="Collapse sidebar">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:16, height:16 }}>
