@@ -1008,8 +1008,10 @@ html[data-theme="dark"] .ly-logo-dark { display: block; }
 /* Logo: keep the white card visible in dark mode (clean brand card on dark
    sidebar). No filter — the PNG has a white background so inverting just
    makes a solid block. */
+/* Expanded sidebar still uses the original logo on a white card.
+   Collapsed sidebar uses the new dark logo on transparent. */
 html[data-theme="dark"] .ly-logo-icon { background: white !important; border-radius: 6px; padding: 4px; }
-html[data-theme="dark"] .ly-collapsed-logo { background: white !important; border-radius: 6px; }
+html[data-theme="dark"] .ly-collapsed-logo { background: transparent !important; }
 
 /* Wider sweep for dark-blue inline text — anything close to navy gets neutralised */
 html[data-theme="dark"] [style*="color:#0A2540"],
