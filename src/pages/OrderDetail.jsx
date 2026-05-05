@@ -1206,14 +1206,14 @@ if (match) {
                             const pendingQty = item.qty - dispQty
                             const itemBatch  = batches.find(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))
                             return (
-                              <tr key={item.id} style={{ background: pendingQty === 0 ? '#f0fdf4' : undefined }}>
-                                <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
-                                <td className="mono"><span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>{item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}</td>
+                              <tr key={item.id}>
+                                <td style={{ paddingLeft: 16, color: 'var(--gray-500)', fontSize: 11 }}>{item.sr_no}</td>
+                                <td className="mono"><span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>{item.description && <div style={{ fontSize: 11, color: 'var(--gray-500)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}</td>
                                 <td style={{ fontSize: 12 }}>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
-                                <td style={{ fontSize: 12, color: itemBatch?.delivered_at ? '#166534' : 'var(--gray-400)', fontWeight: itemBatch?.delivered_at ? 600 : 400 }}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>
+                                <td style={{ fontSize: 12, color: itemBatch?.delivered_at ? 'var(--green-text)' : 'var(--gray-500)', fontWeight: itemBatch?.delivered_at ? 600 : 400 }}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>
                                 <td style={{ textAlign: 'center' }}>{item.qty}</td>
-                                <td style={{ textAlign: 'center', fontWeight: 700, color: '#166534' }}>{dispQty}</td>
-                                <td style={{ textAlign: 'center', color: pendingQty > 0 ? '#c2410c' : '#166534', fontWeight: 600 }}>
+                                <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--green-text)' }}>{dispQty}</td>
+                                <td style={{ textAlign: 'center', color: pendingQty > 0 ? '#c2410c' : 'var(--green-text)', fontWeight: 600 }}>
                                   {pendingQty === 0 ? <span style={{ fontSize: 11 }}>✓ Done</span> : pendingQty}
                                 </td>
                                 <td>₹{item.unit_price_after_disc}</td>

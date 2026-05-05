@@ -83,6 +83,10 @@ html[data-theme="dark"] .hd-content {
   --gray-700: #E2E8F0;
   --gray-800: #ECEEF3;
   --gray-900: #F1F5F9;
+  --green-text: #6EE7B7;
+  --green-bg:   rgba(16,185,129,0.15);
+  --red-text:   #FCA5A5;
+  --red-bg:     rgba(239,68,68,0.15);
 }
 
 /* Loading text — in dark mode make sure spinner + label are visible */
@@ -663,8 +667,10 @@ html[data-theme="dark"] .ly-topbar .ly-bell-wrap .ly-bell-btn,
 html[data-theme="dark"] .ly-bell-btn { background: #1A2236 !important; border-color: #2A3349 !important; color: #94A3B8 !important; }
 html[data-theme="dark"] .ly-topbar .ly-bell-wrap .ly-bell-btn:hover,
 html[data-theme="dark"] .ly-bell-btn:hover { background: #232C44 !important; color: #E5E9F0 !important; }
-html[data-theme="dark"] .ly-bell-btn svg { color: #94A3B8 !important; }
-html[data-theme="dark"] .ly-bell-btn svg path { stroke: currentColor !important; }
+html[data-theme="dark"] .ly-bell-btn svg,
+html[data-theme="dark"] .ly-bell-btn svg path { color: #E5E9F0 !important; stroke: #E5E9F0 !important; }
+html[data-theme="dark"] .ly-bell-btn:hover svg,
+html[data-theme="dark"] .ly-bell-btn:hover svg path { stroke: #FFFFFF !important; }
 html[data-theme="dark"] .ly-bell-badge { border-color: #0F172A !important; }
 html[data-theme="dark"] .ly-notif-dropdown { background: #1A2236 !important; border-color: #2A3349 !important; box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important; }
 html[data-theme="dark"] .ly-notif-header { color: #E5E9F0 !important; border-bottom-color: #2A3349 !important; }
