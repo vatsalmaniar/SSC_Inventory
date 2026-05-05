@@ -34,9 +34,25 @@ export default function Login() {
 
   async function handleSession(session) {
     const { data: profile } = await sb
-      .from('profiles').select('name, role').eq('id', session.user.id).single()
+      .from('profiles').select('id, name, role, username, must_change_password, password_changed_at').eq('id', session.user.id).single()
     const name = profile?.name || session.user.email.split('@')[0]
     const role = profile?.role || 'sales'
+
+    const ageMs = profile?.password_changed_at ? (Date.now() - new Date(profile.password_changed_at).getTime()) : Infinity
+    const expiredByAge = ageMs > 90 * 24 * 60 * 60 * 1000
+    const needsPwdChange = profile?.must_change_password || expiredByAge
+
+    if (needsPwdChange) {
+      const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+        setPendingSession(session)
+        setPendingProfile(profile)
+        await checkAdminMFA()
+        return
+      }
+      navigate('/change-password')
+      return
+    }
 
     if (role === 'fc_kaveri' || role === 'fc_godawari') {
       setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading FC Module...' })

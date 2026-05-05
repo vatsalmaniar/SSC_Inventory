@@ -163,7 +163,9 @@ export default function Layout({ children, pageTitle, pageKey }) {
       }
       const s = session || (await sb.auth.getSession()).data.session
       if (!s) return
-      const { data: profile } = await sb.from('profiles').select('name,role').eq('id', s.user.id).single()
+      const { data: profile } = await sb.from('profiles').select('name,role,must_change_password,password_changed_at').eq('id', s.user.id).single()
+      const pwdAgeMs = profile?.password_changed_at ? (Date.now() - new Date(profile.password_changed_at).getTime()) : Infinity
+      if (profile?.must_change_password || pwdAgeMs > 90 * 24 * 60 * 60 * 1000) { navigate('/change-password'); return }
       const name   = profile?.name || s.user.email.split('@')[0]
       const role   = profile?.role || 'sales'
       const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)

@@ -59,6 +59,7 @@ const BillingDashboard = lazy(() => import('./pages/BillingDashboard'))
 const BillingList = lazy(() => import('./pages/BillingList'))
 const BillingOrderDetail = lazy(() => import('./pages/BillingOrderDetail'))
 const UserManagement = lazy(() => import('./pages/UserManagement'))
+const ChangePassword = lazy(() => import('./pages/ChangePassword'))
 
 export default function App() {
   return (
@@ -67,6 +68,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/sales" element={<Sales />} />
