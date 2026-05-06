@@ -298,12 +298,20 @@ export default function PurchaseInvoiceDetail() {
                             <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'var(--gray-800)'}}>{po.po_number}</div>
                           )}
                           <div style={{fontSize:11,color:'var(--gray-500)',marginTop:2}}>{fmtINR(po.total_amount)}</div>
-                          {po.po_pdf_url && !['admin','ops','management'].includes(userRole) && (
-                            <a href={po.po_pdf_url} target="_blank" rel="noreferrer" style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',marginTop:4,textDecoration:'none'}}>
-                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
-                              View PO
-                            </a>
-                          )}
+                          <div style={{display:'flex',gap:8,marginTop:4,flexWrap:'wrap'}}>
+                            {['admin','ops','management'].includes(userRole) && (
+                              <a onClick={() => navigate('/procurement/po/' + po.id)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',cursor:'pointer',textDecoration:'none'}}>
+                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
+                                View PO
+                              </a>
+                            )}
+                            {po.po_pdf_url && (
+                              <a href={po.po_pdf_url} target="_blank" rel="noreferrer" style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',textDecoration:'none'}}>
+                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
+                                {['admin','ops','management'].includes(userRole) ? 'PO PDF' : 'View PO'}
+                              </a>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <div style={{fontSize:12,color:'var(--gray-400)'}}>No PO linked</div>
@@ -523,16 +531,19 @@ export default function PurchaseInvoiceDetail() {
                   {po && (
                     <div style={{fontSize:12}}>
                       <div style={{color:'var(--gray-400)',fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.5px'}}>Purchase Order</div>
-                      {['admin','ops','management'].includes(userRole) ? (
-                        <div onClick={() => navigate('/procurement/po/' + po.id)} style={{color:'#2563eb',cursor:'pointer',fontFamily:'var(--mono)',fontWeight:600,marginTop:2}}>{po.po_number}</div>
-                      ) : (
-                        <div style={{color:'var(--gray-700)',fontFamily:'var(--mono)',fontWeight:600,marginTop:2}}>
-                          {po.po_number}
-                          {po.po_pdf_url && (
-                            <a href={po.po_pdf_url} target="_blank" rel="noreferrer" style={{marginLeft:8,fontSize:11,color:'#2563eb',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500}}>View PO ↗</a>
-                          )}
-                        </div>
-                      )}
+                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginTop:2}}>
+                        {['admin','ops','management'].includes(userRole) ? (
+                          <span onClick={() => navigate('/procurement/po/' + po.id)} style={{color:'#2563eb',cursor:'pointer',fontFamily:'var(--mono)',fontWeight:600}}>{po.po_number}</span>
+                        ) : (
+                          <span style={{color:'var(--gray-700)',fontFamily:'var(--mono)',fontWeight:600}}>{po.po_number}</span>
+                        )}
+                        {['admin','ops','management'].includes(userRole) && (
+                          <a onClick={() => navigate('/procurement/po/' + po.id)} style={{fontSize:11,color:'#2563eb',cursor:'pointer',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500}}>View PO ↗</a>
+                        )}
+                        {po.po_pdf_url && (
+                          <a href={po.po_pdf_url} target="_blank" rel="noreferrer" style={{fontSize:11,color:'#2563eb',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500}}>{['admin','ops','management'].includes(userRole) ? 'PDF ↗' : 'View PO ↗'}</a>
+                        )}
+                      </div>
                     </div>
                   )}
                   {grn && (
