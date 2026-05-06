@@ -739,6 +739,23 @@ html[data-theme="dark"] [style*="background: #f8fafc"],
 html[data-theme="dark"] [style*="background:rgb(248, 250, 252)"],
 html[data-theme="dark"] [style*="background: rgb(248, 250, 252)"] { background: #2D2D2D !important; }
 
+/* Typeahead dropdown (item search, brand dropdown, generic) */
+html[data-theme="dark"] .typeahead-dropdown { background: #252526 !important; border-color: #3C3C3C !important; box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important; }
+html[data-theme="dark"] .typeahead-item { color: #D4D4D4 !important; border-bottom-color: #3C3C3C !important; }
+html[data-theme="dark"] .typeahead-item:hover { background: #2D2D2D !important; }
+html[data-theme="dark"] .typeahead-item-main { color: #FFFFFF !important; }
+html[data-theme="dark"] .typeahead-item-sub  { color: #858585 !important; }
+html[data-theme="dark"] .typeahead-empty { color: #858585 !important; }
+
+/* @mention dropdown (tagging in notes / comments) */
+html[data-theme="dark"] .od-mention-dropdown { background: #252526 !important; border-color: #3C3C3C !important; box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important; }
+html[data-theme="dark"] .od-mention-item { color: #D4D4D4 !important; }
+html[data-theme="dark"] .od-mention-item:hover { background: #2D2D2D !important; }
+html[data-theme="dark"] .od-mention-name  { color: #FFFFFF !important; }
+html[data-theme="dark"] .od-mention-uname { color: #858585 !important; }
+html[data-theme="dark"] .od-mention-avatar { background: rgba(129,140,248,0.15) !important; color: #818CF8 !important; }
+html[data-theme="dark"] .od-mention-tag    { background: rgba(129,140,248,0.18) !important; color: #A5B4FC !important; }
+
 /* KPI configurator inline boxes — #FBFBFD (light surface), #E8EBF0 (border) */
 html[data-theme="dark"] [style*="rgb(251, 251, 253)"],
 html[data-theme="dark"] [style*="#FBFBFD"],
