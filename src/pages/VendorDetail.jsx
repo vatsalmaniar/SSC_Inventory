@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt } from '../lib/fmt'
@@ -41,12 +41,19 @@ export default function VendorDetail() {
   const [pos, setPos]             = useState([])
   const [grns, setGrns]           = useState([])
   const [contacts, setContacts]   = useState([])
-  const [userRole, setUserRole]   = useState('')
+  const [userRole, setUserRole]     = useState('')
+  const [username, setUsername]     = useState('')
   const [loading, setLoading]     = useState(true)
   const [editMode, setEditMode]   = useState(false)
   const [editData, setEditData]   = useState({})
   const [saving, setSaving]       = useState(false)
   const [approving, setApproving] = useState(false)
+  // Inline compliance edit (admin-only)
+  const [cmpEdit, setCmpEdit]     = useState(false)
+  const [cmpData, setCmpData]     = useState({})
+  const [cmpSaving, setCmpSaving] = useState(false)
+  const gstFileRef    = useRef(null)
+  const msmeFileRef   = useRef(null)
   const [activeTab, setActiveTab] = useState('summary')
   const [showContactModal, setShowContactModal] = useState(false)
   const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
@@ -59,8 +66,9 @@ export default function VendorDetail() {
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
-    const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
+    const { data: profile } = await sb.from('profiles').select('role,username').eq('id', session.user.id).single()
     setUserRole(profile?.role || '')
+    setUsername(profile?.username || '')
 
     const vendorRes = await sb.from('vendors').select('*').eq('id', id).single()
     if (!vendorRes.data) { setLoading(false); return }
@@ -129,6 +137,61 @@ export default function VendorDetail() {
     setEditData(fresh || editData)
     setEditMode(false); setSaving(false)
     toast('Vendor updated', 'success')
+  }
+
+  // ── Inline compliance edit (admin / management / jyashri.negi) ──
+  const canEditCompliance = ['admin', 'management'].includes(userRole) || username === 'jayshree.negi'
+
+  function startCmpEdit() {
+    setCmpData({
+      gst:      vendor?.gst      || '',
+      pan:      vendor?.pan      || '',
+      msme_no:  vendor?.msme_no  || '',
+    })
+    setCmpEdit(true)
+  }
+  function cancelCmpEdit() {
+    setCmpEdit(false)
+    setCmpData({})
+    if (gstFileRef.current)  gstFileRef.current.value = ''
+    if (msmeFileRef.current) msmeFileRef.current.value = ''
+  }
+  async function saveCompliance() {
+    setCmpSaving(true)
+    try {
+      const updates = {
+        gst:     cmpData.gst?.trim()     || null,
+        pan:     cmpData.pan?.trim()     || null,
+        msme_no: cmpData.msme_no?.trim() || null,
+        updated_at: new Date().toISOString(),
+      }
+      const gstFile  = gstFileRef.current?.files?.[0]
+      const msmeFile = msmeFileRef.current?.files?.[0]
+      const upload = async (file, sub) => {
+        if (file.type !== 'application/pdf') throw new Error(sub.toUpperCase() + ' must be a PDF')
+        if (file.size > 5 * 1024 * 1024)     throw new Error(sub.toUpperCase() + ' must be under 5MB')
+        const path = sub + '/' + id + '/' + Date.now() + '.pdf'
+        const { error: upErr } = await sb.storage.from('vendor-docs').upload(path, file, { upsert: true })
+        if (upErr) throw upErr
+        return sb.storage.from('vendor-docs').getPublicUrl(path).data.publicUrl
+      }
+      if (gstFile)  updates.gst_cert_url  = await upload(gstFile,  'gst')
+      if (msmeFile) updates.msme_cert_url = await upload(msmeFile, 'msme')
+
+      const { error } = await sb.from('vendors').update(updates).eq('id', id)
+      if (error) throw error
+      const { data: fresh } = await sb.from('vendors').select('*').eq('id', id).single()
+      setVendor(fresh || vendor)
+      setEditData(fresh || vendor)
+      setCmpEdit(false)
+      setCmpData({})
+      if (gstFileRef.current)  gstFileRef.current.value = ''
+      if (msmeFileRef.current) msmeFileRef.current.value = ''
+      toast('Compliance updated', 'success')
+    } catch (err) {
+      toast(friendlyError(err, 'Could not save compliance'))
+    }
+    setCmpSaving(false)
   }
 
   async function saveContact() {
@@ -431,6 +494,67 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                               </div>
                             )}
                           </div>
+
+                          {canEditCompliance && (
+                            <>
+                              <div className="c360-section-label" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                                <span>Compliance Documents (Admin)</span>
+                                {!cmpEdit
+                                  ? <button onClick={startCmpEdit} className="c360-btn" style={{padding:'4px 10px',fontSize:11}}>Edit</button>
+                                  : <span style={{display:'flex',gap:6}}>
+                                      <button onClick={cancelCmpEdit} disabled={cmpSaving} className="c360-btn" style={{padding:'4px 10px',fontSize:11}}>Cancel</button>
+                                      <button onClick={saveCompliance} disabled={cmpSaving} className="c360-btn c360-btn-primary" style={{padding:'4px 10px',fontSize:11}}>{cmpSaving ? 'Saving…' : 'Save'}</button>
+                                    </span>
+                                }
+                              </div>
+                              <div className="c360-field-grid">
+                                {/* GST Number */}
+                                <div className="c360-field">
+                                  <label>GST Number</label>
+                                  <div className="val">
+                                    {cmpEdit
+                                      ? <input value={cmpData.gst || ''} onChange={e => setCmpData(d => ({...d, gst: e.target.value}))} placeholder="24ABCDE1234F1Z5" style={{width:'100%',padding:'6px 8px',border:'1px solid var(--gray-200)',borderRadius:6,fontFamily:'var(--mono)',fontSize:12}}/>
+                                      : <span style={{fontFamily:'var(--mono)'}}>{vendor.gst || <span style={{color:'var(--gray-300)'}}>Not provided</span>}</span>}
+                                  </div>
+                                </div>
+                                {/* GST Certificate */}
+                                <div className="c360-field">
+                                  <label>GST Certificate</label>
+                                  <div className="val" style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                                    {vendor.gst_cert_url
+                                      ? <a href={vendor.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                          View current
+                                        </a>
+                                      : <span style={{color:'var(--gray-300)',fontSize:12}}>Not uploaded</span>}
+                                    {cmpEdit && <input ref={gstFileRef} type="file" accept="application/pdf" style={{fontSize:11}}/>}
+                                  </div>
+                                </div>
+                                {/* MSME Number */}
+                                <div className="c360-field">
+                                  <label>MSME Number</label>
+                                  <div className="val">
+                                    {cmpEdit
+                                      ? <input value={cmpData.msme_no || ''} onChange={e => setCmpData(d => ({...d, msme_no: e.target.value}))} placeholder="UDYAM-XX-00-0000000" style={{width:'100%',padding:'6px 8px',border:'1px solid var(--gray-200)',borderRadius:6,fontFamily:'var(--mono)',fontSize:12}}/>
+                                      : <span style={{fontFamily:'var(--mono)'}}>{vendor.msme_no || <span style={{color:'var(--gray-300)'}}>Not provided</span>}</span>}
+                                  </div>
+                                </div>
+                                {/* MSME Certificate */}
+                                <div className="c360-field">
+                                  <label>MSME Certificate</label>
+                                  <div className="val" style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                                    {vendor.msme_cert_url
+                                      ? <a href={vendor.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                          View current
+                                        </a>
+                                      : <span style={{color:'var(--gray-300)',fontSize:12}}>Not uploaded</span>}
+                                    {cmpEdit && <input ref={msmeFileRef} type="file" accept="application/pdf" style={{fontSize:11}}/>}
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
 
                           <div className="c360-section-label">Addresses</div>
                           <div className="c360-field-grid">
