@@ -50,21 +50,13 @@ export default function PurchaseInvoiceDetail() {
   const [userRole, setUserRole] = useState('')
   const [userName, setUserName] = useState('')
 
-  // Resolve a Supabase storage URL (which may be a stale public URL or a
-  // bare path) to a fresh signed URL, then open it. Falls back to opening
-  // the original URL if the bucket+path can't be parsed.
-  async function openPoPdf(url) {
-    if (!url) return
-    try {
-      const m = url.match(/\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/)
-      if (m) {
-        const [, bucket, pathRaw] = m
-        const path = decodeURIComponent(pathRaw)
-        const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, 60 * 10)  // 10 min
-        if (!error && data?.signedUrl) { window.open(data.signedUrl, '_blank', 'noopener'); return }
-      }
-    } catch {}
-    window.open(url, '_blank', 'noopener')
+  // Open the live PO view in a new tab — the PO detail page regenerates
+  // the document from data on demand (same approach as the DC in OrderDetail
+  // / FCOrderDetail), which avoids stale stored PDFs that some browsers
+  // render as raw HTML when the content-type is wrong.
+  function openPoPdf() {
+    if (!po?.id) return
+    window.open('/procurement/po/' + po.id, '_blank', 'noopener')
   }
 
   // 3-way check
@@ -323,7 +315,7 @@ export default function PurchaseInvoiceDetail() {
                               </a>
                             )}
                             {po.po_pdf_url && (
-                              <a onClick={() => openPoPdf(po.po_pdf_url)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',textDecoration:'none',cursor:'pointer'}}>
+                              <a onClick={() => openPoPdf()} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',textDecoration:'none',cursor:'pointer'}}>
                                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
                                 {['admin','ops','management'].includes(userRole) ? 'PO PDF' : 'View PO'}
                               </a>
@@ -558,7 +550,7 @@ export default function PurchaseInvoiceDetail() {
                           <a onClick={() => navigate('/procurement/po/' + po.id)} style={{fontSize:11,color:'#2563eb',cursor:'pointer',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500}}>View PO ↗</a>
                         )}
                         {po.po_pdf_url && (
-                          <a onClick={() => openPoPdf(po.po_pdf_url)} style={{fontSize:11,color:'#2563eb',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500,cursor:'pointer'}}>{['admin','ops','management'].includes(userRole) ? 'PDF ↗' : 'View PO ↗'}</a>
+                          <a onClick={() => openPoPdf()} style={{fontSize:11,color:'#2563eb',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500,cursor:'pointer'}}>{['admin','ops','management'].includes(userRole) ? 'PDF ↗' : 'View PO ↗'}</a>
                         )}
                       </div>
                     </div>
