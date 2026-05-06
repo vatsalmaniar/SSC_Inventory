@@ -103,8 +103,15 @@ export default function PurchaseInvoiceDetail() {
       setGrnItems(itemsRes.data || [])
     }
 
-    // Load linked PO (from purchase_invoice.po_id or from grn_items fallback)
+    // Resolve linked PO. Priority:
+    //   1. purchase_invoice.po_id (if invoice was created with PO ref)
+    //   2. grn.po_id (row-level link on the GRN itself)
+    //   3. grn_items.po_id (first item's PO link, multi-PO GRN fallback)
     let poId = data.po_id
+    if (!poId && data.grn_id) {
+      const { data: grnRow } = await sb.from('grn').select('po_id').eq('id', data.grn_id).single()
+      if (grnRow?.po_id) poId = grnRow.po_id
+    }
     if (!poId && data.grn_id) {
       const { data: gi } = await sb.from('grn_items').select('po_id').eq('grn_id', data.grn_id).not('po_id', 'is', null).limit(1)
       if (gi?.[0]?.po_id) poId = gi[0].po_id
