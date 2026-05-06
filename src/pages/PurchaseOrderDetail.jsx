@@ -5,7 +5,6 @@ import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
-import { buildPoHtml as buildPoHtmlShared, openPoHtml } from '../lib/poHtml'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
@@ -689,7 +688,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   }
 
   async function generatePoPdf(poNumber) {
-    const html = buildPoHtmlShared({ po: { ...po, po_number: poNumber }, items, vendorCode })
+    const html = buildPoHtml(poNumber)
     const blob = new Blob([html], { type: 'text/html' })
     const path = `po-pdfs/${id}/${Date.now()}.html`
     const { error } = await sb.storage.from('po-documents').upload(path, blob, { contentType: 'text/html', upsert: true })
@@ -699,9 +698,12 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   }
 
   function viewPoPdf() {
-    if (!openPoHtml({ po, items, vendorCode })) {
-      toast('Popup blocked — allow popups for this site and try again.')
-    }
+    const poNumber = po.po_number || po.temp_po_number || '—'
+    const html = buildPoHtml(poNumber)
+    const w = window.open('', '_blank')
+    if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
+    w.document.write(html)
+    w.document.close()
   }
 
   // ── Stage 3: Order Placed ──
@@ -1813,19 +1815,18 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
       }
       const selectedCount = Object.values(recipientSel).filter(Boolean).length + (oneOffEmail.trim() ? 1 : 0)
       return (
-        <div className="od-drawer-scrim" onClick={() => !sendingEmail && setShowEmailModal(false)}>
-          <div className="od-drawer" style={{ width: 'min(640px, 95vw)' }} onClick={e => e.stopPropagation()}>
-            <div className="od-drawer-head">
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={() => !sendingEmail && setShowEmailModal(false)}>
+          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:640, maxHeight:'92vh', overflow:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
+            onClick={e => e.stopPropagation()}>
+
+            <div style={{ padding:'18px 24px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'white', zIndex:2 }}>
               <div>
-                <div className="od-drawer-eyebrow">PO · {po.po_number}</div>
-                <div className="od-drawer-title">Send PO to Vendor</div>
-                <div className="od-drawer-sub">Email the PO to the vendor with attachments</div>
+                <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Send PO to Vendor</div>
+                <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Email the PO to the vendor with attachments</div>
               </div>
-              <button className="od-drawer-close" onClick={() => setShowEmailModal(false)} disabled={sendingEmail} aria-label="Close">
-                <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
-              </button>
+              <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#94a3b8', padding:0, width:28, height:28 }}>✕</button>
             </div>
-            <div className="od-drawer-body" style={{ padding: 0 }}><div style={{ padding: '20px 28px' }}>
 
             {/* Meta info */}
             <div style={{ padding:'16px 24px 0' }}>
@@ -1919,16 +1920,16 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               </label>
             </div>
 
-            </div></div>
-            <div className="od-drawer-foot" style={{ justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 12, color: '#5B6878' }}>
+            {/* Actions */}
+            <div style={{ padding:'18px 24px 20px', display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', borderTop:'1px solid #f1f5f9', marginTop:18, position:'sticky', bottom:0, background:'white' }}>
+              <div style={{ fontSize:12, color:'#64748b' }}>
                 {selectedCount === 0 ? 'No recipients selected' : `${selectedCount} recipient${selectedCount !== 1 ? 's' : ''} selected`}
               </div>
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display:'flex', gap:10 }}>
                 <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail}
-                  style={{ padding: '9px 18px', border: '1px solid #E8EBF0', borderRadius: 9, background: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Geist, sans-serif', color: '#0B1B30' }}>Cancel</button>
+                  style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
                 <button onClick={sendEmailToVendor} disabled={sendingEmail || selectedCount === 0}
-                  style={{ padding: '9px 22px', border: 'none', borderRadius: 9, background: '#0A2540', color: 'white', fontSize: 13, fontWeight: 500, cursor: sendingEmail || selectedCount === 0 ? 'not-allowed' : 'pointer', fontFamily: 'Geist, sans-serif', opacity: sendingEmail || selectedCount === 0 ? 0.5 : 1 }}>
+                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a4dab', color:'white', fontSize:13, fontWeight:700, cursor: sendingEmail || selectedCount === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: sendingEmail || selectedCount === 0 ? 0.5 : 1 }}>
                   {sendingEmail ? 'Sending…' : 'Send Email'}
                 </button>
               </div>

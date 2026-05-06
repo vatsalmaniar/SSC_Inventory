@@ -5,7 +5,6 @@ import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime } from '../lib/fmt'
 import { toast } from '../lib/toast'
-import { openPoHtml } from '../lib/poHtml'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -45,23 +44,11 @@ export default function PurchaseInvoiceDetail() {
   const [inv, setInv]           = useState(null)
   const [grn, setGrn]           = useState(null)
   const [po, setPo]             = useState(null)
-  const [poItems, setPoItems]   = useState([])
-  const [vendorCode, setVendorCode] = useState('')
   const [grnItems, setGrnItems] = useState([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
   const [userRole, setUserRole] = useState('')
   const [userName, setUserName] = useState('')
-
-  // Render the PO from data and open it in a new tab (same approach as the
-  // DC viewer in OrderDetail / FCOrderDetail). No stored PDF — what you see
-  // is generated on demand from the current po + line items.
-  function openPoPdf() {
-    if (!po) return
-    if (!openPoHtml({ po, items: poItems, vendorCode })) {
-      toast('Popup blocked — allow popups for this site and try again.')
-    }
-  }
 
   // 3-way check
   const [threeWayNotes, setThreeWayNotes] = useState('')
@@ -103,34 +90,15 @@ export default function PurchaseInvoiceDetail() {
       setGrnItems(itemsRes.data || [])
     }
 
-    // Resolve linked PO. Priority:
-    //   1. purchase_invoice.po_id (if invoice was created with PO ref)
-    //   2. grn.po_id (row-level link on the GRN itself)
-    //   3. grn_items.po_id (first item's PO link, multi-PO GRN fallback)
+    // Load linked PO (from purchase_invoice.po_id or from grn_items fallback)
     let poId = data.po_id
-    if (!poId && data.grn_id) {
-      const { data: grnRow } = await sb.from('grn').select('po_id').eq('id', data.grn_id).single()
-      if (grnRow?.po_id) poId = grnRow.po_id
-    }
     if (!poId && data.grn_id) {
       const { data: gi } = await sb.from('grn_items').select('po_id').eq('grn_id', data.grn_id).not('po_id', 'is', null).limit(1)
       if (gi?.[0]?.po_id) poId = gi[0].po_id
     }
     if (poId) {
-      const { data: poData } = await sb.from('purchase_orders')
-        .select('id,po_number,temp_po_number,po_type,vendor_name,vendor_id,status,created_at,po_date,total_amount,po_pdf_url,fulfilment_center,delivery_address,delivery_customer_name,order_number,reference,payment_terms,notes,submitted_by_name,approved_by')
-        .eq('id', poId).single()
+      const { data: poData } = await sb.from('purchase_orders').select('id,po_number,vendor_name,status,created_at,total_amount,po_pdf_url').eq('id', poId).single()
       setPo(poData || null)
-      // Line items (needed to render the PO HTML on demand)
-      const { data: poItems } = await sb.from('purchase_order_items')
-        .select('id,item_code,qty,lp_unit_price,discount_pct,unit_price,unit_price_after_disc,total_price,delivery_date')
-        .eq('po_id', poId).order('id')
-      setPoItems(poItems || [])
-      // Vendor code (for the header)
-      if (poData?.vendor_id) {
-        const { data: v } = await sb.from('vendors').select('vendor_code').eq('id', poData.vendor_id).single()
-        setVendorCode(v?.vendor_code || '')
-      }
     }
 
     // Pre-fill form fields from saved data
@@ -330,20 +298,18 @@ export default function PurchaseInvoiceDetail() {
                             <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'var(--gray-800)'}}>{po.po_number}</div>
                           )}
                           <div style={{fontSize:11,color:'var(--gray-500)',marginTop:2}}>{fmtINR(po.total_amount)}</div>
-                          <div style={{display:'flex',gap:8,marginTop:4,flexWrap:'wrap'}}>
-                            {['admin','ops','management'].includes(userRole) && (
-                              <a onClick={() => navigate('/procurement/po/' + po.id)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',cursor:'pointer',textDecoration:'none'}}>
-                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
-                                View PO
-                              </a>
-                            )}
-                            {po.po_pdf_url && (
-                              <a onClick={() => openPoPdf()} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',textDecoration:'none',cursor:'pointer'}}>
-                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
-                                {['admin','ops','management'].includes(userRole) ? 'PO PDF' : 'View PO'}
-                              </a>
-                            )}
-                          </div>
+                          {['admin','ops','management'].includes(userRole) && (
+                            <a onClick={() => navigate('/procurement/po/' + po.id)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',cursor:'pointer',marginTop:4,textDecoration:'none'}}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
+                              View PO
+                            </a>
+                          )}
+                          {po.po_pdf_url && !['admin','ops','management'].includes(userRole) && (
+                            <a href={po.po_pdf_url} target="_blank" rel="noreferrer" style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',marginTop:4,textDecoration:'none'}}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
+                              View PO
+                            </a>
+                          )}
                         </div>
                       ) : (
                         <div style={{fontSize:12,color:'var(--gray-400)'}}>No PO linked</div>
@@ -563,19 +529,16 @@ export default function PurchaseInvoiceDetail() {
                   {po && (
                     <div style={{fontSize:12}}>
                       <div style={{color:'var(--gray-400)',fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.5px'}}>Purchase Order</div>
-                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginTop:2}}>
-                        {['admin','ops','management'].includes(userRole) ? (
-                          <span onClick={() => navigate('/procurement/po/' + po.id)} style={{color:'#2563eb',cursor:'pointer',fontFamily:'var(--mono)',fontWeight:600}}>{po.po_number}</span>
-                        ) : (
-                          <span style={{color:'var(--gray-700)',fontFamily:'var(--mono)',fontWeight:600}}>{po.po_number}</span>
-                        )}
-                        {['admin','ops','management'].includes(userRole) && (
-                          <a onClick={() => navigate('/procurement/po/' + po.id)} style={{fontSize:11,color:'#2563eb',cursor:'pointer',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500}}>View PO ↗</a>
-                        )}
-                        {po.po_pdf_url && (
-                          <a onClick={() => openPoPdf()} style={{fontSize:11,color:'#2563eb',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500,cursor:'pointer'}}>{['admin','ops','management'].includes(userRole) ? 'PDF ↗' : 'View PO ↗'}</a>
-                        )}
-                      </div>
+                      {['admin','ops','management'].includes(userRole) ? (
+                        <div onClick={() => navigate('/procurement/po/' + po.id)} style={{color:'#2563eb',cursor:'pointer',fontFamily:'var(--mono)',fontWeight:600,marginTop:2}}>{po.po_number}</div>
+                      ) : (
+                        <div style={{color:'var(--gray-700)',fontFamily:'var(--mono)',fontWeight:600,marginTop:2}}>
+                          {po.po_number}
+                          {po.po_pdf_url && (
+                            <a href={po.po_pdf_url} target="_blank" rel="noreferrer" style={{marginLeft:8,fontSize:11,color:'#2563eb',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500}}>View PO ↗</a>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                   {grn && (
