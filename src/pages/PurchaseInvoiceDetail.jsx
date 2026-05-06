@@ -47,14 +47,20 @@ async function openPoHtmlForId(poId) {
   if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
   w.document.write('<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#5b6878">Loading PO…</body></html>')
 
-  // Pull PO + items + vendor code in parallel.
-  const poP    = sb.from('purchase_orders').select('id,po_number,temp_po_number,po_type,vendor_name,vendor_id,po_date,created_at,total_amount,fulfilment_center,delivery_address,delivery_customer_name,order_number,reference,payment_terms,notes,submitted_by_name,approved_by').eq('id', poId).single()
-  const itemsP = sb.from('purchase_order_items').select('item_code,qty,lp_unit_price,discount_pct,unit_price,unit_price_after_disc,total_price,delivery_date').eq('po_id', poId).order('id')
-  const [{ data: po }, { data: items }] = await Promise.all([poP, itemsP])
-  if (!po) { w.document.open(); w.document.write('<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#9b1c1c">PO not found.</body></html>'); w.document.close(); return }
+  // Pull PO + items + vendor code in parallel. Use '*' so we don't break if
+  // the column list ever drifts (same approach as PurchaseOrderDetail).
+  const poP    = sb.from('purchase_orders').select('*').eq('id', poId).single()
+  const itemsP = sb.from('po_items').select('*').eq('po_id', poId).order('sr_no')
+  const [poRes, itemsRes] = await Promise.all([poP, itemsP])
+  const po    = poRes.data
+  const items = itemsRes.data || []
+  if (!po) {
+    const msg = poRes.error ? `Could not load PO: ${poRes.error.message}` : 'PO not found.'
+    w.document.open(); w.document.write(`<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#9b1c1c">${msg}</body></html>`); w.document.close(); return
+  }
   let vendorCode = ''
   if (po.vendor_id) {
-    const { data: v } = await sb.from('vendors').select('vendor_code').eq('id', po.vendor_id).single()
+    const { data: v } = await sb.from('vendors').select('vendor_code').eq('id', po.vendor_id).maybeSingle()
     vendorCode = v?.vendor_code || ''
   }
 
