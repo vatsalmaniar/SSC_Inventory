@@ -236,7 +236,8 @@ export default function PurchaseInvoiceDetail() {
   const navigate = useNavigate()
   const [inv, setInv]           = useState(null)
   const [grn, setGrn]           = useState(null)
-  const [po, setPo]             = useState(null)
+  const [po, setPo]             = useState(null)         // primary PO (first one) — kept for backwards compat
+  const [pos, setPos]           = useState([])           // all distinct POs linked to the GRN
   const [grnItems, setGrnItems] = useState([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
@@ -283,15 +284,30 @@ export default function PurchaseInvoiceDetail() {
       setGrnItems(itemsRes.data || [])
     }
 
-    // Load linked PO (from purchase_invoice.po_id or from grn_items fallback)
-    let poId = data.po_id
-    if (!poId && data.grn_id) {
-      const { data: gi } = await sb.from('grn_items').select('po_id').eq('grn_id', data.grn_id).not('po_id', 'is', null).limit(1)
-      if (gi?.[0]?.po_id) poId = gi[0].po_id
+    // Collect every PO id that's linked through this invoice / GRN.
+    // Sources (in priority order, deduplicated):
+    //   1. purchase_invoice.po_id
+    //   2. grn.po_id (row-level link)
+    //   3. grn_items.po_id (per-item links — multi-PO GRNs)
+    const poIdSet = new Set()
+    if (data.po_id) poIdSet.add(data.po_id)
+    if (data.grn_id) {
+      const { data: grnRow } = await sb.from('grn').select('po_id').eq('id', data.grn_id).maybeSingle()
+      if (grnRow?.po_id) poIdSet.add(grnRow.po_id)
+      const { data: giRows } = await sb.from('grn_items').select('po_id').eq('grn_id', data.grn_id).not('po_id', 'is', null)
+      for (const row of (giRows || [])) if (row.po_id) poIdSet.add(row.po_id)
     }
-    if (poId) {
-      const { data: poData } = await sb.from('purchase_orders').select('id,po_number,vendor_name,status,created_at,total_amount,po_pdf_url').eq('id', poId).single()
-      setPo(poData || null)
+    const poIds = [...poIdSet]
+    if (poIds.length) {
+      const { data: poData } = await sb.from('purchase_orders')
+        .select('id,po_number,vendor_name,status,created_at,total_amount,po_pdf_url')
+        .in('id', poIds)
+        .order('created_at', { ascending: true })
+      setPos(poData || [])
+      setPo((poData && poData[0]) || null)  // keep `po` pointing at the first one for any legacy reads
+    } else {
+      setPos([])
+      setPo(null)
     }
 
     // Pre-fill form fields from saved data
@@ -482,19 +498,25 @@ export default function PurchaseInvoiceDetail() {
                   {/* PO Reference */}
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:16}}>
                     <div style={{padding:12,borderRadius:8,border:'1px solid var(--gray-100)',background:'#f8fafc'}}>
-                      <div style={{fontSize:10,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:4}}>Purchase Order</div>
-                      {po ? (
-                        <div>
-                          {['admin','ops','management'].includes(userRole) ? (
-                            <div onClick={() => navigate('/procurement/po/' + po.id)} style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#2563eb',cursor:'pointer'}}>{po.po_number}</div>
-                          ) : (
-                            <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'var(--gray-800)'}}>{po.po_number}</div>
-                          )}
-                          <div style={{fontSize:11,color:'var(--gray-500)',marginTop:2}}>{fmtINR(po.total_amount)}</div>
-                          <a onClick={() => openPoHtmlForId(po.id)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',cursor:'pointer',marginTop:4,textDecoration:'none'}}>
-                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
-                            View PO
-                          </a>
+                      <div style={{fontSize:10,fontWeight:600,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:4}}>
+                        {pos.length > 1 ? `Purchase Orders (${pos.length})` : 'Purchase Order'}
+                      </div>
+                      {pos.length > 0 ? (
+                        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                          {pos.map((p, idx) => (
+                            <div key={p.id} style={{paddingTop:idx>0?8:0,borderTop:idx>0?'1px dashed var(--gray-200)':'none'}}>
+                              {['admin','ops','management'].includes(userRole) ? (
+                                <div onClick={() => navigate('/procurement/po/' + p.id)} style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#2563eb',cursor:'pointer'}}>{p.po_number}</div>
+                              ) : (
+                                <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'var(--gray-800)'}}>{p.po_number}</div>
+                              )}
+                              <div style={{fontSize:11,color:'var(--gray-500)',marginTop:2}}>{fmtINR(p.total_amount)}</div>
+                              <a onClick={() => openPoHtmlForId(p.id)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',cursor:'pointer',marginTop:4,textDecoration:'none'}}>
+                                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
+                                View PO
+                              </a>
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <div style={{fontSize:12,color:'var(--gray-400)'}}>No PO linked</div>
@@ -711,12 +733,16 @@ export default function PurchaseInvoiceDetail() {
                       </div>
                     </div>
                   )}
-                  {po && (
+                  {pos.length > 0 && (
                     <div style={{fontSize:12}}>
-                      <div style={{color:'var(--gray-400)',fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.5px'}}>Purchase Order</div>
-                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginTop:2}}>
-                        <span style={{color:'var(--gray-700)',fontFamily:'var(--mono)',fontWeight:600}}>{po.po_number}</span>
-                        <a onClick={() => openPoHtmlForId(po.id)} style={{fontSize:11,color:'#2563eb',cursor:'pointer',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500}}>View PO ↗</a>
+                      <div style={{color:'var(--gray-400)',fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.5px'}}>{pos.length > 1 ? `Purchase Orders (${pos.length})` : 'Purchase Order'}</div>
+                      <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:2}}>
+                        {pos.map(p => (
+                          <div key={p.id} style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                            <span style={{color:'var(--gray-700)',fontFamily:'var(--mono)',fontWeight:600}}>{p.po_number}</span>
+                            <a onClick={() => openPoHtmlForId(p.id)} style={{fontSize:11,color:'#2563eb',cursor:'pointer',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500}}>View PO ↗</a>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
