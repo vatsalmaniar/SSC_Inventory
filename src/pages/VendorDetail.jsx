@@ -495,67 +495,6 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                             )}
                           </div>
 
-                          {canEditCompliance && (
-                            <>
-                              <div className="c360-section-label" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                                <span>Compliance Documents (Admin)</span>
-                                {!cmpEdit
-                                  ? <button onClick={startCmpEdit} className="c360-btn" style={{padding:'4px 10px',fontSize:11}}>Edit</button>
-                                  : <span style={{display:'flex',gap:6}}>
-                                      <button onClick={cancelCmpEdit} disabled={cmpSaving} className="c360-btn" style={{padding:'4px 10px',fontSize:11}}>Cancel</button>
-                                      <button onClick={saveCompliance} disabled={cmpSaving} className="c360-btn c360-btn-primary" style={{padding:'4px 10px',fontSize:11}}>{cmpSaving ? 'Saving…' : 'Save'}</button>
-                                    </span>
-                                }
-                              </div>
-                              <div className="c360-field-grid">
-                                {/* GST Number */}
-                                <div className="c360-field">
-                                  <label>GST Number</label>
-                                  <div className="val">
-                                    {cmpEdit
-                                      ? <input value={cmpData.gst || ''} onChange={e => setCmpData(d => ({...d, gst: e.target.value}))} placeholder="24ABCDE1234F1Z5" style={{width:'100%',padding:'6px 8px',border:'1px solid var(--gray-200)',borderRadius:6,fontFamily:'var(--mono)',fontSize:12}}/>
-                                      : <span style={{fontFamily:'var(--mono)'}}>{vendor.gst || <span style={{color:'var(--gray-300)'}}>Not provided</span>}</span>}
-                                  </div>
-                                </div>
-                                {/* GST Certificate */}
-                                <div className="c360-field">
-                                  <label>GST Certificate</label>
-                                  <div className="val" style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-                                    {vendor.gst_cert_url
-                                      ? <a href={vendor.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
-                                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                          View current
-                                        </a>
-                                      : <span style={{color:'var(--gray-300)',fontSize:12}}>Not uploaded</span>}
-                                    {cmpEdit && <input ref={gstFileRef} type="file" accept="application/pdf" style={{fontSize:11}}/>}
-                                  </div>
-                                </div>
-                                {/* MSME Number */}
-                                <div className="c360-field">
-                                  <label>MSME Number</label>
-                                  <div className="val">
-                                    {cmpEdit
-                                      ? <input value={cmpData.msme_no || ''} onChange={e => setCmpData(d => ({...d, msme_no: e.target.value}))} placeholder="UDYAM-XX-00-0000000" style={{width:'100%',padding:'6px 8px',border:'1px solid var(--gray-200)',borderRadius:6,fontFamily:'var(--mono)',fontSize:12}}/>
-                                      : <span style={{fontFamily:'var(--mono)'}}>{vendor.msme_no || <span style={{color:'var(--gray-300)'}}>Not provided</span>}</span>}
-                                  </div>
-                                </div>
-                                {/* MSME Certificate */}
-                                <div className="c360-field">
-                                  <label>MSME Certificate</label>
-                                  <div className="val" style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-                                    {vendor.msme_cert_url
-                                      ? <a href={vendor.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
-                                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                          View current
-                                        </a>
-                                      : <span style={{color:'var(--gray-300)',fontSize:12}}>Not uploaded</span>}
-                                    {cmpEdit && <input ref={msmeFileRef} type="file" accept="application/pdf" style={{fontSize:11}}/>}
-                                  </div>
-                                </div>
-                              </div>
-                            </>
-                          )}
-
                           <div className="c360-section-label">Addresses</div>
                           <div className="c360-field-grid">
                             <div className="c360-field" style={{ gridColumn:'span 2' }}>
@@ -661,6 +600,64 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                       <SideRow label="Total PO Value" val={fmtINR(totalPOValue)} />
                     </div>
                   </div>
+
+                  {/* Compliance Documents — admin / management / jayshree.negi only */}
+                  {canEditCompliance && (
+                    <div className="c360-side-card" style={{ marginTop:12 }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                        <div className="c360-side-title" style={{ marginBottom:0 }}>Compliance Documents</div>
+                        {!cmpEdit
+                          ? <button onClick={startCmpEdit} className="c360-btn" style={{ padding:'4px 10px', fontSize:11 }}>Edit</button>
+                          : <span style={{ display:'flex', gap:6 }}>
+                              <button onClick={cancelCmpEdit} disabled={cmpSaving} className="c360-btn" style={{ padding:'4px 10px', fontSize:11 }}>Cancel</button>
+                              <button onClick={saveCompliance} disabled={cmpSaving} className="c360-btn c360-btn-primary" style={{ padding:'4px 10px', fontSize:11 }}>{cmpSaving ? 'Saving…' : 'Save'}</button>
+                            </span>
+                        }
+                      </div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        {/* GST Number */}
+                        <div>
+                          <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>GST Number</div>
+                          {cmpEdit
+                            ? <input value={cmpData.gst || ''} onChange={e => setCmpData(d => ({...d, gst: e.target.value}))} placeholder="24ABCDE1234F1Z5" style={{ width:'100%', padding:'6px 8px', border:'1px solid var(--gray-200)', borderRadius:6, fontFamily:'var(--mono)', fontSize:12 }}/>
+                            : <div style={{ fontFamily:'var(--mono)', fontSize:13 }}>{vendor.gst || <span style={{ color:'var(--gray-300)' }}>Not provided</span>}</div>}
+                        </div>
+                        {/* GST Certificate */}
+                        <div>
+                          <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>GST Certificate</div>
+                          <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                            {vendor.gst_cert_url
+                              ? <a href={vendor.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                  View current
+                                </a>
+                              : <span style={{ color:'var(--gray-300)', fontSize:12 }}>Not uploaded</span>}
+                            {cmpEdit && <input ref={gstFileRef} type="file" accept="application/pdf" style={{ fontSize:11 }} />}
+                          </div>
+                        </div>
+                        {/* MSME Number */}
+                        <div>
+                          <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>MSME Number</div>
+                          {cmpEdit
+                            ? <input value={cmpData.msme_no || ''} onChange={e => setCmpData(d => ({...d, msme_no: e.target.value}))} placeholder="UDYAM-XX-00-0000000" style={{ width:'100%', padding:'6px 8px', border:'1px solid var(--gray-200)', borderRadius:6, fontFamily:'var(--mono)', fontSize:12 }}/>
+                            : <div style={{ fontFamily:'var(--mono)', fontSize:13 }}>{vendor.msme_no || <span style={{ color:'var(--gray-300)' }}>Not provided</span>}</div>}
+                        </div>
+                        {/* MSME Certificate */}
+                        <div>
+                          <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>MSME Certificate</div>
+                          <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                            {vendor.msme_cert_url
+                              ? <a href={vendor.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                  View current
+                                </a>
+                              : <span style={{ color:'var(--gray-300)', fontSize:12 }}>Not uploaded</span>}
+                            {cmpEdit && <input ref={msmeFileRef} type="file" accept="application/pdf" style={{ fontSize:11 }} />}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
