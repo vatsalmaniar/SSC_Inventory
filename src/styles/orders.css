@@ -163,8 +163,8 @@
 /* ══════════════════════════════════════════
    ORDERS LIST  (/orders/list)
 ══════════════════════════════════════════ */
-.od-list-page { min-height: 100vh; background: #fafafa; }
-.od-list-body { max-width: 1240px; margin: 0 auto; padding: 28px 20px 60px; }
+.od-list-page { min-height: 100vh; background: #fafafa; font-family: 'Geist', -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #0B1B30; }
+.od-list-body { max-width: 1240px; margin: 0 auto; padding: 28px 20px 60px; font-family: 'Geist', -apple-system, system-ui, sans-serif; }
 
 .od-list-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 .od-list-title { font-size: 22px; font-weight: 700; color: var(--gray-900); letter-spacing: -0.5px; }

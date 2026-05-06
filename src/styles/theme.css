@@ -220,6 +220,40 @@ html[data-theme="dark"] .od-page .od-side-card,
 html[data-theme="dark"] .od-page .od-header { color: #D4D4D4 !important; }
 html[data-theme="dark"] .od-page .od-batch-card { background: #252526 !important; }
 
+/* TodayDispatch / Orders List page wrapper (.od-list-page) */
+html[data-theme="dark"] .od-list-page,
+html[data-theme="dark"] .od-dash-page,
+html[data-theme="dark"] .dash-page { background: #181818 !important; color: #D4D4D4 !important; }
+html[data-theme="dark"] .od-list-page,
+html[data-theme="dark"] .od-list-body,
+html[data-theme="dark"] .od-list-page * { font-family: 'Geist', -apple-system, system-ui, sans-serif !important; }
+html[data-theme="dark"] .od-list-title,
+html[data-theme="dark"] .od-dash-greeting,
+html[data-theme="dark"] .dash-greeting { color: #FFFFFF !important; }
+html[data-theme="dark"] .od-list-sub,
+html[data-theme="dark"] .od-dash-date,
+html[data-theme="dark"] .dash-date { color: #858585 !important; }
+html[data-theme="dark"] .od-download-btn,
+html[data-theme="dark"] .od-dash-viewall-btn { background: #2D2D2D !important; border-color: #3C3C3C !important; color: #D4D4D4 !important; }
+html[data-theme="dark"] .od-download-btn:hover,
+html[data-theme="dark"] .od-dash-viewall-btn:hover { background: #3C3C3C !important; }
+
+/* Summary stat tile + table card */
+html[data-theme="dark"] .od-list-page .od-summary-tile,
+html[data-theme="dark"] .od-list-page .od-table-card,
+html[data-theme="dark"] .od-list-page .orders-empty,
+html[data-theme="dark"] .od-list-page .dash-card,
+html[data-theme="dark"] .od-dash-page .dash-card { background: #252526 !important; border-color: #3C3C3C !important; color: #D4D4D4 !important; }
+html[data-theme="dark"] .od-list-page .od-summary-val { color: #FFFFFF !important; }
+html[data-theme="dark"] .od-list-page .od-summary-label { color: #858585 !important; }
+html[data-theme="dark"] .od-list-page .od-summary-divider { background: #3C3C3C !important; }
+html[data-theme="dark"] .od-list-page .orders-empty-title { color: #FFFFFF !important; }
+html[data-theme="dark"] .od-list-page .orders-empty-sub { color: #858585 !important; }
+html[data-theme="dark"] .od-list-page .od-items-table thead th { background: #2D2D2D !important; color: #858585 !important; border-bottom-color: #3C3C3C !important; }
+html[data-theme="dark"] .od-list-page .od-items-table tbody td { color: #D4D4D4 !important; border-color: #3C3C3C !important; }
+html[data-theme="dark"] .od-list-page .od-items-table tbody tr:hover td { background: #2D2D2D !important; }
+html[data-theme="dark"] .od-list-page .order-num-cell { color: #818CF8 !important; }
+
 /* Full / Partial dispatch choice cards — base CSS is white-on-white */
 html[data-theme="dark"] .od-dispatch-choice-btn { background: #2D2D2D !important; border-color: #3C3C3C !important; color: #D4D4D4 !important; }
 html[data-theme="dark"] .od-dispatch-choice-btn:hover { background: #3C3C3C !important; border-color: #818CF8 !important; box-shadow: 0 0 0 3px rgba(129,140,248,0.10) !important; }
