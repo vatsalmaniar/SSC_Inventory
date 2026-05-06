@@ -5,6 +5,7 @@ import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime } from '../lib/fmt'
 import { toast } from '../lib/toast'
+import { openPoHtml } from '../lib/poHtml'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -44,19 +45,22 @@ export default function PurchaseInvoiceDetail() {
   const [inv, setInv]           = useState(null)
   const [grn, setGrn]           = useState(null)
   const [po, setPo]             = useState(null)
+  const [poItems, setPoItems]   = useState([])
+  const [vendorCode, setVendorCode] = useState('')
   const [grnItems, setGrnItems] = useState([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
   const [userRole, setUserRole] = useState('')
   const [userName, setUserName] = useState('')
 
-  // Open the live PO view in a new tab — the PO detail page regenerates
-  // the document from data on demand (same approach as the DC in OrderDetail
-  // / FCOrderDetail), which avoids stale stored PDFs that some browsers
-  // render as raw HTML when the content-type is wrong.
+  // Render the PO from data and open it in a new tab (same approach as the
+  // DC viewer in OrderDetail / FCOrderDetail). No stored PDF — what you see
+  // is generated on demand from the current po + line items.
   function openPoPdf() {
-    if (!po?.id) return
-    window.open('/procurement/po/' + po.id, '_blank', 'noopener')
+    if (!po) return
+    if (!openPoHtml({ po, items: poItems, vendorCode })) {
+      toast('Popup blocked — allow popups for this site and try again.')
+    }
   }
 
   // 3-way check
@@ -106,8 +110,20 @@ export default function PurchaseInvoiceDetail() {
       if (gi?.[0]?.po_id) poId = gi[0].po_id
     }
     if (poId) {
-      const { data: poData } = await sb.from('purchase_orders').select('id,po_number,vendor_name,status,created_at,total_amount,po_pdf_url').eq('id', poId).single()
+      const { data: poData } = await sb.from('purchase_orders')
+        .select('id,po_number,temp_po_number,po_type,vendor_name,vendor_id,status,created_at,po_date,total_amount,po_pdf_url,fulfilment_center,delivery_address,delivery_customer_name,order_number,reference,payment_terms,notes,submitted_by_name,approved_by')
+        .eq('id', poId).single()
       setPo(poData || null)
+      // Line items (needed to render the PO HTML on demand)
+      const { data: poItems } = await sb.from('purchase_order_items')
+        .select('id,item_code,qty,lp_unit_price,discount_pct,unit_price,unit_price_after_disc,total_price,delivery_date')
+        .eq('po_id', poId).order('id')
+      setPoItems(poItems || [])
+      // Vendor code (for the header)
+      if (poData?.vendor_id) {
+        const { data: v } = await sb.from('vendors').select('vendor_code').eq('id', poData.vendor_id).single()
+        setVendorCode(v?.vendor_code || '')
+      }
     }
 
     // Pre-fill form fields from saved data

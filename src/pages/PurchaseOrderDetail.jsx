@@ -5,6 +5,7 @@ import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
+import { buildPoHtml as buildPoHtmlShared, openPoHtml } from '../lib/poHtml'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
@@ -688,7 +689,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   }
 
   async function generatePoPdf(poNumber) {
-    const html = buildPoHtml(poNumber)
+    const html = buildPoHtmlShared({ po: { ...po, po_number: poNumber }, items, vendorCode })
     const blob = new Blob([html], { type: 'text/html' })
     const path = `po-pdfs/${id}/${Date.now()}.html`
     const { error } = await sb.storage.from('po-documents').upload(path, blob, { contentType: 'text/html', upsert: true })
@@ -698,12 +699,9 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   }
 
   function viewPoPdf() {
-    const poNumber = po.po_number || po.temp_po_number || '—'
-    const html = buildPoHtml(poNumber)
-    const w = window.open('', '_blank')
-    if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
-    w.document.write(html)
-    w.document.close()
+    if (!openPoHtml({ po, items, vendorCode })) {
+      toast('Popup blocked — allow popups for this site and try again.')
+    }
   }
 
   // ── Stage 3: Order Placed ──
