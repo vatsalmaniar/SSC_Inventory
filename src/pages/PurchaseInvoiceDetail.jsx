@@ -761,28 +761,42 @@ export default function PurchaseInvoiceDetail() {
                 </div>
               </div>
 
-              {/* Timeline */}
-              <div className="od-side-card" style={{marginTop:12}}>
-                <div className="od-side-card-title">Timeline</div>
-                <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                  <div style={{fontSize:12}}>
-                    <div style={{color:'var(--gray-400)',fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.5px'}}>Created</div>
-                    <div style={{color:'var(--gray-700)',marginTop:2}}>{fmtDateTime(inv.created_at)}</div>
-                  </div>
-                  {inv.three_way_checked_at && (
-                    <div style={{fontSize:12}}>
-                      <div style={{color:'var(--gray-400)',fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.5px'}}>3-Way Check</div>
-                      <div style={{color:'var(--gray-700)',marginTop:2}}>{fmtDateTime(inv.three_way_checked_at)}</div>
-                      {inv.three_way_checked_by && <div style={{marginTop:2}}><OwnerChip name={inv.three_way_checked_by} /></div>}
-                    </div>
-                  )}
-                  {inv.inward_completed_at && (
-                    <div style={{fontSize:12}}>
-                      <div style={{color:'var(--gray-400)',fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.5px'}}>Inward Complete</div>
-                      <div style={{color:'var(--gray-700)',marginTop:2}}>{fmtDateTime(inv.inward_completed_at)}</div>
-                      {inv.inward_completed_by && <div style={{marginTop:2}}><OwnerChip name={inv.inward_completed_by} /></div>}
-                    </div>
-                  )}
+              {/* Activity — vertical timeline, chronological */}
+              <div className="od-side-card od-activity-card" style={{marginTop:12}}>
+                <div className="od-side-card-title">Activity</div>
+                <div className="od-activity-list">
+                  {(() => {
+                    const events = []
+                    if (grn?.created_at)              events.push({ at: grn.created_at,             type: 'system',   title: 'GRN created — ' + (grn.grn_number || ''),                                by: grn.created_by_name })
+                    if (grn?.received_at)             events.push({ at: grn.received_at,            type: 'success',  title: 'Goods received — quality OK',                                              by: grn.received_by_name })
+                    if (inv?.created_at)              events.push({ at: inv.created_at,             type: 'invoice',  title: 'Purchase Invoice created',                                                 by: null })
+                    if (inv?.three_way_checked_at)    events.push({ at: inv.three_way_checked_at,   type: 'system',   title: '3-Way Check completed',                                                    by: inv.three_way_checked_by, sub: inv.three_way_notes })
+                    if (inv?.invoice_number && inv?.invoice_date) events.push({ at: inv.invoice_date,           type: 'invoice',  title: 'Vendor invoice recorded — ' + inv.invoice_number,                          by: null })
+                    if (inv?.inward_completed_at)     events.push({ at: inv.inward_completed_at,    type: 'success',  title: 'Inward complete',                                                          by: inv.inward_completed_by })
+                    events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+
+                    const dotIcon = (type) => ({
+                      system:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+                      success:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>,
+                      invoice:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+                    }[type])
+
+                    if (events.length === 0) return <div style={{fontSize:12,color:'var(--gray-400)',padding:'8px 0'}}>No activity yet.</div>
+
+                    return events.map((e, i) => (
+                      <div key={i} className="od-tl-item">
+                        <div className={'od-tl-dot ' + e.type}>{dotIcon(e.type)}</div>
+                        <div className="od-tl-content">
+                          <div className="od-tl-header">
+                            <div className="od-tl-title">{e.title}</div>
+                            <div className="od-tl-time">{fmtDateTime(e.at)}</div>
+                          </div>
+                          {e.by && <div className="od-tl-sub"><OwnerChip name={e.by} /></div>}
+                          {e.sub && <div className="od-tl-sub" style={{marginTop:4,fontStyle:'italic'}}>"{e.sub}"</div>}
+                        </div>
+                      </div>
+                    ))
+                  })()}
                 </div>
               </div>
             </div>
