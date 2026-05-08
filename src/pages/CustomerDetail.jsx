@@ -116,7 +116,7 @@ export default function CustomerDetail() {
 
     const [ordersRes, contactsRes, oppsRes, visitsRes] = await Promise.all([
       sb.from('orders')
-        .select('id,order_number,customer_name,status,order_type,order_items(qty,total_price,unit_price,unit_price_after_disc,cancelled_qty,line_status),created_at,po_number,order_dispatches(delivered_at)')
+        .select('id,order_number,customer_name,status,order_type,order_items(qty,total_price,unit_price_after_disc,cancelled_qty,line_status),created_at,po_number,order_dispatches(delivered_at)')
         .eq('is_test', false)
         .ilike('customer_name', custRes.data.customer_name)
         .order('created_at', { ascending: false }),
@@ -245,7 +245,7 @@ export default function CustomerDetail() {
     let itemsByOrder = {}
     if (include.orders && orderIds.length > 0) {
       const { data: items } = await sb.from('order_items')
-        .select('order_id,item_code,qty,unit_price,unit_price_after_disc,total_price,customer_ref_no,cancelled_qty,line_status')
+        .select('order_id,item_code,qty,lp_unit_price,unit_price_after_disc,total_price,customer_ref_no,cancelled_qty,line_status')
         .in('order_id', orderIds)
       ;(items || []).forEach(i => {
         if (!itemsByOrder[i.order_id]) itemsByOrder[i.order_id] = []

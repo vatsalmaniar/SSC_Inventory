@@ -104,7 +104,7 @@ export default function Orders() {
   async function loadData(role, uid) {
     setLoading(true)
     let q = sb.from('orders')
-      .select('id,order_number,customer_name,status,order_type,created_at,created_by,order_items(qty,dispatched_qty,total_price,unit_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
+      .select('id,order_number,customer_name,status,order_type,created_at,created_by,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
       .gte('created_at', FY_START).eq('is_test', role === 'demo')
       .order('created_at', { ascending: false })
     if (role === 'sales') q = q.eq('created_by', uid)

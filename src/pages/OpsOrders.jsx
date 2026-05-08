@@ -85,7 +85,7 @@ export default function OpsOrders() {
   async function loadOrders(silent) {
     if (!silent) setLoading(true)
     const { data } = await sb.from('orders')
-      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,status,freight,order_items(id,qty,dispatched_qty,posted_qty,total_price,unit_price,unit_price_after_disc,cancelled_qty,line_status)')
+      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,status,freight,order_items(id,qty,dispatched_qty,posted_qty,total_price,unit_price_after_disc,cancelled_qty,line_status)')
       .gte('created_at', FY_START).eq('is_test', false)
       .order('created_at', { ascending: false })
     setOrders(data || [])

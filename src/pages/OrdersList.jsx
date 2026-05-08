@@ -182,7 +182,7 @@ export default function OrdersList() {
   async function loadOrders(testMode = false, salesUserId = null) {
     setLoading(true)
     let q = sb.from('orders')
-      .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,order_items(id,sr_no,item_code,qty,dispatched_qty,posted_qty,lp_unit_price,discount_pct,unit_price,unit_price_after_disc,total_price,dispatch_date,customer_ref_no,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
+      .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,order_items(id,sr_no,item_code,qty,dispatched_qty,posted_qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,customer_ref_no,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
       .gte('created_at', FY_START).eq('is_test', testMode)
       .order('created_at', { ascending: false })
     if (salesUserId) q = q.eq('created_by', salesUserId)

@@ -36,7 +36,7 @@ export const AUTO_FETCHERS = {
   sales_actual_by_owner: async ({ profileName, fyStart, fyEnd, monthRanges }) => {
     if (!profileName) return {}
     const { data } = await sb.from('orders')
-      .select('created_at, order_items(total_price,unit_price,unit_price_after_disc,cancelled_qty)')
+      .select('created_at, order_items(total_price,unit_price_after_disc,cancelled_qty)')
       .eq('account_owner', profileName).neq('status', 'cancelled').eq('is_test', false)
       .gte('created_at', fyStart).lt('created_at', fyEnd)
     const result = {}

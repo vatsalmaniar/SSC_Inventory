@@ -37,7 +37,7 @@ export default function ProcurementOrders() {
 
     const [coDataRes, orphanPosRes] = await Promise.all([
       sb.from('orders')
-        .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price,unit_price_after_disc,cancelled_qty,line_status)')
+        .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status)')
         .eq('is_test', false).eq('order_type', 'CO')
         .neq('status', 'pending')
         .gte('created_at', FY_START)
@@ -52,7 +52,7 @@ export default function ProcurementOrders() {
       const missingIds = [...new Set(orphanPosAll.map(p => p.order_id))].filter(id => !existingIds.has(id))
       if (missingIds.length) {
         const { data: extraCos } = await sb.from('orders')
-          .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price,unit_price_after_disc,cancelled_qty,line_status)')
+          .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status)')
           .in('id', missingIds).eq('status', 'cancelled')
         if (extraCos?.length) coOrders = [...coOrders, ...extraCos]
       }

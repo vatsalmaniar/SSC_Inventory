@@ -55,7 +55,7 @@ export default function SalesModule() {
   async function loadOrders(testMode = false) {
     setLoading(true)
     const { data } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,order_type,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price,unit_price_after_disc,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,eway_bill_number,dispatched_items)')
+      .select('id,order_number,customer_name,status,order_type,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,eway_bill_number,dispatched_items)')
       .in('status', BILLING_MODULE_STATUSES)
       .gte('created_at', FY_START)
       .eq('is_test', testMode)
