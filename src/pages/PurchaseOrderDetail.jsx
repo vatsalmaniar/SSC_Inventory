@@ -1170,7 +1170,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
           </div>
         )}
 
-        {['placed','acknowledged','delivery_confirmation'].includes(po.status) && (
+        {['placed','acknowledged','delivery_confirmation','partially_received'].includes(po.status) && (
           <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'flex-start', gap:12, fontSize:13, color:'#1d4ed8', marginBottom:0 }}>
             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12l2 2 4-4"/></svg>
             <div>

@@ -125,7 +125,7 @@ export default function NewGRN() {
   async function fetchPOs(q) {
     const { data } = await sb.from('purchase_orders')
       .select('id,po_number,vendor_name,status')
-      .in('status', ['placed', 'acknowledged', 'delivery_confirmation'])
+      .in('status', ['placed', 'acknowledged', 'delivery_confirmation', 'partially_received'])
       .or(`po_number.ilike.%${q}%,vendor_name.ilike.%${q}%`)
       .order('created_at', { ascending: false }).limit(20)
     return data || []
