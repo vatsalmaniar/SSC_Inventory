@@ -525,6 +525,10 @@ export default function FCOrderDetail() {
     await loadOrder()
   }
 
+  // FC marks "Goods Issued" — physical move from shelf at warehouse.
+  // FUTURE: inventory should be deducted HERE (warehouse stock decrement) when inventory
+  // tracking is wired up. The accounting confirmation (goods_issue_posted) is a separate
+  // step in BillingOrderDetail. See project_dispatch_pipeline_rules memory for the model.
   async function confirmGoodsIssued() {
     setSaving(true)
     let dcNum = null
