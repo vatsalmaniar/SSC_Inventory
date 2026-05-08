@@ -13,15 +13,17 @@ import '../styles/neworder.css'
 const PO_STATUS_LABELS = {
   draft:'PO Created', pending_approval:'Pending Approval', approved:'PO Approved',
   placed:'Order Placed', acknowledged:'Acknowledgement',
-  delivery_confirmation:'Delivery Confirmation', material_received:'Material Received',
+  delivery_confirmation:'Delivery Confirmation', partially_received:'Partial GRN',
+  material_received:'Material Received',
   closed:'Closed', cancelled:'Cancelled',
 }
 const PO_PIPE_LABELS = {
   draft:'Created', pending_approval:'Approval', approved:'Approved',
   placed:'Placed', acknowledged:'Acknowledged',
-  delivery_confirmation:'Delivery', material_received:'Received', closed:'Closed',
+  delivery_confirmation:'Delivery', partially_received:'Partial GRN',
+  material_received:'Received', closed:'Closed',
 }
-const PIPELINE = ['draft','pending_approval','approved','placed','acknowledged','delivery_confirmation','material_received','closed']
+const PIPELINE = ['draft','pending_approval','approved','placed','acknowledged','delivery_confirmation','partially_received','material_received','closed']
 const FC_OPTIONS = ['Kaveri','Godawari']
 
 const AVATAR_COLORS = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
@@ -1171,13 +1173,13 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
         )}
 
         {['placed','acknowledged','delivery_confirmation','partially_received'].includes(po.status) && (
-          <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'flex-start', gap:12, fontSize:13, color:'#1d4ed8', marginBottom:0 }}>
-            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12l2 2 4-4"/></svg>
+          <div className="od-grn-banner">
+            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="od-grn-banner-icon"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12l2 2 4-4"/></svg>
             <div>
-              <div style={{ fontWeight:700, marginBottom:2 }}>Waiting for GRN</div>
-              <div style={{ color:'#3b82f6', fontSize:12 }}>Material received will be confirmed through Goods Receipt Note (GRN). Create a GRN against this PO to mark it as received.</div>
+              <div className="od-grn-banner-title">Waiting for GRN</div>
+              <div className="od-grn-banner-sub">Material received will be confirmed through Goods Receipt Note (GRN). Create a GRN against this PO to mark it as received.</div>
             </div>
-            <button onClick={() => navigate('/fc/grn/new?po_id=' + id)} style={{ marginLeft:'auto', background:'#1d4ed8', color:'white', border:'none', borderRadius:8, padding:'8px 16px', fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', fontFamily:'var(--font)' }}>
+            <button onClick={() => navigate('/fc/grn/new?po_id=' + id)} className="od-grn-banner-btn">
               + Create GRN
             </button>
           </div>

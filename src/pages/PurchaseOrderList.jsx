@@ -13,12 +13,13 @@ function initials(name) { return (name||'').split(' ').map(w => w[0]).join('').s
 const PO_STATUS_LABELS = {
   draft:'PO Created', pending_approval:'Pending Approval', approved:'PO Approved', placed:'Order Placed',
   acknowledged:'Acknowledgement', delivery_confirmation:'Delivery Confirmation',
-  material_received:'Material Received', closed:'Closed', cancelled:'Cancelled',
+  partially_received:'Partial GRN', material_received:'Material Received',
+  closed:'Closed', cancelled:'Cancelled',
 }
 const PO_STATUS_COLORS = {
   draft:'#94A3B8', pending_approval:'#F59E0B', approved:'#1E54B7', placed:'#0EA5E9',
   acknowledged:'#0F766E', delivery_confirmation:'#D97706',
-  material_received:'#22C55E', closed:'#047857', cancelled:'#EF4444',
+  partially_received:'#D97706', material_received:'#22C55E', closed:'#047857', cancelled:'#EF4444',
 }
 function poValue(po) { return po.total_amount || 0 }
 function isCPO(po) { return !!(po.order_number && po.order_number.includes('/CO')) }

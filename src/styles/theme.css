@@ -213,6 +213,12 @@ html[data-theme="dark"] .od-page .od-tl-dot.edited { background: rgba(245,158,11
 html[data-theme="dark"] .od-page .od-status-badge.cancelled,
 html[data-theme="dark"] .od-page .od-cancelled-banner { background: rgba(239,68,68,0.12) !important; color: #FCA5A5 !important; border-color: rgba(239,68,68,0.4) !important; }
 
+/* Waiting for GRN banner — dark theme */
+html[data-theme="dark"] .od-page .od-grn-banner { background: rgba(59,130,246,0.12) !important; color: #93C5FD !important; border-color: rgba(59,130,246,0.4) !important; }
+html[data-theme="dark"] .od-page .od-grn-banner-sub { color: #BFDBFE !important; }
+html[data-theme="dark"] .od-page .od-grn-banner-btn { background: #3B82F6 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-grn-banner-btn:hover { background: #60A5FA !important; }
+
 /* Generic od cards/value text — make sure dark text inside is light */
 html[data-theme="dark"] .od-page,
 html[data-theme="dark"] .od-page .od-card,
