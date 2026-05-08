@@ -36,14 +36,14 @@ export const AUTO_FETCHERS = {
   sales_actual_by_owner: async ({ profileName, fyStart, fyEnd, monthRanges }) => {
     if (!profileName) return {}
     const { data } = await sb.from('orders')
-      .select('created_at, order_items(total_price,unit_price,unit_price_after_disc,cancelled_qty)')
+      .select('created_at, order_items(total_price)')
       .eq('account_owner', profileName).neq('status', 'cancelled').eq('is_test', false)
       .gte('created_at', fyStart).lt('created_at', fyEnd)
     const result = {}
     ;(data || []).forEach(o => {
       const k = bucketKey(new Date(o.created_at), monthRanges)
       if (!k) return
-      const v = (o.order_items || []).reduce((a, i) => a + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0)
+      const v = (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0)
       result[k] = (result[k] || 0) + v
     })
     return result

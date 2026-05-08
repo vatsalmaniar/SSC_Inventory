@@ -115,13 +115,10 @@ export default function OrderDetail() {
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
   const [showCancel, setShowCancel] = useState(false)
-  const [cancelMode, setCancelMode] = useState('choice')   // 'choice' | 'full' | 'partial'
-  const [cancelLines, setCancelLines] = useState([])       // line picker state for partial mode
   const [cancelReason, setCancelReason] = useState('')
   const [cancelInitiatorType, setCancelInitiatorType] = useState('staff')
   const [cancelInitiatorName, setCancelInitiatorName] = useState('')
   const [cancelInitiatorFreeText, setCancelInitiatorFreeText] = useState('')
-  const cancelGuardRef = useRef(false)
 
   const [editMode, setEditMode]   = useState(false)
   const [editData, setEditData]   = useState({})
@@ -242,11 +239,7 @@ export default function OrderDetail() {
   const pipelineIdx      = ORDER_PIPELINE_KEYS.indexOf(effectiveStatus)
   const canAdvance       = isOps && !isCancelled && !isInFCFlow && pipelineIdx >= 0 && pipelineIdx < ORDER_PIPELINE_KEYS.length - 1
   const hasAnyDispatched = (order?.order_items || []).some(i => (i.dispatched_qty || 0) > 0)
-  // hasAnyPending: under the new model, "pending" is anything not yet GI-posted (and not cancelled)
-  const hasAnyPending    = (order?.order_items || []).some(i => (i.qty || 0) > ((i.posted_qty || 0) + (i.cancelled_qty || 0)))
-  const hasAnyCancelled  = (order?.order_items || []).some(i => (i.cancelled_qty || 0) > 0)
-  const cancelledValue   = (order?.order_items || []).reduce((s, i) => s + ((i.cancelled_qty || 0) * (i.unit_price_after_disc || i.unit_price || 0)), 0)
-  const netOrderValue    = (order?.order_items || []).reduce((s, i) => s + (((i.qty || 0) - (i.cancelled_qty || 0)) * (i.unit_price_after_disc || i.unit_price || 0)), 0)
+  const hasAnyPending    = (order?.order_items || []).some(i => i.qty > (i.dispatched_qty || 0))
   const showDispatchCols = hasAnyDispatched
   // Next Batch button: ops can dispatch remaining items when order is in FC flow but items still pending
   const canNextBatch     = isOps && !isCancelled && isInFCFlow && hasAnyPending
@@ -497,8 +490,8 @@ export default function OrderDetail() {
     setSaving(true)
     const isPIOrder = (order.credit_terms === 'Against PI' || order.credit_terms === 'Advance') && order.order_type !== 'SAMPLE'
     const rpcCalls = (order.order_items || [])
-      .filter(item => item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0) > 0)
-      .map(item => sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0) }))
+      .filter(item => item.qty - (item.dispatched_qty || 0) > 0)
+      .map(item => sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: item.qty - (item.dispatched_qty || 0) }))
     const rpcResults = await Promise.all(rpcCalls)
     const failed = rpcResults.find(r => r.error)
     if (failed) { toast('Failed to update items: ' + failed.error.message + '. Please refresh and try again.'); setSaving(false); return }
@@ -535,7 +528,7 @@ export default function OrderDetail() {
     setIsNextBatch(false)
     setShowDispatchModal(false)
     setPartialItems((order.order_items || []).map(item => {
-      const remaining = item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0)
+      const remaining = item.qty - (item.dispatched_qty || 0)
       return { id: item.id, item_code: item.item_code, qty: item.qty, dispatched_qty: item.dispatched_qty || 0, dispatchQty: '0', checked: remaining > 0, remaining }
     }))
     setShowPartialModal(true)
@@ -546,7 +539,7 @@ export default function OrderDetail() {
     const selected = partialItems.filter(i => i.checked && parseFloat(i.dispatchQty) > 0)
     if (!selected.length) { toast('Select at least one item with a dispatch quantity.'); return }
     for (const item of selected) {
-      const remaining = item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0)
+      const remaining = item.qty - (item.dispatched_qty || 0)
       if (parseFloat(item.dispatchQty) > remaining) {
         toast(`${item.item_code}: dispatch qty (${item.dispatchQty}) exceeds remaining qty (${remaining}).`)
         return
@@ -592,7 +585,7 @@ export default function OrderDetail() {
     setIsNextBatch(true)
     setFcCenter(order.fulfilment_center || 'Kaveri')  // pre-fill with current, allow change
     setPartialItems((order.order_items || []).map(item => {
-      const remaining = item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0)
+      const remaining = item.qty - (item.dispatched_qty || 0)
       return { id: item.id, item_code: item.item_code, qty: item.qty, dispatched_qty: item.dispatched_qty || 0, dispatchQty: remaining > 0 ? String(remaining) : '0', checked: remaining > 0, remaining }
     }))
     setShowPartialModal(true)
@@ -646,107 +639,21 @@ if (match) {
     )
   }
 
-  function openCancelDrawer() {
-    const lines = (order?.order_items || []).map(i => {
-      const disp   = i.dispatched_qty || 0
-      const posted = i.posted_qty || 0
-      const cur    = i.cancelled_qty || 0
-      // Cancellable = qty - posted - cancelled (anything not yet GI-posted, including in-flight at FC)
-      const pending = Math.max(0, (i.qty || 0) - posted - cur)
-      return {
-        item_id: i.id,
-        item_code: i.item_code,
-        qty: i.qty || 0,
-        dispatched_qty: disp,
-        posted_qty: posted,
-        cancelled_qty_existing: cur,
-        line_status: i.line_status || 'active',
-        unit_price: i.unit_price_after_disc || i.unit_price || 0,
-        pending,
-        checked: false,
-        cancel_qty: '',
-      }
-    })
-    setCancelLines(lines)
-    setCancelMode('choice')
-    setCancelReason('')
-    setCancelInitiatorType('staff')
-    setCancelInitiatorName('')
-    setCancelInitiatorFreeText('')
-    setShowCancel(true)
-  }
-
-  function closeCancelDrawer() {
-    setShowCancel(false)
-    setCancelMode('choice')
-    setCancelLines([])
-    setCancelReason('')
-    setCancelInitiatorType('staff')
-    setCancelInitiatorName('')
-    setCancelInitiatorFreeText('')
-  }
-
-  async function cancelFullOrder() {
-    if (cancelGuardRef.current) return
-    if (hasAnyDispatched) {
-      toast('This order has dispatched items. Use Partial cancellation instead.')
-      return
-    }
+  async function cancelOrder() {
     const initiator = cancelInitiatorType === 'staff' ? cancelInitiatorName : (cancelInitiatorFreeText.trim() || 'Customer')
     if (!initiator) { toast('Please select who initiated the cancellation.'); return }
     if (!cancelReason.trim()) { toast('Please enter a reason.'); return }
-    cancelGuardRef.current = true
     setSaving(true)
     const logMsg = `Order cancelled — Initiated by: ${initiator} | Reason: ${cancelReason.trim()}`
-    const { error: hdrErr } = await sb.from('orders').update({ status: 'cancelled', cancelled_reason: cancelReason.trim(), updated_at: new Date().toISOString() }).eq('id', id)
-    if (hdrErr) { toast(friendlyError(hdrErr, 'Cancellation failed')); cancelGuardRef.current = false; setSaving(false); return }
+    await sb.from('orders').update({ status: 'cancelled', cancelled_reason: cancelReason.trim(), updated_at: new Date().toISOString() }).eq('id', id)
     await sb.from('order_comments').insert({
       order_id: id, author_name: user.name, message: logMsg, tagged_users: [], is_activity: true, is_cancellation: true
     })
     await notifyUsers([], `${order.order_number} — Order cancelled. Reason: ${cancelReason.trim()}`, 'order_cancelled')
     await notifyOpsForLinkedPOs()
     toast('Order cancelled', 'success')
-    closeCancelDrawer()
-    await loadOrder()
-    setSaving(false)
-    cancelGuardRef.current = false
-  }
-
-  async function cancelPartialLinesSubmit() {
-    if (cancelGuardRef.current) return
-    const initiator = cancelInitiatorType === 'staff' ? cancelInitiatorName : (cancelInitiatorFreeText.trim() || 'Customer')
-    if (!initiator) { toast('Please select who initiated the cancellation.'); return }
-    if (!cancelReason.trim()) { toast('Please enter a reason.'); return }
-    const linesToCancel = []
-    for (const l of cancelLines) {
-      if (!l.checked) continue
-      const cq = parseFloat(l.cancel_qty)
-      if (!cq || cq <= 0) { toast(`${l.item_code}: enter a cancel qty greater than 0`); return }
-      if (cq > l.pending) { toast(`${l.item_code}: cancel qty (${cq}) exceeds pending (${l.pending})`); return }
-      linesToCancel.push({ item_id: l.item_id, cancel_qty: cq })
-    }
-    if (!linesToCancel.length) { toast('Select at least one line and enter qty to cancel'); return }
-    cancelGuardRef.current = true
-    setSaving(true)
-    const { error } = await sb.rpc('cancel_order_lines', {
-      p_order_id: id,
-      p_lines: linesToCancel,
-      p_reason: cancelReason.trim(),
-      p_initiator_type: cancelInitiatorType,
-      p_initiator_name: initiator,
-    })
-    if (error) {
-      toast(friendlyError(error, 'Cancellation failed. Please refresh and try again.'))
-      cancelGuardRef.current = false
-      setSaving(false)
-      return
-    }
-    await notifyOpsForLinkedPOs()
-    toast('Lines cancelled', 'success')
-    closeCancelDrawer()
-    await loadOrder()
-    setSaving(false)
-    cancelGuardRef.current = false
+    setShowCancel(false); setCancelReason(''); setCancelInitiatorType('staff'); setCancelInitiatorName(''); setCancelInitiatorFreeText('')
+    await loadOrder(); setSaving(false)
   }
 
   // ── Notify ops/admin about linked POs when a CO is cancelled ──
@@ -851,7 +758,7 @@ if (match) {
                     </>
                   )}
                   {!editMode && user.role === 'admin' && (
-                    <button className="od-btn od-btn-danger" onClick={openCancelDrawer}>
+                    <button className="od-btn od-btn-danger" onClick={() => setShowCancel(true)}>
                       <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                       Cancel Order
                     </button>
@@ -952,7 +859,7 @@ if (match) {
                 <div>
                   <div className="od-pending-banner-label">Delivery In Progress{order.fulfilment_center ? ` — ${order.fulfilment_center}` : ''}</div>
                   <div>
-                    {hasAnyPending ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.posted_qty || 0) - (i.cancelled_qty || 0)), 0)} units pending next batch. ` : ''}
+                    {hasAnyPending ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.dispatched_qty || 0)), 0)} units pending next batch. ` : ''}
                     Currently: {{'delivery_created':'Delivery Created','goods_issued':'Goods Issued','pending_billing':'Pending Billing','credit_check':'Credit Check','goods_issue_posted':'Goods Issue Posted','invoice_generated':'Invoice Generated','delivery_ready':'Delivery Ready','eway_pending':'Ready for E-Way Bill','eway_generated':'E-Way Bill Generated'}[order.status] || order.status}
                   </div>
                 </div>
@@ -1221,7 +1128,7 @@ if (match) {
                         </span>
                         <span className="od-dispatch-tile-count">
                           {hasAnyPending
-                            ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.posted_qty || 0) - (i.cancelled_qty || 0)), 0)} units pending`
+                            ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.dispatched_qty || 0)), 0)} units pending`
                             : `${(order.order_items || []).reduce((s, i) => s + (i.dispatched_qty || 0), 0)} units in transit`
                           }
                         </span>
@@ -1242,8 +1149,6 @@ if (match) {
                         </thead>
                         <tbody>
                           {(order.order_items || []).filter(item => {
-                            // Skip terminal lines — they show in the Cancelled tile below
-                            if ((item.line_status || 'active') !== 'active') return false
                             const deliveredQty = batches.filter(b => b.status === 'dispatched_fc').reduce((s, b) => { const di = (b.dispatched_items || []).find(i => i.order_item_id === item.id); return s + (di?.qty || 0) }, 0)
                             return item.qty > deliveredQty
                           }).map(item => {
@@ -1321,57 +1226,6 @@ if (match) {
                     </div>
                   )}
 
-                  {/* Tile 3: Cancelled items — separate so it doesn't muddy pending/shipped totals */}
-                  {hasAnyCancelled && (
-                    <div className="od-dispatch-tile" style={{ borderColor: '#fecaca', background: '#fffbfb' }}>
-                      <div className="od-dispatch-tile-header">
-                        <span className="od-dispatch-tile-label" style={{ color: '#dc2626' }}>
-                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                          Cancelled Items
-                        </span>
-                        <span className="od-dispatch-tile-count" style={{ background: '#fee2e2', color: '#dc2626' }}>
-                          {(order.order_items || []).reduce((s, i) => s + ((i.cancelled_qty || 0)), 0)} units · ₹{cancelledValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <table className="od-items-table">
-                        <thead>
-                          <tr>
-                            <th style={{ paddingLeft: 16 }}>#</th>
-                            <th>Item Code</th>
-                            <th style={{ textAlign: 'center' }}>Ordered</th>
-                            <th style={{ textAlign: 'center' }}>Dispatched</th>
-                            <th style={{ textAlign: 'center', color: '#dc2626' }}>Cancelled</th>
-                            <th>Cancelled On</th>
-                            <th>Reason</th>
-                            <th>Unit Price</th>
-                            <th className="right" style={{ paddingRight: 16 }}>Cancelled Value</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(order.order_items || []).filter(item => (item.cancelled_qty || 0) > 0).map(item => (
-                            <tr key={item.id} style={{ background: '#fffbfb' }}>
-                              <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
-                              <td className="mono">
-                                <span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'line-through', textDecorationStyle: 'solid', color: '#dc2626' }}>{item.item_code}</span>
-                                {item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}
-                                <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', background: '#fee2e2', padding: '2px 6px', borderRadius: 4, display: 'inline-block', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                  {item.line_status === 'short_closed' ? 'Short Closed' : 'Cancelled'}
-                                </div>
-                              </td>
-                              <td style={{ textAlign: 'center' }}>{item.qty}</td>
-                              <td style={{ textAlign: 'center', color: (item.dispatched_qty || 0) > 0 ? 'var(--green-text)' : 'var(--gray-400)' }}>{item.dispatched_qty || '—'}</td>
-                              <td style={{ textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>{item.cancelled_qty}</td>
-                              <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{item.cancelled_at ? fmt(item.cancelled_at) : '—'}</td>
-                              <td style={{ fontSize: 12, color: 'var(--gray-700)', maxWidth: 280, whiteSpace: 'normal' }}>{item.cancel_reason || '—'}</td>
-                              <td>₹{item.unit_price_after_disc}</td>
-                              <td className="right" style={{ paddingRight: 16, color: '#dc2626', fontWeight: 600 }}>₹{((item.unit_price_after_disc || 0) * (item.cancelled_qty || 0)).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
                   {/* Dispatch batch history */}
                   {(() => {
                     const dispatchLogs = comments.filter(c => c.is_activity && (c.message.includes('Dispatch') || c.message.includes('dispatch')))
@@ -1395,12 +1249,6 @@ if (match) {
                   <div className="od-totals">
                     <div className="od-totals-inner">
                       <div className="od-totals-row"><span>Order Subtotal</span><span>₹{subtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
-                      {hasAnyCancelled && (
-                        <>
-                          <div className="od-totals-row"><span style={{ color: '#dc2626' }}>Cancelled</span><span style={{ color: '#dc2626', fontWeight: 700 }}>− ₹{cancelledValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
-                          <div className="od-totals-row"><span>Net Order Value</span><span style={{ fontWeight: 700 }}>₹{netOrderValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
-                        </>
-                      )}
                       <div className="od-totals-row"><span>Dispatched Value</span><span style={{ color: '#166534', fontWeight: 700 }}>₹{(order.order_items || []).reduce((s, i) => s + (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                       <div className="od-totals-row"><span>Freight</span><span>₹{(order.freight||0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                       <div className="od-totals-row grand"><span>Grand Total</span><span>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
@@ -1433,8 +1281,8 @@ if (match) {
                         return (
                         <tr key={item.id}>
                           <td style={{ paddingLeft: 20, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
-                          <td className="mono"><span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>{item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}{(item.cancelled_qty || 0) > 0 && (<div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '2px 6px', borderRadius: 4, display: 'inline-block', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{item.line_status === 'short_closed' ? 'Short Closed' : 'Cancelled'} · {item.cancelled_qty}</div>)}</td>
-                          <td>{item.qty}{(item.cancelled_qty || 0) > 0 && <span style={{ fontSize: 10, color: '#dc2626', marginLeft: 6 }}>(− {item.cancelled_qty})</span>}</td>
+                          <td className="mono"><span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>{item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}</td>
+                          <td>{item.qty}</td>
                           {order.status !== 'inventory_check' && <><td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
                           <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td></>}
                           <td>₹{item.unit_price_after_disc}</td>
@@ -1477,12 +1325,6 @@ if (match) {
                   <div className="od-totals">
                     <div className="od-totals-inner">
                       <div className="od-totals-row"><span>Subtotal</span><span>₹{subtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
-                      {hasAnyCancelled && (
-                        <>
-                          <div className="od-totals-row"><span style={{ color: '#dc2626' }}>Cancelled</span><span style={{ color: '#dc2626', fontWeight: 700 }}>− ₹{cancelledValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
-                          <div className="od-totals-row"><span>Net Order Value</span><span style={{ fontWeight: 700 }}>₹{netOrderValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
-                        </>
-                      )}
                       <div className="od-totals-row"><span>Freight</span><span>₹{(order.freight||0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                       <div className="od-totals-row grand"><span>Grand Total</span><span>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                     </div>
@@ -1774,156 +1616,44 @@ if (match) {
       )}
 
       {showCancel && (
-        <div className="od-drawer-scrim" onClick={e => { if (e.target === e.currentTarget) closeCancelDrawer() }}>
-          <div className="od-drawer" style={{ width: cancelMode === 'partial' ? 'min(820px, 95vw)' : 'min(560px, 95vw)' }}>
-            <div className="od-drawer-head">
-              <div>
-                <div className="od-drawer-eyebrow">Order · {order.order_number}</div>
-                <div className="od-drawer-title" style={{ color: '#dc2626' }}>
-                  {cancelMode === 'choice' ? 'Cancel Order' : cancelMode === 'full' ? 'Cancel Full Order' : 'Cancel Specific Lines'}
-                </div>
-                <div className="od-drawer-sub">
-                  {cancelMode === 'choice' && 'Choose how much of this order to cancel.'}
-                  {cancelMode === 'full' && 'Cancels every line. Only available when nothing has been dispatched yet.'}
-                  {cancelMode === 'partial' && 'Pick lines and the qty to cancel. Already-dispatched qty stays untouched.'}
-                </div>
+        <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCancel(false) }}>
+          <div className="od-cancel-modal" style={{ maxWidth: 480 }}>
+            <div className="od-cancel-title" style={{ color: '#dc2626' }}>Cancel Order</div>
+            <div className="od-cancel-sub">This will move the order to Cancelled. All delivery information will be preserved. Only admins can perform this action.</div>
+
+            <div style={{ marginTop: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', marginBottom: 8 }}>Who initiated the cancellation?</div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {['staff', 'customer'].map(type => (
+                  <button key={type} onClick={() => { setCancelInitiatorType(type); setCancelInitiatorName(''); setCancelInitiatorFreeText('') }}
+                    style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: '1px solid ' + (cancelInitiatorType === type ? '#dc2626' : 'var(--gray-200)'), background: cancelInitiatorType === type ? '#fff1f2' : 'white', color: cancelInitiatorType === type ? '#dc2626' : 'var(--gray-700)', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    {type === 'staff' ? 'Staff Member' : 'Customer'}
+                  </button>
+                ))}
               </div>
-              <button className="od-drawer-close" onClick={closeCancelDrawer} aria-label="Close">
-                <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
-              </button>
-            </div>
-
-            <div className="od-drawer-body">
-              {cancelMode === 'choice' && (
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <button
-                    className="od-dispatch-choice-btn"
-                    onClick={() => setCancelMode('full')}
-                    disabled={hasAnyDispatched}
-                    title={hasAnyDispatched ? 'This order has dispatched items. Use Partial cancellation.' : ''}
-                    style={hasAnyDispatched ? { opacity: 0.45, cursor: 'not-allowed' } : {}}>
-                    <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#dc2626',marginBottom:8}}>
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#0B1B30' }}>Cancel Full Order</div>
-                    <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4 }}>
-                      {hasAnyDispatched ? 'Disabled — items already dispatched' : 'Cancels every line in one go'}
-                    </div>
-                  </button>
-                  <button className="od-dispatch-choice-btn" onClick={() => setCancelMode('partial')}>
-                    <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#F59E0B',marginBottom:8}}>
-                      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-                    </svg>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#0B1B30' }}>Cancel Specific Lines</div>
-                    <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4 }}>Pick lines & pending qty to cancel</div>
-                  </button>
-                </div>
-              )}
-
-              {(cancelMode === 'full' || cancelMode === 'partial') && (
-                <>
-                  {cancelMode === 'partial' && (
-                    <div style={{ marginBottom: 16, overflowX: 'auto', border: '1px solid #E8EBF0', borderRadius: 10 }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ background: '#FBFBFD', borderBottom: '1px solid #E8EBF0' }}>
-                            <th style={{ padding: '10px', textAlign: 'left', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sel</th>
-                            <th style={{ padding: '10px', textAlign: 'left', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Item Code</th>
-                            <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Ordered</th>
-                            <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dispatched</th>
-                            <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cancelled</th>
-                            <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Pending</th>
-                            <th style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 10.5, color: '#5B6878', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cancel Qty</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cancelLines.map((l, i) => {
-                            const closed = l.line_status !== 'active' || l.pending <= 0
-                            return (
-                              <tr key={l.item_id} style={{ borderBottom: '1px solid #EEF1F5', background: l.checked ? '#FFF7ED' : (closed ? '#F8FAFC' : 'white'), opacity: closed ? 0.55 : 1 }}>
-                                <td style={{ padding: '10px' }}>
-                                  <input type="checkbox" checked={l.checked} disabled={closed}
-                                    onChange={e => setCancelLines(prev => prev.map((p,j) => j===i ? { ...p, checked: e.target.checked, cancel_qty: e.target.checked ? String(p.pending) : '' } : p))}
-                                    style={{ width: 15, height: 15, cursor: closed ? 'not-allowed' : 'pointer', accentColor: '#dc2626' }} />
-                                </td>
-                                <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12.5, fontWeight: 600, color: '#1E54B7' }}>
-                                  {l.item_code}
-                                  {l.line_status !== 'active' && (
-                                    <div style={{ fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 2 }}>
-                                      {l.line_status === 'cancelled' ? 'Cancelled' : 'Short closed'}
-                                    </div>
-                                  )}
-                                </td>
-                                <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace' }}>{l.qty}</td>
-                                <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', color: l.dispatched_qty > 0 ? '#10B981' : '#94A3B8' }}>{l.dispatched_qty}</td>
-                                <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', color: l.cancelled_qty_existing > 0 ? '#dc2626' : '#94A3B8' }}>{l.cancelled_qty_existing}</td>
-                                <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontWeight: 600, color: l.pending > 0 ? '#B45309' : '#94A3B8' }}>{l.pending}</td>
-                                <td style={{ padding: '10px', textAlign: 'center' }}>
-                                  {closed ? (
-                                    <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'Geist Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.04em' }}>—</span>
-                                  ) : (
-                                    <input type="number" min="0" max={l.pending} value={l.cancel_qty}
-                                      onChange={e => setCancelLines(prev => prev.map((p,j) => j===i ? { ...p, cancel_qty: e.target.value } : p))}
-                                      disabled={!l.checked}
-                                      style={{ width: 70, border: '1px solid #E8EBF0', borderRadius: 6, padding: '5px 8px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 13, outline: 'none', background: l.checked ? 'white' : '#F6F7F9' }} />
-                                  )}
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {cancelMode === 'partial' && cancelLines.some(l => l.checked) && (
-                    <div style={{ marginBottom: 16, padding: '10px 14px', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
-                      <strong>Linked POs not auto-cancelled.</strong> If procurement raised POs against these lines, cancel them manually on PO Detail. Ops/admin will be notified.
-                    </div>
-                  )}
-
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', marginBottom: 8 }}>Who initiated the cancellation?</div>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                      {['staff', 'customer'].map(type => (
-                        <button key={type} onClick={() => { setCancelInitiatorType(type); setCancelInitiatorName(''); setCancelInitiatorFreeText('') }}
-                          style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: '1px solid ' + (cancelInitiatorType === type ? '#dc2626' : 'var(--gray-200)'), background: cancelInitiatorType === type ? '#fff1f2' : 'white', color: cancelInitiatorType === type ? '#dc2626' : 'var(--gray-700)', fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                          {type === 'staff' ? 'Staff Member' : 'Customer'}
-                        </button>
-                      ))}
-                    </div>
-                    {cancelInitiatorType === 'staff' ? (
-                      <select value={cancelInitiatorName} onChange={e => setCancelInitiatorName(e.target.value)}
-                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gray-200)', fontFamily: 'var(--font)', fontSize: 13, background: 'white' }}>
-                        <option value="">Select staff member…</option>
-                        {profiles.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                      </select>
-                    ) : (
-                      <input value={cancelInitiatorFreeText} onChange={e => setCancelInitiatorFreeText(e.target.value)}
-                        placeholder="Customer name (optional)"
-                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gray-200)', fontFamily: 'var(--font)', fontSize: 13, boxSizing: 'border-box' }} />
-                    )}
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', marginBottom: 8 }}>Reason / Issue <span style={{ color: '#dc2626' }}>*</span></div>
-                    <textarea className="od-cancel-textarea" value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="e.g. Customer cancelled remaining qty, item discontinued…" autoFocus style={{ borderColor: '#fecaca' }} />
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="od-drawer-foot">
-              {cancelMode === 'choice' ? (
-                <button className="od-btn" onClick={closeCancelDrawer}>Dismiss</button>
+              {cancelInitiatorType === 'staff' ? (
+                <select value={cancelInitiatorName} onChange={e => setCancelInitiatorName(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gray-200)', fontFamily: 'var(--font)', fontSize: 13, background: 'white' }}>
+                  <option value="">Select staff member…</option>
+                  {profiles.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
               ) : (
-                <>
-                  <button className="od-btn" onClick={() => setCancelMode('choice')}>← Back</button>
-                  <button className="od-btn od-btn-danger" onClick={cancelMode === 'full' ? cancelFullOrder : cancelPartialLinesSubmit} disabled={saving}>
-                    {saving ? 'Cancelling…' : (cancelMode === 'full' ? 'Confirm Full Cancellation' : 'Confirm Line Cancellation')}
-                  </button>
-                </>
+                <input value={cancelInitiatorFreeText} onChange={e => setCancelInitiatorFreeText(e.target.value)}
+                  placeholder="Customer name (optional)"
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gray-200)', fontFamily: 'var(--font)', fontSize: 13, boxSizing: 'border-box' }} />
               )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--gray-500)', marginBottom: 8 }}>Reason / Issue <span style={{ color: '#dc2626' }}>*</span></div>
+              <textarea className="od-cancel-textarea" value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="e.g. Wrong item delivered, customer refused delivery…" autoFocus style={{ borderColor: '#fecaca' }} />
+            </div>
+
+            <div className="od-cancel-actions">
+              <button className="od-btn" onClick={() => { setShowCancel(false); setCancelReason(''); setCancelInitiatorType('staff'); setCancelInitiatorName(''); setCancelInitiatorFreeText('') }}>Dismiss</button>
+              <button className="od-btn od-btn-danger" onClick={cancelOrder} disabled={saving}>
+                {saving ? 'Cancelling...' : 'Confirm Cancellation'}
+              </button>
             </div>
           </div>
         </div>
@@ -2028,7 +1758,7 @@ if (match) {
                   </thead>
                   <tbody>
                     {partialItems.map((item, i) => {
-                      const remaining = item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0)
+                      const remaining = item.qty - (item.dispatched_qty || 0)
                       return (
                         <tr key={item.id} style={{ borderBottom: '1px solid #EEF1F5', background: item.checked ? '#FBFBFD' : 'white' }}>
                           <td style={{ padding: '10px' }}>

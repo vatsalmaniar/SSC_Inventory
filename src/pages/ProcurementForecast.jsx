@@ -726,17 +726,14 @@ export default function ProcurementForecast() {
     const startDate = QM[0] + '-01'
     const endDate   = QM[2] + '-' + lastDayOf(QM[2])
 
-    // System sales = qty actually DELIVERED (FC clicked delivered → status='dispatched_fc' + delivered_at).
-    // Source of truth: order_dispatches.dispatched_items per batch, grouped by delivered_at month.
-    // (Replaced earlier reliance on order_items.dispatched_qty which fired at delivery_created — too early.)
-    const [deliveredBatchesRes, manualSalesRes, invRes, manualStockRes] = await Promise.all([
-      sb.from('order_dispatches')
-        .select('delivered_at, dispatched_items, orders!inner(is_test)')
-        .eq('status', 'dispatched_fc')
+    const [sysOrdersRes, manualSalesRes, invRes, manualStockRes] = await Promise.all([
+      sb.from('order_items')
+        .select('item_code, dispatched_qty, orders!inner(order_date, status, is_test)')
+        .in('item_code', itemCodes)
+        .in('orders.status', DELIVERED_STATUSES)
         .eq('orders.is_test', false)
-        .not('delivered_at', 'is', null)
-        .gte('delivered_at', startDate + 'T00:00:00')
-        .lte('delivered_at', endDate + 'T23:59:59'),
+        .gte('orders.order_date', startDate)
+        .lte('orders.order_date', endDate),
       sb.from('procurement_forecast_sales').select('item_code, month, manual_qty').in('item_code', itemCodes).in('month', QM),
       sb.from('inventory').select('product_code, quantity, location').in('product_code', itemCodes),
       sb.from('procurement_forecast_stock').select('item_code, manual_qty').in('item_code', itemCodes),
@@ -744,16 +741,10 @@ export default function ProcurementForecast() {
 
     const sMap = {}
     items.forEach(i => { sMap[i.item_code] = {}; QM.forEach(m => { sMap[i.item_code][m] = { sys: 0, manual: null } }) })
-    const itemCodeSet = new Set(itemCodes)
-    ;(deliveredBatchesRes.data || []).forEach(batch => {
-      const month = batch.delivered_at?.slice(0, 7)
-      if (!month || !QM.includes(month)) return
-      ;(batch.dispatched_items || []).forEach(di => {
-        const code = di?.item_code
-        const qty  = parseFloat(di?.qty) || 0
-        if (!itemCodeSet.has(code) || sMap[code]?.[month] === undefined) return
-        sMap[code][month].sys += qty
-      })
+    ;(sysOrdersRes.data || []).forEach(row => {
+      const month = row.orders?.order_date?.slice(0, 7)
+      if (month && QM.includes(month) && sMap[row.item_code]?.[month] !== undefined)
+        sMap[row.item_code][month].sys += (row.dispatched_qty || 0)
     })
     ;(manualSalesRes.data || []).forEach(row => {
       if (sMap[row.item_code]?.[row.month] !== undefined) sMap[row.item_code][row.month].manual = row.manual_qty

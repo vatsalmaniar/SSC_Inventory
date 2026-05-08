@@ -116,7 +116,7 @@ export default function CustomerDetail() {
 
     const [ordersRes, contactsRes, oppsRes, visitsRes] = await Promise.all([
       sb.from('orders')
-        .select('id,order_number,customer_name,status,order_type,order_items(qty,total_price,unit_price,unit_price_after_disc,cancelled_qty,line_status),created_at,po_number,order_dispatches(delivered_at)')
+        .select('id,order_number,customer_name,status,order_type,order_items(total_price),created_at,po_number,order_dispatches(delivered_at)')
         .eq('is_test', false)
         .ilike('customer_name', custRes.data.customer_name)
         .order('created_at', { ascending: false }),
@@ -245,7 +245,7 @@ export default function CustomerDetail() {
     let itemsByOrder = {}
     if (include.orders && orderIds.length > 0) {
       const { data: items } = await sb.from('order_items')
-        .select('order_id,item_code,qty,unit_price,unit_price_after_disc,total_price,customer_ref_no,cancelled_qty,line_status')
+        .select('order_id,item_code,qty,unit_price_after_disc,total_price,customer_ref_no')
         .in('order_id', orderIds)
       ;(items || []).forEach(i => {
         if (!itemsByOrder[i.order_id]) itemsByOrder[i.order_id] = []
@@ -259,7 +259,7 @@ export default function CustomerDetail() {
 
     const ordersHTML = orders.map((o, idx) => {
       const items = itemsByOrder[o.id] || []
-      const orderTotal = items.reduce((s,i) => s + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0)
+      const orderTotal = items.reduce((s,i) => s + (i.total_price||0), 0)
       const deliveredAt = (o.order_dispatches||[]).map(d=>d.delivered_at).filter(Boolean).sort().pop()
       const statusStyle = ['delivered','dispatched_fc'].includes(o.status)
         ? 'background:#f0fdf4;color:#15803d'
@@ -324,7 +324,7 @@ export default function CustomerDetail() {
         </tbody>
       </table>`
 
-    const totalPending = activeOrders.reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0), 0)
+    const totalPending = activeOrders.reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t+(i.total_price||0),0), 0)
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Customer Report — ${esc(customer.customer_name)}</title>
@@ -430,7 +430,7 @@ ${oppsHTML}
 
   const activeOrders    = orders.filter(o => !['cancelled','delivered','dispatched_fc'].includes(o.status))
   const completedOrders = orders.filter(o => ['delivered','dispatched_fc'].includes(o.status))
-  const totalRevenue    = orders.filter(o => ['delivered','dispatched_fc'].includes(o.status)).reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0), 0)
+  const totalRevenue    = orders.filter(o => ['delivered','dispatched_fc'].includes(o.status)).reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t+(i.total_price||0),0), 0)
   const openOpps        = opps.filter(o => !['WON','LOST'].includes(o.stage))
   const quotationOpps   = opps.filter(o => o.quotation_ref)
   const initials        = customer.customer_name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
@@ -521,7 +521,7 @@ ${oppsHTML}
               <div className="c360-stat">
                 <span className="c360-stat-label">Pending Value</span>
                 <span className={'c360-stat-value' + (activeOrders.length > 0 ? ' accent' : '')} style={{ fontSize:14 }}>
-                  {fmtINR(activeOrders.reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0), 0))}
+                  {fmtINR(activeOrders.reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t+(i.total_price||0),0), 0))}
                 </span>
               </div>
               <div className="c360-stat">
@@ -883,7 +883,7 @@ ${oppsHTML}
                           </td>
                           <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmt(o.created_at)}</td>
                           <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{deliveredAt ? fmt(deliveredAt) : '—'}</td>
-                          <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR((o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0))}</td>
+                          <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR((o.order_items||[]).reduce((t,i)=>t+(i.total_price||0),0))}</td>
                         </tr>
                         )
                       })}

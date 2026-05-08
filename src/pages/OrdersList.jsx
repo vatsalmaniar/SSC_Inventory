@@ -68,8 +68,7 @@ function fmtCr(val) {
 
 function isPartiallyDispatched(o) {
   const items = o.order_items || []
-  // Partial = some qty has been GI-posted AND something is still pending (under user-visible posted_qty model)
-  return items.some(i => (i.posted_qty || 0) > 0) && items.some(i => i.qty > ((i.posted_qty || 0) + (i.cancelled_qty || 0)))
+  return items.some(i => (i.dispatched_qty || 0) > 0) && items.some(i => i.qty > (i.dispatched_qty || 0))
 }
 
 const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','pi_requested','pi_generated','pi_payment_pending','goods_issued','pending_billing','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_pending','eway_generated']
@@ -79,22 +78,14 @@ function isPendingDelivery(o) {
   if (o.status === 'partial_dispatch') return true
   if (FC_ACTIVE_STATUSES.includes(o.status)) return false
   const items = o.order_items || []
-  // "Done" = every line is either fully GI-posted OR fully cancelled (terminal line under user-visible model)
-  if (items.length > 0 && items.every(i => ((i.posted_qty || 0) + (i.cancelled_qty || 0)) >= i.qty)) return false
+  if (items.length > 0 && items.every(i => (i.dispatched_qty || 0) >= i.qty)) return false
   return true
 }
 function isInFCFlow(o) { return FC_ACTIVE_STATUSES.includes(o.status) }
-function totalValue(o) {
-  // Net of cancellations: original total_price minus cancelled-qty value per line
-  return (o.order_items || []).reduce((s, r) => {
-    const cancelVal = (r.cancelled_qty || 0) * (r.unit_price_after_disc || r.unit_price || 0)
-    return s + (r.total_price || 0) - cancelVal
-  }, 0) + (o.freight || 0)
-}
+function totalValue(o) { return (o.order_items || []).reduce((s, r) => s + (r.total_price || 0), 0) + (o.freight || 0) }
 function pendingValue(o) {
-  // Pending visibility = qty - posted_qty - cancelled_qty (per dispatch pipeline rules — pending until GI-posted)
   return (o.order_items || []).reduce((s, i) => {
-    const pq = Math.max(0, i.qty - (i.posted_qty || 0) - (i.cancelled_qty || 0))
+    const pq = Math.max(0, i.qty - (i.dispatched_qty || 0))
     return s + pq * (i.unit_price_after_disc || 0)
   }, 0) + (o.freight || 0)
 }
@@ -182,7 +173,7 @@ export default function OrdersList() {
   async function loadOrders(testMode = false, salesUserId = null) {
     setLoading(true)
     let q = sb.from('orders')
-      .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,order_items(id,sr_no,item_code,qty,dispatched_qty,posted_qty,lp_unit_price,discount_pct,unit_price,unit_price_after_disc,total_price,dispatch_date,customer_ref_no,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
+      .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,order_items(id,sr_no,item_code,qty,dispatched_qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,customer_ref_no),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
       .gte('created_at', FY_START).eq('is_test', testMode)
       .order('created_at', { ascending: false })
     if (salesUserId) q = q.eq('created_by', salesUserId)
@@ -325,16 +316,13 @@ export default function OrdersList() {
         pushRow({ ...baseRow, sr_no:'', item_code:'', total_qty:'', pending_qty:'', total_value:'', pending_value:'', delivery_date:'' })
       } else {
         items.forEach(item => {
-          // Excel export "pending qty" = visible-pending (until GI posted)
-          const pendingQty = Math.max(0, item.qty - (item.posted_qty || 0) - (item.cancelled_qty || 0))
+          const pendingQty = Math.max(0, item.qty - (item.dispatched_qty || 0))
           const pendingValueLocal = pendingQty * (item.unit_price_after_disc || 0)
-          const cancelVal = (item.cancelled_qty || 0) * (item.unit_price_after_disc || item.unit_price || 0)
-          const netValue  = (item.total_price || 0) - cancelVal
           pushRow({
             ...baseRow,
             sr_no: item.sr_no, item_code: item.item_code,
             total_qty: item.qty, pending_qty: pendingQty,
-            total_value: netValue, pending_value: pendingValueLocal,
+            total_value: item.total_price || 0, pending_value: pendingValueLocal,
             delivery_date: item.dispatch_date ? fmt(item.dispatch_date) : '',
           })
         })

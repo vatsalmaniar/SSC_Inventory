@@ -11,8 +11,7 @@ const STATUSES = ['all', 'partial', 'pending', 'inv_check', 'inventory_check', '
 
 function isPartiallyDispatched(o) {
   const items = o.order_items || []
-  // Partial = some qty has been GI-posted AND something is still pending (under user-visible posted_qty model)
-  return items.some(i => (i.posted_qty || 0) > 0) && items.some(i => i.qty > ((i.posted_qty || 0) + (i.cancelled_qty || 0)))
+  return items.some(i => (i.dispatched_qty || 0) > 0) && items.some(i => i.qty > (i.dispatched_qty || 0))
 }
 
 const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
@@ -85,7 +84,7 @@ export default function OpsOrders() {
   async function loadOrders(silent) {
     if (!silent) setLoading(true)
     const { data } = await sb.from('orders')
-      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,status,freight,order_items(id,qty,dispatched_qty,posted_qty,total_price,unit_price,unit_price_after_disc,cancelled_qty,line_status)')
+      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,status,freight,order_items(id,qty,dispatched_qty,total_price)')
       .gte('created_at', FY_START).eq('is_test', false)
       .order('created_at', { ascending: false })
     setOrders(data || [])
@@ -166,7 +165,7 @@ export default function OpsOrders() {
                 </thead>
                 <tbody>
                   {filtered.map(o => {
-                    const total = (o.order_items || []).reduce((s, r) => s + ((r.total_price || 0) - ((r.cancelled_qty||0) * (r.unit_price_after_disc || r.unit_price || 0))), 0) + (o.freight || 0)
+                    const total = (o.order_items || []).reduce((s, r) => s + (r.total_price || 0), 0) + (o.freight || 0)
                     return (
                       <tr key={o.id} onClick={() => openDetail(o)}>
                         <td className="order-num-cell">{o.order_number}</td>
@@ -177,7 +176,7 @@ export default function OpsOrders() {
                           {(o.order_items || []).length}
                           {isPartiallyDispatched(o) && (
                             <span style={{ marginLeft: 6, fontSize: 11, color: '#92400e', fontWeight: 600 }}>
-                              {(o.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.posted_qty || 0) - (i.cancelled_qty || 0)), 0)} pending
+                              {(o.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.dispatched_qty || 0)), 0)} pending
                             </span>
                           )}
                         </td>
