@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs } from '../lib/fmt'
+import { friendlyError } from '../lib/errorMsg'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/orders.css'
@@ -322,10 +323,19 @@ export default function BillingOrderDetail() {
   }
 
   // STEP 2: credit_check → goods_issue_posted (no auto invoice number — Tally number entered at upload)
+  // Gate 2 in the dispatch pipeline: this is the canonical "Accounts has posted GI" event.
+  // It locks the batch's qty against cancellation and increments order_items.posted_qty
+  // (the user-visible "pending" pivot — see project_dispatch_pipeline_rules memory).
+  // FUTURE: when inventory tracking is added, deduct inventory inside mark_batch_posted RPC
+  // (or call inventory deduction from there). Reversal of GI-post is not currently supported.
   async function advanceGIPosted() {
     setSaving(true)
     if (activeBatch) {
-      await sb.from('order_dispatches').update({ status: 'goods_issue_posted', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+      const { error: stErr } = await sb.from('order_dispatches').update({ status: 'goods_issue_posted', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+      if (stErr) { toast(friendlyError(stErr, 'Failed to post GI. Please try again.')); setSaving(false); return }
+      // Gate 2: lock qty against cancellation by incrementing posted_qty (idempotent RPC)
+      const { error: rpcErr } = await sb.rpc('mark_batch_posted', { p_dispatch_id: activeBatch.id })
+      if (rpcErr) { toast(friendlyError(rpcErr, 'Failed to update posted qty. Please refresh.')); setSaving(false); return }
     }
     await logActivity('Goods Issue Posted. Invoice number will be assigned from Tally on upload.')
     toast('Goods issue posted', 'success')
@@ -484,10 +494,12 @@ const mentionSuggestions = mentionQuery !== null
         unit_price: i.unit_price, total_price: i.total_price || (i.unit_price * i.qty),
         customer_ref_no: i.customer_ref_no || null,
       }))
-    : (order.order_items || []).filter(i => (i.dispatched_qty || 0) > 0).map((i, idx) => ({
-        sr_no: idx + 1, item_code: i.item_code, qty: i.dispatched_qty,
+    // Fallback path (no activeBatch.dispatched_items): only include items past Gate 2 (GI-posted).
+    // posted_qty > 0 ensures we never invoice an item that's still in flight.
+    : (order.order_items || []).filter(i => (i.posted_qty || 0) > 0).map((i, idx) => ({
+        sr_no: idx + 1, item_code: i.item_code, qty: i.posted_qty,
         unit_price: i.unit_price_after_disc,
-        total_price: (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0),
+        total_price: (i.unit_price_after_disc || 0) * (i.posted_qty || 0),
         customer_ref_no: i.customer_ref_no || null,
       }))
   const dispatchedSubtotal = billingItems.reduce((s, i) => s + (i.total_price || 0), 0)
