@@ -45,7 +45,7 @@ export default function BillingList() {
   async function loadBatches() {
     setLoading(true)
     const { data } = await sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, credit_terms, freight, order_items(id, qty, dispatched_qty))')
+      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, credit_terms, freight, order_items(id, qty, dispatched_qty, total_price, unit_price_after_disc, cancelled_qty, line_status))')
       .in('status', BILLING_BATCH_STATUSES)
       .eq('orders.is_test', false)
       .neq('orders.order_type', 'SAMPLE')
@@ -85,7 +85,7 @@ export default function BillingList() {
   const totalValue = filtered.reduce((s, b) => {
     const v = (b.dispatched_items || []).length
       ? b.dispatched_items.reduce((sum, i) => sum + (i.total_price || 0), 0)
-      : (b.orders?.order_items || []).reduce((sum, i) => sum + (i.total_price || 0), 0)
+      : (b.orders?.order_items || []).reduce((sum, i) => sum + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0)
     return s + v
   }, 0)
   const overrides = filtered.filter(b => b.credit_override).length
@@ -178,7 +178,7 @@ export default function BillingList() {
                   const hasInv = b.invoice_number && !b.invoice_number.startsWith('Temp/')
                   const batchVal = (b.dispatched_items || []).length
                     ? b.dispatched_items.reduce((sum, i) => sum + (i.total_price || 0), 0)
-                    : (b.orders?.order_items || []).reduce((sum, i) => sum + (i.total_price || 0), 0)
+                    : (b.orders?.order_items || []).reduce((sum, i) => sum + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0)
                   const itemsCount = (b.dispatched_items || b.orders?.order_items || []).length
                   const stageKey = isCancelled ? 'cancelled' : s
                   return (

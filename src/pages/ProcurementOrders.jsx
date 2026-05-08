@@ -37,7 +37,7 @@ export default function ProcurementOrders() {
 
     const [coDataRes, orphanPosRes] = await Promise.all([
       sb.from('orders')
-        .select('id,order_number,customer_name,status,created_at,order_items(id,total_price)')
+        .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status)')
         .eq('is_test', false).eq('order_type', 'CO')
         .neq('status', 'pending')
         .gte('created_at', FY_START)
@@ -52,7 +52,7 @@ export default function ProcurementOrders() {
       const missingIds = [...new Set(orphanPosAll.map(p => p.order_id))].filter(id => !existingIds.has(id))
       if (missingIds.length) {
         const { data: extraCos } = await sb.from('orders')
-          .select('id,order_number,customer_name,status,created_at,order_items(id,total_price)')
+          .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status)')
           .in('id', missingIds).eq('status', 'cancelled')
         if (extraCos?.length) coOrders = [...coOrders, ...extraCos]
       }
@@ -73,8 +73,10 @@ export default function ProcurementOrders() {
         coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
       }
       coOrders = coOrders.map(o => {
-        const total = (o.order_items || []).length
-        const covered = (o.order_items || []).filter(oi => coveredSet.has(oi.id)).length
+        // Only count active (non-cancelled / non-short-closed) lines for coverage
+        const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
+        const total = activeItems.length
+        const covered = activeItems.filter(oi => coveredSet.has(oi.id)).length
         const linkedPosList = posByCo[o.id] || []
         const orphanPOs = linkedPosList.filter(p => ORPHAN_PO_STATUSES.includes(p.status))
         const hasPostApprovalPO = linkedPosList.some(p => !PRE_APPROVAL_PO_STATUSES.includes(p.status))
@@ -101,7 +103,7 @@ export default function ProcurementOrders() {
   const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   const totalUncovered = pendingOrders.reduce((s, o) => s + (o._totalItems - o._coveredItems), 0)
-  const totalValue = pendingOrders.reduce((s, o) => s + (o.order_items || []).reduce((a,i) => a + (i.total_price||0), 0), 0)
+  const totalValue = pendingOrders.reduce((s, o) => s + (o.order_items || []).reduce((a,i) => a + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0), 0)
 
   return (
     <Layout pageTitle="CO Orders" pageKey="procurement">
@@ -174,7 +176,7 @@ export default function ProcurementOrders() {
             ) : (
               <div className="ol-table">
                 {paginated.map(o => {
-                  const val = (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+                  const val = (o.order_items || []).reduce((s, i) => s + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0)
                   const covered = o._coveredItems || 0
                   const total = o._totalItems || 0
                   const hasPartial = covered > 0 && covered < total

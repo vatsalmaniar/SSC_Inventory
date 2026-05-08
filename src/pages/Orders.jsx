@@ -104,7 +104,7 @@ export default function Orders() {
   async function loadData(role, uid) {
     setLoading(true)
     let q = sb.from('orders')
-      .select('id,order_number,customer_name,status,order_type,created_at,created_by,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
+      .select('id,order_number,customer_name,status,order_type,created_at,created_by,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
       .gte('created_at', FY_START).eq('is_test', role === 'demo')
       .order('created_at', { ascending: false })
     if (role === 'sales') q = q.eq('created_by', uid)
@@ -118,7 +118,7 @@ export default function Orders() {
   }
 
   const today = new Date().toISOString().slice(0, 10)
-  const totalValue = orders.reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0)
+  const totalValue = orders.reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0), 0)
   const dispatchedValue = orders.reduce((s, o) => {
     const delivered = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc')
     const v = delivered.reduce((bs, b) => bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)

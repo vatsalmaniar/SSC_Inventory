@@ -55,7 +55,7 @@ export default function SalesModule() {
   async function loadOrders(testMode = false) {
     setLoading(true)
     const { data } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,order_type,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc),order_dispatches(id,batch_no,invoice_number,eway_bill_number,dispatched_items)')
+      .select('id,order_number,customer_name,status,order_type,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,eway_bill_number,dispatched_items)')
       .in('status', BILLING_MODULE_STATUSES)
       .gte('created_at', FY_START)
       .eq('is_test', testMode)
@@ -293,7 +293,7 @@ export default function SalesModule() {
                         const activeBatch = (o.order_dispatches || []).sort((a, b) => b.batch_no - a.batch_no)[0]
                         const batchTotal = activeBatch?.dispatched_items
                           ? activeBatch.dispatched_items.reduce((s, i) => s + (i.total_price || (i.unit_price * i.qty) || 0), 0) + (o.freight || 0)
-                          : (o.order_items || []).reduce((s, r) => s + (r.total_price || 0), 0) + (o.freight || 0)
+                          : (o.order_items || []).reduce((s, r) => s + ((r.total_price || 0) - ((r.cancelled_qty||0) * (r.unit_price_after_disc || r.unit_price || 0))), 0) + (o.freight || 0)
                         const dcNum  = activeBatch?.dc_number || o.dc_number
                         const invNum = activeBatch?.invoice_number || o.invoice_number
                         return (
@@ -321,7 +321,7 @@ export default function SalesModule() {
                     const activeBatch = (o.order_dispatches || []).sort((a, b) => b.batch_no - a.batch_no)[0]
                     const batchTotal = activeBatch?.dispatched_items
                       ? activeBatch.dispatched_items.reduce((s, i) => s + (i.total_price || (i.unit_price * i.qty) || 0), 0) + (o.freight || 0)
-                      : (o.order_items || []).reduce((s, r) => s + (r.total_price || 0), 0) + (o.freight || 0)
+                      : (o.order_items || []).reduce((s, r) => s + ((r.total_price || 0) - ((r.cancelled_qty||0) * (r.unit_price_after_disc || r.unit_price || 0))), 0) + (o.freight || 0)
                     const dcNum  = activeBatch?.dc_number || o.dc_number
                     const invNum = activeBatch?.invoice_number || o.invoice_number
                     return (
