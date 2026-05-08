@@ -51,7 +51,7 @@ export default function FCModule() {
   async function loadBatches(center, testMode = false) {
     setLoading(true)
     let q = sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, freight, order_items(id, qty, dispatched_qty))')
+      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, freight, order_items(id, qty, dispatched_qty, total_price, unit_price_after_disc, lp_unit_price, cancelled_qty))')
       .eq('orders.is_test', testMode)
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
@@ -90,7 +90,7 @@ export default function FCModule() {
   const totalValue = filtered.reduce((s, b) => {
     const v = (b.dispatched_items || []).length
       ? (b.dispatched_items).reduce((sum, i) => sum + (i.total_price || 0), 0)
-      : (b.orders?.order_items || []).reduce((sum, i) => sum + (i.total_price || 0), 0)
+      : (b.orders?.order_items || []).reduce((sum, i) => sum + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.lp_unit_price || 0))), 0)
     return s + v
   }, 0)
 
@@ -188,7 +188,7 @@ export default function FCModule() {
                   const isTempDC = b.dc_number?.startsWith('Temp/')
                   const batchVal = (b.dispatched_items || []).length
                     ? (b.dispatched_items).reduce((sum, i) => sum + (i.total_price || 0), 0)
-                    : (b.orders?.order_items || []).reduce((sum, i) => sum + (i.total_price || 0), 0)
+                    : (b.orders?.order_items || []).reduce((sum, i) => sum + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.lp_unit_price || 0))), 0)
                   const itemsCount = (b.dispatched_items || b.orders?.order_items || []).length
                   const stageKey = isCancelled ? 'cancelled' : isWaiting ? 'waiting' : s
                   return (

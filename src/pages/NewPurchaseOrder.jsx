@@ -84,7 +84,7 @@ export default function NewPurchaseOrder() {
   async function fetchPendingCOs(q) {
     // Search CO orders by order_number or customer_name
     const { data: coOrders } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(id)')
+      .select('id,order_number,customer_name,order_items(id,line_status)')
       .eq('order_type', 'CO')
       .eq('is_test', false)
       .in('status', ['inv_check', 'inventory_check', 'dispatch', 'pending', 'confirmed'])
@@ -103,16 +103,16 @@ export default function NewPurchaseOrder() {
     const coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
 
     return coOrders.filter(o => {
-      const totalItems = (o.order_items || []).length
-      if (!totalItems) return true
-      const coveredCount = (o.order_items || []).filter(oi => coveredSet.has(oi.id)).length
-      return coveredCount < totalItems // show if any items still uncovered
+      const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
+      if (!activeItems.length) return false  // every line cancelled/short_closed → nothing left to procure
+      const coveredCount = activeItems.filter(oi => coveredSet.has(oi.id)).length
+      return coveredCount < activeItems.length  // show if any active items still uncovered
     })
   }
 
   async function loadCOOrder(coId) {
     const { data: order } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(id,item_code,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date)')
+      .select('id,order_number,customer_name,order_items(id,item_code,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty)')
       .eq('id', coId).single()
     if (!order) return
 
@@ -125,7 +125,8 @@ export default function NewPurchaseOrder() {
       coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
     }
 
-    const allItems = order.order_items || []
+    // Only active (non-cancelled, non-short-closed) lines are candidates for procurement
+    const allItems = (order.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
     const uncovered = allItems.filter(oi => !coveredSet.has(oi.id))
     const coveredCount = allItems.length - uncovered.length
 
