@@ -111,6 +111,7 @@ export default function OrderDetail() {
   const navigate = useNavigate()
 
   const [order, setOrder]           = useState(null)
+  const [payments, setPayments]     = useState(null)  // {outstanding_inr, overdue_inr, imported_at} | null
   const [user, setUser]             = useState({ name: '', avatar: '', role: '' })
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
@@ -208,6 +209,8 @@ export default function OrderDetail() {
     const bg = []
     if (data?.customer_name) {
       bg.push(sb.from('customers').select('customer_id').ilike('customer_name', data.customer_name).maybeSingle().then(({ data: cust }) => setCustCode(cust?.customer_id || '')))
+      // Receivables snapshot — matched by case-insensitive party name
+      bg.push(sb.from('customer_payments_snapshot').select('outstanding_inr,overdue_inr,imported_at').ilike('party_name_raw', data.customer_name).maybeSingle().then(({ data: pay }) => setPayments(pay || null)))
     }
     if (data?.order_type === 'CO') {
       bg.push(sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery,created_at').eq('order_id', id).order('created_at', { ascending: false }).then(({ data: pos }) => setLinkedPOs(pos || [])))
@@ -1588,6 +1591,32 @@ if (match) {
                       </div>
                     )
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Receivables — Outstanding & Overdue (sourced from accounts' Pending Payment sheet) */}
+            {payments && (
+              <div className="od-side-card" style={{ borderColor: (payments.overdue_inr || 0) > 0 ? '#fecaca' : 'var(--gray-100)' }}>
+                <div className="od-side-card-title" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <span>Receivables</span>
+                  <span style={{ fontSize:10, fontWeight:500, color:'var(--gray-400)', textTransform:'none', letterSpacing:0 }}>
+                    Updated {payments.imported_at ? fmtTs(payments.imported_at) : '—'}
+                  </span>
+                </div>
+                <div style={{ display:'flex', gap:16, padding:'12px 16px' }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Outstanding</div>
+                    <div style={{ fontSize:18, fontWeight:700, color:'#0B1B30', fontFamily:'var(--mono)' }}>
+                      ₹{Number(payments.outstanding_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div style={{ flex:1, paddingLeft:16, borderLeft:'1px solid var(--gray-100)' }}>
+                    <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Overdue</div>
+                    <div style={{ fontSize:18, fontWeight:700, color: (payments.overdue_inr || 0) > 0 ? '#dc2626' : 'var(--gray-400)', fontFamily:'var(--mono)' }}>
+                      ₹{Number(payments.overdue_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
