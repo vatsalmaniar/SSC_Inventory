@@ -88,7 +88,7 @@ function StagePill({ stage }) {
 }
 
 function emptyQuoteItem() {
-  return { _id: Date.now() + Math.random(), item_code:'', description:'', qty:'1', unit_price:'', discount_pct:'', total_price:'' }
+  return { _id: Date.now() + Math.random(), item_code:'', description:'', qty:'1', unit_price:'', discount_pct:'0', total_price:'' }
 }
 function unitAfterDisc(row) {
   return (parseFloat(row.unit_price)||0) * (1 - (parseFloat(row.discount_pct)||0) / 100)
@@ -1640,7 +1640,7 @@ export default function CRMOpportunityDetail() {
                           </td>
                           <td><input type="number" value={row.qty} onChange={e=>updateQuoteRow(idx,'qty',e.target.value)} placeholder="0" min="0" /></td>
                           <td><input type="number" value={row.unit_price} onChange={e=>updateQuoteRow(idx,'unit_price',e.target.value)} placeholder="0.00" min="0" step="0.01" /></td>
-                          <td><input type="number" value={row.discount_pct} onChange={e=>updateQuoteRow(idx,'discount_pct',e.target.value)} placeholder="req *" min="0" max="100" style={row.discount_pct===''||row.discount_pct===null||row.discount_pct===undefined?{borderColor:'#fca5a5',background:'#fff5f5'}:{}} /></td>
+                          <td><input type="number" value={row.discount_pct} onChange={e=>updateQuoteRow(idx,'discount_pct',e.target.value)} placeholder="0" min="0" max="100" /></td>
                           <td><input readOnly value={unitAfterDisc(row) > 0 ? unitAfterDisc(row).toFixed(2) : ''} placeholder="—" className="calc-field" /></td>
                           <td><input readOnly value={row.total_price || ''} placeholder="—" className="calc-field total-field" /></td>
                           <td>

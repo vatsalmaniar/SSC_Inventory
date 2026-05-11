@@ -1285,3 +1285,12 @@ html[data-theme="dark"] .orders-app .card-title { color: #FFFFFF !important; }
 
 /* Trend pill / indicator chips */
 html[data-theme="dark"] .orders-app .trend-pill { background-color: #2D2D2D !important; color: #D4D4D4 !important; border-color: #3C3C3C !important; }
+
+/* ── no-items-table (CRM Opportunity/Lead quote rows, New Order, etc.) — dark ── */
+html[data-theme="dark"] .no-items-table thead th { background: #1F1F1F !important; color: #858585 !important; border-bottom-color: #3C3C3C !important; }
+html[data-theme="dark"] .no-items-table tbody tr { border-bottom-color: #2D2D2D !important; background: transparent !important; }
+html[data-theme="dark"] .no-items-table tbody tr.row-filled { background: #1F1F1F !important; }
+html[data-theme="dark"] .no-items-table tbody tr:hover { background: #2D2D2D !important; }
+html[data-theme="dark"] .no-items-table input { background: #2D2D2D !important; color: #D4D4D4 !important; border-color: #3C3C3C !important; }
+html[data-theme="dark"] .no-items-table input:focus { border-color: #818CF8 !important; }
+html[data-theme="dark"] .no-items-table .calc-field { background: #252526 !important; color: #D4D4D4 !important; border-color: #3C3C3C !important; }
