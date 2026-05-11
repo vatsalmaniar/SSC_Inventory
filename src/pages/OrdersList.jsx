@@ -291,6 +291,7 @@ export default function OrdersList() {
         default: return { bg: 'FFF1F5F9', fg: 'FF334155' }
       }
     }
+    let rowCounter = 0
     filtered.forEach(o => {
       const items = o.order_items || []
       const dispatches = o.order_dispatches || []
@@ -322,7 +323,8 @@ export default function OrdersList() {
         }
       }
       if (items.length === 0) {
-        pushRow({ ...baseRow, sr_no:'', item_code:'', total_qty:'', pending_qty:'', total_value:'', pending_value:'', delivery_date:'' })
+        rowCounter += 1
+        pushRow({ ...baseRow, sr_no: rowCounter, item_code:'', total_qty:'', pending_qty:'', total_value:'', pending_value:'', delivery_date:'' })
       } else {
         items.forEach(item => {
           // Excel export "pending qty" = visible-pending (until GI posted)
@@ -330,9 +332,10 @@ export default function OrdersList() {
           const pendingValueLocal = pendingQty * (item.unit_price_after_disc || 0)
           const cancelVal = (item.cancelled_qty || 0) * (item.unit_price_after_disc || item.unit_price || 0)
           const netValue  = (item.total_price || 0) - cancelVal
+          rowCounter += 1
           pushRow({
             ...baseRow,
-            sr_no: item.sr_no, item_code: item.item_code,
+            sr_no: rowCounter, item_code: item.item_code,
             total_qty: item.qty, pending_qty: pendingQty,
             total_value: netValue, pending_value: pendingValueLocal,
             delivery_date: item.dispatch_date ? fmt(item.dispatch_date) : '',

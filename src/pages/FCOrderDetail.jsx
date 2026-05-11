@@ -619,6 +619,11 @@ export default function FCOrderDetail() {
     setSaving(true)
     if (activeBatch) {
       await sb.from('order_dispatches').update({ status: 'dispatched_fc', delivered_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
+      // Safety net: ensure posted_qty is incremented even if the batch skipped the
+      // explicit GI-post step in Billing. mark_batch_posted is idempotent — no-ops
+      // if it was already applied. Prevents the "fully delivered but still shows
+      // pending" bug from recurring.
+      await sb.rpc('mark_batch_posted', { p_dispatch_id: activeBatch.id })
     }
     // Order is fully done only when ALL batches are dispatched_fc
     const { data: allBatchData } = await sb.from('order_dispatches').select('status').eq('order_id', id)

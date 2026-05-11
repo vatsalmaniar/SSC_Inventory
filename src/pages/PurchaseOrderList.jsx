@@ -198,6 +198,7 @@ export default function PurchaseOrderList() {
           default: return { bg: 'FFF1F5F9', fg: 'FF334155' }
         }
       }
+      let rowCounter = 0
       filtered.forEach(po => {
         const items = po.po_items || []
         const sStyle = statusStyle(po.status)
@@ -226,16 +227,18 @@ export default function PurchaseOrderList() {
           }
         }
         if (items.length === 0) {
-          pushRow({ ...baseRow, sr_no:'', item_code:'', total_qty:'', pending_qty:'', total_value:'', pending_value:'', delivery_date:'' })
+          rowCounter += 1
+          pushRow({ ...baseRow, sr_no: rowCounter, item_code:'', total_qty:'', pending_qty:'', total_value:'', pending_value:'', delivery_date:'' })
         } else {
           items.forEach(item => {
             const recv = item.received_qty || 0
             const pendingQty = Math.max(0, (item.qty || 0) - recv)
             const unit = item.unit_price_after_disc || item.unit_price || item.lp_unit_price || 0
             const pendingValueLocal = pendingQty * unit
+            rowCounter += 1
             pushRow({
               ...baseRow,
-              sr_no: item.sr_no, item_code: item.item_code,
+              sr_no: rowCounter, item_code: item.item_code,
               total_qty: item.qty,
               pending_qty: pendingQty,
               total_value: item.total_price || 0,
