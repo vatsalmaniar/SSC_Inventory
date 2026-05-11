@@ -1499,6 +1499,32 @@ if (match) {
           {/* ── RIGHT ── */}
           <div className="od-sidebar">
 
+            {/* Receivables — top of sidebar, above all other tiles */}
+            {payments && (
+              <div className="od-side-card" style={{ borderColor: (payments.overdue_inr || 0) > 0 ? '#fecaca' : 'var(--gray-100)' }}>
+                <div className="od-side-card-title" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <span>Receivables</span>
+                  <span style={{ fontSize:10, fontWeight:500, color:'var(--gray-400)', textTransform:'none', letterSpacing:0 }}>
+                    Updated {payments.imported_at ? fmtTs(payments.imported_at) : '—'}
+                  </span>
+                </div>
+                <div style={{ display:'flex', gap:16, padding:'12px 16px' }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Outstanding</div>
+                    <div style={{ fontSize:18, fontWeight:700, color:'#0B1B30', fontFamily:'var(--mono)' }}>
+                      ₹{Number(payments.outstanding_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  <div style={{ flex:1, paddingLeft:16, borderLeft:'1px solid var(--gray-100)' }}>
+                    <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Overdue</div>
+                    <div style={{ fontSize:18, fontWeight:700, color: (payments.overdue_inr || 0) > 0 ? '#dc2626' : 'var(--gray-400)', fontFamily:'var(--mono)' }}>
+                      ₹{Number(payments.overdue_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Dispatch Batches */}
             {batches.length > 0 && (
               <div className="od-side-card" style={{padding:0,overflow:'hidden'}}>
@@ -1591,32 +1617,6 @@ if (match) {
                       </div>
                     )
                   })}
-                </div>
-              </div>
-            )}
-
-            {/* Receivables — Outstanding & Overdue (sourced from accounts' Pending Payment sheet) */}
-            {payments && (
-              <div className="od-side-card" style={{ borderColor: (payments.overdue_inr || 0) > 0 ? '#fecaca' : 'var(--gray-100)' }}>
-                <div className="od-side-card-title" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                  <span>Receivables</span>
-                  <span style={{ fontSize:10, fontWeight:500, color:'var(--gray-400)', textTransform:'none', letterSpacing:0 }}>
-                    Updated {payments.imported_at ? fmtTs(payments.imported_at) : '—'}
-                  </span>
-                </div>
-                <div style={{ display:'flex', gap:16, padding:'12px 16px' }}>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Outstanding</div>
-                    <div style={{ fontSize:18, fontWeight:700, color:'#0B1B30', fontFamily:'var(--mono)' }}>
-                      ₹{Number(payments.outstanding_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                    </div>
-                  </div>
-                  <div style={{ flex:1, paddingLeft:16, borderLeft:'1px solid var(--gray-100)' }}>
-                    <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Overdue</div>
-                    <div style={{ fontSize:18, fontWeight:700, color: (payments.overdue_inr || 0) > 0 ? '#dc2626' : 'var(--gray-400)', fontFamily:'var(--mono)' }}>
-                      ₹{Number(payments.overdue_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                    </div>
-                  </div>
                 </div>
               </div>
             )}
