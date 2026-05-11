@@ -92,6 +92,7 @@ export default function CustomerDetail() {
   const [contacts, setContacts]       = useState([])
   const [opps, setOpps]               = useState([])
   const [visits, setVisits]           = useState([])
+  const [payments, setPayments]       = useState(null)  // { outstanding_inr, overdue_inr } | null
   const [activeTab, setActiveTab]     = useState('summary')
   const [showContactModal, setShowContactModal] = useState(false)
   const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
@@ -114,7 +115,7 @@ export default function CustomerDetail() {
     const custRes = await sb.from('customers').select('*').eq('id', id).single()
     if (!custRes.data) { navigate('/customers'); return }
 
-    const [ordersRes, contactsRes, oppsRes, visitsRes] = await Promise.all([
+    const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes] = await Promise.all([
       sb.from('orders')
         .select('id,order_number,customer_name,status,order_type,order_items(qty,total_price,unit_price_after_disc,cancelled_qty,line_status),created_at,po_number,order_dispatches(delivered_at)')
         .eq('is_test', false)
@@ -129,6 +130,10 @@ export default function CustomerDetail() {
         .select('id,visit_date,visit_type,purpose,outcome,next_action,next_action_date,created_at,profiles(name),crm_opportunities(opportunity_name)')
         .eq('company_id', id)
         .order('visit_date', { ascending: false }),
+      sb.from('customer_payments_snapshot')
+        .select('outstanding_inr,overdue_inr,imported_at')
+        .eq('customer_id', id)
+        .maybeSingle(),
     ])
 
     setCustomer(custRes.data)
@@ -137,6 +142,7 @@ export default function CustomerDetail() {
     setContacts(contactsRes.data || [])
     setOpps(oppsRes.data || [])
     setVisits(visitsRes.data || [])
+    setPayments(paymentsRes?.data || null)
     setLoading(false)
   }
 
@@ -528,6 +534,22 @@ ${oppsHTML}
                 <span className="c360-stat-label">Lifetime Revenue</span>
                 <span className="c360-stat-value green">{fmtINR(totalRevenue)}</span>
               </div>
+              {payments && (
+                <>
+                  <div className="c360-stat" title="Outstanding receivables — sourced from Accounts' pending payment sheet">
+                    <span className="c360-stat-label">Outstanding</span>
+                    <span className={'c360-stat-value' + ((payments.outstanding_inr || 0) > 0 ? ' accent' : '')} style={{ fontSize:14 }}>
+                      {fmtINR(payments.outstanding_inr || 0)}
+                    </span>
+                  </div>
+                  <div className="c360-stat" title="Overdue portion — bills past their due date">
+                    <span className="c360-stat-label">Overdue</span>
+                    <span className="c360-stat-value" style={{ fontSize:14, color: (payments.overdue_inr || 0) > 0 ? '#dc2626' : 'var(--gray-400)', fontWeight: (payments.overdue_inr || 0) > 0 ? 700 : 500 }}>
+                      {fmtINR(payments.overdue_inr || 0)}
+                    </span>
+                  </div>
+                </>
+              )}
               <div className="c360-stat">
                 <span className="c360-stat-label">Open Opps</span>
                 <span className={'c360-stat-value' + (openOpps.length > 0 ? ' accent' : '')}>{openOpps.length}</span>

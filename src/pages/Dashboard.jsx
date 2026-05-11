@@ -167,8 +167,8 @@ export default function Dashboard() {
           <div className="hd-section-label" style={{ marginTop: 4 }}>At a glance</div>
         )}
         <div className="hd-module-kpis">
-          {moduleKpis.map(k => (
-            <KpiTile key={k.key} {...k} onClick={() => navigate(k.path)}/>
+          {moduleKpis.map(({ key, ...rest }) => (
+            <KpiTile key={key} {...rest} onClick={() => navigate(rest.path)}/>
           ))}
         </div>
 

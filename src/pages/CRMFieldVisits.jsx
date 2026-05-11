@@ -430,7 +430,10 @@ export default function CRMFieldVisits() {
                         ))}
                       </div>
                     ) : (
-                      <div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:200,marginTop:2,padding:'10px 14px',fontSize:12,color:'#94a3b8'}}>No results</div>
+                      <div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',border:'1px solid #fde68a',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:200,marginTop:2,padding:'10px 14px',fontSize:12,color:'#92400e',background:'#fffbeb'}}>
+                        <div style={{fontWeight:600,marginBottom:2}}>Not in Customer 360 yet</div>
+                        <div style={{color:'#b45309'}}>Submit to save this visit as a new prospect.</div>
+                      </div>
                     )
                   })()}
                 </div>
