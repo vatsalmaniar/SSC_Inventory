@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { fmtNum } from '../lib/fmt'
+import { SSC_OFFICES, geocodeAddress, haversineKm } from '../lib/geo'
+import MiniMap from '../components/MiniMap'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
 import '../styles/orders.css'
@@ -38,6 +40,8 @@ function emptyForm() {
     principal_id: '',
     principal_rep_name: '',
     ssc_team_members: [],
+    origin_type: 'office_ahmedabad',
+    destination_address: '',
   }
 }
 
@@ -57,7 +61,7 @@ export default function CRMFieldVisits() {
   const [form, setForm]             = useState(emptyForm())
   const [companyOpps, setCompanyOpps] = useState([])
   const [loadingOpps, setLoadingOpps] = useState(false)
-  const [customers, setCustomers]   = useState([])
+  const [acctMatches, setAcctMatches] = useState([])
   const [acctSearch, setAcctSearch] = useState('')
   const [showAcctDrop, setShowAcctDrop] = useState(false)
 
@@ -83,19 +87,17 @@ export default function CRMFieldVisits() {
     setLoading(false)
   }
 
-  // Load customers only when modal opens — same pattern as NewLeadModal
-  async function loadCustomers() {
-    if (customers.length > 0) return // already loaded
-    let all = []
-    let from = 0
-    while (true) {
-      const { data } = await sb.from('customers').select('id,customer_name,account_owner,customer_type').order('customer_name').range(from, from + 999)
-      if (!data || data.length === 0) break
-      all = [...all, ...data]
-      if (data.length < 1000) break
-      from += 1000
-    }
-    setCustomers(all)
+  // Server-side customer search (matches NewLead pattern). Called per keystroke,
+  // returns top 10 matches by name. Avoids loading all 4000+ customers upfront.
+  async function searchCustomers(q) {
+    const term = (q || '').trim()
+    if (!term) { setAcctMatches([]); return }
+    const { data } = await sb.from('customers')
+      .select('id,customer_name,customer_type,billing_address')
+      .ilike('customer_name', `%${term}%`)
+      .order('customer_name')
+      .limit(10)
+    setAcctMatches(data || [])
   }
 
   async function onSelectCustomer(c) {
@@ -103,12 +105,18 @@ export default function CRMFieldVisits() {
     setAcctSearch(c.customer_name)
     setShowAcctDrop(false)
     setLoadingOpps(true)
-    const { data } = await sb.from('crm_opportunities')
-      .select('id,opportunity_name,product_notes,stage,estimated_value_inr')
-      .eq('customer_id', c.id)
-      .not('stage', 'in', '(WON,LOST)')
-      .order('created_at', { ascending: false })
-    setCompanyOpps(data || [])
+    // Fetch billing address for destination, in parallel with opps
+    const [oppRes, custFull] = await Promise.all([
+      sb.from('crm_opportunities')
+        .select('id,opportunity_name,product_notes,stage,estimated_value_inr')
+        .eq('customer_id', c.id)
+        .not('stage', 'in', '(WON,LOST)')
+        .order('created_at', { ascending: false }),
+      sb.from('customers').select('billing_address,shipping_address').eq('id', c.id).maybeSingle(),
+    ])
+    setCompanyOpps(oppRes.data || [])
+    const addr = custFull.data?.billing_address || custFull.data?.shipping_address || ''
+    if (addr) setForm(p => ({ ...p, destination_address: addr }))
     setLoadingOpps(false)
   }
 
@@ -123,6 +131,21 @@ export default function CRMFieldVisits() {
       : form.with_ssc ? 'JOINT_SSC_TEAM'
       : form.with_principal ? 'JOINT_PRINCIPAL'
       : 'SOLO'
+    // Geo: origin + destination + distance
+    const office = SSC_OFFICES[form.origin_type]
+    let origin_address = office ? office.address : ''
+    let origin_lat = office ? office.lat : null
+    let origin_lng = office ? office.lng : null
+    let dest_lat = null, dest_lng = null, distance_km = null
+    const destAddr = (form.destination_address || '').trim()
+    if (destAddr) {
+      const dg = await geocodeAddress(destAddr)
+      if (dg) { dest_lat = dg.lat; dest_lng = dg.lng }
+    }
+    if (origin_lat != null && dest_lat != null) {
+      distance_km = haversineKm(origin_lat, origin_lng, dest_lat, dest_lng)
+    }
+
     const payload = {
       rep_id: user.id,
       visit_date: form.visit_date,
@@ -137,6 +160,14 @@ export default function CRMFieldVisits() {
       principal_id: form.with_principal ? (form.principal_id || null) : null,
       principal_rep_name: form.with_principal ? (form.principal_rep_name.trim() || null) : null,
       ssc_team_members: form.with_ssc ? form.ssc_team_members : [],
+      origin_type: form.origin_type || null,
+      origin_address,
+      origin_lat,
+      origin_lng,
+      destination_address: destAddr || null,
+      destination_lat: dest_lat,
+      destination_lng: dest_lng,
+      distance_km,
     }
 
     const { error } = await sb.from('crm_field_visits').insert(payload)
@@ -171,10 +202,10 @@ export default function CRMFieldVisits() {
   function openModal() {
     setForm(emptyForm())
     setCompanyOpps([])
+    setAcctMatches([])
     setAcctSearch('')
     setShowAcctDrop(false)
     setShowModal(true)
-    loadCustomers()
   }
 
   const isManager = ['admin','management'].includes(user.role)
@@ -264,7 +295,7 @@ export default function CRMFieldVisits() {
                 return (
                   <div key={v.id} className="dl-row dl-data"
                     style={{ gridTemplateColumns: '1.6fr 130px 120px 1.4fr 1fr 160px' }}
-                    onClick={() => v.opportunity_id ? navigate('/crm/opportunities/' + v.opportunity_id) : setViewVisit(v)}>
+                    onClick={() => setViewVisit(v)}>
                     <div className="dl-cell dl-deal">
                       <div className="dl-title">{v.company_freetext || '—'}</div>
                       {v.purpose && <div className="dl-deal-meta"><span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{v.purpose.length > 50 ? v.purpose.slice(0,50)+'…' : v.purpose}</span></div>}
@@ -308,11 +339,11 @@ export default function CRMFieldVisits() {
         )}
       </div>
 
-      {/* ── Visit Detail Popup ── */}
+      {/* ── Visit Detail Drawer (right side) ── */}
       {viewVisit && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', justifyContent:'flex-end' }}
           onClick={e => { if (e.target === e.currentTarget) setViewVisit(null) }}>
-          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:480, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background:'white', width:'100%', maxWidth:520, height:'100vh', overflowY:'auto', boxShadow:'-20px 0 60px rgba(0,0,0,0.2)', display:'flex', flexDirection:'column' }}>
             <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'white', zIndex:1 }}>
               <div>
                 <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>{viewVisit.company_freetext || '—'}</div>
@@ -336,6 +367,38 @@ export default function CRMFieldVisits() {
               <button onClick={() => setViewVisit(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8', lineHeight:1, padding:4 }}>✕</button>
             </div>
             <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+              {viewVisit.distance_km != null && viewVisit.origin_lat && viewVisit.destination_lat && (
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:8 }}>
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#166534', marginBottom:2 }}>Distance</div>
+                      <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>{viewVisit.distance_km} km</div>
+                    </div>
+                    <div style={{ fontSize:11, color:'#475569', textAlign:'right', maxWidth:240 }}>
+                      {viewVisit.origin_type === 'office_ahmedabad' ? 'Ahmedabad' : viewVisit.origin_type === 'office_baroda' ? 'Baroda' : 'Origin'} → {viewVisit.company_freetext || 'Customer'}
+                    </div>
+                  </div>
+                  <MiniMap
+                    origin={{ lat: viewVisit.origin_lat, lng: viewVisit.origin_lng }}
+                    destination={{ lat: viewVisit.destination_lat, lng: viewVisit.destination_lng }}
+                  />
+                </div>
+              )}
+              {viewVisit.opportunity_id && viewVisit.crm_opportunities && (
+                <div onClick={() => navigate('/crm/opportunities/' + viewVisit.opportunity_id)}
+                  style={{ padding:'10px 12px', borderRadius:8, border:'1px solid #c2d9f5', background:'#eff6ff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}
+                  onMouseEnter={e => e.currentTarget.style.background='#dbeafe'}
+                  onMouseLeave={e => e.currentTarget.style.background='#eff6ff'}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#1a4dab', marginBottom:3 }}>Linked Opportunity</div>
+                    <div style={{ fontSize:13, fontWeight:600, color:'#0f172a', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{viewVisit.crm_opportunities.opportunity_name || '—'}</div>
+                    {viewVisit.crm_opportunities.stage && (
+                      <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Stage: {viewVisit.crm_opportunities.stage}</div>
+                    )}
+                  </div>
+                  <svg fill="none" stroke="#1a4dab" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+              )}
               {(viewVisit.visit_type === 'JOINT_PRINCIPAL' || viewVisit.visit_type === 'JOINT_SSC_TEAM') && (() => {
                 const withPrincipal = viewVisit.visit_type === 'JOINT_PRINCIPAL'
                 const teamNames = (viewVisit.ssc_team_members || []).map(id => reps.find(r => r.id === id)?.name).filter(Boolean)
@@ -402,9 +465,11 @@ export default function CRMFieldVisits() {
                   <input
                     value={acctSearch}
                     onChange={e => {
-                      setAcctSearch(e.target.value)
+                      const v = e.target.value
+                      setAcctSearch(v)
                       setShowAcctDrop(true)
-                      if (!e.target.value) { setForm(p => ({...p,selected_customer_id:'',company_freetext:'',opportunity_id:''})); setCompanyOpps([]) }
+                      if (!v) { setForm(p => ({...p,selected_customer_id:'',company_freetext:'',opportunity_id:''})); setCompanyOpps([]); setAcctMatches([]) }
+                      else { searchCustomers(v) }
                     }}
                     onFocus={() => setShowAcctDrop(true)}
                     onBlur={() => setTimeout(() => setShowAcctDrop(false), 150)}
@@ -416,7 +481,7 @@ export default function CRMFieldVisits() {
                       style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:14,lineHeight:1,padding:2}}>✕</button>
                   )}
                   {showAcctDrop && acctSearch.trim() && !form.selected_customer_id && (() => {
-                    const matches = customers.filter(c => c.customer_name.toLowerCase().includes(acctSearch.trim().toLowerCase())).slice(0,10)
+                    const matches = acctMatches
                     return matches.length > 0 ? (
                       <div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',border:'1px solid #e2e8f0',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:200,marginTop:2,overflow:'hidden'}}>
                         {matches.map(c => (
@@ -465,6 +530,24 @@ export default function CRMFieldVisits() {
               <div>
                 <label style={LBL}>Visit Date <span style={{color:'#dc2626'}}>*</span></label>
                 <input type="date" value={form.visit_date} onChange={e => setForm(p=>({...p,visit_date:e.target.value}))} style={INP} />
+              </div>
+
+              {/* Origin (for distance tracking) */}
+              <div>
+                <label style={LBL}>Origin (started from)</label>
+                <select value={form.origin_type} onChange={e => setForm(p=>({...p,origin_type:e.target.value}))} style={INP}>
+                  <option value="office_ahmedabad">{SSC_OFFICES.office_ahmedabad.label}</option>
+                  <option value="office_baroda">{SSC_OFFICES.office_baroda.label}</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              {/* Destination address — auto-filled when Customer 360 is selected */}
+              <div>
+                <label style={LBL}>Destination Address {form.selected_customer_id ? <span style={{color:'#059669',fontSize:11,fontWeight:500,marginLeft:6}}>· from Customer 360</span> : <span style={{color:'#94a3b8',fontSize:11,fontWeight:500,marginLeft:6}}>· optional</span>}</label>
+                <textarea value={form.destination_address} onChange={e => setForm(p=>({...p,destination_address:e.target.value}))}
+                  placeholder="Customer address — used to compute distance from office. Leave empty to skip."
+                  style={{ ...INP, minHeight: 60, resize:'vertical', fontFamily:'var(--font)' }} />
               </div>
 
               {/* Visit Type checkboxes */}
