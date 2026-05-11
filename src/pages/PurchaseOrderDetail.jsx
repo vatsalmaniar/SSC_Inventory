@@ -238,6 +238,42 @@ export default function PurchaseOrderDetail() {
       order_id: newCo.id, order_number: newCo.order_number, updated_at: new Date().toISOString(),
     }).eq('id', id)
     if (error) { toast(friendlyError(error, "Relink failed. Please try again.")); setRelinking(false); return }
+
+    // Also remap po_items.order_item_id to the new CO's matching lines (by item_code).
+    // Without this, coverage check in Procurement still treats the new CO as uncovered.
+    // Greedy match: for each po_item, pick an unused order_item from new CO with same
+    // item_code, preferring same qty. Duplicates handled via row_number pairing.
+    try {
+      const [{ data: poItems }, { data: newOiList }] = await Promise.all([
+        sb.from('po_items').select('id,item_code,qty,sr_no,order_item_id').eq('po_id', id).order('sr_no'),
+        sb.from('order_items').select('id,item_code,qty').eq('order_id', newCo.id),
+      ])
+      const available = {}
+      ;(newOiList || []).forEach(oi => {
+        const k = oi.item_code
+        if (!available[k]) available[k] = []
+        available[k].push(oi)
+      })
+      // sort each bucket by qty desc so highest qty gets matched first to highest-qty po_item
+      Object.values(available).forEach(arr => arr.sort((a,b) => (b.qty||0) - (a.qty||0)))
+      const sortedPoItems = [...(poItems || [])].sort((a,b) => (b.qty||0) - (a.qty||0))
+      const updates = []
+      for (const pi of sortedPoItems) {
+        const bucket = available[pi.item_code]
+        if (bucket && bucket.length) {
+          const oi = bucket.shift()
+          updates.push({ id: pi.id, order_item_id: oi.id })
+        } else {
+          // No match in new CO — clear the stale link to avoid pointing to the cancelled CO
+          updates.push({ id: pi.id, order_item_id: null })
+        }
+      }
+      // Apply updates sequentially (small N, safer)
+      for (const u of updates) {
+        await sb.from('po_items').update({ order_item_id: u.order_item_id }).eq('id', u.id)
+      }
+    } catch (e) { console.error('po_items relink failed:', e) }
+
     await logActivity(`PO relinked from ${oldOrderNumber} (cancelled) to ${newCo.order_number}`)
     try {
       if (oldOrderId) await sb.from('order_comments').insert({ order_id: oldOrderId, author_name: userName, message: `PO ${po.po_number} was relinked away from this cancelled CO to ${newCo.order_number}.`, is_activity: true })
