@@ -102,6 +102,7 @@ export default function CRMOpportunityDetail() {
   const navigate = useNavigate()
   const [user, setUser]             = useState({ name:'', role:'', id:'' })
   const [opp, setOpp]               = useState(null)
+  const [payments, setPayments]     = useState(null)  // {outstanding_inr,overdue_inr,imported_at} | null
   const [activities, setActivities] = useState([])
   const [tasks, setTasks]           = useState([])
   const [quoteItems, setQuoteItems] = useState([])
@@ -239,6 +240,14 @@ export default function CRMOpportunityDetail() {
     if (oppData?.customer_id) {
       const { data: ccs } = await sb.from('customer_contacts').select('*').eq('customer_id', oppData.customer_id).order('created_at', { ascending: true })
       setCustContacts(ccs || [])
+    }
+    // Receivables snapshot — direct match via customer_id when opp is linked to Customer 360
+    if (oppData?.customer_id) {
+      sb.from('customer_payments_snapshot')
+        .select('outstanding_inr,overdue_inr,imported_at')
+        .eq('customer_id', oppData.customer_id)
+        .maybeSingle()
+        .then(({ data }) => setPayments(data || null))
     }
     setLoading(false)
   }
@@ -1687,6 +1696,31 @@ export default function CRMOpportunityDetail() {
 
             {/* Right Sidebar */}
             <div className="od-sidebar">
+
+              {payments && (
+                <div className="od-side-card" style={{ borderColor: (payments.overdue_inr || 0) > 0 ? '#fecaca' : 'var(--gray-100)' }}>
+                  <div className="od-side-card-title" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <span>Receivables</span>
+                    <span style={{ fontSize:10, fontWeight:500, color:'var(--gray-400)', textTransform:'none', letterSpacing:0 }}>
+                      Updated {payments.imported_at ? fmtTs(payments.imported_at) : '—'}
+                    </span>
+                  </div>
+                  <div style={{ display:'flex', gap:16, padding:'12px 16px' }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Outstanding</div>
+                      <div style={{ fontSize:18, fontWeight:700, color:'#0B1B30', fontFamily:'var(--mono)' }}>
+                        ₹{Number(payments.outstanding_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                    <div style={{ flex:1, paddingLeft:16, borderLeft:'1px solid var(--gray-100)' }}>
+                      <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Overdue</div>
+                      <div style={{ fontSize:18, fontWeight:700, color: (payments.overdue_inr || 0) > 0 ? '#dc2626' : 'var(--gray-400)', fontFamily:'var(--mono)' }}>
+                        ₹{Number(payments.overdue_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Contacts */}
               <div className="od-side-card">

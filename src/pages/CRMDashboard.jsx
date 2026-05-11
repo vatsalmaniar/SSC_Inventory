@@ -84,7 +84,7 @@ export default function CRMDashboard() {
         .in('stage', ['WON','LOST'])
         .gte('updated_at', sinceISO),
       sb.from('crm_tasks')
-        .select('id,title,due_date,completed,opportunity_id,lead_id,assigned_rep_id, crm_opportunities(crm_companies(company_name)), crm_leads(freetext_company,crm_companies(company_name))')
+        .select('id,task_type,notes,due_date,completed,opportunity_id,lead_id,assigned_rep_id, crm_opportunities(crm_companies(company_name)), crm_leads(freetext_company,crm_companies(company_name))')
         .eq('completed', false).order('due_date', { ascending: true }),
       sb.from('profiles').select('id,name,role').in('role',['sales','admin']),
       sb.from('crm_activities').select('id,created_at,rep_id').gte('created_at', sinceISO).order('created_at', { ascending: false }),
@@ -368,7 +368,7 @@ export default function CRMDashboard() {
                       <div key={t.id} className={`task-row prio-${prio}`} onClick={() => navigate(taskLink(t))}>
                         <div className="task-chk" onClick={e => markTaskDone(e, t.id)} title="Mark done"/>
                         <div className="task-body">
-                          <div className="task-title">{t.title}</div>
+                          <div className="task-title">{t.task_type || 'Task'}{t.notes ? ` — ${t.notes}` : ''}</div>
                           <div className="task-meta mono">{taskCompany(t)}</div>
                         </div>
                         <div className={`task-due due-${prio}`}>{taskDue(t)}</div>

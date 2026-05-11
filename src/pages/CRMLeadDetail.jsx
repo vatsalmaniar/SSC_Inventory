@@ -54,6 +54,7 @@ export default function CRMLeadDetail() {
   const navigate = useNavigate()
   const [user, setUser]             = useState({ name:'', role:'', id:'' })
   const [lead, setLead]             = useState(null)
+  const [payments, setPayments]     = useState(null)  // {outstanding_inr,overdue_inr,imported_at} | null
   const [activities, setActivities] = useState([])
   const [tasks, setTasks]           = useState([])
   const [quoteItems, setQuoteItems] = useState([])
@@ -114,6 +115,16 @@ export default function CRMLeadDetail() {
     }
     setPrincipals(principalsRes.data || [])
     setReps(repsRes.data || [])
+    // Receivables snapshot — match by the linked company's name (only for leads
+    // tied to a Customer 360 record; pure free-text leads won't have a match).
+    const companyNameForMatch = leadRes.data?.crm_companies?.company_name || leadRes.data?.freetext_company
+    if (companyNameForMatch) {
+      sb.from('customer_payments_snapshot')
+        .select('outstanding_inr,overdue_inr,imported_at')
+        .ilike('party_name_raw', companyNameForMatch)
+        .maybeSingle()
+        .then(({ data }) => setPayments(data || null))
+    }
     if (leadRes.data?.company_id) {
       const { data: ctcts } = await sb.from('crm_contacts').select('*').eq('company_id', leadRes.data.company_id).order('created_at')
       setLeadContacts(ctcts || [])
@@ -505,6 +516,32 @@ export default function CRMLeadDetail() {
 
             {/* Right Sidebar */}
             <div className="od-sidebar">
+
+              {payments && (
+                <div className="od-side-card" style={{ borderColor: (payments.overdue_inr || 0) > 0 ? '#fecaca' : 'var(--gray-100)' }}>
+                  <div className="od-side-card-title" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <span>Receivables</span>
+                    <span style={{ fontSize:10, fontWeight:500, color:'var(--gray-400)', textTransform:'none', letterSpacing:0 }}>
+                      Updated {payments.imported_at ? fmtTs(payments.imported_at) : '—'}
+                    </span>
+                  </div>
+                  <div style={{ display:'flex', gap:16, padding:'12px 16px' }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Outstanding</div>
+                      <div style={{ fontSize:18, fontWeight:700, color:'#0B1B30', fontFamily:'var(--mono)' }}>
+                        ₹{Number(payments.outstanding_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                    <div style={{ flex:1, paddingLeft:16, borderLeft:'1px solid var(--gray-100)' }}>
+                      <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Overdue</div>
+                      <div style={{ fontSize:18, fontWeight:700, color: (payments.overdue_inr || 0) > 0 ? '#dc2626' : 'var(--gray-400)', fontFamily:'var(--mono)' }}>
+                        ₹{Number(payments.overdue_inr || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Quick Info */}
               <div className="od-side-card">
                 <div className="od-side-card-title">Quick Info</div>
