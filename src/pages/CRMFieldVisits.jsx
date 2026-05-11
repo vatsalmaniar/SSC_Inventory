@@ -42,7 +42,14 @@ function emptyForm() {
     ssc_team_members: [],
     origin_type: 'office_ahmedabad',
     destination_address: '',
+    destination_pincode: '',
   }
+}
+
+function extractPincode(text) {
+  if (!text) return ''
+  const m = String(text).match(/\b(\d{6})\b/)
+  return m ? m[1] : ''
 }
 
 export default function CRMFieldVisits() {
@@ -54,6 +61,7 @@ export default function CRMFieldVisits() {
   const [loading, setLoading]       = useState(true)
   const [showModal, setShowModal]   = useState(false)
   const [viewVisit, setViewVisit]   = useState(null)
+  const [editingId, setEditingId]   = useState(null)  // visit id when editing; null when creating new
   const [saving, setSaving]         = useState(false)
   const [search, setSearch]         = useState('')
   const [filterRep, setFilterRep]   = useState('')
@@ -116,7 +124,8 @@ export default function CRMFieldVisits() {
     ])
     setCompanyOpps(oppRes.data || [])
     const addr = custFull.data?.billing_address || custFull.data?.shipping_address || ''
-    if (addr) setForm(p => ({ ...p, destination_address: addr }))
+    const pin = extractPincode(addr)
+    if (addr || pin) setForm(p => ({ ...p, destination_address: addr, destination_pincode: pin }))
     setLoadingOpps(false)
   }
 
@@ -138,7 +147,13 @@ export default function CRMFieldVisits() {
     let origin_lng = office ? office.lng : null
     let dest_lat = null, dest_lng = null, distance_km = null
     const destAddr = (form.destination_address || '').trim()
-    if (destAddr) {
+    const destPin  = (form.destination_pincode || '').trim()
+    // Pincode geocodes most reliably in India. Try pin first, fall back to full address.
+    if (destPin && /^\d{6}$/.test(destPin)) {
+      const dg = await geocodeAddress(`${destPin}, India`)
+      if (dg) { dest_lat = dg.lat; dest_lng = dg.lng }
+    }
+    if (dest_lat == null && destAddr) {
       const dg = await geocodeAddress(destAddr)
       if (dg) { dest_lat = dg.lat; dest_lng = dg.lng }
     }
@@ -165,12 +180,20 @@ export default function CRMFieldVisits() {
       origin_lat,
       origin_lng,
       destination_address: destAddr || null,
+      destination_pincode: destPin || null,
       destination_lat: dest_lat,
       destination_lng: dest_lng,
       distance_km,
     }
 
-    const { error } = await sb.from('crm_field_visits').insert(payload)
+    let error
+    if (editingId) {
+      // rep_id intentionally omitted on update — keep original logger
+      const { rep_id, ...updatePayload } = payload
+      ;({ error } = await sb.from('crm_field_visits').update(updatePayload).eq('id', editingId))
+    } else {
+      ;({ error } = await sb.from('crm_field_visits').insert(payload))
+    }
     if (error) { toast('Error saving visit: ' + error.message); setSaving(false); return }
 
     // If linked to opportunity → post Visit activity on it
@@ -194,12 +217,53 @@ export default function CRMFieldVisits() {
     setVisits(fresh || [])
     setForm(emptyForm())
     setCompanyOpps([])
-    toast('Field visit logged', 'success')
+    toast(editingId ? 'Visit updated' : 'Field visit logged', 'success')
     setShowModal(false)
+    setEditingId(null)
     setSaving(false)
   }
 
+  function openEditDrawer(v) {
+    // Pre-populate the form from an existing visit
+    setEditingId(v.id)
+    setForm({
+      visit_date: v.visit_date || new Date().toISOString().slice(0,10),
+      visit_type: v.visit_type || 'SOLO',
+      with_ssc: v.visit_type === 'JOINT_SSC_TEAM' || (Array.isArray(v.ssc_team_members) && v.ssc_team_members.length > 0),
+      with_principal: v.visit_type === 'JOINT_PRINCIPAL' || !!v.principal_id,
+      selected_customer_id: '',
+      company_freetext: v.company_freetext || '',
+      opportunity_id: v.opportunity_id || '',
+      purpose: v.purpose || '',
+      outcome: v.outcome || '',
+      next_action: v.next_action || '',
+      next_action_date: v.next_action_date || '',
+      principal_id: v.principal_id || '',
+      principal_rep_name: v.principal_rep_name || '',
+      ssc_team_members: v.ssc_team_members || [],
+      origin_type: v.origin_type || 'office_ahmedabad',
+      destination_address: v.destination_address || '',
+      destination_pincode: v.destination_pincode || '',
+    })
+    setAcctSearch(v.company_freetext || '')
+    setAcctMatches([])
+    setCompanyOpps([])
+    setViewVisit(null)
+    setShowModal(true)
+  }
+
+  async function deleteVisit(v) {
+    if (!isManager) { toast('Only admin/management can delete visits'); return }
+    if (!window.confirm(`Delete this visit?\n\n${v.company_freetext || 'Visit'} · ${v.visit_date}\n\nThis cannot be undone.`)) return
+    const { error } = await sb.from('crm_field_visits').delete().eq('id', v.id)
+    if (error) { toast('Delete failed: ' + error.message); return }
+    setVisits(prev => prev.filter(x => x.id !== v.id))
+    setViewVisit(null)
+    toast('Visit deleted', 'success')
+  }
+
   function openModal() {
+    setEditingId(null)
     setForm(emptyForm())
     setCompanyOpps([])
     setAcctMatches([])
@@ -341,40 +405,54 @@ export default function CRMFieldVisits() {
 
       {/* ── Visit Detail Drawer (right side) ── */}
       {viewVisit && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', justifyContent:'flex-end' }}
+        <div className="od-drawer-scrim"
           onClick={e => { if (e.target === e.currentTarget) setViewVisit(null) }}>
-          <div style={{ background:'white', width:'100%', maxWidth:520, height:'100vh', overflowY:'auto', boxShadow:'-20px 0 60px rgba(0,0,0,0.2)', display:'flex', flexDirection:'column' }}>
-            <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'white', zIndex:1 }}>
+          <div className="od-drawer" style={{ width:'min(560px, 95vw)' }}>
+            <div className="od-drawer-head">
               <div>
-                <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>{viewVisit.company_freetext || '—'}</div>
+                <div style={{ fontSize:15, fontWeight:700, color:'var(--c-text)' }}>{viewVisit.company_freetext || '—'}</div>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:4, flexWrap:'wrap' }}>
-                  <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'#475569' }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'var(--c-muted)' }}>
                     <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:13,height:13}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                     {fmtNum(viewVisit.visit_date)}
                   </span>
                   {viewVisit.created_at && (
-                    <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'#475569' }}>
+                    <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'var(--c-muted)' }}>
                       <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:13,height:13}}><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
                       {(() => { const d=new Date(viewVisit.created_at); return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}` })()}
                     </span>
                   )}
-                  <span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:4,
+                  <span className={`visit-type-pill visit-type-${viewVisit.visit_type}`} style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:4,
                     background: viewVisit.visit_type==='SOLO'?'#f1f5f9':viewVisit.visit_type==='JOINT_PRINCIPAL'?'#e8f2fc':'#f5f3ff',
                     color: viewVisit.visit_type==='SOLO'?'#475569':viewVisit.visit_type==='JOINT_PRINCIPAL'?'#1a4dab':'#6d28d9'
                   }}>{VISIT_TYPE_LABELS[viewVisit.visit_type]}</span>
                 </div>
               </div>
-              <button onClick={() => setViewVisit(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8', lineHeight:1, padding:4 }}>✕</button>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <button onClick={() => openEditDrawer(viewVisit)} title="Edit visit"
+                  style={{ background:'#eff6ff', border:'1px solid #c2d9f5', borderRadius:6, padding:'5px 10px', fontSize:12, fontWeight:600, color:'#1a4dab', cursor:'pointer', fontFamily:'var(--font)', display:'flex', alignItems:'center', gap:5 }}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Edit
+                </button>
+                {isManager && (
+                  <button onClick={() => deleteVisit(viewVisit)} title="Delete visit (admin/management only)"
+                    style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:6, padding:'5px 10px', fontSize:12, fontWeight:600, color:'#dc2626', cursor:'pointer', fontFamily:'var(--font)', display:'flex', alignItems:'center', gap:5 }}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                    Delete
+                  </button>
+                )}
+                <button onClick={() => setViewVisit(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'var(--c-muted-2)', lineHeight:1, padding:4, marginLeft:2 }}>✕</button>
+              </div>
             </div>
-            <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+            <div className="od-drawer-body" style={{ display:'flex', flexDirection:'column', gap:14 }}>
               {viewVisit.distance_km != null && viewVisit.origin_lat && viewVisit.destination_lat && (
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:8 }}>
+                  <div className="visit-distance-tile" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:8 }}>
                     <div>
-                      <div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#166534', marginBottom:2 }}>Distance</div>
-                      <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>{viewVisit.distance_km} km</div>
+                      <div className="visit-distance-label" style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#166534', marginBottom:2 }}>Distance</div>
+                      <div style={{ fontSize:15, fontWeight:700, color:'var(--c-text)' }}>{viewVisit.distance_km} km</div>
                     </div>
-                    <div style={{ fontSize:11, color:'#475569', textAlign:'right', maxWidth:240 }}>
+                    <div style={{ fontSize:11, color:'var(--c-muted)', textAlign:'right', maxWidth:240 }}>
                       {viewVisit.origin_type === 'office_ahmedabad' ? 'Ahmedabad' : viewVisit.origin_type === 'office_baroda' ? 'Baroda' : 'Origin'} → {viewVisit.company_freetext || 'Customer'}
                     </div>
                   </div>
@@ -385,25 +463,23 @@ export default function CRMFieldVisits() {
                 </div>
               )}
               {viewVisit.opportunity_id && viewVisit.crm_opportunities && (
-                <div onClick={() => navigate('/crm/opportunities/' + viewVisit.opportunity_id)}
-                  style={{ padding:'10px 12px', borderRadius:8, border:'1px solid #c2d9f5', background:'#eff6ff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}
-                  onMouseEnter={e => e.currentTarget.style.background='#dbeafe'}
-                  onMouseLeave={e => e.currentTarget.style.background='#eff6ff'}>
+                <div className="linked-opp-tile" onClick={() => navigate('/crm/opportunities/' + viewVisit.opportunity_id)}
+                  style={{ padding:'10px 12px', borderRadius:8, border:'1px solid #c2d9f5', background:'#eff6ff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
                   <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#1a4dab', marginBottom:3 }}>Linked Opportunity</div>
-                    <div style={{ fontSize:13, fontWeight:600, color:'#0f172a', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{viewVisit.crm_opportunities.opportunity_name || '—'}</div>
+                    <div className="linked-opp-label" style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#1a4dab', marginBottom:3 }}>Linked Opportunity</div>
+                    <div style={{ fontSize:13, fontWeight:600, color:'var(--c-text)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{viewVisit.crm_opportunities.opportunity_name || '—'}</div>
                     {viewVisit.crm_opportunities.stage && (
-                      <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Stage: {viewVisit.crm_opportunities.stage}</div>
+                      <div style={{ fontSize:11, color:'var(--c-muted)', marginTop:2 }}>Stage: {viewVisit.crm_opportunities.stage}</div>
                     )}
                   </div>
-                  <svg fill="none" stroke="#1a4dab" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  <svg className="linked-opp-arrow" fill="none" stroke="#1a4dab" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </div>
               )}
               {(viewVisit.visit_type === 'JOINT_PRINCIPAL' || viewVisit.visit_type === 'JOINT_SSC_TEAM') && (() => {
                 const withPrincipal = viewVisit.visit_type === 'JOINT_PRINCIPAL'
                 const teamNames = (viewVisit.ssc_team_members || []).map(id => reps.find(r => r.id === id)?.name).filter(Boolean)
                 return (
-                  <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:6 }}>Visited With</div>
+                  <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'var(--c-muted-2)', marginBottom:6 }}>Visited With</div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:10 }}>
                     {withPrincipal && viewVisit.crm_principals?.name && (
                       <OwnerChip name={viewVisit.crm_principals.name + (viewVisit.principal_rep_name ? ' · ' + viewVisit.principal_rep_name : '')} />
@@ -415,33 +491,73 @@ export default function CRMFieldVisits() {
                 )
               })()}
               {viewVisit.purpose && (
-                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:3 }}>Purpose</div>
+                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'var(--c-muted-2)', marginBottom:3 }}>Purpose</div>
                 <div style={{ fontSize:13 }}>{viewVisit.purpose}</div></div>
               )}
               {viewVisit.outcome && (
-                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:3 }}>Outcome</div>
+                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'var(--c-muted-2)', marginBottom:3 }}>Outcome</div>
                 <div style={{ fontSize:13 }}>{viewVisit.outcome}</div></div>
               )}
               {viewVisit.next_action && (
-                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:3 }}>Next Action</div>
+                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'var(--c-muted-2)', marginBottom:3 }}>Next Action</div>
                 <div style={{ fontSize:13 }}>{viewVisit.next_action}</div>
                 {viewVisit.next_action_date && <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{fmtNum(viewVisit.next_action_date)}</div>}</div>
               )}
-              <div style={{ display:'flex', gap:24, paddingTop:4, borderTop:'1px solid #f1f5f9' }}>
-                <div><div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#94a3b8', marginBottom:6 }}>Rep</div>
-                <OwnerChip name={viewVisit.profiles?.name} /></div>
+
+              {/* Trip details (origin + destination address + pincode) */}
+              {(viewVisit.origin_type || viewVisit.destination_address || viewVisit.destination_pincode) && (
+                <div className="visit-trip-tile" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, padding:'10px 12px', background:'#fafafa', border:'1px solid #f1f5f9', borderRadius:8 }}>
+                  {viewVisit.origin_type && (
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'var(--c-muted-2)', marginBottom:3 }}>Origin</div>
+                      <div style={{ fontSize:12, color:'var(--c-text)' }}>{viewVisit.origin_type === 'office_ahmedabad' ? 'SSC Ahmedabad' : viewVisit.origin_type === 'office_baroda' ? 'SSC Baroda' : 'Other'}</div>
+                    </div>
+                  )}
+                  {viewVisit.destination_pincode && (
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'var(--c-muted-2)', marginBottom:3 }}>Pincode</div>
+                      <div style={{ fontSize:12, color:'var(--c-text)', fontFamily:'var(--mono)' }}>{viewVisit.destination_pincode}</div>
+                    </div>
+                  )}
+                  {viewVisit.destination_address && (
+                    <div style={{ gridColumn:'1 / -1' }}>
+                      <div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'var(--c-muted-2)', marginBottom:3 }}>Destination Address</div>
+                      <div style={{ fontSize:12, color:'var(--c-text)', whiteSpace:'pre-wrap' }}>{viewVisit.destination_address}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Logged-by footer */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, paddingTop:8, borderTop:'1px solid var(--c-line)' }}>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'var(--c-muted-2)', marginBottom:6 }}>Logged by</div>
+                  <OwnerChip name={viewVisit.profiles?.name} />
+                </div>
+                {viewVisit.created_at && (
+                  <div style={{ textAlign:'right' }}>
+                    <div style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'var(--c-muted-2)', marginBottom:4 }}>Logged on</div>
+                    <div style={{ fontSize:12, color:'var(--c-muted)' }}>
+                      {(() => {
+                        const d = new Date(viewVisit.created_at)
+                        const pad = n => n.toString().padStart(2,'0')
+                        return `${pad(d.getDate())}-${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]}-${d.getFullYear()} · ${pad(d.getHours())}:${pad(d.getMinutes())}`
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Log Visit Modal ── */}
+      {/* ── Log Visit Drawer (right side) ── */}
       {showModal && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+        <div className="od-drawer-scrim"
           onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
-          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:540, maxHeight:'92vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-            <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'white', zIndex:1 }}>
+          <div className="od-drawer" style={{ width:'min(560px, 95vw)' }}>
+            <div className="od-drawer-head">
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <div style={{ width:36, height:36, borderRadius:8, background:'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center' }}>
                   <svg fill="none" stroke="#059669" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{width:18,height:18}}>
@@ -449,14 +565,14 @@ export default function CRMFieldVisits() {
                   </svg>
                 </div>
                 <div>
-                  <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Log Field Visit</div>
-                  <div style={{ fontSize:11, color:'#94a3b8', marginTop:1 }}>Record a customer visit</div>
+                  <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>{editingId ? 'Edit Field Visit' : 'Log Field Visit'}</div>
+                  <div style={{ fontSize:11, color:'var(--c-muted-2)', marginTop:1 }}>{editingId ? 'Update visit details' : 'Record a customer visit'}</div>
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8', lineHeight:1, padding:4 }}>✕</button>
+              <button onClick={() => setShowModal(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'var(--c-muted-2)', lineHeight:1, padding:4 }}>✕</button>
             </div>
 
-            <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+            <div className="od-drawer-body" style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
               {/* Account — local filter dropdown (same pattern as New Lead form) */}
               <div>
@@ -478,7 +594,7 @@ export default function CRMFieldVisits() {
                   />
                   {form.selected_customer_id && (
                     <button type="button" onClick={() => { setForm(p => ({...p,selected_customer_id:'',company_freetext:'',opportunity_id:''})); setAcctSearch(''); setCompanyOpps([]) }}
-                      style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:14,lineHeight:1,padding:2}}>✕</button>
+                      style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--c-muted-2)',fontSize:14,lineHeight:1,padding:2}}>✕</button>
                   )}
                   {showAcctDrop && acctSearch.trim() && !form.selected_customer_id && (() => {
                     const matches = acctMatches
@@ -490,12 +606,12 @@ export default function CRMFieldVisits() {
                             onMouseEnter={e => e.currentTarget.style.background='#f0f9ff'}
                             onMouseLeave={e => e.currentTarget.style.background='white'}>
                             <div style={{fontWeight:600}}>{c.customer_name}</div>
-                            {c.customer_type && <div style={{fontSize:11,color:'#94a3b8'}}>{c.customer_type}</div>}
+                            {c.customer_type && <div style={{fontSize:11,color:'var(--c-muted-2)'}}>{c.customer_type}</div>}
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',border:'1px solid #fde68a',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:200,marginTop:2,padding:'10px 14px',fontSize:12,color:'#92400e',background:'#fffbeb'}}>
+                      <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fffbeb',border:'1px solid #fde68a',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:200,marginTop:2,padding:'10px 14px',fontSize:12,color:'#92400e'}}>
                         <div style={{fontWeight:600,marginBottom:2}}>Not in Customer 360 yet</div>
                         <div style={{color:'#b45309'}}>Submit to save this visit as a new prospect.</div>
                       </div>
@@ -507,11 +623,11 @@ export default function CRMFieldVisits() {
               {/* Opportunity link — after customer selected */}
               {form.selected_customer_id && (
                 <div>
-                  <label style={LBL}>Linked Opportunity <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0,color:'#94a3b8'}}>— optional</span></label>
+                  <label style={LBL}>Linked Opportunity <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--c-muted-2)'}}>— optional</span></label>
                   {loadingOpps ? (
-                    <div style={{fontSize:12,color:'#94a3b8',padding:'8px 0'}}>Loading…</div>
+                    <div style={{fontSize:12,color:'var(--c-muted-2)',padding:'8px 0'}}>Loading…</div>
                   ) : companyOpps.length === 0 ? (
-                    <div style={{fontSize:12,color:'#94a3b8',padding:'4px 0'}}>No open opportunities for this account — visit will be logged without one.</div>
+                    <div style={{fontSize:12,color:'var(--c-muted-2)',padding:'4px 0'}}>No open opportunities for this account — visit will be logged without one.</div>
                   ) : (
                     <select value={form.opportunity_id} onChange={e => setForm(p => ({...p, opportunity_id: e.target.value}))} style={INP}>
                       <option value="">— No specific opportunity —</option>
@@ -542,11 +658,26 @@ export default function CRMFieldVisits() {
                 </select>
               </div>
 
-              {/* Destination address — auto-filled when Customer 360 is selected */}
+              {/* Destination pincode — used for distance calculation. More reliable than full address. */}
               <div>
-                <label style={LBL}>Destination Address {form.selected_customer_id ? <span style={{color:'#059669',fontSize:11,fontWeight:500,marginLeft:6}}>· from Customer 360</span> : <span style={{color:'#94a3b8',fontSize:11,fontWeight:500,marginLeft:6}}>· optional</span>}</label>
+                <label style={LBL}>Destination Pincode {form.selected_customer_id && form.destination_pincode ? <span style={{color:'#059669',fontSize:11,fontWeight:500,marginLeft:6}}>· auto-detected</span> : <span style={{color:'var(--c-muted-2)',fontSize:11,fontWeight:500,marginLeft:6}}>· 6-digit, used to compute distance</span>}</label>
+                <input value={form.destination_pincode} onChange={e => setForm(p=>({...p,destination_pincode:e.target.value.replace(/\D/g,'').slice(0,6)}))}
+                  placeholder="e.g. 380051"
+                  inputMode="numeric"
+                  maxLength={6}
+                  style={INP} />
+                {form.selected_customer_id && !form.destination_pincode && (
+                  <div style={{ marginTop:6, padding:'8px 10px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:6, fontSize:11, color:'#92400e', lineHeight:1.4 }}>
+                    ⚠ No pincode found in this customer's saved address — enter it manually to enable the distance + map. (You can also fix the address in Customer 360 later.)
+                  </div>
+                )}
+              </div>
+
+              {/* Destination address — optional, just for human reference */}
+              <div>
+                <label style={LBL}>Destination Address <span style={{color:'var(--c-muted-2)',fontSize:11,fontWeight:500,marginLeft:6}}>· optional</span></label>
                 <textarea value={form.destination_address} onChange={e => setForm(p=>({...p,destination_address:e.target.value}))}
-                  placeholder="Customer address — used to compute distance from office. Leave empty to skip."
+                  placeholder="Full address (optional — pincode is what's used for distance)"
                   style={{ ...INP, minHeight: 60, resize:'vertical', fontFamily:'var(--font)' }} />
               </div>
 
@@ -573,7 +704,7 @@ export default function CRMFieldVisits() {
                     </button>
                   ))}
                   {!form.with_ssc && !form.with_principal && (
-                    <span style={{ fontSize:12, color:'#94a3b8', alignSelf:'center', marginLeft:4 }}>Alone</span>
+                    <span style={{ fontSize:12, color:'var(--c-muted-2)', alignSelf:'center', marginLeft:4 }}>Alone</span>
                   )}
                 </div>
               </div>

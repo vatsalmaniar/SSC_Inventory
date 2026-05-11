@@ -27,6 +27,7 @@ const CRMOpportunities = lazy(() => import('./pages/CRMOpportunities'))
 const CRMOpportunityDetail = lazy(() => import('./pages/CRMOpportunityDetail'))
 const CRMNewOpportunity = lazy(() => import('./pages/CRMNewOpportunity'))
 const CRMFieldVisits = lazy(() => import('./pages/CRMFieldVisits'))
+const CRMQuotations = lazy(() => import('./pages/CRMQuotations'))
 const CRMSampleRequests = lazy(() => import('./pages/CRMSampleRequests'))
 const CRMTargets = lazy(() => import('./pages/CRMTargets'))
 const ItemMaster = lazy(() => import('./pages/ItemMaster'))
@@ -94,6 +95,7 @@ export default function App() {
           <Route path="/crm/opportunities/new" element={<CRMNewOpportunity />} />
           <Route path="/crm/opportunities/:id" element={<CRMOpportunityDetail />} />
           <Route path="/crm/visits" element={<CRMFieldVisits />} />
+          <Route path="/crm/quotations" element={<CRMQuotations />} />
           <Route path="/crm/samples" element={<CRMSampleRequests />} />
           <Route path="/crm/targets" element={<CRMTargets />} />
           <Route path="/items" element={<ItemMaster />} />

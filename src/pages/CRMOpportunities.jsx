@@ -193,8 +193,16 @@ export default function CRMOpportunities() {
 
 function KanbanView({ opps, navigate, onMoveStage }) {
   const wheelHandler = (e) => {
-    // Translate vertical wheel into horizontal scroll for kanban
+    // Translate vertical wheel into horizontal scroll for kanban,
+    // but let a column body scroll vertically first if it has room.
     if (e.deltaY === 0 || e.shiftKey) return
+    const body = e.target.closest && e.target.closest('.kb-col-body')
+    if (body) {
+      const vMax = body.scrollHeight - body.clientHeight
+      const canScrollDown = e.deltaY > 0 && body.scrollTop < vMax - 1
+      const canScrollUp   = e.deltaY < 0 && body.scrollTop > 0
+      if (canScrollDown || canScrollUp) return  // let native vertical scroll happen
+    }
     const el = e.currentTarget
     const max = el.scrollWidth - el.clientWidth
     if (max <= 0) return

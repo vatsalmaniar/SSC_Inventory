@@ -22,6 +22,7 @@ const NAV_ITEMS = [
       { key: 'crm-dash',  label: 'Dashboard',     path: '/crm' },
       { key: 'crm-opps',  label: 'Opportunities', path: '/crm/opportunities' },
       { key: 'crm-visits', label: 'Field Visits',  path: '/crm/visits' },
+      { key: 'crm-quotes', label: 'Quotations',    path: '/crm/quotations' },
     ],
   },
   {
