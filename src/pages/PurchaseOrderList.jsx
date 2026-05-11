@@ -120,7 +120,7 @@ export default function PurchaseOrderList() {
   async function loadPos(testMode = false) {
     setLoading(true)
     const { data } = await sb.from('purchase_orders')
-      .select('id,po_number,status,total_amount,vendor_name,vendor_id,order_number,fulfilment_center,submitted_by_name,created_at,po_date,expected_delivery,po_items(id)')
+      .select('id,po_number,status,total_amount,vendor_name,vendor_id,order_number,fulfilment_center,submitted_by_name,created_at,po_date,expected_delivery,received_at,po_items(id,sr_no,item_code,qty,received_qty,unit_price,unit_price_after_disc,lp_unit_price,total_price,delivery_date)')
       .gte('created_at', FY_START).eq('is_test', testMode)
       .order('created_at', { ascending: false })
     setPos(data || [])
@@ -159,6 +159,122 @@ export default function PurchaseOrderList() {
     XLSX.writeFile(wb, fileName + '_Summary.xlsx')
   }
 
+  async function downloadDetailed() {
+    if (!filtered.length) { alert('No POs to export. Adjust filters and try again.'); return }
+    let ExcelJS
+    try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
+    try {
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'SSC ERP'; wb.created = new Date()
+      const ws = wb.addWorksheet('POs Detailed', { views: [{ state: 'frozen', ySplit: 1 }] })
+      const cols = [
+        { header: 'Sr No', key: 'sr_no', width: 6 },
+        { header: 'PO Date', key: 'po_date', width: 12 },
+        { header: 'PO #', key: 'po_number', width: 22 },
+        { header: 'Vendor', key: 'vendor', width: 28 },
+        { header: 'Linked CO', key: 'linked_co', width: 18 },
+        { header: 'Submitted By', key: 'submitted_by', width: 18 },
+        { header: 'Item', key: 'item_code', width: 26 },
+        { header: 'Total Qty', key: 'total_qty', width: 10 },
+        { header: 'Pending Qty', key: 'pending_qty', width: 11 },
+        { header: 'Total Value', key: 'total_value', width: 14, style: { numFmt: '₹#,##,##0.00' } },
+        { header: 'Pending Value', key: 'pending_value', width: 14, style: { numFmt: '₹#,##,##0.00' } },
+        { header: 'Delivery Date', key: 'delivery_date', width: 13 },
+        { header: 'Received Date', key: 'received_date', width: 13 },
+        { header: 'Status', key: 'status', width: 18 },
+      ]
+      ws.columns = cols
+      const statusStyle = (s) => {
+        switch (s) {
+          case 'draft': return { bg: 'FFF1F5F9', fg: 'FF475569' }
+          case 'pending_approval': return { bg: 'FFFEF3C7', fg: 'FF92400E' }
+          case 'approved': return { bg: 'FFDBEAFE', fg: 'FF1E40AF' }
+          case 'placed': return { bg: 'FFCFFAFE', fg: 'FF0E7490' }
+          case 'acknowledged': return { bg: 'FFCCFBF1', fg: 'FF115E59' }
+          case 'delivery_confirmation': case 'partially_received': return { bg: 'FFFFEDD5', fg: 'FF9A3412' }
+          case 'material_received': return { bg: 'FFDCFCE7', fg: 'FF14532D' }
+          case 'closed': return { bg: 'FFBBF7D0', fg: 'FF14532D' }
+          case 'cancelled': return { bg: 'FFFEE2E2', fg: 'FFB91C1C' }
+          default: return { bg: 'FFF1F5F9', fg: 'FF334155' }
+        }
+      }
+      filtered.forEach(po => {
+        const items = po.po_items || []
+        const sStyle = statusStyle(po.status)
+        const baseRow = {
+          po_date: po.po_date ? fmt(po.po_date) : '',
+          po_number: po.po_number,
+          vendor: po.vendor_name || '',
+          linked_co: po.order_number || '',
+          submitted_by: po.submitted_by_name || '',
+          received_date: po.received_at ? fmt(po.received_at) : '',
+          status: PO_STATUS_LABELS[po.status] || po.status,
+        }
+        const pushRow = (data) => {
+          const row = ws.addRow(data)
+          const sCell = row.getCell('status')
+          sCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sStyle.bg } }
+          sCell.font = { bold: true, color: { argb: sStyle.fg } }
+          sCell.alignment = { horizontal: 'center', vertical: 'middle' }
+          if ((data.pending_qty || 0) > 0) {
+            const pq = row.getCell('pending_qty')
+            pq.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
+            pq.font = { bold: true, color: { argb: 'FF92400E' } }
+            const pv = row.getCell('pending_value')
+            pv.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
+            pv.font = { bold: true, color: { argb: 'FF92400E' } }
+          }
+        }
+        if (items.length === 0) {
+          pushRow({ ...baseRow, sr_no:'', item_code:'', total_qty:'', pending_qty:'', total_value:'', pending_value:'', delivery_date:'' })
+        } else {
+          items.forEach(item => {
+            const recv = item.received_qty || 0
+            const pendingQty = Math.max(0, (item.qty || 0) - recv)
+            const unit = item.unit_price_after_disc || item.unit_price || item.lp_unit_price || 0
+            const pendingValueLocal = pendingQty * unit
+            pushRow({
+              ...baseRow,
+              sr_no: item.sr_no, item_code: item.item_code,
+              total_qty: item.qty,
+              pending_qty: pendingQty,
+              total_value: item.total_price || 0,
+              pending_value: pendingValueLocal,
+              delivery_date: item.delivery_date ? fmt(item.delivery_date) : '',
+            })
+          })
+        }
+      })
+      const header = ws.getRow(1)
+      header.height = 24
+      header.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A2540' } }
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+        cell.alignment = { vertical: 'middle', horizontal: 'left' }
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FF143055' } } }
+      })
+      const lastRow = ws.rowCount
+      for (let r = 2; r <= lastRow; r++) {
+        const row = ws.getRow(r)
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } }
+        })
+        if (r % 2 === 0) {
+          row.eachCell({ includeEmpty: true }, cell => {
+            const isTinted = cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor?.argb !== 'FFFFFFFF'
+            if (!isTinted) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
+          })
+        }
+      }
+      ws.autoFilter = { from: { row:1, column:1 }, to: { row:1, column: cols.length } }
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = fileName + '_Detailed.xlsx'
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
+  }
+
   return (
     <Layout pageTitle="Purchase Orders" pageKey="procurement">
       <div className="orders-app">
@@ -182,6 +298,10 @@ export default function PurchaseOrderList() {
               <button className="o-dl-btn" onClick={downloadSummary} title="Summary Excel">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Summary
+              </button>
+              <button className="o-dl-btn" onClick={downloadDetailed} title="Detailed Excel — line items per PO">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Detailed
               </button>
             </div>
             <button className="btn-primary" onClick={() => navigate('/procurement/po/new')}>

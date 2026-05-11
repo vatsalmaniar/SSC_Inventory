@@ -1294,3 +1294,11 @@ html[data-theme="dark"] .no-items-table tbody tr:hover { background: #2D2D2D !im
 html[data-theme="dark"] .no-items-table input { background: #2D2D2D !important; color: #D4D4D4 !important; border-color: #3C3C3C !important; }
 html[data-theme="dark"] .no-items-table input:focus { border-color: #818CF8 !important; }
 html[data-theme="dark"] .no-items-table .calc-field { background: #252526 !important; color: #D4D4D4 !important; border-color: #3C3C3C !important; }
+
+/* Customer 360 tab bar — dark theme */
+html[data-theme="dark"] .c360-page .c360-tabs { background: #252526 !important; border-color: #3C3C3C !important; box-shadow: none !important; }
+html[data-theme="dark"] .c360-page .c360-tab { color: #858585 !important; }
+html[data-theme="dark"] .c360-page .c360-tab:hover { color: #D4D4D4 !important; }
+html[data-theme="dark"] .c360-page .c360-tab.active { color: #818CF8 !important; border-bottom-color: #818CF8 !important; }
+html[data-theme="dark"] .c360-page .c360-tab-count { background: #3C3C3C !important; color: #D4D4D4 !important; }
+html[data-theme="dark"] .c360-page .c360-tab.active .c360-tab-count { background: rgba(129,140,248,0.15) !important; color: #C7D2FE !important; }
