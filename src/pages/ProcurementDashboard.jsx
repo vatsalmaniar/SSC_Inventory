@@ -54,7 +54,7 @@ export default function ProcurementDashboard() {
     setPendingInward(inwardCountRes.count || 0)
 
     const { data: coData } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,order_items(id,total_price)')
+      .select('id,order_number,customer_name,status,order_items(id,total_price,procurement_source,line_status)')
       .eq('is_test', false).eq('order_type', 'CO')
       .in('status', ['inv_check','inventory_check','dispatch'])
       .gte('created_at', FY_START)
@@ -70,10 +70,12 @@ export default function ProcurementDashboard() {
         coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
       }
       coList = coList.map(o => {
-        const total = (o.order_items || []).length
-        const covered = (o.order_items || []).filter(oi => coveredSet.has(oi.id)).length
+        // Only count active lines; covered = PO line OR procurement_source='stock'
+        const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
+        const total = activeItems.length
+        const covered = activeItems.filter(oi => coveredSet.has(oi.id) || oi.procurement_source === 'stock').length
         return { ...o, _totalItems: total, _coveredItems: covered }
-      }).filter(o => o._coveredItems < o._totalItems)
+      }).filter(o => o._totalItems > 0 && o._coveredItems < o._totalItems)
     }
     setCoOrders(coList)
     setLoading(false)

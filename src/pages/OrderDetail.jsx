@@ -146,6 +146,7 @@ export default function OrderDetail() {
   const [isNextBatch, setIsNextBatch]             = useState(false)
   const [batches, setBatches]                     = useState([])
   const [linkedPOs, setLinkedPOs]                 = useState([])
+  const [poCoveredItemIds, setPoCoveredItemIds]   = useState(new Set())
   const [custCode, setCustCode]                   = useState('')
 
   // Stock status (inventory check)
@@ -213,9 +214,16 @@ export default function OrderDetail() {
       bg.push(sb.from('customer_payments_snapshot').select('outstanding_inr,overdue_inr,imported_at').ilike('party_name_raw', data.customer_name).maybeSingle().then(({ data: pay }) => setPayments(pay || null)))
     }
     if (data?.order_type === 'CO') {
-      bg.push(sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery,created_at').eq('order_id', id).order('created_at', { ascending: false }).then(({ data: pos }) => setLinkedPOs(pos || [])))
+      bg.push(sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery,created_at').eq('order_id', id).order('created_at', { ascending: false }).then(async ({ data: pos }) => {
+        setLinkedPOs(pos || [])
+        const poIds = (pos || []).map(p => p.id)
+        if (!poIds.length) { setPoCoveredItemIds(new Set()); return }
+        const { data: pis } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
+        setPoCoveredItemIds(new Set((pis || []).map(pi => pi.order_item_id)))
+      }))
     } else {
       setLinkedPOs([])
+      setPoCoveredItemIds(new Set())
     }
     Promise.all(bg)
   }
@@ -245,6 +253,10 @@ export default function OrderDetail() {
   const pipelineIdx      = ORDER_PIPELINE_KEYS.indexOf(effectiveStatus)
   const canAdvance       = isOps && !isCancelled && !isInFCFlow && pipelineIdx >= 0 && pipelineIdx < ORDER_PIPELINE_KEYS.length - 1
   const hasAnyDispatched = (order?.order_items || []).some(i => (i.dispatched_qty || 0) > 0)
+  // For CO: every active line is covered (PO line linked OR procurement_source='stock') ⇒ hide Add PO button
+  const _coActiveLines = order?.order_type === 'CO' ? (order?.order_items || []).filter(i => (i.line_status || 'active') === 'active') : []
+  const allCoLinesCovered = order?.order_type === 'CO' && _coActiveLines.length > 0 &&
+    _coActiveLines.every(i => i.procurement_source === 'stock' || poCoveredItemIds.has(i.id))
   // hasAnyPending: under the new model, "pending" is anything not yet GI-posted (and not cancelled)
   const hasAnyPending    = (order?.order_items || []).some(i => (i.qty || 0) > ((i.posted_qty || 0) + (i.cancelled_qty || 0)))
   const hasAnyCancelled  = (order?.order_items || []).some(i => (i.cancelled_qty || 0) > 0)
@@ -440,6 +452,15 @@ export default function OrderDetail() {
   }
 
   // ── Stock status update (inventory check stage) ──
+  async function undoStockFlag(itemId) {
+    if (!isOps) { toast('Ops/admin only'); return }
+    if (!window.confirm('Undo "From Stock" for this line? It will move back into the procurement queue and you will need to place a PO for it.')) return
+    const { error } = await sb.from('order_items').update({ procurement_source: 'po' }).eq('id', itemId)
+    if (error) { toast('Failed to undo: ' + error.message); return }
+    toast('Line moved back to procurement queue', 'success')
+    loadOrder(true)
+  }
+
   async function updateStockStatus(itemId, status) {
     const prev = stockStatuses[itemId]
     setStockStatuses(s => ({ ...s, [itemId]: status }))
@@ -1090,8 +1111,11 @@ if (match) {
                     <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:16,height:16,marginRight:6,verticalAlign:'middle'}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
                     Purchase Orders {linkedPOs.length > 0 && <span style={{fontSize:11,fontWeight:600,color:'var(--gray-400)',marginLeft:6}}>({linkedPOs.length})</span>}
                   </div>
-                  {isOps && linkedPOs.length > 0 && (
+                  {isOps && linkedPOs.length > 0 && !allCoLinesCovered && (
                     <button className="od-btn" style={{fontSize:12,padding:'4px 10px'}} onClick={() => navigate('/procurement/po/new?order_id=' + id)}>+ Add PO</button>
+                  )}
+                  {allCoLinesCovered && (
+                    <span style={{ fontSize:11, fontWeight:700, color:'#166534', background:'#dcfce7', padding:'3px 8px', borderRadius:6, textTransform:'uppercase', letterSpacing:'0.04em' }}>Fully Covered</span>
                   )}
                 </div>
                 <div className="od-card-body">
@@ -1121,11 +1145,15 @@ if (match) {
                     </div>
                   ) : (
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
-                      <div style={{fontSize:13,color:'#b45309'}}>
-                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14,verticalAlign:'middle',marginRight:4}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        No Purchase Order created yet
+                      <div style={{fontSize:13, color: allCoLinesCovered ? '#166534' : '#b45309'}}>
+                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14,verticalAlign:'middle',marginRight:4}}>
+                          {allCoLinesCovered
+                            ? <polyline points="20 6 9 17 4 12"/>
+                            : <><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>}
+                        </svg>
+                        {allCoLinesCovered ? 'All items closed from stock — no PO required' : 'No Purchase Order created yet'}
                       </div>
-                      {isOps && <button className="od-btn" style={{fontSize:12,padding:'4px 10px'}} onClick={() => navigate('/procurement/po/new?order_id=' + id)}>Create PO</button>}
+                      {isOps && !allCoLinesCovered && <button className="od-btn" style={{fontSize:12,padding:'4px 10px'}} onClick={() => navigate('/procurement/po/new?order_id=' + id)}>Create PO</button>}
                     </div>
                   )}
                 </div>
@@ -1436,7 +1464,7 @@ if (match) {
                         return (
                         <tr key={item.id}>
                           <td style={{ paddingLeft: 20, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
-                          <td className="mono"><span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>{item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}{(item.cancelled_qty || 0) > 0 && (<div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '2px 6px', borderRadius: 4, display: 'inline-block', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{item.line_status === 'short_closed' ? 'Short Closed' : 'Cancelled'} · {item.cancelled_qty}</div>)}</td>
+                          <td className="mono"><span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>{item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}{(item.cancelled_qty || 0) > 0 && (<div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '2px 6px', borderRadius: 4, display: 'inline-block', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{item.line_status === 'short_closed' ? 'Short Closed' : 'Cancelled'} · {item.cancelled_qty}</div>)}{order.order_type === 'CO' && item.procurement_source === 'stock' && (<div style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:4 }}><span style={{ fontSize: 10, fontWeight: 700, color: '#166534', background: '#dcfce7', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>From Stock · No PO</span>{isOps && (order.status !== 'cancelled') && (<button onClick={() => undoStockFlag(item.id)} title="Undo — move back to procurement queue" style={{ background:'none', border:'1px solid var(--gray-200)', color:'var(--gray-500)', borderRadius:4, padding:'1px 6px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Undo</button>)}</div>)}</td>
                           <td>{item.qty}{(item.cancelled_qty || 0) > 0 && <span style={{ fontSize: 10, color: '#dc2626', marginLeft: 6 }}>(− {item.cancelled_qty})</span>}</td>
                           {order.status !== 'inventory_check' && <><td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
                           <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td></>}

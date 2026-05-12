@@ -14,7 +14,7 @@ const FC_ADDRESSES = {
 }
 
 function emptyItem() {
-  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null }
+  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', from_stock: false }
 }
 
 export default function NewPurchaseOrder() {
@@ -84,7 +84,7 @@ export default function NewPurchaseOrder() {
   async function fetchPendingCOs(q) {
     // Search CO orders by order_number or customer_name
     const { data: coOrders } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(id,line_status)')
+      .select('id,order_number,customer_name,order_items(id,line_status,procurement_source)')
       .eq('order_type', 'CO')
       .eq('is_test', false)
       .in('status', ['inv_check', 'inventory_check', 'dispatch', 'pending', 'confirmed'])
@@ -94,41 +94,52 @@ export default function NewPurchaseOrder() {
     if (!coOrders?.length) return []
 
     // Check item-level coverage — show COs that still have uncovered items
+    // A line is covered if it has a po_items row OR procurement_source = 'stock'
     const coIds = coOrders.map(o => o.id)
     const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id').in('order_id', coIds)
-    if (!linkedPos?.length) return coOrders
-
-    const poIds = linkedPos.map(p => p.id)
-    const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
-    const coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
+    let coveredByPo = new Set()
+    if (linkedPos?.length) {
+      const poIds = linkedPos.map(p => p.id)
+      const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
+      coveredByPo = new Set((poItems || []).map(pi => pi.order_item_id))
+    }
 
     return coOrders.filter(o => {
       const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
-      if (!activeItems.length) return false  // every line cancelled/short_closed → nothing left to procure
-      const coveredCount = activeItems.filter(oi => coveredSet.has(oi.id)).length
-      return coveredCount < activeItems.length  // show if any active items still uncovered
+      if (!activeItems.length) return false
+      const uncovered = activeItems.filter(oi => !coveredByPo.has(oi.id) && oi.procurement_source !== 'stock')
+      return uncovered.length > 0
     })
   }
 
   async function loadCOOrder(coId) {
     const { data: order } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(id,item_code,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty)')
+      .select('id,order_number,customer_name,order_items(id,item_code,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty,procurement_source)')
       .eq('id', coId).single()
     if (!order) return
 
     // Find which CO items already have POs (item-level coverage)
     const { data: existingPos } = await sb.from('purchase_orders').select('id').eq('order_id', coId)
-    let coveredSet = new Set()
+    let coveredByPo = new Set()
     if (existingPos?.length) {
       const poIds = existingPos.map(p => p.id)
       const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
-      coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
+      coveredByPo = new Set((poItems || []).map(pi => pi.order_item_id))
     }
 
     // Only active (non-cancelled, non-short-closed) lines are candidates for procurement
     const allItems = (order.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
-    const uncovered = allItems.filter(oi => !coveredSet.has(oi.id))
+    // Covered = has a PO line OR already flagged as procurement_source='stock'
+    const uncovered = allItems.filter(oi => !coveredByPo.has(oi.id) && oi.procurement_source !== 'stock')
     const coveredCount = allItems.length - uncovered.length
+
+    // Fetch item types (CI / SI) from the items master for the pre-fill rows
+    const codes = [...new Set(uncovered.map(oi => oi.item_code).filter(Boolean))]
+    let typeByCode = new Map()
+    if (codes.length) {
+      const { data: itemMaster } = await sb.from('items').select('item_code,type').in('item_code', codes)
+      typeByCode = new Map((itemMaster || []).map(it => [it.item_code, it.type || '']))
+    }
 
     setCOOrder({ ...order, _coveredCount: coveredCount, _totalItems: allItems.length })
     setCOText(order.order_number + ' — ' + order.customer_name)
@@ -150,6 +161,8 @@ export default function NewPurchaseOrder() {
       unit_price_after_disc: String(oi.unit_price_after_disc || ''),
       total_price: String(oi.total_price || ''),
       delivery_date: oi.dispatch_date || '',
+      item_type: typeByCode.get(oi.item_code) || '',
+      from_stock: false,
     }))
     setItems(prefilled)
   }
@@ -245,19 +258,43 @@ export default function NewPurchaseOrder() {
 
   function addRow()       { setItems(prev => [...prev, emptyItem()]) }
   function removeRow(idx) { setItems(prev => prev.filter((_, i) => i !== idx)) }
+  function toggleFromStock(idx) {
+    setItems(prev => prev.map((it, i) => i === idx ? { ...it, from_stock: !it.from_stock } : it))
+  }
 
   const filledItems = items.filter(i => i.item_code.trim())
-  const grandTotal  = filledItems.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0)
-  const isCO = poType === 'CO'
+  const poLines     = filledItems.filter(i => !i.from_stock)
+  const stockLines  = filledItems.filter(i => i.from_stock && i.order_item_id)
+  const grandTotal  = poLines.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0)
+  const isCO        = poType === 'CO'
+  const closeOnly   = isCO && poLines.length === 0 && stockLines.length > 0
 
   async function submitPO(submitForApproval) {
     if (submitGuard.current) return
-    if (!vendorId)          { toast('Please select a vendor'); return }
     if (isCO && !coOrder)   { toast('Please select a Custom Order (SSC CO No.)'); return }
+    if (!filledItems.length){ toast('Add at least one line item'); return }
+
+    // Close-as-Stock path: every filled line is "From Stock", no PO created
+    if (closeOnly) {
+      submitGuard.current = true
+      setSubmitting(true)
+      try {
+        const ids = stockLines.map(s => s.order_item_id)
+        const { error } = await sb.from('order_items').update({ procurement_source: 'stock' }).in('id', ids)
+        if (error) { toast(friendlyError(error, 'Failed to mark items as stock')); submitGuard.current = false; setSubmitting(false); return }
+        toast(`${ids.length} item${ids.length>1?'s':''} closed from stock — no PO needed`, 'success')
+        navigate('/procurement/orders')
+        return
+      } catch (err) {
+        toast(friendlyError(err)); submitGuard.current = false; setSubmitting(false); return
+      }
+    }
+
+    // Normal PO path — at least one PO line. Validate PO-only requirements.
+    if (!vendorId)          { toast('Please select a vendor'); return }
     if (!fulfilmentCenter)  { toast('Please select a delivery address'); return }
     if (fulfilmentCenter === 'Customer' && !deliveryCustName) { toast('Please select a customer for delivery address'); return }
-    if (!filledItems.length){ toast('Add at least one line item'); return }
-    for (const item of filledItems) {
+    for (const item of poLines) {
       if (!item.qty || parseFloat(item.qty) <= 0) { toast(`Qty is required for item: ${item.item_code}`); return }
       if (item.lp_unit_price === '' || item.lp_unit_price === undefined || parseFloat(item.lp_unit_price) < 0) { toast(`LP Price is required for item: ${item.item_code}`); return }
       if (!item.delivery_date) { toast(`Delivery Date is required for item: ${item.item_code}`); return }
@@ -326,7 +363,7 @@ export default function NewPurchaseOrder() {
 
       if (insertErr) { toast(friendlyError(insertErr)); submitGuard.current = false; setSubmitting(false); return }
 
-      const lineItems = filledItems.map((item, idx) => ({
+      const lineItems = poLines.map((item, idx) => ({
         po_id:            po.id,
         sr_no:            idx + 1,
         item_code:        item.item_code.trim(),
@@ -340,9 +377,30 @@ export default function NewPurchaseOrder() {
       }))
 
       const { error: itemsErr } = await sb.from('po_items').insert(lineItems)
-      if (itemsErr) toast(friendlyError(itemsErr, "PO created but items failed. Please try again."))
+      if (itemsErr) {
+        // Roll back the header so we don't leave a ghost PO with no items.
+        await sb.from('purchase_orders').delete().eq('id', po.id)
+        toast(friendlyError(itemsErr, "Failed to save PO items — rolled back. Please try again."))
+        submitGuard.current = false; setSubmitting(false); return
+      }
 
-      toast('Purchase Order created — PO number will be assigned on approval', 'success')
+      // Flag any SI lines the user toggled "From Stock". If this fails, also roll back
+      // the PO so the user can retry from a clean state — otherwise the PO would exist
+      // but the same SI lines would keep appearing in the procurement queue.
+      if (stockLines.length) {
+        const stockIds = stockLines.map(s => s.order_item_id)
+        const { error: stockErr } = await sb.from('order_items').update({ procurement_source: 'stock' }).in('id', stockIds)
+        if (stockErr) {
+          await sb.from('po_items').delete().eq('po_id', po.id)
+          await sb.from('purchase_orders').delete().eq('id', po.id)
+          toast(friendlyError(stockErr, 'Could not mark items as stock — rolled back. Please try again.'))
+          submitGuard.current = false; setSubmitting(false); return
+        }
+      }
+
+      toast(stockLines.length
+        ? `PO created with ${poLines.length} item${poLines.length>1?'s':''}, ${stockLines.length} closed from stock`
+        : 'Purchase Order created — PO number will be assigned on approval', 'success')
       navigate('/procurement/po/' + po.id)
     } catch (err) {
       toast(friendlyError(err))
@@ -595,37 +653,54 @@ export default function NewPurchaseOrder() {
                   <th className="col-unit">Unit Price (₹)</th>
                   <th className="col-total">Total (₹)</th>
                   <th className="col-date">Delivery Date <span className="req">*</span></th>
+                  {isCO && <th className="col-stock" title="Close this SI line from stock — skip the PO">From Stock</th>}
                   <th className="col-del"></th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, idx) => (
-                  <tr key={idx} className={item.item_code ? 'row-filled' : ''}>
+                {items.map((item, idx) => {
+                  const isSI    = item.item_type === 'SI'
+                  const isCI    = item.item_type === 'CI'
+                  const stocked = !!item.from_stock
+                  const rowStyle = stocked ? { opacity: 0.55, background: 'var(--gray-50)' } : {}
+                  return (
+                  <tr key={idx} className={item.item_code ? 'row-filled' : ''} style={rowStyle}>
                     <td className="col-sr">{idx + 1}</td>
                     <td className="col-code">
-                      <Typeahead
-                        value={item.item_code}
-                        onChange={v => updateItem(idx, 'item_code', v)}
-                        onSelect={it => selectItemCode(idx, it)}
-                        placeholder="Search item code or brand…"
-                        fetchFn={fetchItems}
-                        strictSelect
-                        renderItem={it => (
-                          <div>
-                            <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{it.item_code}</div>
-                            {(it.brand || it.category) && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 1 }}>{[it.brand, it.category].filter(Boolean).join(' · ')}</div>}
-                          </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <Typeahead
+                            value={item.item_code}
+                            onChange={v => updateItem(idx, 'item_code', v)}
+                            onSelect={it => selectItemCode(idx, it)}
+                            placeholder="Search item code or brand…"
+                            fetchFn={fetchItems}
+                            strictSelect
+                            renderItem={it => (
+                              <div>
+                                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{it.item_code}</div>
+                                {(it.brand || it.category) && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 1 }}>{[it.brand, it.category].filter(Boolean).join(' · ')}</div>}
+                              </div>
+                            )}
+                          />
+                        </div>
+                        {isCO && item.item_type && (
+                          <span title={isCI ? 'Customised Item — must be procured' : 'Standard Item — can be dispatched from stock'}
+                            style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:4, flexShrink:0,
+                              background: isCI ? '#fef3c7' : '#dcfce7', color: isCI ? '#92400e' : '#166534' }}>
+                            {item.item_type}
+                          </span>
                         )}
-                      />
+                      </div>
                     </td>
                     <td className="col-qty">
-                      <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', e.target.value)} placeholder="0" min="0" />
+                      <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', e.target.value)} placeholder="0" min="0" disabled={stocked} />
                     </td>
                     <td className="col-lp">
-                      <input type="number" value={item.lp_unit_price} onChange={e => updateItem(idx, 'lp_unit_price', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                      <input type="number" value={item.lp_unit_price} onChange={e => updateItem(idx, 'lp_unit_price', e.target.value)} placeholder="0.00" min="0" step="0.01" disabled={stocked} />
                     </td>
                     <td className="col-disc">
-                      <input type="number" value={item.discount_pct} onChange={e => updateItem(idx, 'discount_pct', e.target.value)} placeholder="0" min="0" max="100" />
+                      <input type="number" value={item.discount_pct} onChange={e => updateItem(idx, 'discount_pct', e.target.value)} placeholder="0" min="0" max="100" disabled={stocked} />
                     </td>
                     <td className="col-unit">
                       <input readOnly value={item.unit_price_after_disc} placeholder="—" className="calc-field" />
@@ -634,8 +709,20 @@ export default function NewPurchaseOrder() {
                       <input readOnly value={item.total_price} placeholder="—" className="calc-field total-field" />
                     </td>
                     <td className="col-date">
-                      <input type="date" value={item.delivery_date} onChange={e => updateItem(idx, 'delivery_date', e.target.value)} />
+                      <input type="date" value={item.delivery_date} onChange={e => updateItem(idx, 'delivery_date', e.target.value)} disabled={stocked} />
                     </td>
+                    {isCO && (
+                      <td className="col-stock" style={{ textAlign:'center' }}>
+                        {isSI && item.order_item_id ? (
+                          <label style={{ display:'inline-flex', alignItems:'center', gap:4, cursor:'pointer', fontSize:11, fontWeight:600, color: stocked ? '#166534' : 'var(--gray-500)' }}>
+                            <input type="checkbox" checked={stocked} onChange={() => toggleFromStock(idx)} style={{ accentColor:'#166534', width:14, height:14 }} />
+                            {stocked ? 'Stock' : ''}
+                          </label>
+                        ) : (
+                          <span style={{ fontSize:10, color:'var(--gray-400)' }}>—</span>
+                        )}
+                      </td>
+                    )}
                     <td className="col-del">
                       {items.length > 1 && (
                         <button className="del-row-btn" onClick={() => removeRow(idx)} title="Remove row">
@@ -648,7 +735,8 @@ export default function NewPurchaseOrder() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -684,12 +772,16 @@ export default function NewPurchaseOrder() {
           )}
           <div style={{ flex: 1 }} />
           <button className="no-cancel-btn" onClick={() => navigate('/procurement/po')}>Cancel</button>
-          <button className="no-cancel-btn" onClick={() => submitPO(false)} disabled={submitting}>
-            {submitting ? 'Saving…' : 'Save as Draft'}
-          </button>
-          <button className="no-submit-btn" onClick={() => submitPO(true)} disabled={submitting}>
+          {!closeOnly && (
+            <button className="no-cancel-btn" onClick={() => submitPO(false)} disabled={submitting}>
+              {submitting ? 'Saving…' : 'Save as Draft'}
+            </button>
+          )}
+          <button className="no-submit-btn" onClick={() => submitPO(true)} disabled={submitting} title={closeOnly ? `Close ${stockLines.length} item${stockLines.length>1?'s':''} as stock — no PO will be created` : ''}>
             {submitting ? (
-              <><div className="no-spinner" />Submitting...</>
+              <><div className="no-spinner" />{closeOnly ? 'Closing…' : 'Submitting...'}</>
+            ) : closeOnly ? (
+              <><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Close — All From Stock</>
             ) : (
               <><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Submit for Approval</>
             )}

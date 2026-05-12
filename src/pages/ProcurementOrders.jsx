@@ -37,7 +37,7 @@ export default function ProcurementOrders() {
 
     const [coDataRes, orphanPosRes] = await Promise.all([
       sb.from('orders')
-        .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status)')
+        .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status,procurement_source)')
         .eq('is_test', false).eq('order_type', 'CO')
         .neq('status', 'pending')
         .gte('created_at', FY_START)
@@ -52,7 +52,7 @@ export default function ProcurementOrders() {
       const missingIds = [...new Set(orphanPosAll.map(p => p.order_id))].filter(id => !existingIds.has(id))
       if (missingIds.length) {
         const { data: extraCos } = await sb.from('orders')
-          .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status)')
+          .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status,procurement_source)')
           .in('id', missingIds).eq('status', 'cancelled')
         if (extraCos?.length) coOrders = [...coOrders, ...extraCos]
       }
@@ -76,11 +76,13 @@ export default function ProcurementOrders() {
         // Only count active (non-cancelled / non-short-closed) lines for coverage
         const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
         const total = activeItems.length
-        const covered = activeItems.filter(oi => coveredSet.has(oi.id)).length
+        // A line is covered if it has a PO line OR was closed from stock
+        const covered = activeItems.filter(oi => coveredSet.has(oi.id) || oi.procurement_source === 'stock').length
+        const stockClosed = activeItems.filter(oi => oi.procurement_source === 'stock').length
         const linkedPosList = posByCo[o.id] || []
         const orphanPOs = linkedPosList.filter(p => ORPHAN_PO_STATUSES.includes(p.status))
         const hasPostApprovalPO = linkedPosList.some(p => !PRE_APPROVAL_PO_STATUSES.includes(p.status))
-        return { ...o, _totalItems: total, _coveredItems: covered, _hasPostApprovalPO: hasPostApprovalPO, _orphanPOs: orphanPOs }
+        return { ...o, _totalItems: total, _coveredItems: covered, _stockClosed: stockClosed, _hasPostApprovalPO: hasPostApprovalPO, _orphanPOs: orphanPOs }
       })
     }
     setOrders(coOrders)
