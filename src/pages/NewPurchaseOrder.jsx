@@ -659,7 +659,7 @@ export default function NewPurchaseOrder() {
                   <th className="col-unit">Unit Price (₹)</th>
                   <th className="col-total">Total (₹)</th>
                   <th className="col-date">Delivery Date <span className="req">*</span></th>
-                  {isCO && <th className="col-stock" title="Close this SI line from stock — skip the PO">From Stock</th>}
+                  {isCO && <th className="col-stock" title="Close this line from stock — skip the PO">From Stock</th>}
                   <th className="col-del"></th>
                 </tr>
               </thead>
@@ -691,7 +691,7 @@ export default function NewPurchaseOrder() {
                           />
                         </div>
                         {isCO && item.item_type && (
-                          <span title={isCI ? 'Customised Item — must be procured' : 'Standard Item — can be dispatched from stock'}
+                          <span title={isCI ? 'Customised Item — typically procured, but can be marked from stock if available' : 'Standard Item — can be dispatched from stock'}
                             style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:4, flexShrink:0,
                               background: isCI ? '#fef3c7' : '#dcfce7', color: isCI ? '#92400e' : '#166534' }}>
                             {item.item_type}
@@ -719,7 +719,7 @@ export default function NewPurchaseOrder() {
                     </td>
                     {isCO && (
                       <td className="col-stock" style={{ textAlign:'center' }}>
-                        {isSI && item.order_item_id ? (
+                        {item.order_item_id ? (
                           <label style={{ display:'inline-flex', alignItems:'center', gap:4, cursor:'pointer', fontSize:11, fontWeight:600, color: stocked ? '#166534' : 'var(--gray-500)' }}>
                             <input type="checkbox" checked={stocked} onChange={() => toggleFromStock(idx)} style={{ accentColor:'#166534', width:14, height:14 }} />
                             {stocked ? 'Stock' : ''}

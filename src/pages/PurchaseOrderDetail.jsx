@@ -53,6 +53,7 @@ export default function PurchaseOrderDetail() {
   const navigate = useNavigate()
   const [po, setPo]               = useState(null)
   const [sourceCOStatus, setSourceCOStatus] = useState(null)
+  const [coStockClosedItems, setCoStockClosedItems] = useState([])  // CO lines (CI or SI) closed from stock (not on this PO)
   const [vendorCode, setVendorCode] = useState('')
   const [items, setItems]         = useState([])
   const [grns, setGrns] = useState([])
@@ -163,8 +164,15 @@ export default function PurchaseOrderDetail() {
           setActiveCOsForRelink(activeCOs || [])
         }
       })
+      // Stock-closed CO lines (CI or SI) on the same CO — show for approver visibility.
+      // Filter to active lines only — a cancelled stock-flagged line shouldn't surface.
+      sb.from('order_items').select('id,item_code,qty,description,line_status')
+        .eq('order_id', poRes.data.order_id)
+        .eq('procurement_source', 'stock')
+        .then(({ data }) => setCoStockClosedItems((data || []).filter(it => (it.line_status || 'active') === 'active')))
     } else {
       setSourceCOStatus(null)
+      setCoStockClosedItems([])
     }
     const [itemsRes, datesRes, commentsRes] = await Promise.all([
       sb.from('po_items').select('*').eq('po_id', id).order('sr_no'),
@@ -210,6 +218,19 @@ export default function PurchaseOrderDetail() {
     } catch { setPurchaseInvoices([]) }
 
     setLoading(false)
+  }
+
+  async function undoStockFlagFromPO(orderItemId, itemCode) {
+    if (!['ops','admin','management'].includes(userRole)) { toast('Ops / admin / management only'); return }
+    if (!window.confirm(`Untick "From Stock" for ${itemCode}? It will return to the procurement queue on ${po.order_number} and need a PO.`)) return
+    const { error } = await sb.from('order_items').update({ procurement_source: 'po' }).eq('id', orderItemId)
+    if (error) { toast('Failed to untick: ' + error.message); return }
+    await logActivity(`Reverted "From Stock" on ${itemCode} (CO ${po.order_number}) — now needs PO`)
+    toast(`${itemCode} unticked — now needs PO on ${po.order_number}`, 'success')
+    // Refresh the banner list (active stock-flagged lines only)
+    const { data } = await sb.from('order_items').select('id,item_code,qty,description,line_status')
+      .eq('order_id', po.order_id).eq('procurement_source', 'stock')
+    setCoStockClosedItems((data || []).filter(it => (it.line_status || 'active') === 'active'))
   }
 
   // ── Status transitions ──
@@ -1377,6 +1398,39 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             </div>
 
             {/* Line Items */}
+            {/* Stock-closed lines from the linked CO — for approver/reviewer visibility */}
+            {po.order_id && coStockClosedItems.length > 0 && (
+              <div className="od-card" style={{ borderColor:'#bbf7d0', background:'#f0fdf4' }}>
+                <div style={{ padding:'12px 16px', display:'flex', alignItems:'flex-start', gap:10 }}>
+                  <svg fill="none" stroke="#166534" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0, marginTop:2 }}><path d="M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:'#166534', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:4 }}>
+                      {coStockClosedItems.length} item{coStockClosedItems.length>1?'s':''} on {po.order_number} closed from stock — not on this PO
+                    </div>
+                    <div style={{ fontSize:11, color:'#15803d', marginBottom:8 }}>
+                      These lines were marked "From Stock" and will be dispatched from existing inventory. This PO covers the remaining lines that need procurement.
+                    </div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                      {coStockClosedItems.map(it => (
+                        <span key={it.id} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'#166534', background:'white', border:'1px solid #bbf7d0', padding:'3px 8px', borderRadius:6 }}>
+                          {it.item_code}{it.qty ? ` × ${it.qty}` : ''}
+                          {editMode && (
+                            <button type="button" onClick={() => undoStockFlagFromPO(it.id, it.item_code)} title="Untick — move this line back to needs-PO"
+                              style={{ background:'none', border:'none', cursor:'pointer', color:'#166534', fontSize:13, lineHeight:1, padding:'0 2px', fontWeight:700, fontFamily:'inherit' }}>×</button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                    {editMode && (
+                      <div style={{ fontSize:11, color:'#15803d', marginTop:6, fontStyle:'italic' }}>
+                        Click × on any chip to untick "From Stock" — that line will return to the procurement queue on the CO.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="od-card">
               <div className="od-card-header">
                 <div className="od-card-title">
