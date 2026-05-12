@@ -539,7 +539,7 @@ function OrderVsDispatchChart({ data }) {
   const [showLines, setShowLines] = useState({ ordered: true, delivered: true })
   const svgRef = useRef(null)
 
-  const W = 1000, H = 320, P = { l: 0, r: 56, t: 24, b: 50 }
+  const W = 1000, H = 320, P = { l: 32, r: 56, t: 24, b: 50 }
   const innerW = W - P.l - P.r, innerH = H - P.t - P.b
   const active = data.filter(d => !d.isFuture)
 

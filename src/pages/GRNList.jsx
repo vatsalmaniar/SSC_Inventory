@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
 import Layout from '../components/Layout'
+import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
 const REP_PALETTE = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
@@ -83,6 +84,165 @@ export default function GRNList() {
   const pendingCount = grns.filter(g => (g.status === 'draft' || g.status === 'checking') && matchType(g, typeFilter)).length
   const confirmedCount = grns.filter(g => g.status === 'confirmed' && matchType(g, typeFilter)).length
 
+  const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'GRNs'
+  const typeLabel = TYPE_FILTERS.find(t => t.key === typeFilter)?.label || ''
+  const fileName = `SSC_GRNs_${activeFilterLabel}_${typeLabel}_${new Date().toISOString().slice(0,10)}`.replace(/\s+/g, '_')
+
+  function downloadSummary() {
+    if (!filtered.length) { alert('No GRNs to export. Adjust filters and try again.'); return }
+    const rows = filtered.map(g => ({
+      'GRN #':         g.grn_number || '',
+      'Type':          GRN_TYPE_LABELS[g.grn_type] || g.grn_type || '',
+      'Vendor / Source': g.vendor_name || '',
+      'PO Number':     g.po_number || '',
+      'Centre':        g.fulfilment_center || '',
+      'Received By':   g.received_by || '',
+      'Received On':   g.received_at ? fmt(g.received_at) : '',
+      'Invoice #':     g.invoice_number || '',
+      'Invoice Date':  g.invoice_date ? fmt(g.invoice_date) : '',
+      'Invoice Value (₹)': g.invoice_amount || g.total_amount || 0,
+      'Status':        GRN_STATUS_LABELS[g.status] || g.status || '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'GRNs')
+    XLSX.writeFile(wb, fileName + '_Summary.xlsx')
+  }
+
+  async function downloadDetailed() {
+    if (!filtered.length) { alert('No GRNs to export. Adjust filters and try again.'); return }
+    let ExcelJS
+    try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
+
+    // Fetch all grn_items for filtered GRNs in one query
+    const grnIds = filtered.map(g => g.id)
+    const { data: allItems } = await sb.from('grn_items').select('*').in('grn_id', grnIds).order('sr_no', { ascending: true })
+    const itemsByGrn = {}
+    ;(allItems || []).forEach(it => { (itemsByGrn[it.grn_id] = itemsByGrn[it.grn_id] || []).push(it) })
+
+    try {
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'SSC ERP'; wb.created = new Date()
+      const ws = wb.addWorksheet('GRNs Detailed', { views: [{ state: 'frozen', ySplit: 1 }] })
+      const cols = [
+        { header: 'Sr No',          key: 'sr_no',           width: 6 },
+        { header: 'GRN Date',       key: 'grn_date',        width: 12 },
+        { header: 'GRN #',          key: 'grn_number',      width: 22 },
+        { header: 'Type',           key: 'grn_type',        width: 16 },
+        { header: 'Vendor / Source',key: 'vendor_name',     width: 30 },
+        { header: 'PO Number',      key: 'po_number',       width: 22 },
+        { header: 'Centre',         key: 'centre',          width: 12 },
+        { header: 'Invoice #',      key: 'invoice_number',  width: 16 },
+        { header: 'Invoice Date',   key: 'invoice_date',    width: 12 },
+        { header: 'Item Code',      key: 'item_code',       width: 22 },
+        { header: 'Description',    key: 'description',     width: 30 },
+        { header: 'Expected Qty',   key: 'expected_qty',    width: 12 },
+        { header: 'Received Qty',   key: 'received_qty',    width: 12 },
+        { header: 'Accepted Qty',   key: 'accepted_qty',    width: 12 },
+        { header: 'Rejected Qty',   key: 'rejected_qty',    width: 12 },
+        { header: 'Rejection Reason', key: 'rejection_reason', width: 24 },
+        { header: 'Received By',    key: 'received_by',     width: 18 },
+        { header: 'Status',         key: 'status',          width: 18 },
+      ]
+      ws.columns = cols
+
+      const statusStyle = (s) => {
+        switch (s) {
+          case 'draft':           return { bg: 'FFF1F5F9', fg: 'FF334155' }
+          case 'checking':        return { bg: 'FFFEF3C7', fg: 'FF92400E' }
+          case 'confirmed':       return { bg: 'FFDBEAFE', fg: 'FF1E40AF' }
+          case 'invoice_matched': return { bg: 'FFD1FAE5', fg: 'FF065F46' }
+          case 'inward_posted':   return { bg: 'FFBBF7D0', fg: 'FF14532D' }
+          default:                return { bg: 'FFF1F5F9', fg: 'FF334155' }
+        }
+      }
+
+      let rowCounter = 0
+      filtered.forEach(g => {
+        const items = itemsByGrn[g.id] || []
+        const sStyle = statusStyle(g.status)
+        const baseRow = {
+          grn_date:       g.received_at ? fmt(g.received_at) : (g.created_at ? fmt(g.created_at) : ''),
+          grn_number:     g.grn_number || '',
+          grn_type:       GRN_TYPE_LABELS[g.grn_type] || g.grn_type || '',
+          vendor_name:    g.vendor_name || '',
+          po_number:      g.po_number || '',
+          centre:         g.fulfilment_center || '',
+          invoice_number: g.invoice_number || '',
+          invoice_date:   g.invoice_date ? fmt(g.invoice_date) : '',
+          received_by:    g.received_by || '',
+          status:         GRN_STATUS_LABELS[g.status] || g.status || '',
+        }
+        const pushRow = (data) => {
+          const row = ws.addRow(data)
+          const sCell = row.getCell('status')
+          sCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sStyle.bg } }
+          sCell.font = { bold: true, color: { argb: sStyle.fg } }
+          sCell.alignment = { horizontal: 'center', vertical: 'middle' }
+          // Highlight rejected qty if > 0
+          if ((data.rejected_qty || 0) > 0) {
+            const rj = row.getCell('rejected_qty')
+            rj.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } }
+            rj.font = { bold: true, color: { argb: 'FFB91C1C' } }
+          }
+          // Highlight short receipt (received < expected)
+          if (typeof data.expected_qty === 'number' && typeof data.received_qty === 'number' && data.received_qty < data.expected_qty) {
+            const rv = row.getCell('received_qty')
+            rv.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
+            rv.font = { bold: true, color: { argb: 'FF92400E' } }
+          }
+        }
+        if (items.length === 0) {
+          rowCounter += 1
+          pushRow({ ...baseRow, sr_no: rowCounter, item_code:'', description:'', expected_qty:'', received_qty:'', accepted_qty:'', rejected_qty:'', rejection_reason:'' })
+        } else {
+          items.forEach(it => {
+            rowCounter += 1
+            pushRow({
+              ...baseRow,
+              sr_no: rowCounter,
+              item_code:        it.item_code || '',
+              description:      it.description || '',
+              expected_qty:     it.expected_qty ?? '',
+              received_qty:     it.received_qty ?? '',
+              accepted_qty:     it.accepted_qty ?? '',
+              rejected_qty:     it.rejected_qty ?? '',
+              rejection_reason: it.rejection_reason || '',
+            })
+          })
+        }
+      })
+
+      const header = ws.getRow(1)
+      header.height = 24
+      header.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A2540' } }
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+        cell.alignment = { vertical: 'middle', horizontal: 'left' }
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FF143055' } } }
+      })
+      const lastRow = ws.rowCount
+      for (let r = 2; r <= lastRow; r++) {
+        const row = ws.getRow(r)
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } }
+        })
+        if (r % 2 === 0) {
+          row.eachCell({ includeEmpty: true }, cell => {
+            const isTinted = cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor?.argb !== 'FFFFFFFF'
+            if (!isTinted) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
+          })
+        }
+      }
+      ws.autoFilter = { from: { row:1, column:1 }, to: { row:1, column: cols.length } }
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = fileName + '_Detailed.xlsx'
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
+  }
+
   return (
     <Layout pageTitle="Goods Receipt Notes" pageKey="fc">
       <div className="orders-app">
@@ -95,6 +255,16 @@ export default function GRNList() {
             </div>
           </div>
           <div className="page-meta">
+            <div className="o-dl-group">
+              <button className="o-dl-btn" onClick={downloadSummary} title="Summary Excel">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Summary
+              </button>
+              <button className="o-dl-btn" onClick={downloadDetailed} title="Detailed Excel">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Detailed
+              </button>
+            </div>
             <button className="btn-primary" onClick={() => navigate('/fc/grn/new')}>
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
               New GRN
