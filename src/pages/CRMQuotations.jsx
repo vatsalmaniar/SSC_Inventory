@@ -170,19 +170,12 @@ export default function CRMQuotations() {
   }
 
   async function nextQuoteNumber() {
-    // FY format like SSC/QU0001/26-27. Increment the QU counter.
+    // Use same RPC as Opportunity Detail flow so both share one counter
     const now = new Date()
     const yr = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
     const fy = `${String(yr%100).padStart(2,'0')}-${String((yr+1)%100).padStart(2,'0')}`
-    // Upsert into order_number_counters
-    const { data: existing } = await sb.from('order_number_counters').select('last_seq').eq('fy', fy).eq('order_type','QU').maybeSingle()
-    let nextSeq = (existing?.last_seq || 0) + 1
-    if (existing) {
-      await sb.from('order_number_counters').update({ last_seq: nextSeq }).eq('fy', fy).eq('order_type','QU')
-    } else {
-      await sb.from('order_number_counters').insert({ fy, order_type:'QU', last_seq: nextSeq })
-    }
-    const qnum = `SSC/QU${String(nextSeq).padStart(4,'0')}/${fy}`
+    const { data: qnum, error } = await sb.rpc('generate_crm_quote_number', { p_fy: fy })
+    if (error || !qnum) throw new Error(error?.message || 'Could not generate quote number')
     return { quote_number: qnum, fy }
   }
 
@@ -213,8 +206,10 @@ export default function CRMQuotations() {
       const refBase = (existing?.full_ref || quote_number).replace(/\/\d+$/, '')
       full_ref = `${refBase}/${revision}`
     } else {
-      const fresh = await nextQuoteNumber()
-      quote_number = fresh.quote_number; fy = fresh.fy
+      try {
+        const fresh = await nextQuoteNumber()
+        quote_number = fresh.quote_number; fy = fresh.fy
+      } catch (e) { toast('Failed: ' + e.message); setSaving(false); return }
       revision = 1
       full_ref = `${quote_number}/${revision}`
     }
