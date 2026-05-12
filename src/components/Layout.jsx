@@ -89,7 +89,7 @@ const NAV_ITEMS = [
     key: 'inventory',
     label: 'Inventory',
     path: '/inventory',
-    roles: ['sales', 'admin', 'management', 'ops'],
+    roles: ['sales', 'admin', 'management', 'ops', 'fc_kaveri', 'fc_godawari'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg>,
     section: '360',
   },
