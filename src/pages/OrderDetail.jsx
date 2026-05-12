@@ -259,12 +259,17 @@ export default function OrderDetail() {
     _coActiveLines.every(i => i.procurement_source === 'stock' || poCoveredItemIds.has(i.id))
   // hasAnyPending: under the new model, "pending" is anything not yet GI-posted (and not cancelled)
   const hasAnyPending    = (order?.order_items || []).some(i => (i.qty || 0) > ((i.posted_qty || 0) + (i.cancelled_qty || 0)))
+  // hasUndispatched: anything not yet reserved in a delivery batch (and not cancelled).
+  // Used to decide whether Next Batch makes sense — if dispatched_qty + cancelled_qty == qty,
+  // a full delivery has been created for every remaining unit, so no new batch is needed.
+  const hasUndispatched  = (order?.order_items || []).some(i => (i.qty || 0) > ((i.dispatched_qty || 0) + (i.cancelled_qty || 0)))
   const hasAnyCancelled  = (order?.order_items || []).some(i => (i.cancelled_qty || 0) > 0)
   const cancelledValue   = (order?.order_items || []).reduce((s, i) => s + ((i.cancelled_qty || 0) * (i.unit_price_after_disc || i.unit_price || 0)), 0)
   const netOrderValue    = (order?.order_items || []).reduce((s, i) => s + (((i.qty || 0) - (i.cancelled_qty || 0)) * (i.unit_price_after_disc || i.unit_price || 0)), 0)
   const showDispatchCols = hasAnyDispatched
-  // Next Batch button: ops can dispatch remaining items when order is in FC flow but items still pending
-  const canNextBatch     = isOps && !isCancelled && isInFCFlow && hasAnyPending
+  // Next Batch button: ops can dispatch remaining items when order is in FC flow AND there are
+  // still units not reserved in any batch yet. Full Delivery reserves everything → button hides.
+  const canNextBatch     = isOps && !isCancelled && isInFCFlow && hasUndispatched
 
   const actionBtnLabel = isPending ? 'Accept Order'
     : order?.status === 'inv_check'       ? 'Confirm Approval'
@@ -896,9 +901,6 @@ if (match) {
               return (
                 <div key={stage.key} className={'od-pipe-stage' + (isDone ? ' done' : '') + (isActive || isFinal ? ' active' : '')}>
                   {stage.label}
-                  {isFinal && hasAnyPending && (
-                    <span style={{fontSize:9,background:'rgba(255,255,255,0.2)',borderRadius:4,padding:'1px 5px',marginLeft:4,fontWeight:700}}>PARTIAL</span>
-                  )}
                 </div>
               )
             })}
@@ -976,7 +978,7 @@ if (match) {
                 <div>
                   <div className="od-pending-banner-label">Delivery In Progress{order.fulfilment_center ? ` — ${order.fulfilment_center}` : ''}</div>
                   <div>
-                    {hasAnyPending ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.posted_qty || 0) - (i.cancelled_qty || 0)), 0)} units pending next batch. ` : ''}
+                    {hasUndispatched ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, (i.qty || 0) - (i.dispatched_qty || 0) - (i.cancelled_qty || 0)), 0)} units pending next batch. ` : ''}
                     Currently: {{'delivery_created':'Delivery Created','goods_issued':'Goods Issued','pending_billing':'Pending Billing','credit_check':'Credit Check','goods_issue_posted':'Goods Issue Posted','invoice_generated':'Invoice Generated','delivery_ready':'Delivery Ready','eway_pending':'Ready for E-Way Bill','eway_generated':'E-Way Bill Generated'}[order.status] || order.status}
                   </div>
                 </div>
