@@ -133,12 +133,18 @@ export default function NewPurchaseOrder() {
     const uncovered = allItems.filter(oi => !coveredByPo.has(oi.id) && oi.procurement_source !== 'stock')
     const coveredCount = allItems.length - uncovered.length
 
-    // Fetch item types (CI / SI) from the items master for the pre-fill rows
+    // Fetch item types (CI / SI) from the items master for the pre-fill rows.
+    // Use parallel .eq() instead of .in() — some item codes contain quotes/parens
+    // that break PostgREST's .in() list parsing, silently dropping matches.
     const codes = [...new Set(uncovered.map(oi => oi.item_code).filter(Boolean))]
     let typeByCode = new Map()
     if (codes.length) {
-      const { data: itemMaster } = await sb.from('items').select('item_code,type').in('item_code', codes)
-      typeByCode = new Map((itemMaster || []).map(it => [it.item_code, it.type || '']))
+      const results = await Promise.all(
+        codes.map(code => sb.from('items').select('item_code,type').eq('item_code', code).maybeSingle())
+      )
+      for (const r of results) {
+        if (r.data?.item_code) typeByCode.set(r.data.item_code, r.data.type || '')
+      }
     }
 
     setCOOrder({ ...order, _coveredCount: coveredCount, _totalItems: allItems.length })
