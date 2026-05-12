@@ -349,15 +349,11 @@ export default function Accounts() {
         <div className="acc-page-sub">{tab === 'inventory' ? 'Drop the daily warehouse XLS — columns are detected automatically.' : 'Drop the Tally "Bills Receivable" export — party-wise outstanding + overdue are updated.'}</div>
 
         {/* Tab toggle */}
-        <div style={{ display:'inline-flex', gap:4, background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:10, padding:4, marginBottom:18 }}>
-          <button onClick={() => setTab('inventory')}
-            style={{ padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600,
-              background: tab === 'inventory' ? '#1a4dab' : 'transparent', color: tab === 'inventory' ? 'white' : '#475569', fontFamily:'var(--font)' }}>
+        <div className="acc-tabs" style={{ display:'inline-flex', gap:4, borderRadius:10, padding:4, marginBottom:18 }}>
+          <button onClick={() => setTab('inventory')} className={'acc-tab ' + (tab === 'inventory' ? 'on' : '')}>
             Inventory
           </button>
-          <button onClick={() => setTab('payments')}
-            style={{ padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600,
-              background: tab === 'payments' ? '#1a4dab' : 'transparent', color: tab === 'payments' ? 'white' : '#475569', fontFamily:'var(--font)' }}>
+          <button onClick={() => setTab('payments')} className={'acc-tab ' + (tab === 'payments' ? 'on' : '')}>
             Pending Payments
           </button>
         </div>

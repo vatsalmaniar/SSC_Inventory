@@ -8,6 +8,11 @@
 .acc-page-title { font-size: 22px; font-weight: 600; color: #0B1B30; margin-bottom: 4px; letter-spacing: -0.02em; }
 .acc-page-sub   { font-size: 13px; color: #5B6878; margin-bottom: 16px; }
 
+/* ── Tabs ── */
+.acc-tabs { background: #f1f5f9; border: 1px solid #e2e8f0; }
+.acc-tab { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; background: transparent; color: #475569; font-family: var(--font); }
+.acc-tab.on { background: #1a4dab; color: white; }
+
 /* ── Warehouse status ── */
 .acc-status-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
 .acc-status-card { background: white; border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }

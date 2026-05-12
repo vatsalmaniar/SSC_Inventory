@@ -559,6 +559,8 @@ html[data-theme="dark"] .no-card,
 html[data-theme="dark"] .acc-status-card,
 html[data-theme="dark"] .acc-detect-card,
 html[data-theme="dark"] .acc-preview-card,
+html[data-theme="dark"] .acc-how-item,
+html[data-theme="dark"] .acc-upload-zone,
 html[data-theme="dark"] .hd-stat,
 html[data-theme="dark"] .hd-app-card,
 html[data-theme="dark"] .hd-kpi-tile:not(.hd-kpi-hero) {
@@ -566,6 +568,29 @@ html[data-theme="dark"] .hd-kpi-tile:not(.hd-kpi-hero) {
   border-color: #3C3C3C !important;
   color: #D4D4D4;
 }
+
+/* Account page — specific dark tweaks for elements that ride on light-blue accents */
+html[data-theme="dark"] .acc-how-num { background: rgba(56,114,224,0.22) !important; color: #93C5FD !important; }
+html[data-theme="dark"] .acc-how-label { color: #94A3B8 !important; }
+html[data-theme="dark"] .acc-how-label strong { color: #D4D4D4 !important; }
+html[data-theme="dark"] .acc-upload-zone { border-color: #3C3C3C !important; }
+html[data-theme="dark"] .acc-upload-zone:hover,
+html[data-theme="dark"] .acc-upload-zone.drag-over { border-color: #3872E0 !important; background: rgba(56,114,224,0.12) !important; }
+html[data-theme="dark"] .acc-upload-zone h3 { color: #D4D4D4 !important; }
+html[data-theme="dark"] .acc-upload-zone p { color: #94A3B8 !important; }
+html[data-theme="dark"] .acc-upload-zone .acc-hint { color: #8A8A8A !important; }
+html[data-theme="dark"] .acc-upload-icon { background: rgba(56,114,224,0.16) !important; color: #93C5FD !important; }
+html[data-theme="dark"] .acc-detect-header { background: rgba(56,114,224,0.18) !important; border-color: #3C3C3C !important; }
+html[data-theme="dark"] .acc-detect-header svg,
+html[data-theme="dark"] .acc-detect-header-text h3 { color: #93C5FD !important; }
+html[data-theme="dark"] .acc-detect-header-text p { color: #BFDBFE !important; }
+html[data-theme="dark"] .acc-detect-field { border-color: #3C3C3C !important; }
+html[data-theme="dark"] .acc-detect-value { color: #D4D4D4 !important; }
+html[data-theme="dark"] .acc-status-name { color: #D4D4D4 !important; }
+html[data-theme="dark"] .acc-status-meta { color: #94A3B8 !important; }
+html[data-theme="dark"] .acc-tabs { background: #252526 !important; border-color: #3C3C3C !important; }
+html[data-theme="dark"] .acc-tab { color: #94A3B8 !important; }
+html[data-theme="dark"] .acc-tab.on { background: #3872E0 !important; color: white !important; }
 
 /* Subtle / striped backgrounds */
 html[data-theme="dark"] .orders-app .ol-row.ol-head,
