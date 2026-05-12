@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { fmt } from '../lib/fmt'
+import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -112,6 +114,130 @@ export default function CustomerMaster() {
   const hasFilters = filterNew || filterTerms || filterRep || filterType
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
+  const [downloading, setDownloading] = useState(false)
+  async function downloadSummary() {
+    if (downloading) return
+    setDownloading(true)
+    try {
+      // Fetch ALL matching customers (paginated so we don't blow the 1000-row default cap)
+      let query = sb.from('customers')
+        .select('customer_id,customer_name,account_owner,gst,credit_terms,customer_type,billing_address,shipping_address,created_at')
+        .eq('approval_status', 'approved').order('customer_name')
+      if (search.trim()) query = query.or(`customer_name.ilike.%${search.trim()}%,gst.ilike.%${search.trim()}%,account_owner.ilike.%${search.trim()}%`)
+      if (filterNew) query = query.gte('created_at', NEW_CUSTOMER_FLOOR)
+      if (filterTerms) query = query.eq('credit_terms', filterTerms)
+      if (filterRep) query = query.ilike('account_owner', filterRep)
+      if (filterType) query = query.eq('customer_type', filterType)
+
+      const all = []
+      const PAGE = 1000
+      let from = 0
+      while (true) {
+        const { data, error } = await query.range(from, from + PAGE - 1)
+        if (error) { toast('Export failed: ' + error.message); setDownloading(false); return }
+        if (!data?.length) break
+        all.push(...data)
+        if (data.length < PAGE) break
+        from += PAGE
+      }
+      if (!all.length) { toast('No customers to export'); setDownloading(false); return }
+
+      let ExcelJS
+      try { ExcelJS = (await import('exceljs')).default } catch (e) { toast('Failed to load Excel library: ' + e.message); setDownloading(false); return }
+
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'SSC ERP'; wb.created = new Date()
+      const ws = wb.addWorksheet('Customers', { views: [{ state: 'frozen', ySplit: 1 }] })
+      const cols = [
+        { header: 'Customer ID',      key: 'customer_id',      width: 14 },
+        { header: 'Customer Name',    key: 'customer_name',    width: 36 },
+        { header: 'Type',             key: 'customer_type',    width: 14 },
+        { header: 'Account Owner',    key: 'account_owner',    width: 20 },
+        { header: 'GST',              key: 'gst',              width: 18 },
+        { header: 'Credit Terms',     key: 'credit_terms',     width: 16 },
+        { header: 'Billing Address',  key: 'billing_address',  width: 50 },
+        { header: 'Shipping Address', key: 'shipping_address', width: 50 },
+        { header: 'Created On',       key: 'created_at',       width: 13 },
+      ]
+      ws.columns = cols
+
+      const termsStyle = (t) => CREDIT_COLORS[t] ? { bg: 'FFF1F5F9', fg: CREDIT_COLORS[t].replace('#', 'FF') } : null
+      const typeStyle = (t) => {
+        switch (t) {
+          case 'OEM':           return { bg: 'FFDBEAFE', fg: 'FF1E40AF' }
+          case 'Panel Builder': return { bg: 'FFE0E7FF', fg: 'FF3730A3' }
+          case 'End User':      return { bg: 'FFDCFCE7', fg: 'FF166534' }
+          case 'Trader':        return { bg: 'FFFEF3C7', fg: 'FF92400E' }
+          default:              return null
+        }
+      }
+      all.forEach(c => {
+        const row = ws.addRow({
+          customer_id:      c.customer_id || '',
+          customer_name:    c.customer_name || '',
+          customer_type:    c.customer_type || '',
+          account_owner:    c.account_owner || '',
+          gst:              c.gst || '',
+          credit_terms:     c.credit_terms || '',
+          billing_address:  c.billing_address || '',
+          shipping_address: c.shipping_address || '',
+          created_at:       c.created_at ? fmt(c.created_at) : '',
+        })
+        const idCell = row.getCell('customer_id')
+        idCell.font = { name: 'Geist Mono', bold: true, color: { argb: 'FF1E54B7' } }
+        const ts = typeStyle(c.customer_type)
+        if (ts) {
+          const tc = row.getCell('customer_type')
+          tc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ts.bg } }
+          tc.font = { bold: true, color: { argb: ts.fg } }
+          tc.alignment = { horizontal: 'center', vertical: 'middle' }
+        }
+        const cs = termsStyle(c.credit_terms)
+        if (cs) {
+          const ctc = row.getCell('credit_terms')
+          ctc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cs.bg } }
+          ctc.font = { bold: true, color: { argb: cs.fg } }
+          ctc.alignment = { horizontal: 'center', vertical: 'middle' }
+        }
+        // Wrap long address cells
+        row.getCell('billing_address').alignment  = { wrapText: true, vertical: 'top' }
+        row.getCell('shipping_address').alignment = { wrapText: true, vertical: 'top' }
+      })
+
+      const header = ws.getRow(1)
+      header.height = 24
+      header.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A2540' } }
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+        cell.alignment = { vertical: 'middle', horizontal: 'left' }
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FF143055' } } }
+      })
+      const lastRow = ws.rowCount
+      for (let r = 2; r <= lastRow; r++) {
+        const row = ws.getRow(r)
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } }
+        })
+        if (r % 2 === 0) {
+          row.eachCell({ includeEmpty: true }, cell => {
+            const isTinted = cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor?.argb !== 'FFFFFFFF'
+            if (!isTinted) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
+          })
+        }
+      }
+      ws.autoFilter = { from: { row:1, column:1 }, to: { row:1, column: cols.length } }
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const fname = `SSC_Customers_${hasFilters ? 'Filtered_' : ''}${new Date().toISOString().slice(0,10)}.xlsx`
+      const a = document.createElement('a'); a.href = url; a.download = fname
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    } catch (e) {
+      toast('Export failed: ' + (e.message || e))
+    }
+    setDownloading(false)
+  }
+
   return (
     <Layout pageTitle="Customer 360" pageKey="customer360">
       <div className="orders-app">
@@ -137,6 +263,12 @@ export default function CustomerMaster() {
                 Pending Approval
               </button>
             )}
+            <div className="o-dl-group">
+              <button className="o-dl-btn" onClick={downloadSummary} disabled={downloading} title="Summary Excel">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                {downloading ? 'Exporting…' : 'Summary'}
+              </button>
+            </div>
             <button className="btn-primary" onClick={() => navigate('/customers/new')}>
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
               New Customer
