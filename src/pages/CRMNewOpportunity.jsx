@@ -65,7 +65,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
     }
     const [principalsRes, repsRes] = await Promise.all([
       sb.from('crm_principals').select('*').order('name'),
-      sb.from('profiles').select('id,name').in('role',['sales','admin']).order('name'),
+      sb.from('profiles').select('id,name').in('role',['sales','admin','management']).order('name'),
     ])
     setCompanies(allCustomers)
     setPrincipals(principalsRes.data || [])

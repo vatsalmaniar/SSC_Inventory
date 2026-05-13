@@ -40,7 +40,7 @@ export default function CRMLeads() {
     if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
     const [leadsRes, repsRes, principalsRes] = await Promise.all([
       sb.from('crm_leads').select('*, crm_companies(company_name), crm_principals(name), profiles(name)').order('created_at', { ascending: false }),
-      sb.from('profiles').select('id,name').in('role',['sales','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin','management']),
       sb.from('crm_principals').select('*').order('name'),
     ])
     setLeads(leadsRes.data || [])

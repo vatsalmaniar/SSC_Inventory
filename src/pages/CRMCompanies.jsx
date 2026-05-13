@@ -41,7 +41,7 @@ export default function CRMCompanies() {
     setUser({ name: profile?.name || '', role: profile?.role || 'sales', id: session.user.id })
     const [compRes, repsRes] = await Promise.all([
       sb.from('crm_companies').select('*, profiles(name)').order('company_name'),
-      sb.from('profiles').select('id,name').in('role',['sales','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin','management']),
     ])
     setCompanies(compRes.data || [])
     setReps(repsRes.data || [])

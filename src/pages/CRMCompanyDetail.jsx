@@ -45,7 +45,7 @@ export default function CRMCompanyDetail() {
       sb.from('crm_companies').select('*, profiles(name)').eq('id', id).single(),
       sb.from('crm_contacts').select('*').eq('company_id', id).order('name'),
       sb.from('crm_opportunities').select('*, crm_principals(name)').eq('company_id', id).order('created_at', { ascending: false }),
-      sb.from('profiles').select('id,name').in('role',['sales','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin','management']),
     ])
     setCompany(compRes.data)
     setEditData(compRes.data || {})

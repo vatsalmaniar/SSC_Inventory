@@ -110,7 +110,7 @@ export default function Orders() {
     if (role === 'sales') q = q.eq('created_by', uid)
     const [ordersRes, repsRes] = await Promise.all([
       q,
-      sb.from('profiles').select('id,name,role').in('role',['sales','admin']),
+      sb.from('profiles').select('id,name,role').in('role',['sales','admin','management']),
     ])
     setOrders(ordersRes.data || [])
     setReps(repsRes.data || [])

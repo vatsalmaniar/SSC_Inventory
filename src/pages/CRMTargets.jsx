@@ -61,7 +61,7 @@ export default function CRMTargets() {
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
     if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
-    const { data: repsData } = await sb.from('profiles').select('id,name').in('role',['sales','admin'])
+    const { data: repsData } = await sb.from('profiles').select('id,name').in('role',['sales','admin','management'])
     setReps(repsData || [])
   }
 

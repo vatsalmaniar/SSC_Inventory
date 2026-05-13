@@ -86,7 +86,7 @@ export default function CRMDashboard() {
       sb.from('crm_tasks')
         .select('id,task_type,notes,due_date,completed,opportunity_id,lead_id,assigned_rep_id, crm_opportunities(crm_companies(company_name)), crm_leads(freetext_company,crm_companies(company_name))')
         .eq('completed', false).order('due_date', { ascending: true }),
-      sb.from('profiles').select('id,name,role').in('role',['sales','admin']),
+      sb.from('profiles').select('id,name,role').in('role',['sales','admin','management']),
       sb.from('crm_activities').select('id,created_at,rep_id').gte('created_at', sinceISO).order('created_at', { ascending: false }),
     ])
     setOpens(openRes.data || [])

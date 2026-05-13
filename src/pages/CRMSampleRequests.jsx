@@ -31,7 +31,7 @@ export default function CRMSampleRequests() {
     if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
     const [srsRes, repsRes] = await Promise.all([
       sb.from('crm_sample_requests').select('*, crm_companies(company_name), crm_principals(name), crm_opportunities(id), crm_contacts(name)').order('created_at', { ascending: false }),
-      sb.from('profiles').select('id,name').in('role',['sales','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin','management']),
     ])
     setSrs(srsRes.data || [])
     setReps(repsRes.data || [])

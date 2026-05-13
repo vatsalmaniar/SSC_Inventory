@@ -199,7 +199,7 @@ export default function CRMOpportunityDetail() {
       sb.from('crm_tasks').select('*, profiles(name)').eq('opportunity_id', id).order('due_date', { ascending: true }),
       sb.from('crm_quote_items').select('*').eq('opportunity_id', id).order('created_at', { ascending: true }),
       sb.from('crm_principals').select('*').order('name'),
-      sb.from('profiles').select('id,name').in('role',['sales','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin','management']),
       sb.from('crm_quotes').select('*, profiles(name)').eq('opportunity_id', id).order('revision', { ascending: false }),
     ])
     const oppData = oppRes.data
@@ -527,7 +527,7 @@ export default function CRMOpportunityDetail() {
         ? `Opportunity Won — ${oppName}` + (stageReason ? `. ${stageReason}` : '')
         : `Opportunity Lost — ${oppName}` + (stageReason ? `. ${stageReason}` : '')
       // Notify sales + admin only (ops/accounts/fc excluded from CRM notifications)
-      const { data: allProfiles } = await sb.from('profiles').select('id,name').in('role', ['sales','admin'])
+      const { data: allProfiles } = await sb.from('profiles').select('id,name').in('role', ['sales','admin','management'])
       if (allProfiles?.length) {
         const notifRows = allProfiles.filter(p => p.id !== user.id).map(p => ({
           user_id: p.id, user_name: p.name, message: msg,

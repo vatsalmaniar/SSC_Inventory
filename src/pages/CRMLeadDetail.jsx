@@ -102,7 +102,7 @@ export default function CRMLeadDetail() {
       sb.from('crm_tasks').select('*, profiles(name)').eq('lead_id', id).order('due_date', { ascending: true }),
       sb.from('crm_quote_items').select('*').eq('lead_id', id).order('created_at', { ascending: true }),
       sb.from('crm_principals').select('*').order('name'),
-      sb.from('profiles').select('id,name').in('role',['sales','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin','management']),
     ])
     setLead(leadRes.data)
     setEditData(leadRes.data || {})

@@ -86,7 +86,7 @@ export default function CRMFieldVisits() {
       sb.from('crm_field_visits')
         .select('*, profiles(name), crm_principals(name), crm_opportunities(id,opportunity_name,product_notes,stage)')
         .order('visit_date', { ascending: false }),
-      sb.from('profiles').select('id,name').in('role',['sales','admin']),
+      sb.from('profiles').select('id,name').in('role',['sales','admin','management']),
       sb.from('crm_principals').select('*').order('name'),
     ])
     setVisits(visitsRes.data || [])
