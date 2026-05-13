@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -14,7 +14,7 @@ const FC_ADDRESSES = {
 }
 
 function emptyItem() {
-  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', from_stock: false }
+  return { item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', from_stock: false }
 }
 
 export default function NewPurchaseOrder() {
@@ -114,7 +114,7 @@ export default function NewPurchaseOrder() {
 
   async function loadCOOrder(coId) {
     const { data: order } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(id,item_code,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty,procurement_source)')
+      .select('id,order_number,customer_name,order_items(id,item_code,description,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty,procurement_source)')
       .eq('id', coId).single()
     if (!order) return
 
@@ -161,6 +161,7 @@ export default function NewPurchaseOrder() {
     const prefilled = uncovered.map(oi => ({
       order_item_id: oi.id,
       item_code: oi.item_code || '',
+      description: oi.description || '',
       qty: String(oi.qty || ''),
       lp_unit_price: String(oi.lp_unit_price || ''),
       discount_pct: String(oi.discount_pct || '0'),
@@ -373,6 +374,7 @@ export default function NewPurchaseOrder() {
         po_id:            po.id,
         sr_no:            idx + 1,
         item_code:        item.item_code.trim(),
+        description:      item.description?.trim() || null,
         qty:              parseFloat(item.qty),
         lp_unit_price:    parseFloat(item.lp_unit_price) || null,
         discount_pct:     parseFloat(item.discount_pct) || 0,
@@ -670,7 +672,8 @@ export default function NewPurchaseOrder() {
                   const stocked = !!item.from_stock
                   const rowStyle = stocked ? { opacity: 0.55, background: 'var(--gray-50)' } : {}
                   return (
-                  <tr key={idx} className={item.item_code ? 'row-filled' : ''} style={rowStyle}>
+                  <Fragment key={idx}>
+                  <tr className={item.item_code ? 'row-filled' : ''} style={rowStyle}>
                     <td className="col-sr">{idx + 1}</td>
                     <td className="col-code">
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -741,6 +744,21 @@ export default function NewPurchaseOrder() {
                       )}
                     </td>
                   </tr>
+                  {item.item_code && (
+                    <tr style={{ ...rowStyle, borderTop: 'none' }}>
+                      <td></td>
+                      <td colSpan={isCO ? 9 : 8} style={{ paddingTop: 2, paddingBottom: 8 }}>
+                        <input
+                          value={item.description}
+                          onChange={e => updateItem(idx, 'description', e.target.value)}
+                          placeholder="Description (optional)"
+                          disabled={stocked}
+                          style={{ width: '100%', fontSize: 11, color: 'var(--gray-500)', fontStyle: item.description ? 'normal' : 'italic' }}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                   )
                 })}
               </tbody>
