@@ -615,10 +615,23 @@ export default function CRMOpportunityDetail() {
 
   async function addTask() {
     setAddingTask(true)
+    const assigneeId = taskAssignee || user.id
     await sb.from('crm_tasks').insert({
       opportunity_id: id, task_type: taskType, due_date: taskDueDate || null,
-      notes: taskNotes.trim() || null, assigned_rep_id: taskAssignee || user.id, completed: false,
+      notes: taskNotes.trim() || null, assigned_rep_id: assigneeId, completed: false,
     })
+    // Notify the assignee (skip self-assignments)
+    if (assigneeId && assigneeId !== user.id) {
+      const assignee = reps.find(r => r.id === assigneeId)
+      if (assignee) {
+        await sb.from('notifications').insert({
+          user_name: assignee.name, user_id: assignee.id,
+          message: `${user.name} assigned you a ${taskType}${taskDueDate ? ' (due ' + taskDueDate + ')' : ''}${taskNotes.trim() ? ': ' + taskNotes.trim() : ''}`,
+          order_id: null, order_number: opp?.opportunity_name || opp?.product_notes || 'Opportunity',
+          from_name: user.name, email_type: 'assignment',
+        })
+      }
+    }
     setTaskType('Call'); setTaskDueDate(''); setTaskNotes('')
     const { data: t } = await sb.from('crm_tasks').select('*, profiles(name)').eq('opportunity_id', id).order('due_date', { ascending: true })
     setTasks(t || [])
