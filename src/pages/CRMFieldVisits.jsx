@@ -252,6 +252,38 @@ export default function CRMFieldVisits() {
     setShowModal(true)
   }
 
+  const [retryingGeo, setRetryingGeo] = useState(false)
+  async function retryGeocodeForVisit(v) {
+    if (retryingGeo) return
+    setRetryingGeo(true)
+    const office = SSC_OFFICES[v.origin_type]
+    const origin_lat = office ? office.lat : v.origin_lat
+    const origin_lng = office ? office.lng : v.origin_lng
+    let dest_lat = null, dest_lng = null
+    const destPin = (v.destination_pincode || '').trim()
+    const destAddr = (v.destination_address || '').trim()
+    if (destPin && /^\d{6}$/.test(destPin)) {
+      const dg = await geocodeAddress(`${destPin}, India`)
+      if (dg) { dest_lat = dg.lat; dest_lng = dg.lng }
+    }
+    if (dest_lat == null && destAddr) {
+      const dg = await geocodeAddress(destAddr)
+      if (dg) { dest_lat = dg.lat; dest_lng = dg.lng }
+    }
+    if (dest_lat == null) {
+      toast('Geocoding still failed — check pincode / address and try again', 'error')
+      setRetryingGeo(false); return
+    }
+    const distance_km = (origin_lat != null && dest_lat != null) ? haversineKm(origin_lat, origin_lng, dest_lat, dest_lng) : null
+    const updates = { origin_lat, origin_lng, destination_lat: dest_lat, destination_lng: dest_lng, distance_km }
+    const { error } = await sb.from('crm_field_visits').update(updates).eq('id', v.id)
+    if (error) { toast('Update failed: ' + error.message, 'error'); setRetryingGeo(false); return }
+    setVisits(prev => prev.map(x => x.id === v.id ? { ...x, ...updates } : x))
+    setViewVisit(prev => prev && prev.id === v.id ? { ...prev, ...updates } : prev)
+    toast('Map updated · ' + distance_km + ' km', 'success')
+    setRetryingGeo(false)
+  }
+
   async function deleteVisit(v) {
     if (!isManager) { toast('Only admin/management can delete visits'); return }
     if (!window.confirm(`Delete this visit?\n\n${v.company_freetext || 'Visit'} · ${v.visit_date}\n\nThis cannot be undone.`)) return
@@ -445,7 +477,7 @@ export default function CRMFieldVisits() {
               </div>
             </div>
             <div className="od-drawer-body" style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              {viewVisit.distance_km != null && viewVisit.origin_lat && viewVisit.destination_lat && (
+              {viewVisit.distance_km != null && viewVisit.origin_lat && viewVisit.destination_lat ? (
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                   <div className="visit-distance-tile" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:8 }}>
                     <div>
@@ -461,7 +493,21 @@ export default function CRMFieldVisits() {
                     destination={{ lat: viewVisit.destination_lat, lng: viewVisit.destination_lng }}
                   />
                 </div>
-              )}
+              ) : (viewVisit.destination_pincode || viewVisit.destination_address) ? (
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px', background:'rgba(245,158,11,0.10)', border:'1px solid rgba(245,158,11,0.35)', borderRadius:8, gap:10 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
+                    <svg fill="none" stroke="#b45309" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:600, color:'#b45309' }}>Map not generated yet</div>
+                      <div style={{ fontSize:11, color:'var(--c-muted)', marginTop:1 }}>Geocoding failed at save time — likely Nominatim was rate-limited. You can retry now.</div>
+                    </div>
+                  </div>
+                  <button onClick={() => retryGeocodeForVisit(viewVisit)} disabled={retryingGeo}
+                    style={{ flexShrink:0, background:'#b45309', color:'white', border:'none', borderRadius:6, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>
+                    {retryingGeo ? 'Retrying…' : 'Retry'}
+                  </button>
+                </div>
+              ) : null}
               {viewVisit.opportunity_id && viewVisit.crm_opportunities && (
                 <div className="linked-opp-tile" onClick={() => navigate('/crm/opportunities/' + viewVisit.opportunity_id)}
                   style={{ padding:'10px 12px', borderRadius:8, border:'1px solid #c2d9f5', background:'#eff6ff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>

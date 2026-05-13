@@ -383,6 +383,12 @@ SSC Control Pvt. Ltd.`
     // Gather attachments (respect user-removed items)
     const attachments = []
 
+    // Guard: don't render a PDF before PO items have loaded
+    if (!excludePoPdf && (!items || !items.length)) {
+      toast('PO line items not loaded yet — please wait a moment and try again.', 'error')
+      return
+    }
+
     setSendingEmail(true)
     try {
       // Generate PO PDF in-browser from the existing HTML template
@@ -394,7 +400,22 @@ SSC Control Pvt. Ltd.`
         wrapper.style.cssText = 'position:fixed;left:-99999px;top:0;width:860px'
         wrapper.innerHTML = html
         document.body.appendChild(wrapper)
-        await new Promise(r => setTimeout(r, 350)) // let fonts/CSS settle
+
+        // Wait for every <img> inside the wrapper to load (or error) before rendering.
+        // Without this, the logo can be missing from the captured canvas → effectively blank PDF.
+        const imgs = Array.from(wrapper.querySelectorAll('img'))
+        await Promise.all(imgs.map(img => new Promise(resolve => {
+          if (img.complete && img.naturalHeight > 0) return resolve()
+          let done = false
+          const finish = () => { if (!done) { done = true; resolve() } }
+          img.addEventListener('load', finish, { once: true })
+          img.addEventListener('error', finish, { once: true })
+          setTimeout(finish, 4000) // hard cap per image so a broken URL can't hang the email
+        })))
+        // Let fonts/CSS settle after images load
+        if (document.fonts && document.fonts.ready) { try { await document.fonts.ready } catch (_) {} }
+        await new Promise(r => setTimeout(r, 600))
+
         const blob = await html2pdf().set({
           margin:    [8, 10, 10, 10],
           filename:  `${po.po_number.split('/')[1] || po.po_number}.pdf`,
@@ -404,6 +425,14 @@ SSC Control Pvt. Ltd.`
           pagebreak: { mode: ['css', 'legacy'] }, // default — splits long POs cleanly across pages
         }).from(wrapper).outputPdf('blob')
         document.body.removeChild(wrapper)
+
+        // Sanity check — a real PO PDF is comfortably > 20 KB. Anything tiny means render failed.
+        if (!blob || blob.size < 8 * 1024) {
+          toast('PDF rendered blank — email not sent. Please refresh the page and try again.', 'error')
+          setSendingEmail(false)
+          return
+        }
+
         const buf = await blob.arrayBuffer()
         let bin = ''; const bytes = new Uint8Array(buf)
         for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
