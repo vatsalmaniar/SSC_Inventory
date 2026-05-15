@@ -426,9 +426,13 @@ SSC Control Pvt. Ltd.`
         }).from(wrapper).outputPdf('blob')
         document.body.removeChild(wrapper)
 
-        // Sanity check — a real PO PDF is comfortably > 20 KB. Anything tiny means render failed.
-        if (!blob || blob.size < 8 * 1024) {
-          toast('PDF rendered blank — email not sent. Please refresh the page and try again.', 'error')
+        // Sanity check — a real PO PDF is comfortably > 10 KB. Anything truly tiny means
+        // html2pdf failed (e.g. an asset blocked by CSP, an unloaded image). Log the size so
+        // we have a number to debug with if it ever rejects again.
+        const sizeKB = blob ? Math.round(blob.size / 1024) : 0
+        console.log('[PO Email] Generated PDF size:', sizeKB + ' KB')
+        if (!blob || blob.size < 2 * 1024) {
+          toast(`PDF rendered blank (${sizeKB} KB) — email not sent. Please refresh and try again.`, 'error')
           setSendingEmail(false)
           return
         }
