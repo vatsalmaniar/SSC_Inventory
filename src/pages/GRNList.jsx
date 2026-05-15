@@ -116,7 +116,7 @@ export default function GRNList() {
 
     // Fetch all grn_items for filtered GRNs in one query
     const grnIds = filtered.map(g => g.id)
-    const { data: allItems } = await sb.from('grn_items').select('*').in('grn_id', grnIds).order('sr_no', { ascending: true })
+    const { data: allItems } = await sb.from('grn_items').select('*').in('grn_id', grnIds).order('id', { ascending: true })
     const itemsByGrn = {}
     ;(allItems || []).forEach(it => { (itemsByGrn[it.grn_id] = itemsByGrn[it.grn_id] || []).push(it) })
 

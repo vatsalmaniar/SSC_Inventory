@@ -48,7 +48,7 @@ async function openGrnHtmlForId(grnId) {
   w.document.write('<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#5b6878">Loading GRN…</body></html>')
   const [grnRes, itemsRes] = await Promise.all([
     sb.from('grn').select('*').eq('id', grnId).single(),
-    sb.from('grn_items').select('*').eq('grn_id', grnId).order('sr_no'),
+    sb.from('grn_items').select('*').eq('grn_id', grnId).order('id'),
   ])
   const grn = grnRes.data
   if (!grn) {
