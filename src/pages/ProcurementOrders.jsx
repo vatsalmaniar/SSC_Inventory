@@ -60,17 +60,36 @@ export default function ProcurementOrders() {
 
     if (coOrders.length) {
       const coIds = coOrders.map(o => o.id)
-      const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id,status').in('order_id', coIds)
+      // Chunk .in() lookups — once we cross ~150 UUIDs the URL exceeds PostgREST's
+      // 8 KB cap and the query gets silently truncated (= COs falsely shown as
+      // uncovered because their POs fall outside the truncated set).
+      async function chunkedFetch(builderFn, ids, chunkSize = 150) {
+        const all = []
+        for (let i = 0; i < ids.length; i += chunkSize) {
+          const slice = ids.slice(i, i + chunkSize)
+          const { data, error } = await builderFn(slice)
+          if (error) { console.error('chunkedFetch error:', error); continue }
+          if (data?.length) all.push(...data)
+        }
+        return all
+      }
+      const linkedPos = await chunkedFetch(
+        (slice) => sb.from('purchase_orders').select('id,order_id,status').in('order_id', slice),
+        coIds
+      )
       let coveredSet = new Set()
       const posByCo = {}
-      if (linkedPos?.length) {
+      if (linkedPos.length) {
         for (const p of linkedPos) {
           if (!posByCo[p.order_id]) posByCo[p.order_id] = []
           posByCo[p.order_id].push({ id: p.id, status: p.status })
         }
         const poIds = linkedPos.map(p => p.id)
-        const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
-        coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
+        const poItems = await chunkedFetch(
+          (slice) => sb.from('po_items').select('order_item_id').in('po_id', slice).not('order_item_id', 'is', null),
+          poIds
+        )
+        coveredSet = new Set(poItems.map(pi => pi.order_item_id))
       }
       coOrders = coOrders.map(o => {
         // Only count active (non-cancelled / non-short-closed) lines for coverage

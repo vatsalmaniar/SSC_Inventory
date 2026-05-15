@@ -62,12 +62,27 @@ export default function ProcurementDashboard() {
     let coList = coData || []
     if (coList.length) {
       const coIds = coList.map(o => o.id)
-      const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id').in('order_id', coIds)
+      // Chunk .in() so the URL doesn't exceed PostgREST's ~8 KB cap and get truncated
+      async function chunkedFetch(builderFn, ids, chunkSize = 150) {
+        const all = []
+        for (let i = 0; i < ids.length; i += chunkSize) {
+          const { data } = await builderFn(ids.slice(i, i + chunkSize))
+          if (data?.length) all.push(...data)
+        }
+        return all
+      }
+      const linkedPos = await chunkedFetch(
+        (slice) => sb.from('purchase_orders').select('id,order_id').in('order_id', slice),
+        coIds
+      )
       let coveredSet = new Set()
-      if (linkedPos?.length) {
+      if (linkedPos.length) {
         const poIds = linkedPos.map(p => p.id)
-        const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
-        coveredSet = new Set((poItems || []).map(pi => pi.order_item_id))
+        const poItems = await chunkedFetch(
+          (slice) => sb.from('po_items').select('order_item_id').in('po_id', slice).not('order_item_id', 'is', null),
+          poIds
+        )
+        coveredSet = new Set(poItems.map(pi => pi.order_item_id))
       }
       coList = coList.map(o => {
         // Only count active lines; covered = PO line OR procurement_source='stock'
