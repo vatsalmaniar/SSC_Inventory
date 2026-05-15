@@ -688,6 +688,8 @@ SSC Control Pvt. Ltd.`
     <div class="meta-section-label">Vendor</div>
     <div class="meta-name">${esc(po.vendor_name) || '—'}</div>
     ${vendorCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Vendor Code: <strong style="font-family:'Geist Mono',monospace">${esc(vendorCode)}</strong></div>` : ''}
+    ${vendorDetail?.billing_address ? `<div style="font-size:11px;color:#475569;margin-top:6px;line-height:1.6">${esc(vendorDetail.billing_address).replace(/\n/g,'<br/>')}</div>` : ''}
+    ${vendorDetail?.gst ? `<div style="font-size:11px;color:#475569;margin-top:4px">GSTIN: <strong style="font-family:'Geist Mono',monospace">${esc(vendorDetail.gst)}</strong></div>` : ''}
   </div>
   <div>
     <div class="meta-section-label">Reference</div>
