@@ -274,18 +274,22 @@ async function handleNotification(sb: any, r: any) {
     })
     const data = await res.json()
 
-    await sb.from('email_log').insert({
-      notification_id: r.id, recipient_email: email, email_type: r.email_type,
-      resend_id: data.id || null, status: res.ok ? 'sent' : 'failed',
-      error_message: res.ok ? null : JSON.stringify(data),
-    }).catch(() => {})
+    try {
+      await sb.from('email_log').insert({
+        notification_id: r.id, recipient_email: email, email_type: r.email_type,
+        resend_id: data.id || null, status: res.ok ? 'sent' : 'failed',
+        error_message: res.ok ? null : JSON.stringify(data),
+      })
+    } catch (_) { /* log failure doesn't affect email delivery */ }
 
     return new Response(res.ok ? 'sent' : 'failed')
   } catch (e) {
-    await sb.from('email_log').insert({
-      notification_id: r.id, recipient_email: email, email_type: r.email_type,
-      status: 'failed', error_message: (e as Error).message,
-    }).catch(() => {})
+    try {
+      await sb.from('email_log').insert({
+        notification_id: r.id, recipient_email: email, email_type: r.email_type,
+        status: 'failed', error_message: (e as Error).message,
+      })
+    } catch (_) {}
     return new Response('email_failed_gracefully')
   }
 }
