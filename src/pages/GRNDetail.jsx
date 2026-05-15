@@ -5,6 +5,7 @@ import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
+import { buildGrnHtml as buildGrnHtmlShared } from '../lib/grnHtml'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -291,7 +292,7 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
   }
 
   function viewGrnDoc() {
-    const html = buildGrnHtml()
+    const html = buildGrnHtmlShared(grn, grnItems)
     const w = window.open('', '_blank')
     if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
     w.document.write(html)

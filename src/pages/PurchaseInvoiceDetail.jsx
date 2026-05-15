@@ -5,6 +5,7 @@ import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime } from '../lib/fmt'
 import { toast } from '../lib/toast'
+import { buildGrnHtml } from '../lib/grnHtml'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -36,6 +37,26 @@ function OwnerChip({ name }) {
 function fmtINR(val) {
   if (!val) return '—'
   return '₹' + Number(val).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+}
+
+// Open the GRN as a print-ready HTML document in a new tab — gives accounts a
+// quick way to verify received qty + invoice ref while doing the 3-way match.
+async function openGrnHtmlForId(grnId) {
+  if (!grnId) return
+  const w = window.open('', '_blank')
+  if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
+  w.document.write('<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#5b6878">Loading GRN…</body></html>')
+  const [grnRes, itemsRes] = await Promise.all([
+    sb.from('grn').select('*').eq('id', grnId).single(),
+    sb.from('grn_items').select('*').eq('grn_id', grnId).order('sr_no'),
+  ])
+  const grn = grnRes.data
+  if (!grn) {
+    const msg = grnRes.error ? `Could not load GRN: ${grnRes.error.message}` : 'GRN not found.'
+    w.document.open(); w.document.write(`<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#9b1c1c">${msg}</body></html>`); w.document.close(); return
+  }
+  const html = buildGrnHtml(grn, itemsRes.data || [])
+  w.document.open(); w.document.write(html); w.document.close()
 }
 
 // Open the PO as a print-ready HTML document in a new tab. Same approach as
@@ -528,6 +549,10 @@ export default function PurchaseInvoiceDetail() {
                         <div>
                           <div onClick={() => navigate('/fc/grn/' + grn.id)} style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#2563eb',cursor:'pointer'}}>{grn.grn_number}</div>
                           <div style={{fontSize:11,color:'var(--gray-500)',marginTop:2}}>{grnItems.length} items received</div>
+                          <a onClick={() => openGrnHtmlForId(grn.id)} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:'#2563eb',cursor:'pointer',marginTop:4,textDecoration:'none'}}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:11,height:11}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M21 14v7H3V3h7"/></svg>
+                            View GRN
+                          </a>
                         </div>
                       ) : (
                         <div style={{fontSize:12,color:'var(--gray-400)'}}>No GRN linked</div>
@@ -749,7 +774,10 @@ export default function PurchaseInvoiceDetail() {
                   {grn && (
                     <div style={{fontSize:12}}>
                       <div style={{color:'var(--gray-400)',fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.5px'}}>GRN</div>
-                      <div onClick={() => navigate('/fc/grn/' + grn.id)} style={{color:'#2563eb',cursor:'pointer',fontFamily:'var(--mono)',fontWeight:600,marginTop:2}}>{grn.grn_number}</div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginTop:2}}>
+                        <span onClick={() => navigate('/fc/grn/' + grn.id)} style={{color:'#2563eb',cursor:'pointer',fontFamily:'var(--mono)',fontWeight:600}}>{grn.grn_number}</span>
+                        <a onClick={() => openGrnHtmlForId(grn.id)} style={{fontSize:11,color:'#2563eb',cursor:'pointer',textDecoration:'none',fontFamily:'var(--font)',fontWeight:500}}>View GRN ↗</a>
+                      </div>
                     </div>
                   )}
                   {inv.total_amount > 0 && (
