@@ -59,9 +59,12 @@ export default function Login() {
     const name = profile?.name || session.user.email.split('@')[0]
     const role = profile?.role || 'sales'
 
-    const ageMs = profile?.password_changed_at ? (Date.now() - new Date(profile.password_changed_at).getTime()) : Infinity
-    const expiredByAge = ageMs > 90 * 24 * 60 * 60 * 1000
-    const needsPwdChange = profile?.must_change_password || expiredByAge
+    // Conservative: if profile fetch came back partial / RLS race / network glitch,
+    // we don't have a reliable password_changed_at — treat it as "unknown, don't force".
+    // Otherwise a flaky load bounces the user to /change-password on a normal refresh.
+    const ageMs = profile?.password_changed_at ? (Date.now() - new Date(profile.password_changed_at).getTime()) : null
+    const expiredByAge = ageMs !== null && ageMs > 90 * 24 * 60 * 60 * 1000
+    const needsPwdChange = (profile?.must_change_password === true) || expiredByAge
 
     if (needsPwdChange) {
       const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel()
