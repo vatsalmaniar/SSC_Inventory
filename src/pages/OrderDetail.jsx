@@ -196,6 +196,12 @@ export default function OrderDetail() {
       sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true }),
       sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true }),
     ])
+    // Sort order_items by sr_no for display. The embed returns rows in heap order,
+    // which shifts after UPDATEs (partial dispatch, edits) and shows lines like 3,1,2.
+    // Pure display sort — no data mutation, sr_no values in DB are unchanged.
+    if (data?.order_items) {
+      data.order_items.sort((a, b) => (a.sr_no || 0) - (b.sr_no || 0))
+    }
     setOrder(data)
     setBatches(batches || [])
     setComments(comments || [])
