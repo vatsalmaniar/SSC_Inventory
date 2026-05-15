@@ -168,9 +168,19 @@ export default function Layout({ children, pageTitle, pageKey }) {
       }
       const s = session || (await sb.auth.getSession()).data.session
       if (!s) return
-      const { data: profile } = await sb.from('profiles').select('name,role,must_change_password,password_changed_at').eq('id', s.user.id).single()
-      const pwdAgeMs = profile?.password_changed_at ? (Date.now() - new Date(profile.password_changed_at).getTime()) : Infinity
-      if (profile?.must_change_password || pwdAgeMs > 90 * 24 * 60 * 60 * 1000) { navigate('/change-password'); return }
+      const { data: profile, error: profileErr } = await sb.from('profiles').select('name,role,must_change_password,password_changed_at').eq('id', s.user.id).single()
+      // If the profile fetch failed (e.g. internet flicker mid-load, RLS race), do NOT
+      // force a /change-password redirect — we don't know the real password age. Same
+      // conservative rule used in Login.jsx (commit 84f0107). Force-change fires only
+      // when must_change_password is explicitly true OR password is provably > 90 days.
+      if (profileErr || !profile) {
+        // Skip the password-age check this load; user is on a stale-but-cached session
+        // and will retry on next navigation. Don't redirect away from their page.
+      } else {
+        const pwdAgeMs = profile.password_changed_at ? (Date.now() - new Date(profile.password_changed_at).getTime()) : null
+        const expiredByAge = pwdAgeMs !== null && pwdAgeMs > 90 * 24 * 60 * 60 * 1000
+        if (profile.must_change_password === true || expiredByAge) { navigate('/change-password'); return }
+      }
       const name   = profile?.name || s.user.email.split('@')[0]
       const role   = profile?.role || 'sales'
       const avatar = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
