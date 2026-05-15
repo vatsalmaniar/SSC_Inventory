@@ -396,31 +396,45 @@ SSC Control Pvt. Ltd.`
         const html2pdfMod = await import('html2pdf.js')
         const html2pdf = html2pdfMod.default || html2pdfMod
         const html = buildPoHtml(po.po_number)
+        // IMPORTANT: keep the wrapper on-screen but visually hidden. html2canvas in
+        // recent Chrome versions silently skips elements positioned far off-canvas
+        // (left:-99999px), producing a blank PDF. opacity:0 + pointer-events:none
+        // keeps the wrapper renderable while hiding it from the user.
         const wrapper = document.createElement('div')
-        wrapper.style.cssText = 'position:fixed;left:-99999px;top:0;width:860px'
+        wrapper.style.cssText = 'position:absolute;left:0;top:0;width:860px;opacity:0;pointer-events:none;z-index:-1'
         wrapper.innerHTML = html
         document.body.appendChild(wrapper)
 
-        // Wait for every <img> inside the wrapper to load (or error) before rendering.
-        // Without this, the logo can be missing from the captured canvas → effectively blank PDF.
-        const imgs = Array.from(wrapper.querySelectorAll('img'))
-        await Promise.all(imgs.map(img => new Promise(resolve => {
+        // Wait for stylesheets (the local fonts.css <link>) AND images to load. Without
+        // this, html2canvas can snapshot before CSS applies → content positioned
+        // weirdly or invisible.
+        const linkPromises = Array.from(wrapper.querySelectorAll('link[rel="stylesheet"]')).map(l => new Promise(resolve => {
+          if (l.sheet) return resolve()
+          let done = false
+          const finish = () => { if (!done) { done = true; resolve() } }
+          l.addEventListener('load', finish, { once: true })
+          l.addEventListener('error', finish, { once: true })
+          setTimeout(finish, 3000)
+        }))
+        const imgPromises = Array.from(wrapper.querySelectorAll('img')).map(img => new Promise(resolve => {
           if (img.complete && img.naturalHeight > 0) return resolve()
           let done = false
           const finish = () => { if (!done) { done = true; resolve() } }
           img.addEventListener('load', finish, { once: true })
           img.addEventListener('error', finish, { once: true })
-          setTimeout(finish, 4000) // hard cap per image so a broken URL can't hang the email
-        })))
-        // Let fonts/CSS settle after images load
+          setTimeout(finish, 4000)
+        }))
+        await Promise.all([...linkPromises, ...imgPromises])
         if (document.fonts && document.fonts.ready) { try { await document.fonts.ready } catch (_) {} }
-        await new Promise(r => setTimeout(r, 600))
+        // Two animation frames + a small settle so layout is fully committed before snapshot.
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+        await new Promise(r => setTimeout(r, 300))
 
         const blob = await html2pdf().set({
           margin:    [8, 10, 10, 10],
           filename:  `${po.po_number.split('/')[1] || po.po_number}.pdf`,
           image:     { type: 'jpeg', quality: 0.96 },
-          html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860, logging: false },
           jsPDF:     { unit: 'mm', format: 'a4', orientation: 'portrait' },
           pagebreak: { mode: ['css', 'legacy'] }, // default — splits long POs cleanly across pages
         }).from(wrapper).outputPdf('blob')
