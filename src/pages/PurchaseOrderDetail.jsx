@@ -370,6 +370,63 @@ SSC Control Pvt. Ltd.`
     setUploadingFile(false)
   }
 
+  // Generate the same PDF the vendor would receive and open it in a new tab
+  // for the user to visually verify BEFORE sending. Critical safety net —
+  // if the PDF is blank here, it would also be blank in the email.
+  const [previewingPdf, setPreviewingPdf] = useState(false)
+  async function previewPoPdf() {
+    if (previewingPdf) return
+    setPreviewingPdf(true)
+    try {
+      const html2pdfMod = await import('html2pdf.js')
+      const html2pdf = html2pdfMod.default || html2pdfMod
+      const html = buildPoHtml(po.po_number)
+      const wrapper = document.createElement('div')
+      wrapper.style.cssText = 'position:absolute;left:0;top:0;width:860px;opacity:0;pointer-events:none;z-index:-1'
+      wrapper.innerHTML = html
+      document.body.appendChild(wrapper)
+      const linkPromises = Array.from(wrapper.querySelectorAll('link[rel="stylesheet"]')).map(l => new Promise(resolve => {
+        if (l.sheet) return resolve()
+        let done = false; const finish = () => { if (!done) { done = true; resolve() } }
+        l.addEventListener('load', finish, { once: true }); l.addEventListener('error', finish, { once: true })
+        setTimeout(finish, 3000)
+      }))
+      const imgPromises = Array.from(wrapper.querySelectorAll('img')).map(img => new Promise(resolve => {
+        if (img.complete && img.naturalHeight > 0) return resolve()
+        let done = false; const finish = () => { if (!done) { done = true; resolve() } }
+        img.addEventListener('load', finish, { once: true }); img.addEventListener('error', finish, { once: true })
+        setTimeout(finish, 4000)
+      }))
+      await Promise.all([...linkPromises, ...imgPromises])
+      if (document.fonts && document.fonts.ready) { try { await document.fonts.ready } catch (_) {} }
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+      await new Promise(r => setTimeout(r, 300))
+      const blob = await html2pdf().set({
+        margin: [8, 10, 10, 10],
+        filename: `${po.po_number.split('/')[1] || po.po_number}.pdf`,
+        image: { type: 'jpeg', quality: 0.96 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'] },
+      }).from(wrapper).outputPdf('blob')
+      document.body.removeChild(wrapper)
+      const sizeKB = blob ? Math.round(blob.size / 1024) : 0
+      console.log('[PO Preview] Generated PDF size:', sizeKB + ' KB')
+      if (!blob || blob.size < 2 * 1024) {
+        toast(`Preview rendered blank (${sizeKB} KB) — DO NOT SEND. Refresh and try again.`, 'error')
+        setPreviewingPdf(false); return
+      }
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      // Don't revoke immediately — give the new tab time to load it. Browser cleans up on close.
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+    } catch (err) {
+      console.error('PDF preview failed:', err)
+      toast(friendlyError(err, 'Preview failed. Check console and retry.'))
+    }
+    setPreviewingPdf(false)
+  }
+
   async function sendEmailToVendor() {
     // Gather selected recipients
     const toEmails = Object.entries(recipientSel).filter(([_, v]) => v).map(([k]) => k)
@@ -2067,10 +2124,18 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 {selectedCount === 0 ? 'No recipients selected' : `${selectedCount} recipient${selectedCount !== 1 ? 's' : ''} selected`}
               </div>
               <div style={{ display:'flex', gap:10 }}>
-                <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail}
+                <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail || previewingPdf}
                   style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
-                <button onClick={sendEmailToVendor} disabled={sendingEmail || selectedCount === 0}
-                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a4dab', color:'white', fontSize:13, fontWeight:700, cursor: sendingEmail || selectedCount === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: sendingEmail || selectedCount === 0 ? 0.5 : 1 }}>
+                {!excludePoPdf && (
+                  <button onClick={previewPoPdf} disabled={previewingPdf || sendingEmail}
+                    title="Open the PDF in a new tab to verify before sending — uses the same renderer the email does"
+                    style={{ padding:'10px 18px', border:'1px solid #1a4dab', borderRadius:8, background:'white', color:'#1a4dab', fontSize:13, fontWeight:700, cursor: previewingPdf || sendingEmail ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: previewingPdf || sendingEmail ? 0.5 : 1, display:'inline-flex', alignItems:'center', gap:6 }}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    {previewingPdf ? 'Generating…' : 'Preview PDF'}
+                  </button>
+                )}
+                <button onClick={sendEmailToVendor} disabled={sendingEmail || previewingPdf || selectedCount === 0}
+                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a4dab', color:'white', fontSize:13, fontWeight:700, cursor: sendingEmail || previewingPdf || selectedCount === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: sendingEmail || previewingPdf || selectedCount === 0 ? 0.5 : 1 }}>
                   {sendingEmail ? 'Sending…' : 'Send Email'}
                 </button>
               </div>
