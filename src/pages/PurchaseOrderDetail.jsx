@@ -370,55 +370,79 @@ SSC Control Pvt. Ltd.`
     setUploadingFile(false)
   }
 
-  // Generate the same PDF the vendor would receive and open it in a new tab
-  // for the user to visually verify BEFORE sending. Critical safety net —
-  // if the PDF is blank here, it would also be blank in the email.
+  // Render the PO HTML to a PDF blob via an isolated iframe. Iframe gives us a
+  // completely separate document so the inline <style> rules (global * and body
+  // selectors) can't leak onto the main app UI. Used by both Preview and Send so
+  // what the user previews is byte-for-byte what the vendor receives.
+  async function renderPoPdfBlob(html, poNumber) {
+    const html2pdfMod = await import('html2pdf.js')
+    const html2pdf = html2pdfMod.default || html2pdfMod
+    const iframe = document.createElement('iframe')
+    iframe.setAttribute('aria-hidden', 'true')
+    iframe.style.cssText = 'position:fixed;left:0;top:0;width:860px;height:1px;opacity:0;pointer-events:none;z-index:-1;border:0'
+    document.body.appendChild(iframe)
+    try {
+      const doc = iframe.contentDocument
+      doc.open(); doc.write(html); doc.close()
+
+      // Wait for stylesheets and images inside the iframe to fully load
+      const linkPromises = Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).map(l => new Promise(resolve => {
+        if (l.sheet) return resolve()
+        let done = false; const finish = () => { if (!done) { done = true; resolve() } }
+        l.addEventListener('load', finish, { once: true })
+        l.addEventListener('error', finish, { once: true })
+        setTimeout(finish, 3000)
+      }))
+      const imgPromises = Array.from(doc.querySelectorAll('img')).map(img => new Promise(resolve => {
+        if (img.complete && img.naturalHeight > 0) return resolve()
+        let done = false; const finish = () => { if (!done) { done = true; resolve() } }
+        img.addEventListener('load', finish, { once: true })
+        img.addEventListener('error', finish, { once: true })
+        setTimeout(finish, 4000)
+      }))
+      await Promise.all([...linkPromises, ...imgPromises])
+      if (iframe.contentWindow?.document?.fonts?.ready) {
+        try { await iframe.contentWindow.document.fonts.ready } catch (_) {}
+      }
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+      await new Promise(r => setTimeout(r, 300))
+
+      // Grow the iframe to match content height so html2canvas can capture everything
+      const contentHeight = doc.body.scrollHeight
+      iframe.style.height = contentHeight + 'px'
+      await new Promise(r => setTimeout(r, 100))
+
+      const blob = await html2pdf().set({
+        margin: [8, 10, 10, 10],
+        filename: `${poNumber.split('/')[1] || poNumber}.pdf`,
+        image: { type: 'jpeg', quality: 0.96 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'] },
+      }).from(doc.body).outputPdf('blob')
+
+      const sizeKB = blob ? Math.round(blob.size / 1024) : 0
+      console.log('[PO PDF] Generated size:', sizeKB + ' KB')
+      if (!blob || blob.size < 2 * 1024) return { blob: null, sizeKB }
+      return { blob, sizeKB }
+    } finally {
+      document.body.removeChild(iframe)
+    }
+  }
+
   const [previewingPdf, setPreviewingPdf] = useState(false)
   async function previewPoPdf() {
     if (previewingPdf) return
     setPreviewingPdf(true)
     try {
-      const html2pdfMod = await import('html2pdf.js')
-      const html2pdf = html2pdfMod.default || html2pdfMod
       const html = buildPoHtml(po.po_number)
-      const wrapper = document.createElement('div')
-      wrapper.style.cssText = 'position:absolute;left:0;top:0;width:860px;opacity:0;pointer-events:none;z-index:-1'
-      wrapper.innerHTML = html
-      document.body.appendChild(wrapper)
-      const linkPromises = Array.from(wrapper.querySelectorAll('link[rel="stylesheet"]')).map(l => new Promise(resolve => {
-        if (l.sheet) return resolve()
-        let done = false; const finish = () => { if (!done) { done = true; resolve() } }
-        l.addEventListener('load', finish, { once: true }); l.addEventListener('error', finish, { once: true })
-        setTimeout(finish, 3000)
-      }))
-      const imgPromises = Array.from(wrapper.querySelectorAll('img')).map(img => new Promise(resolve => {
-        if (img.complete && img.naturalHeight > 0) return resolve()
-        let done = false; const finish = () => { if (!done) { done = true; resolve() } }
-        img.addEventListener('load', finish, { once: true }); img.addEventListener('error', finish, { once: true })
-        setTimeout(finish, 4000)
-      }))
-      await Promise.all([...linkPromises, ...imgPromises])
-      if (document.fonts && document.fonts.ready) { try { await document.fonts.ready } catch (_) {} }
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
-      await new Promise(r => setTimeout(r, 300))
-      const blob = await html2pdf().set({
-        margin: [8, 10, 10, 10],
-        filename: `${po.po_number.split('/')[1] || po.po_number}.pdf`,
-        image: { type: 'jpeg', quality: 0.96 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] },
-      }).from(wrapper).outputPdf('blob')
-      document.body.removeChild(wrapper)
-      const sizeKB = blob ? Math.round(blob.size / 1024) : 0
-      console.log('[PO Preview] Generated PDF size:', sizeKB + ' KB')
-      if (!blob || blob.size < 2 * 1024) {
+      const { blob, sizeKB } = await renderPoPdfBlob(html, po.po_number)
+      if (!blob) {
         toast(`Preview rendered blank (${sizeKB} KB) — DO NOT SEND. Refresh and try again.`, 'error')
         setPreviewingPdf(false); return
       }
       const url = URL.createObjectURL(blob)
       window.open(url, '_blank')
-      // Don't revoke immediately — give the new tab time to load it. Browser cleans up on close.
       setTimeout(() => URL.revokeObjectURL(url), 60000)
     } catch (err) {
       console.error('PDF preview failed:', err)
@@ -448,66 +472,14 @@ SSC Control Pvt. Ltd.`
 
     setSendingEmail(true)
     try {
-      // Generate PO PDF in-browser from the existing HTML template
+      // Generate the PO PDF inside an isolated iframe (no style leak to main UI)
       if (!excludePoPdf) {
-        const html2pdfMod = await import('html2pdf.js')
-        const html2pdf = html2pdfMod.default || html2pdfMod
         const html = buildPoHtml(po.po_number)
-        // IMPORTANT: keep the wrapper on-screen but visually hidden. html2canvas in
-        // recent Chrome versions silently skips elements positioned far off-canvas
-        // (left:-99999px), producing a blank PDF. opacity:0 + pointer-events:none
-        // keeps the wrapper renderable while hiding it from the user.
-        const wrapper = document.createElement('div')
-        wrapper.style.cssText = 'position:absolute;left:0;top:0;width:860px;opacity:0;pointer-events:none;z-index:-1'
-        wrapper.innerHTML = html
-        document.body.appendChild(wrapper)
-
-        // Wait for stylesheets (the local fonts.css <link>) AND images to load. Without
-        // this, html2canvas can snapshot before CSS applies → content positioned
-        // weirdly or invisible.
-        const linkPromises = Array.from(wrapper.querySelectorAll('link[rel="stylesheet"]')).map(l => new Promise(resolve => {
-          if (l.sheet) return resolve()
-          let done = false
-          const finish = () => { if (!done) { done = true; resolve() } }
-          l.addEventListener('load', finish, { once: true })
-          l.addEventListener('error', finish, { once: true })
-          setTimeout(finish, 3000)
-        }))
-        const imgPromises = Array.from(wrapper.querySelectorAll('img')).map(img => new Promise(resolve => {
-          if (img.complete && img.naturalHeight > 0) return resolve()
-          let done = false
-          const finish = () => { if (!done) { done = true; resolve() } }
-          img.addEventListener('load', finish, { once: true })
-          img.addEventListener('error', finish, { once: true })
-          setTimeout(finish, 4000)
-        }))
-        await Promise.all([...linkPromises, ...imgPromises])
-        if (document.fonts && document.fonts.ready) { try { await document.fonts.ready } catch (_) {} }
-        // Two animation frames + a small settle so layout is fully committed before snapshot.
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
-        await new Promise(r => setTimeout(r, 300))
-
-        const blob = await html2pdf().set({
-          margin:    [8, 10, 10, 10],
-          filename:  `${po.po_number.split('/')[1] || po.po_number}.pdf`,
-          image:     { type: 'jpeg', quality: 0.96 },
-          html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860, logging: false },
-          jsPDF:     { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'] }, // default — splits long POs cleanly across pages
-        }).from(wrapper).outputPdf('blob')
-        document.body.removeChild(wrapper)
-
-        // Sanity check — a real PO PDF is comfortably > 10 KB. Anything truly tiny means
-        // html2pdf failed (e.g. an asset blocked by CSP, an unloaded image). Log the size so
-        // we have a number to debug with if it ever rejects again.
-        const sizeKB = blob ? Math.round(blob.size / 1024) : 0
-        console.log('[PO Email] Generated PDF size:', sizeKB + ' KB')
-        if (!blob || blob.size < 2 * 1024) {
+        const { blob, sizeKB } = await renderPoPdfBlob(html, po.po_number)
+        if (!blob) {
           toast(`PDF rendered blank (${sizeKB} KB) — email not sent. Please refresh and try again.`, 'error')
-          setSendingEmail(false)
-          return
+          setSendingEmail(false); return
         }
-
         const buf = await blob.arrayBuffer()
         let bin = ''; const bytes = new Uint8Array(buf)
         for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
