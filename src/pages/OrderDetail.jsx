@@ -70,7 +70,7 @@ function printDCChallan(order, batch, dcNumber, isSample = false, custCode = '')
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>${isSample ? 'Sample Challan' : 'Delivery Challan'} — ${dcNumber}</title>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="${window.location.origin}/fonts/fonts.css" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:860px;margin:0 auto;line-height:1.5}.mono{font-family:'Geist Mono',monospace}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}.co-name{font-size:17px;font-weight:700;margin-bottom:2px}.co-sub{font-size:11px;color:#64748b;margin-bottom:8px}.co-addr{font-size:10.5px;color:#475569;line-height:1.6}

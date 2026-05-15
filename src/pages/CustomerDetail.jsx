@@ -334,7 +334,7 @@ export default function CustomerDetail() {
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Customer Report — ${esc(customer.customer_name)}</title>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="${window.location.origin}/fonts/fonts.css" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:900px;margin:0 auto;line-height:1.5}
