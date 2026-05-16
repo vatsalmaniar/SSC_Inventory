@@ -92,9 +92,15 @@ export function scoreFor(value, threshold) {
   }
   // gte: find largest min ≤ value
   const sorted = [...threshold.thresholds].sort((a, b) => a.min - b.min)
+  // 0.5% tolerance for fractional/percent thresholds — treats 99.5%+ as 100%.
+  // Detected by any non-zero threshold below 5 (counts use whole numbers >= 1,
+  // so a min < 5 in a tier means the KPI is a ratio/percentage, not a count).
+  // For pure count KPIs the tolerance stays 0 — no behavior change.
+  const isFractional = sorted.some(t => t.min > 0 && t.min < 5)
+  const eps = isFractional ? 0.005 : 0
   let pts = 0
   for (const t of sorted) {
-    if (v >= t.min) pts = t.points
+    if (v + eps >= t.min) pts = t.points
   }
   return pts
 }
@@ -127,7 +133,12 @@ export function fmtInrCeil(n) {
 }
 export function fmtPct(n) {
   if (n == null || isNaN(n)) return '—'
-  return Math.round(Number(n) * 100) + '%'
+  const pct = Number(n) * 100
+  // Show whole percent when it's effectively a clean integer; one decimal otherwise.
+  // 99.985% renders as "99.99%" so the user can see precise value instead of
+  // a misleading rounded "100%".
+  if (Math.abs(pct - Math.round(pct)) < 0.05) return Math.round(pct) + '%'
+  return pct.toFixed(2) + '%'
 }
 export function fmtVal(n, format) {
   if (n == null || isNaN(n)) return '—'

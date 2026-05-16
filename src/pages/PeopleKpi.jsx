@@ -6,7 +6,7 @@ import Layout from '../components/Layout'
 import { friendlyError } from '../lib/errorMsg'
 import {
   currentFyLabel, fyMonths, monthLabel, monthKey,
-  scoreFor, maxPointsThreshold, fmtInr, fmtInrCeil,
+  scoreFor, maxPointsThreshold, fmtInr, fmtInrCeil, fmtPct,
 } from '../lib/kpi'
 import { AUTO_FETCHERS, DERIVED_FETCHERS } from '../lib/kpiFetchers'
 import KpiConfigurator from '../components/KpiConfigurator'
@@ -811,7 +811,7 @@ function KpiGrid({ emp, a, m, monthIdx, months, defs = [], kras = {}, isAdmin, s
             ? (def.format === 'pct' ? `${Math.round(targetVal*100)}%` : (def.kpi_key === 'complaints' ? `≤ ${targetVal}` : `${targetVal}+`))
             : '—'
           let displayValue = ''
-          if (def.format === 'pct') displayValue = isFinite(value) ? `${Math.round(Number(value || 0)*100)}%` : '—'
+          if (def.format === 'pct') displayValue = isFinite(value) ? fmtPct(Number(value || 0)) : '—'
           else if (def.format === 'inr') displayValue = fmtInr(value)
           else displayValue = String(Number(value || 0))
           let support = null
