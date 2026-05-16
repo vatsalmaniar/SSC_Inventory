@@ -126,7 +126,7 @@ export default function GRNDetail() {
   // need a reversal RPC — out of scope for v1.
   function enterEditMode() {
     if (!['admin','management'].includes(userRole)) { toast('Admin / management only', 'error'); return }
-    if (grn.status !== 'checking') { toast('Edit only available during Check Goods stage', 'error'); return }
+    if (!['draft','checking'].includes(grn.status)) { toast('Edit only available before GRN is confirmed', 'error'); return }
     setEditItems(grnItems.map(it => ({
       id: it.id,
       item_code: it.item_code || '',
@@ -429,6 +429,20 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                 </div>
               </div>
               <div className="od-header-actions">
+                {!editMode && !isConfirmed && ['admin','management'].includes(userRole) && (
+                  <button className="od-btn od-btn-edit" onClick={enterEditMode} style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width:15, height:15 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Edit GRN
+                  </button>
+                )}
+                {editMode && (
+                  <>
+                    <button className="od-btn" onClick={cancelEdit} disabled={saving}>Discard</button>
+                    <button className="od-btn od-btn-edit" onClick={saveEdits} disabled={saving}>
+                      {saving ? 'Saving…' : 'Save Changes'}
+                    </button>
+                  </>
+                )}
                 <button className="od-btn" onClick={viewGrnDoc} style={{ display:'flex', alignItems:'center', gap:6 }}>
                   <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width:15, height:15 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                   View GRN
@@ -566,25 +580,9 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">Items ({grnItems.length})</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                    {!editMode && (
-                      <div style={{ fontSize:12, color:'var(--gray-500)' }}>
-                        <span style={{ color:'#15803d', fontWeight:600 }}>{totalAccepted} accepted</span>
-                        {totalRejected > 0 && <span style={{ color:'#dc2626', fontWeight:600, marginLeft:8 }}>{totalRejected} rejected</span>}
-                      </div>
-                    )}
-                    {!editMode && grn.status === 'checking' && ['admin','management'].includes(userRole) && (
-                      <button className="od-btn" onClick={enterEditMode} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12 }}>
-                        <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width:14, height:14 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        Edit Items
-                      </button>
-                    )}
-                    {editMode && (
-                      <div style={{ display:'flex', gap:8 }}>
-                        <button className="od-btn" onClick={cancelEdit} disabled={saving}>Cancel</button>
-                        <button className="od-btn od-btn-approve" onClick={saveEdits} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
-                      </div>
-                    )}
+                  <div style={{ fontSize:12, color:'var(--gray-500)' }}>
+                    <span style={{ color:'#15803d', fontWeight:600 }}>{totalAccepted} accepted</span>
+                    {totalRejected > 0 && <span style={{ color:'#dc2626', fontWeight:600, marginLeft:8 }}>{totalRejected} rejected</span>}
                   </div>
                 </div>
                 <div className="od-card-body" style={{ padding:0 }}>
