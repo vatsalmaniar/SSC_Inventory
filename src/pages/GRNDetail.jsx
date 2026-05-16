@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { friendlyError } from '../lib/errorMsg'
@@ -63,6 +63,11 @@ export default function GRNDetail() {
   const [userRole, setUserRole] = useState('')
   const [userName, setUserName] = useState('')
 
+  // Edit mode (admin/management can correct QC counts before confirming)
+  const [editMode, setEditMode]         = useState(false)
+  const [editItems, setEditItems]       = useState([])
+  const submitGuard                     = useRef(false)
+
   // Delivery form state
   const [showDeliveryForm, setShowDeliveryForm] = useState(false)
   const [dispatchMode, setDispatchMode]         = useState('')
@@ -112,6 +117,85 @@ export default function GRNDetail() {
       setLinkedPos([])
     }
     setLoading(false)
+  }
+
+  // ── Edit GRN items (admin/management, status=checking only) ──
+  // The "Confirm GRN" step calls confirm_grn RPC which atomically updates
+  // po_items.received_qty. We only allow edits BEFORE confirmation, so the
+  // RPC sees the corrected values when it runs. Editing after confirm would
+  // need a reversal RPC — out of scope for v1.
+  function enterEditMode() {
+    if (!['admin','management'].includes(userRole)) { toast('Admin / management only', 'error'); return }
+    if (grn.status !== 'checking') { toast('Edit only available during Check Goods stage', 'error'); return }
+    setEditItems(grnItems.map(it => ({
+      id: it.id,
+      item_code: it.item_code || '',
+      ordered_qty: it.ordered_qty || it.expected_qty || 0,
+      received_qty: String(it.received_qty || ''),
+      accepted_qty: String(it.accepted_qty || ''),
+      rejected_qty: String(it.rejected_qty || ''),
+      rejection_reason: it.rejection_reason || '',
+    })))
+    setEditMode(true)
+  }
+
+  function cancelEdit() {
+    setEditItems([])
+    setEditMode(false)
+  }
+
+  function updateEditItem(idx, field, value) {
+    setEditItems(prev => {
+      const next = [...prev]
+      next[idx] = { ...next[idx], [field]: value }
+      // Auto-derive: when received changes and rejected is set, accepted = received - rejected.
+      // When rejected changes, same. Keeps the three numbers consistent.
+      if (field === 'received_qty' || field === 'rejected_qty') {
+        const r = parseFloat(next[idx].received_qty) || 0
+        const rj = parseFloat(next[idx].rejected_qty) || 0
+        next[idx].accepted_qty = String(Math.max(0, r - rj))
+      }
+      return next
+    })
+  }
+
+  async function saveEdits() {
+    if (submitGuard.current) return
+    if (!editItems.length) { toast('No items to save'); return }
+    // Validate: rejected <= received, accepted = received - rejected, received >= 0
+    for (const it of editItems) {
+      const r = parseFloat(it.received_qty) || 0
+      const a = parseFloat(it.accepted_qty) || 0
+      const rj = parseFloat(it.rejected_qty) || 0
+      if (r < 0 || a < 0 || rj < 0) { toast(`Negative qty on ${it.item_code}`, 'error'); return }
+      if (rj > r) { toast(`Rejected (${rj}) cannot exceed received (${r}) on ${it.item_code}`, 'error'); return }
+      if (Math.abs((a + rj) - r) > 0.01) { toast(`Accepted + Rejected must equal Received on ${it.item_code}`, 'error'); return }
+      if (rj > 0 && !it.rejection_reason.trim()) { toast(`Rejection reason required for ${it.item_code}`, 'error'); return }
+    }
+    submitGuard.current = true
+    setSaving(true)
+    try {
+      for (const it of editItems) {
+        const { error } = await sb.from('grn_items').update({
+          received_qty: parseFloat(it.received_qty) || 0,
+          accepted_qty: parseFloat(it.accepted_qty) || 0,
+          rejected_qty: parseFloat(it.rejected_qty) || 0,
+          rejection_reason: it.rejection_reason.trim() || null,
+        }).eq('id', it.id)
+        if (error) {
+          toast(friendlyError(error, `Failed to save ${it.item_code}`))
+          submitGuard.current = false; setSaving(false); return
+        }
+      }
+      toast('GRN items updated', 'success')
+      setEditMode(false)
+      setEditItems([])
+      await loadGRN()
+    } catch (e) {
+      toast(friendlyError(e, 'Save failed'))
+    }
+    submitGuard.current = false
+    setSaving(false)
   }
 
   // ── Status transitions ──
@@ -482,39 +566,95 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">Items ({grnItems.length})</div>
-                  <div style={{ fontSize:12, color:'var(--gray-500)' }}>
-                    <span style={{ color:'#15803d', fontWeight:600 }}>{totalAccepted} accepted</span>
-                    {totalRejected > 0 && <span style={{ color:'#dc2626', fontWeight:600, marginLeft:8 }}>{totalRejected} rejected</span>}
+                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    {!editMode && (
+                      <div style={{ fontSize:12, color:'var(--gray-500)' }}>
+                        <span style={{ color:'#15803d', fontWeight:600 }}>{totalAccepted} accepted</span>
+                        {totalRejected > 0 && <span style={{ color:'#dc2626', fontWeight:600, marginLeft:8 }}>{totalRejected} rejected</span>}
+                      </div>
+                    )}
+                    {!editMode && grn.status === 'checking' && ['admin','management'].includes(userRole) && (
+                      <button className="od-btn" onClick={enterEditMode} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12 }}>
+                        <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width:14, height:14 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Edit Items
+                      </button>
+                    )}
+                    {editMode && (
+                      <div style={{ display:'flex', gap:8 }}>
+                        <button className="od-btn" onClick={cancelEdit} disabled={saving}>Cancel</button>
+                        <button className="od-btn od-btn-approve" onClick={saveEdits} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="od-card-body" style={{ padding:0 }}>
-                  <table className="od-items-table">
-                    <thead>
-                      <tr>
-                        <th style={{ paddingLeft:20 }}>Item Code</th>
-                        <th style={{ textAlign:'right' }}>Ordered</th>
-                        <th style={{ textAlign:'right' }}>Received</th>
-                        <th style={{ textAlign:'right' }}>Accepted</th>
-                        {totalRejected > 0 && <th style={{ textAlign:'right' }}>Rejected</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {grnItems.map((item, idx) => (
-                        <tr key={item.id || idx}>
-                          <td style={{ paddingLeft:20, fontFamily:'var(--mono)', fontSize:12, fontWeight:500 }}>{item.item_code || '—'}</td>
-                          <td style={{ textAlign:'right', color:'var(--gray-500)' }}>{item.ordered_qty || item.expected_qty || '—'}</td>
-                          <td style={{ textAlign:'right', fontWeight:600 }}>{item.received_qty}</td>
-                          <td style={{ textAlign:'right', fontWeight:600, color:'#15803d' }}>{item.accepted_qty}</td>
-                          {totalRejected > 0 && <td style={{ textAlign:'right', fontWeight:600, color: (item.rejected_qty||0) > 0 ? '#dc2626' : 'var(--gray-400)' }}>{item.rejected_qty || 0}</td>}
+                  {editMode ? (
+                    <table className="od-items-table">
+                      <thead>
+                        <tr>
+                          <th style={{ paddingLeft:20 }}>Item Code</th>
+                          <th style={{ textAlign:'right' }}>Ordered</th>
+                          <th style={{ textAlign:'right', width:100 }}>Received</th>
+                          <th style={{ textAlign:'right', width:100 }}>Rejected</th>
+                          <th style={{ textAlign:'right', width:100 }}>Accepted</th>
+                          <th>Rejection Reason</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {editItems.map((it, idx) => (
+                          <tr key={it.id}>
+                            <td style={{ paddingLeft:20, fontFamily:'var(--mono)', fontSize:12, fontWeight:500 }}>{it.item_code || '—'}</td>
+                            <td style={{ textAlign:'right', color:'var(--gray-500)' }}>{it.ordered_qty || '—'}</td>
+                            <td style={{ textAlign:'right' }}>
+                              <input type="number" min="0" step="any" value={it.received_qty}
+                                onChange={e => updateEditItem(idx, 'received_qty', e.target.value)}
+                                style={{ width:80, padding:'4px 6px', textAlign:'right', border:'1px solid var(--gray-200)', borderRadius:4, fontFamily:'var(--mono)', fontSize:12 }} />
+                            </td>
+                            <td style={{ textAlign:'right' }}>
+                              <input type="number" min="0" step="any" value={it.rejected_qty}
+                                onChange={e => updateEditItem(idx, 'rejected_qty', e.target.value)}
+                                style={{ width:80, padding:'4px 6px', textAlign:'right', border:'1px solid var(--gray-200)', borderRadius:4, fontFamily:'var(--mono)', fontSize:12 }} />
+                            </td>
+                            <td style={{ textAlign:'right', fontWeight:600, color:'#15803d', fontFamily:'var(--mono)', fontSize:12 }}>{it.accepted_qty || 0}</td>
+                            <td>
+                              <input type="text" value={it.rejection_reason}
+                                placeholder={parseFloat(it.rejected_qty) > 0 ? 'Required' : 'Optional'}
+                                onChange={e => updateEditItem(idx, 'rejection_reason', e.target.value)}
+                                style={{ width:'100%', padding:'4px 6px', border:'1px solid var(--gray-200)', borderRadius:4, fontSize:12 }} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table className="od-items-table">
+                      <thead>
+                        <tr>
+                          <th style={{ paddingLeft:20 }}>Item Code</th>
+                          <th style={{ textAlign:'right' }}>Ordered</th>
+                          <th style={{ textAlign:'right' }}>Received</th>
+                          <th style={{ textAlign:'right' }}>Accepted</th>
+                          {totalRejected > 0 && <th style={{ textAlign:'right' }}>Rejected</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {grnItems.map((item, idx) => (
+                          <tr key={item.id || idx}>
+                            <td style={{ paddingLeft:20, fontFamily:'var(--mono)', fontSize:12, fontWeight:500 }}>{item.item_code || '—'}</td>
+                            <td style={{ textAlign:'right', color:'var(--gray-500)' }}>{item.ordered_qty || item.expected_qty || '—'}</td>
+                            <td style={{ textAlign:'right', fontWeight:600 }}>{item.received_qty}</td>
+                            <td style={{ textAlign:'right', fontWeight:600, color:'#15803d' }}>{item.accepted_qty}</td>
+                            {totalRejected > 0 && <td style={{ textAlign:'right', fontWeight:600, color: (item.rejected_qty||0) > 0 ? '#dc2626' : 'var(--gray-400)' }}>{item.rejected_qty || 0}</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
 
               {/* Action card */}
-              {!isConfirmed && (
+              {!isConfirmed && !editMode && (
                 <div className="od-card">
                   <div className="od-card-header"><div className="od-card-title">Action Required</div></div>
                   <div className="od-card-body">
