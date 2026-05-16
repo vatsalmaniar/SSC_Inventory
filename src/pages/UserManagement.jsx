@@ -93,13 +93,13 @@ export default function UserManagement() {
   const pendingResets = useMemo(() => users.filter(u => u.must_change_password).length, [users])
 
   if (loading) return (
-    <Layout pageTitle="User Management" pageKey="admin">
+    <Layout pageTitle="User Management">
       <div className="orders-app"><div style={{ padding:60, textAlign:'center', color:'var(--o-muted)' }}>Loading users…</div></div>
     </Layout>
   )
 
   return (
-    <Layout pageTitle="User Management" pageKey="admin">
+    <Layout pageTitle="User Management">
       <div className="orders-app" style={{ padding:'20px 24px 40px' }}>
         {/* Page header */}
         <div className="page-head">
