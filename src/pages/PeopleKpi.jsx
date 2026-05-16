@@ -88,8 +88,11 @@ export default function PeopleKpi() {
   const [defsByTeam, setDefsByTeam]   = useState({})            // {team_id: [definition rows sorted]}
   const [krasByTeam, setKrasByTeam]   = useState({})            // {team_id: {code: {code,name,color}}}
   const [heroByMonth, setHeroByMonth] = useState({})
-  const [allMonthlyData, setAllMonthlyData] = useState({})       // {assignment_id: {month_iso: {kpi_key: value}}}
-  const [autoData, setAutoData]       = useState({})              // {assignment_id: {month_iso: {kpi_key: value}}}
+  const [allMonthlyData, setAllMonthlyData] = useState({})       // {assignment_id: {month_iso: {kpi_key: value}}} — manual overrides only
+  const [kpiSnapshots, setKpiSnapshots]     = useState({})       // {assignment_id: {month_iso: {kpi_key: value}}} — cached auto-pull
+  const [snapshotMeta, setSnapshotMeta]     = useState({})       // {assignment_id: {synced_at, synced_by}}
+  const [syncing, setSyncing]               = useState(false)
+  const [syncProgress, setSyncProgress]     = useState({ done: 0, total: 0 })
   const [loading, setLoading]         = useState(true)
   const [saving, setSaving]           = useState(false)
 
@@ -147,22 +150,42 @@ export default function PeopleKpi() {
 
     // Default filter: own team if user has an assignment
     if (ownAssignment) setFilter(ownAssignment.team_id)
+
+    // Load all snapshot rows for the whole FY in one query — feeds the team-list scores
+    // without hitting orders/customers/visits live on every page load.
+    const assignmentIds = (aRes.data || []).map(a => a.id)
+    if (assignmentIds.length) {
+      const { data: snapRows } = await sb.from('kpi_snapshots').select('*').in('assignment_id', assignmentIds)
+      const sm = {}, meta = {}
+      ;(snapRows || []).forEach(r => {
+        const mIso = r.month_start.slice(0, 10)
+        if (!sm[r.assignment_id]) sm[r.assignment_id] = {}
+        if (!sm[r.assignment_id][mIso]) sm[r.assignment_id][mIso] = {}
+        sm[r.assignment_id][mIso][r.kpi_key] = Number(r.value)
+        const cur = meta[r.assignment_id]
+        if (!cur || r.synced_at > cur.synced_at) meta[r.assignment_id] = { synced_at: r.synced_at, synced_by: r.synced_by }
+      })
+      setKpiSnapshots(sm)
+      setSnapshotMeta(meta)
+    }
+
     setLoading(false)
   }
 
-  // Load monthly data + auto-pull for currently selected employees
+  // Load manual overrides (kpi_monthly_data) for selected employees. Auto values now come
+  // from kpi_snapshots (loaded once in init for everyone). Use functional setState so
+  // concurrent calls during fast user switching don't stomp each other.
   useEffect(() => {
     if (selectedIds.length === 0) return
-    loadDataForSelected()
-  }, [selectedIds, heroByMonth])
+    loadManualDataForSelected()
+  }, [selectedIds])
 
-  async function loadDataForSelected() {
-    const newMonthly = { ...allMonthlyData }
-    const newAuto = { ...autoData }
+  async function loadManualDataForSelected() {
     for (const profileId of selectedIds) {
       const a = assignments.find(x => x.profile_id === profileId)
       if (!a) continue
-      if (newMonthly[a.id] && newAuto[a.id]) continue  // already loaded
+      // skip if already loaded — manual overrides rarely change so cache is safe
+      if (allMonthlyData[a.id]) continue
       const { data: monthly } = await sb.from('kpi_monthly_data').select('*').eq('assignment_id', a.id)
       const mmap = {}
       months.forEach(m => { mmap[monthKey(m)] = {} })
@@ -171,20 +194,62 @@ export default function PeopleKpi() {
         if (!mmap[k]) mmap[k] = {}
         mmap[k][r.kpi_key] = Number(r.value)
       })
-      newMonthly[a.id] = mmap
-
-      const accountOwnerName = a.profiles?.name || ''
-      const defs = defsByTeam[a.team_id] || []
-      newAuto[a.id] = await bulkAutoPullForFy(defs, profileId, accountOwnerName, months, heroByMonth)
+      setAllMonthlyData(prev => ({ ...prev, [a.id]: mmap }))
     }
-    setAllMonthlyData(newMonthly)
-    setAutoData(newAuto)
+  }
+
+  // === Snapshot sync — admin/management only ===
+  // Runs bulkAutoPullForFy for every visible assignment and upserts results into
+  // kpi_snapshots so subsequent page loads skip the live queries entirely.
+  async function syncSnapshots() {
+    if (syncing) return
+    if (!['admin','management'].includes(user.role)) { toast('Admin / management only', 'error'); return }
+    const toSync = employeeList.length ? employeeList.map(e => assignments.find(a => a.id === e.assignmentId)).filter(Boolean) : []
+    if (!toSync.length) { toast('Nothing to sync'); return }
+    setSyncing(true)
+    setSyncProgress({ done: 0, total: toSync.length })
+    const newSnap = { ...kpiSnapshots }
+    const newMeta = { ...snapshotMeta }
+    let i = 0
+    for (const a of toSync) {
+      try {
+        const accountOwnerName = a.profiles?.name || ''
+        const defs = defsByTeam[a.team_id] || []
+        const auto = await bulkAutoPullForFy(defs, a.profile_id, accountOwnerName, months, heroByMonth)
+        const rows = []
+        const stamp = new Date().toISOString()
+        for (const mIso of Object.keys(auto)) {
+          for (const [kpi_key, value] of Object.entries(auto[mIso] || {})) {
+            rows.push({ assignment_id: a.id, month_start: mIso, kpi_key, value: Number(value) || 0, synced_at: stamp, synced_by: user.id })
+          }
+        }
+        if (rows.length) {
+          const { error } = await sb.from('kpi_snapshots').upsert(rows, { onConflict: 'assignment_id,month_start,kpi_key' })
+          if (error) { console.error('snapshot upsert error', a.profiles?.name, error); }
+        }
+        // Update local state immediately so partial progress is visible
+        if (!newSnap[a.id]) newSnap[a.id] = {}
+        for (const mIso of Object.keys(auto)) {
+          newSnap[a.id][mIso] = { ...(newSnap[a.id][mIso] || {}), ...(auto[mIso] || {}) }
+        }
+        newMeta[a.id] = { synced_at: stamp, synced_by: user.id }
+      } catch (e) {
+        console.error('sync failed for', a.profiles?.name, e)
+      }
+      i++
+      setSyncProgress({ done: i, total: toSync.length })
+    }
+    setKpiSnapshots(newSnap)
+    setSnapshotMeta(newMeta)
+    setSyncing(false)
+    setSyncProgress({ done: 0, total: 0 })
+    toast(`Synced ${toSync.length} employee${toSync.length>1?'s':''} · ${months.length} months each`, 'success')
   }
 
   function computeMonthForAssignment(a, mIdx) {
     const monthIso = monthKey(months[mIdx])
     const stored = allMonthlyData[a.id]?.[monthIso] || {}
-    const auto = autoData[a.id]?.[monthIso] || {}
+    const auto = kpiSnapshots[a.id]?.[monthIso] || {}
     const merged = { ...auto, ...stored }
     const monthlyTarget = Number(a.monthly_target_inr) || 0
     const defs = defsByTeam[a.team_id] || []
@@ -239,7 +304,9 @@ export default function PeopleKpi() {
     if (filter !== 'all') list = list.filter(a => a.team_id === filter)
     if (query.trim()) list = list.filter(a => (a.profiles?.name||'').toLowerCase().includes(query.toLowerCase()))
     return list.map(a => {
-      const m = (allMonthlyData[a.id] && autoData[a.id]) ? computeMonthForAssignment(a, monthIdx) : { total: 0, max: 0 }
+      // Always compute from snapshots — they're loaded for the full team up-front in init().
+      // computeMonthForAssignment safely returns 0 when snapshot is missing for that month.
+      const m = computeMonthForAssignment(a, monthIdx)
       return {
         id: a.profile_id, assignmentId: a.id, name: a.profiles?.name || '—', role: a.profiles?.role || '',
         team: a.team_id, ctc: Number(a.annual_ctc_inr) || 0, target: Number(a.annual_target_inr) || 0,
@@ -247,7 +314,7 @@ export default function PeopleKpi() {
         score: m.total, max: m.max,
       }
     }).sort((a, b) => b.score - a.score)
-  }, [assignments, filter, query, isAdmin, user.id, monthIdx, allMonthlyData, autoData])
+  }, [assignments, filter, query, isAdmin, user.id, monthIdx, allMonthlyData, kpiSnapshots, defsByTeam, thresholdsByTeam])
 
   const selectedEmps = selectedIds.map(id => employeeList.find(e => e.id === id) || assignments.find(a => a.profile_id === id) && (() => {
     const a = assignments.find(x => x.profile_id === id)
@@ -275,7 +342,23 @@ export default function PeopleKpi() {
           <div className="page-meta">
             <div className="meta-pill"><span className="meta-label">FY</span><span className="meta-val">20{fy.split('-')[0]}–20{fy.split('-')[1]}</span></div>
             <div className="meta-pill"><span className="meta-label">Period</span><span className="meta-val">{MONTHS_LABELS[monthIdx]} {months[monthIdx].getFullYear()}</span></div>
-            <div className="meta-pill live"><span className="meta-dot"/> Live</div>
+            {(() => {
+              const stamps = Object.values(snapshotMeta).map(m => m?.synced_at).filter(Boolean)
+              if (!stamps.length) return <div className="meta-pill" style={{ background:'rgba(180,83,9,0.10)', borderColor:'rgba(180,83,9,0.35)', color:'#92400e' }}><span className="meta-label">Snapshot</span><span className="meta-val">Not synced yet</span></div>
+              const latest = stamps.sort().reverse()[0]
+              const ageMs = Date.now() - new Date(latest).getTime()
+              const ageHr = Math.round(ageMs / 3600000)
+              const ageStr = ageHr < 1 ? 'just now' : ageHr < 24 ? `${ageHr}h ago` : `${Math.round(ageHr/24)}d ago`
+              return <div className="meta-pill"><span className="meta-label">Last sync</span><span className="meta-val">{ageStr}</span></div>
+            })()}
+            {['admin','management'].includes(user.role) && (
+              <button onClick={syncSnapshots} disabled={syncing}
+                title="Re-fetch sales / customers / visits from live data and write to kpi_snapshots"
+                style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'8px 14px', border:'1px solid #1a4dab', borderRadius:8, background: syncing ? '#dbeafe' : '#1a4dab', color: syncing ? '#1e40af' : 'white', fontSize:12, fontWeight:700, cursor: syncing ? 'wait' : 'pointer', fontFamily:'var(--font)' }}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14 }}><path d="M21 12a9 9 0 11-3.5-7.1M21 4v5h-5"/></svg>
+                {syncing ? `Syncing ${syncProgress.done}/${syncProgress.total}…` : 'Sync'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -291,7 +374,7 @@ export default function PeopleKpi() {
             months={months} monthIdx={monthIdx} setMonthIdx={setMonthIdx}
             computeMonth={computeMonthForAssignment} ytdAvg={ytdAvg}
             thresholdsByTeam={thresholdsByTeam} defsByTeam={defsByTeam} krasByTeam={krasByTeam}
-            allMonthlyData={allMonthlyData} autoData={autoData}
+            allMonthlyData={allMonthlyData}
             isAdmin={isAdmin} saving={saving} onSave={saveValue}
             hasOwnAssignment={!!assignments.find(a => a.profile_id === user.id)}
             userName={user.name}
@@ -429,7 +512,7 @@ function ScoreSpark({ value, max }) {
 }
 
 // ── Dashboard (single + compare) ──
-function Dashboard({ selectedEmps, assignments, teams, months, monthIdx, setMonthIdx, computeMonth, ytdAvg, thresholdsByTeam, defsByTeam, krasByTeam, allMonthlyData, autoData, isAdmin, saving, onSave, hasOwnAssignment, userName, onConfigOpen }) {
+function Dashboard({ selectedEmps, assignments, teams, months, monthIdx, setMonthIdx, computeMonth, ytdAvg, thresholdsByTeam, defsByTeam, krasByTeam, allMonthlyData, isAdmin, saving, onSave, hasOwnAssignment, userName, onConfigOpen }) {
   if (selectedEmps.length === 0) {
     // Sales / non-admin user with no assignment of their own
     if (!isAdmin && !hasOwnAssignment) {
