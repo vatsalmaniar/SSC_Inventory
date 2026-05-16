@@ -667,7 +667,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
               <div className="c360-card">
                 <div className="c360-card-header">
                   <div className="c360-card-title">Contacts ({contacts.length})</div>
-                  {['ops','admin'].includes(userRole) && (
+                  {['ops','admin','management'].includes(userRole) && (
                     <button className="c360-btn c360-btn-primary" onClick={() => setShowContactModal(true)}>+ Add Contact</button>
                   )}
                 </div>
@@ -687,7 +687,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                           {c.whatsapp && <a href={'https://wa.me/'+c.whatsapp.replace(/\D/g,'')} className="c360-contact-phone" target="_blank" rel="noopener noreferrer" style={{ color:'#059669' }}>WhatsApp</a>}
                           {c.email    && <a href={'mailto:'+c.email} className="c360-contact-email">{c.email}</a>}
                         </div>
-                        {['ops','admin'].includes(userRole) && (
+                        {['ops','admin','management'].includes(userRole) && (
                           <button onClick={() => deleteContact(c.id)} style={{ position:'absolute', top:10, right:10, background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:16, lineHeight:1 }}>×</button>
                         )}
                       </div>
