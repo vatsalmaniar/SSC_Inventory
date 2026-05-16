@@ -151,13 +151,19 @@ export default function PeopleKpi() {
     // Default filter: own team if user has an assignment
     if (ownAssignment) setFilter(ownAssignment.team_id)
 
-    // Load all snapshot rows for the whole FY in one query — feeds the team-list scores
-    // without hitting orders/customers/visits live on every page load.
+    // Load both snapshots (cached auto values) AND manual overrides for the WHOLE team
+    // up-front in two parallel queries. Without the manual overrides loaded for everyone,
+    // the team-list scores only become "exact" after you click each member (because
+    // loadManualDataForSelected used to be lazy). Both are bounded — ~12 months × ~9 KPIs
+    // × 11 employees ≈ 1200 rows total, fine in one round-trip.
     const assignmentIds = (aRes.data || []).map(a => a.id)
     if (assignmentIds.length) {
-      const { data: snapRows } = await sb.from('kpi_snapshots').select('*').in('assignment_id', assignmentIds)
+      const [snapRes, manualRes] = await Promise.all([
+        sb.from('kpi_snapshots').select('*').in('assignment_id', assignmentIds),
+        sb.from('kpi_monthly_data').select('*').in('assignment_id', assignmentIds),
+      ])
       const sm = {}, meta = {}
-      ;(snapRows || []).forEach(r => {
+      ;(snapRes.data || []).forEach(r => {
         const mIso = r.month_start.slice(0, 10)
         if (!sm[r.assignment_id]) sm[r.assignment_id] = {}
         if (!sm[r.assignment_id][mIso]) sm[r.assignment_id][mIso] = {}
@@ -167,36 +173,45 @@ export default function PeopleKpi() {
       })
       setKpiSnapshots(sm)
       setSnapshotMeta(meta)
+
+      const md = {}
+      ;(aRes.data || []).forEach(a => {
+        md[a.id] = {}
+        months.forEach(m => { md[a.id][monthKey(m)] = {} })
+      })
+      ;(manualRes.data || []).forEach(r => {
+        const mIso = r.month_start.slice(0, 10)
+        if (!md[r.assignment_id]) md[r.assignment_id] = {}
+        if (!md[r.assignment_id][mIso]) md[r.assignment_id][mIso] = {}
+        md[r.assignment_id][mIso][r.kpi_key] = Number(r.value)
+      })
+      setAllMonthlyData(md)
     }
 
     setLoading(false)
   }
 
-  // Load manual overrides (kpi_monthly_data) for selected employees. Auto values now come
-  // from kpi_snapshots (loaded once in init for everyone). Use functional setState so
-  // concurrent calls during fast user switching don't stomp each other.
+  // Manual overrides for the whole team are loaded in init(). This effect is a safety
+  // net — if a brand-new assignment was added after init or state went stale somehow,
+  // re-fetch for the currently selected user. Mostly a no-op.
   useEffect(() => {
     if (selectedIds.length === 0) return
-    loadManualDataForSelected()
-  }, [selectedIds])
-
-  async function loadManualDataForSelected() {
     for (const profileId of selectedIds) {
       const a = assignments.find(x => x.profile_id === profileId)
-      if (!a) continue
-      // skip if already loaded — manual overrides rarely change so cache is safe
-      if (allMonthlyData[a.id]) continue
-      const { data: monthly } = await sb.from('kpi_monthly_data').select('*').eq('assignment_id', a.id)
-      const mmap = {}
-      months.forEach(m => { mmap[monthKey(m)] = {} })
-      ;(monthly || []).forEach(r => {
-        const k = r.month_start.slice(0, 10)
-        if (!mmap[k]) mmap[k] = {}
-        mmap[k][r.kpi_key] = Number(r.value)
+      if (!a || allMonthlyData[a.id]) continue
+      // Missing — fetch and merge
+      sb.from('kpi_monthly_data').select('*').eq('assignment_id', a.id).then(({ data: monthly }) => {
+        const mmap = {}
+        months.forEach(m => { mmap[monthKey(m)] = {} })
+        ;(monthly || []).forEach(r => {
+          const k = r.month_start.slice(0, 10)
+          if (!mmap[k]) mmap[k] = {}
+          mmap[k][r.kpi_key] = Number(r.value)
+        })
+        setAllMonthlyData(prev => ({ ...prev, [a.id]: mmap }))
       })
-      setAllMonthlyData(prev => ({ ...prev, [a.id]: mmap }))
     }
-  }
+  }, [selectedIds])
 
   // === Snapshot sync — admin/management only ===
   // Runs bulkAutoPullForFy for every visible assignment and upserts results into
