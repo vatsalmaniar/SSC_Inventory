@@ -403,20 +403,30 @@ export default function PurchaseInvoiceDetail() {
     }).eq('id', id)
     if (error) { toast(friendlyError(error)); setSaving(false); return }
 
-    // Auto-close PO if all linked purchase invoices are now inward_complete
+    // Auto-close PO only if BOTH conditions hold:
+    //  (1) every linked purchase invoice is inward_complete, AND
+    //  (2) every po_items line is fully received (received_qty >= qty).
+    // Without (2), a single partial GRN + inward-complete invoice would close the
+    // entire PO even though most items are still pending — that bug closed PO0023
+    // with 11,223 of 12,425 units still outstanding.
     const poId = inv.po_id
     if (poId) {
-      const { count: pendingCount } = await sb.from('purchase_invoices')
+      const { count: pendingPiCount } = await sb.from('purchase_invoices')
         .select('id', { count: 'exact', head: true })
         .eq('po_id', poId)
         .neq('status', 'inward_complete')
         .neq('id', id)
-      if (pendingCount === 0) {
-        await sb.from('purchase_orders').update({
-          status: 'closed',
-          closed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }).eq('id', poId)
+      if (pendingPiCount === 0) {
+        const { data: poItemsRows } = await sb.from('po_items').select('qty, received_qty').eq('po_id', poId)
+        const fullyReceived = (poItemsRows || []).length > 0
+          && (poItemsRows || []).every(it => (Number(it.received_qty) || 0) >= (Number(it.qty) || 0))
+        if (fullyReceived) {
+          await sb.from('purchase_orders').update({
+            status: 'closed',
+            closed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq('id', poId)
+        }
       }
     }
 
