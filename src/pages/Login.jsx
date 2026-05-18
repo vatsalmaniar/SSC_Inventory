@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
-import { sb } from '../lib/supabase'
+import { sb, stampLoginNow } from '../lib/supabase'
 import '../styles/login.css'
 
 const HCAPTCHA_SITE_KEY = '3eb698c2-27c4-46b8-bc52-6aa0e778a0cc'
@@ -126,6 +126,11 @@ export default function Login() {
       setPassword('')
       return
     }
+
+    // Fresh credential login succeeded — stamp the 24h clock.
+    // (Stamping here instead of onAuthStateChange so cached-session restores
+    // don't reset the clock — see src/lib/supabase.js for context.)
+    stampLoginNow()
 
     const { data: profile, error: profileErr } = await sb
       .from('profiles').select('id, name, role, username').eq('id', data.session.user.id).single()

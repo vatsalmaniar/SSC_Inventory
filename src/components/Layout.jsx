@@ -161,6 +161,12 @@ export default function Layout({ children, pageTitle, pageKey }) {
     // Force re-login after 24 hours
     if (!checkSessionAge()) { navigate('/login'); return }
 
+    // Re-check periodically — Layout only mounts once for the SPA session, so
+    // without polling a user who keeps a tab open never trips the cutoff.
+    const sessionPoll = setInterval(() => {
+      if (!checkSessionAge()) { navigate('/login') }
+    }, 5 * 60 * 1000) // every 5 minutes
+
     sb.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         const { data } = await sb.auth.refreshSession()
@@ -189,6 +195,8 @@ export default function Layout({ children, pageTitle, pageKey }) {
       try { sessionStorage.setItem('ly_user', JSON.stringify(userData)) } catch {}
       loadNotifs(s.user.id)
     })
+
+    return () => clearInterval(sessionPoll)
   }, [])
 
   // Close dropdowns on outside click

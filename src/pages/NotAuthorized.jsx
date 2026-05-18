@@ -45,7 +45,7 @@ export default function NotAuthorized() {
             Your current role <strong>{user.role || '—'}</strong> isn't permitted to view this module.
             Please contact your administrator if you believe you should have access.
           </p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
             <button
               onClick={() => navigate('/dashboard')}
               style={{
@@ -54,15 +54,6 @@ export default function NotAuthorized() {
               }}>
               Back to Dashboard
             </button>
-            <a
-              href="mailto:vatsalmaniar@gmail.com?subject=Access%20request%20for%20{moduleName}"
-              style={{
-                padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 500,
-                background: 'transparent', color: 'var(--text, #111827)',
-                border: '1px solid var(--border, #d1d5db)', textDecoration: 'none', display: 'inline-block',
-              }}>
-              Contact Admin
-            </a>
           </div>
         </div>
       </div>
