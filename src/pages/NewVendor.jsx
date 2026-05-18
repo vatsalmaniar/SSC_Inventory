@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
+import PhoneInput, { isValidPhone, isValidEmail } from '../components/PhoneInput'
 import '../styles/orderdetail.css'
 import { friendlyError } from '../lib/errorMsg'
 
@@ -56,8 +57,8 @@ export default function NewVendor() {
     year_established: '', premises: '', turnover: '',
     gst: '', pan: '', msme_no: '',
     billing_address: '', shipping_address: '',
-    poc_name: '', poc_phone: '', poc_email: '',
-    director_name: '', director_no: '', director_email: '',
+    poc_name: '', poc_phone: '', poc_phone_cc: '+91', poc_email: '',
+    director_name: '', director_no: '', director_no_cc: '+91', director_email: '',
     credit_terms: '30 Days', account_status: 'Active',
   })
   const [gstCertFile, setGstCertFile]   = useState(null)
@@ -127,14 +128,14 @@ export default function NewVendor() {
     // Contacts
     if (!form.poc_name.trim())      newErrors.poc_name       = 'Required'
     if (!form.poc_phone.trim())     newErrors.poc_phone      = 'Required'
-    else if (!/^[6-9][0-9]{9}$/.test(form.poc_phone.trim())) newErrors.poc_phone = 'Invalid mobile number (10 digits, starts with 6-9)'
+    else if (!isValidPhone(form.poc_phone_cc, form.poc_phone)) newErrors.poc_phone = 'Invalid mobile number format'
     if (!form.poc_email.trim())     newErrors.poc_email      = 'Required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.poc_email.trim())) newErrors.poc_email = 'Invalid email format'
+    else if (!isValidEmail(form.poc_email)) newErrors.poc_email = 'Invalid email format'
     if (!form.director_name.trim()) newErrors.director_name  = 'Required'
     if (!form.director_no.trim())   newErrors.director_no    = 'Required'
-    else if (!/^[6-9][0-9]{9}$/.test(form.director_no.trim())) newErrors.director_no = 'Invalid mobile number (10 digits, starts with 6-9)'
+    else if (!isValidPhone(form.director_no_cc, form.director_no)) newErrors.director_no = 'Invalid mobile number format'
     if (!form.director_email.trim()) newErrors.director_email = 'Required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.director_email.trim())) newErrors.director_email = 'Invalid email format'
+    else if (!isValidEmail(form.director_email)) newErrors.director_email = 'Invalid email format'
     // Credit
     if (!form.credit_terms)         newErrors.credit_terms   = 'Required'
     if (Object.keys(newErrors).length > 0) {
@@ -171,10 +172,10 @@ export default function NewVendor() {
         billing_address:  form.billing_address.trim() || null,
         shipping_address: form.shipping_address.trim() || null,
         poc_name:         form.poc_name.trim() || null,
-        poc_phone:        form.poc_phone.trim() || null,
+        poc_phone:        form.poc_phone.trim() ? `${form.poc_phone_cc}${form.poc_phone.trim()}` : null,
         poc_email:        form.poc_email.trim() || null,
         director_name:    form.director_name.trim() || null,
-        director_no:      form.director_no.trim() || null,
+        director_no:      form.director_no.trim() ? `${form.director_no_cc}${form.director_no.trim()}` : null,
         director_email:   form.director_email.trim() || null,
         credit_terms:     form.credit_terms || null,
         account_status:   form.account_status || 'Active',
@@ -371,7 +372,8 @@ export default function NewVendor() {
                     {errors.poc_name && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.poc_name}</div>}
                   </Field>
                   <Field label="Phone" required>
-                    <input style={inputStyle('poc_phone')} value={form.poc_phone} onChange={e => set('poc_phone', e.target.value)} placeholder="Mobile / office number" />
+                    <PhoneInput dial={form.poc_phone_cc} digits={form.poc_phone}
+                      onChange={({ dial, digits }) => { set('poc_phone_cc', dial); set('poc_phone', digits) }}/>
                     {errors.poc_phone && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.poc_phone}</div>}
                   </Field>
                   <div style={{ gridColumn:'span 2' }}>
@@ -388,7 +390,8 @@ export default function NewVendor() {
                     {errors.director_name && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.director_name}</div>}
                   </Field>
                   <Field label="Phone" required>
-                    <input style={inputStyle('director_no')} value={form.director_no} onChange={e => set('director_no', e.target.value)} placeholder="Director contact number" />
+                    <PhoneInput dial={form.director_no_cc} digits={form.director_no}
+                      onChange={({ dial, digits }) => { set('director_no_cc', dial); set('director_no', digits) }}/>
                     {errors.director_no && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.director_no}</div>}
                   </Field>
                   <div style={{ gridColumn:'span 2' }}>
