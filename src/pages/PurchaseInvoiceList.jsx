@@ -208,14 +208,16 @@ export default function PurchaseInvoiceList() {
             </div>
           </div>
           <div className="page-meta">
-            <button className="o-dl-btn" onClick={downloadSummary} title="Summary Excel">
-              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v9m-3-3 3 3 3-3M3 14h10"/></svg>
-              Summary
-            </button>
-            <button className="o-dl-btn" onClick={downloadDetailed} title="Detailed Excel">
-              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 6h12M6 2v12"/></svg>
-              Detailed
-            </button>
+            <div className="o-dl-group">
+              <button className="o-dl-btn" onClick={downloadSummary} title="Summary Excel">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Summary
+              </button>
+              <button className="o-dl-btn" onClick={downloadDetailed} title="Detailed Excel">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Detailed
+              </button>
+            </div>
             <button className="btn-ghost" onClick={() => navigate('/billing')}>Dashboard</button>
           </div>
         </div>
