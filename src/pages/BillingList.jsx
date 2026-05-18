@@ -390,16 +390,17 @@ export default function BillingList() {
                   })}
                 </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="ol-pagination">
+                {/* Pagination — matches OrdersList ol-foot */}
+                {filtered.length > 0 && (
+                  <div className="ol-foot">
                     <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
                     <div className="ol-pages">
                       <button className="ol-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
                       {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
-                        const show = p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                        const show = totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                        const ellipsis = !show && Math.abs(p - safePage) === 2
                         if (show) return <button key={p} className={`ol-page-btn ${p === safePage ? 'on' : ''}`} onClick={() => setPage(p)}>{p}</button>
-                        if (p === safePage - 2 || p === safePage + 2) return <span key={p} style={{ color: 'var(--o-muted)' }}>…</span>
+                        if (ellipsis) return <span key={'e'+p} style={{ padding:'5px 4px', color:'var(--o-muted-2)' }}>…</span>
                         return null
                       })}
                       <button className="ol-page-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>Next ›</button>
