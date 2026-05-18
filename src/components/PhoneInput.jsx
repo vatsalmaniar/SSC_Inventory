@@ -4,21 +4,21 @@ import { useState, useRef, useEffect } from 'react'
 // len = expected digit count for full validation. If a country has variable
 // length, use a range like [min, max].
 export const DIAL_CODES = [
-  { code: '+91',  flag: '🇮🇳', name: 'India',          len: 10 },
-  { code: '+1',   flag: '🇺🇸', name: 'USA / Canada',   len: 10 },
-  { code: '+44',  flag: '🇬🇧', name: 'UK',             len: [10, 11] },
-  { code: '+971', flag: '🇦🇪', name: 'UAE',            len: 9 },
-  { code: '+966', flag: '🇸🇦', name: 'Saudi Arabia',   len: 9 },
-  { code: '+65',  flag: '🇸🇬', name: 'Singapore',      len: 8 },
-  { code: '+86',  flag: '🇨🇳', name: 'China',          len: 11 },
-  { code: '+81',  flag: '🇯🇵', name: 'Japan',          len: [10, 11] },
-  { code: '+49',  flag: '🇩🇪', name: 'Germany',        len: [10, 11] },
-  { code: '+33',  flag: '🇫🇷', name: 'France',         len: 9 },
-  { code: '+61',  flag: '🇦🇺', name: 'Australia',      len: 9 },
-  { code: '+880', flag: '🇧🇩', name: 'Bangladesh',     len: 10 },
-  { code: '+92',  flag: '🇵🇰', name: 'Pakistan',       len: 10 },
-  { code: '+94',  flag: '🇱🇰', name: 'Sri Lanka',      len: 9 },
-  { code: '+977', flag: '🇳🇵', name: 'Nepal',          len: 10 },
+  { iso: 'IN', code: '+91',  flag: '🇮🇳', name: 'India',          len: 10 },
+  { iso: 'US', code: '+1',   flag: '🇺🇸', name: 'USA / Canada',   len: 10 },
+  { iso: 'GB', code: '+44',  flag: '🇬🇧', name: 'UK',             len: [10, 11] },
+  { iso: 'AE', code: '+971', flag: '🇦🇪', name: 'UAE',            len: 9 },
+  { iso: 'SA', code: '+966', flag: '🇸🇦', name: 'Saudi Arabia',   len: 9 },
+  { iso: 'SG', code: '+65',  flag: '🇸🇬', name: 'Singapore',      len: 8 },
+  { iso: 'CN', code: '+86',  flag: '🇨🇳', name: 'China',          len: 11 },
+  { iso: 'JP', code: '+81',  flag: '🇯🇵', name: 'Japan',          len: [10, 11] },
+  { iso: 'DE', code: '+49',  flag: '🇩🇪', name: 'Germany',        len: [10, 11] },
+  { iso: 'FR', code: '+33',  flag: '🇫🇷', name: 'France',         len: 9 },
+  { iso: 'AU', code: '+61',  flag: '🇦🇺', name: 'Australia',      len: 9 },
+  { iso: 'BD', code: '+880', flag: '🇧🇩', name: 'Bangladesh',     len: 10 },
+  { iso: 'PK', code: '+92',  flag: '🇵🇰', name: 'Pakistan',       len: 10 },
+  { iso: 'LK', code: '+94',  flag: '🇱🇰', name: 'Sri Lanka',      len: 9 },
+  { iso: 'NP', code: '+977', flag: '🇳🇵', name: 'Nepal',          len: 10 },
 ]
 
 export function isValidPhone(dialCode, digits) {
@@ -44,7 +44,7 @@ export function PhoneDisplay({ value }) {
   const entry = DIAL_CODES.find(c => c.code === dial) || DIAL_CODES[0]
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ fontSize: '0.9em' }}>{entry.flag}</span>
+      <span style={{ fontSize: '0.9em', lineHeight: 1 }}>{entry.flag}</span>
       <span>{dial} {digits}</span>
     </span>
   )
@@ -74,13 +74,14 @@ export default function PhoneInput({ dial, digits, onChange, placeholder = '', d
   const valid = !digits || isValidPhone(dial, digits)
 
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'stretch', border: `1px solid ${valid ? '#e2e8f0' : '#fca5a5'}`, borderRadius: 8, background: 'white', overflow: 'visible' }}>
+    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: `1px solid ${valid ? '#e2e8f0' : '#fca5a5'}`, background: 'transparent' }}>
       <button type="button" disabled={disabled} onClick={() => setOpen(v => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', background: '#f8fafc', border: 'none', borderRight: '1px solid #e2e8f0', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', minWidth: 78, whiteSpace: 'nowrap' }}>
-        <span style={{ fontSize: 15 }}>{entry.flag}</span>
-        <span style={{ fontFamily: 'var(--mono, monospace)', fontSize: 12, fontWeight: 600, color: '#0f172a' }}>{entry.code}</span>
-        <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#64748b" strokeWidth="2"><path d="M3 5l3 3 3-3"/></svg>
+        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: 0, background: 'transparent', border: 'none', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', color: '#0f172a' }}>
+        <span style={{ fontWeight: 600, letterSpacing: '0.02em' }}>{entry.iso}</span>
+        <span style={{ fontSize: 15, lineHeight: 1 }}>{entry.flag}</span>
+        <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M3 5l3 3 3-3"/></svg>
       </button>
+      <span style={{ fontFamily: 'var(--mono, monospace)', fontSize: 13, color: '#475569' }}>{entry.code}</span>
       <input
         type="tel"
         inputMode="numeric"
@@ -88,16 +89,17 @@ export default function PhoneInput({ dial, digits, onChange, placeholder = '', d
         disabled={disabled}
         placeholder={placeholder || (Array.isArray(entry.len) ? `${entry.len[0]}–${entry.len[1]} digits` : `${entry.len} digits`)}
         onChange={e => onChange({ dial, digits: e.target.value.replace(/\D/g, '') })}
-        style={{ flex: 1, border: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', outline: 'none', minWidth: 0 }}
+        style={{ flex: 1, border: 'none', padding: '2px 0', fontSize: 14, fontFamily: 'inherit', outline: 'none', minWidth: 0, background: 'transparent', color: '#0f172a' }}
       />
       {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999, minWidth: 220, maxHeight: 260, overflowY: 'auto' }}>
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999, minWidth: 220, maxHeight: 260, overflowY: 'auto' }}>
           {DIAL_CODES.map(c => (
             <button key={c.code} type="button"
               onClick={() => { onChange({ dial: c.code, digits }); setOpen(false) }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: c.code === dial ? '#eff6ff' : 'white', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>
+              <span style={{ fontWeight: 600, minWidth: 26, color: '#0f172a' }}>{c.iso}</span>
               <span style={{ fontSize: 15 }}>{c.flag}</span>
-              <span style={{ fontFamily: 'var(--mono, monospace)', fontWeight: 600, minWidth: 44, color: '#0f172a' }}>{c.code}</span>
+              <span style={{ fontFamily: 'var(--mono, monospace)', fontWeight: 600, minWidth: 44, color: '#475569' }}>{c.code}</span>
               <span style={{ color: '#64748b', fontSize: 12 }}>{c.name}</span>
             </button>
           ))}
