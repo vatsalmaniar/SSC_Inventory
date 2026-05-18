@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
+import PhoneInput, { isValidPhone, isValidEmail } from '../components/PhoneInput'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -95,7 +96,7 @@ export default function CustomerDetail() {
   const [payments, setPayments]       = useState(null)  // { outstanding_inr, overdue_inr } | null
   const [activeTab, setActiveTab]     = useState('summary')
   const [showContactModal, setShowContactModal] = useState(false)
-  const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
+  const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', phoneCC:'+91', whatsapp:'', whatsappCC:'+91', email:'' })
   const [savingContact, setSavingContact] = useState(false)
   const [showCreditCheck, setShowCreditCheck] = useState(false)
   const [ccForm, setCcForm]           = useState({ gst:'', mca:'', thirdparty:'' })
@@ -148,11 +149,22 @@ export default function CustomerDetail() {
 
   async function saveContact() {
     if (!contactForm.name.trim()) { toast('Name is required'); return }
+    if (contactForm.phone && !isValidPhone(contactForm.phoneCC, contactForm.phone)) { toast('Invalid phone number format'); return }
+    if (contactForm.whatsapp && !isValidPhone(contactForm.whatsappCC, contactForm.whatsapp)) { toast('Invalid WhatsApp number format'); return }
+    if (contactForm.email && !isValidEmail(contactForm.email)) { toast('Invalid email format'); return }
     setSavingContact(true)
-    const { data, error } = await sb.from('customer_contacts').insert({ ...contactForm, customer_id: id }).select().single()
+    const payload = {
+      customer_id: id,
+      name: contactForm.name.trim(),
+      designation: contactForm.designation.trim() || null,
+      phone:    contactForm.phone    ? `${contactForm.phoneCC}${contactForm.phone}`       : null,
+      whatsapp: contactForm.whatsapp ? `${contactForm.whatsappCC}${contactForm.whatsapp}` : null,
+      email:    contactForm.email.trim() || null,
+    }
+    const { data, error } = await sb.from('customer_contacts').insert(payload).select().single()
     if (error) { toast(friendlyError(error)); setSavingContact(false); return }
     setContacts(p => [...p, data])
-    setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'' })
+    setContactForm({ name:'', designation:'', phone:'', phoneCC:'+91', whatsapp:'', whatsappCC:'+91', email:'' })
     setShowContactModal(false)
     setSavingContact(false)
     toast('Contact added', 'success')
@@ -1032,13 +1044,31 @@ ${oppsHTML}
               <button onClick={() => setShowContactModal(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
             </div>
             <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:12 }}>
-              {[['name','Name *','text'],['designation','Title / Designation','text'],['phone','Phone','tel'],['whatsapp','WhatsApp','tel'],['email','Email','email']].map(([field,label,type]) => (
+              {[['name','Name *','text'],['designation','Title / Designation','text']].map(([field,label,type]) => (
                 <div key={field}>
                   <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</div>
                   <input type={type} value={contactForm[field]} onChange={e => setContactForm(p => ({ ...p, [field]: e.target.value }))}
                     style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
                 </div>
               ))}
+              <div>
+                <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.4px' }}>Phone</div>
+                <PhoneInput dial={contactForm.phoneCC} digits={contactForm.phone}
+                  onChange={({ dial, digits }) => setContactForm(p => ({ ...p, phoneCC: dial, phone: digits }))}/>
+              </div>
+              <div>
+                <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.4px' }}>WhatsApp</div>
+                <PhoneInput dial={contactForm.whatsappCC} digits={contactForm.whatsapp}
+                  onChange={({ dial, digits }) => setContactForm(p => ({ ...p, whatsappCC: dial, whatsapp: digits }))}/>
+              </div>
+              <div>
+                <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.4px' }}>Email</div>
+                <input type="email" value={contactForm.email} onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))}
+                  style={{ width:'100%', border:`1px solid ${contactForm.email && !isValidEmail(contactForm.email) ? '#fca5a5' : '#e2e8f0'}`, borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
+                {contactForm.email && !isValidEmail(contactForm.email) && (
+                  <div style={{ fontSize:11, color:'#dc2626', marginTop:3 }}>Enter a valid email like name@example.com</div>
+                )}
+              </div>
             </div>
             <div style={{ padding:'0 20px 18px', display:'flex', gap:8, justifyContent:'flex-end' }}>
               <button onClick={() => setShowContactModal(false)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>

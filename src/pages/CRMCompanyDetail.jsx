@@ -6,6 +6,7 @@ import { friendlyError } from '../lib/errorMsg'
 import { toast } from '../lib/toast'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
+import PhoneInput, { isValidPhone, isValidEmail } from '../components/PhoneInput'
 import '../styles/crm.css'
 import '../styles/orderdetail.css'
 
@@ -30,7 +31,7 @@ export default function CRMCompanyDetail() {
   const [editData, setEditData] = useState({})
   const [saving, setSaving]   = useState(false)
   const [showContactForm, setShowContactForm] = useState(false)
-  const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', whatsapp:'', email:'', is_decision_maker:false, is_influencer:false, notes:'' })
+  const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', phoneCC:'+91', whatsapp:'', whatsappCC:'+91', email:'', is_decision_maker:false, is_influencer:false, notes:'' })
   const [savingContact, setSavingContact] = useState(false)
 
   useEffect(() => { init() }, [id])
@@ -87,13 +88,27 @@ export default function CRMCompanyDetail() {
 
   async function saveContact() {
     if (!contactForm.name.trim()) { toast('Contact name is required'); return }
+    if (contactForm.phone && !isValidPhone(contactForm.phoneCC, contactForm.phone)) { toast('Invalid phone number format'); return }
+    if (contactForm.whatsapp && !isValidPhone(contactForm.whatsappCC, contactForm.whatsapp)) { toast('Invalid WhatsApp number format'); return }
+    if (contactForm.email && !isValidEmail(contactForm.email)) { toast('Invalid email format'); return }
     setSavingContact(true)
-    const { data, error } = await sb.from('crm_contacts').insert({ ...contactForm, company_id: id }).select().single()
+    const payload = {
+      company_id: id,
+      name: contactForm.name.trim(),
+      designation: contactForm.designation.trim() || null,
+      phone:    contactForm.phone    ? `${contactForm.phoneCC}${contactForm.phone}`       : null,
+      whatsapp: contactForm.whatsapp ? `${contactForm.whatsappCC}${contactForm.whatsapp}` : null,
+      email:    contactForm.email.trim() || null,
+      is_decision_maker: !!contactForm.is_decision_maker,
+      is_influencer:     !!contactForm.is_influencer,
+      notes: contactForm.notes || null,
+    }
+    const { data, error } = await sb.from('crm_contacts').insert(payload).select().single()
     if (error) { toast(friendlyError(error)); setSavingContact(false); return }
     setContacts(prev => [...prev, data])
     toast('Contact added', 'success')
     setShowContactForm(false)
-    setContactForm({ name:'', designation:'', phone:'', whatsapp:'', email:'', is_decision_maker:false, is_influencer:false, notes:'' })
+    setContactForm({ name:'', designation:'', phone:'', phoneCC:'+91', whatsapp:'', whatsappCC:'+91', email:'', is_decision_maker:false, is_influencer:false, notes:'' })
     setSavingContact(false)
   }
 
@@ -251,9 +266,21 @@ export default function CRMCompanyDetail() {
                       <div className="crm-form">
                         <div className="crm-edit-field"><label>Name *</label><input value={contactForm.name} onChange={e=>setContactForm(p=>({...p,name:e.target.value}))}/></div>
                         <div className="crm-edit-field"><label>Designation</label><input value={contactForm.designation} onChange={e=>setContactForm(p=>({...p,designation:e.target.value}))}/></div>
-                        <div className="crm-edit-field"><label>Phone</label><input value={contactForm.phone} onChange={e=>setContactForm(p=>({...p,phone:e.target.value}))}/></div>
-                        <div className="crm-edit-field"><label>WhatsApp</label><input value={contactForm.whatsapp} onChange={e=>setContactForm(p=>({...p,whatsapp:e.target.value}))}/></div>
-                        <div className="crm-edit-field"><label>Email</label><input value={contactForm.email} onChange={e=>setContactForm(p=>({...p,email:e.target.value}))}/></div>
+                        <div className="crm-edit-field"><label>Phone</label>
+                          <PhoneInput dial={contactForm.phoneCC} digits={contactForm.phone}
+                            onChange={({ dial, digits }) => setContactForm(p => ({ ...p, phoneCC: dial, phone: digits }))}/>
+                        </div>
+                        <div className="crm-edit-field"><label>WhatsApp</label>
+                          <PhoneInput dial={contactForm.whatsappCC} digits={contactForm.whatsapp}
+                            onChange={({ dial, digits }) => setContactForm(p => ({ ...p, whatsappCC: dial, whatsapp: digits }))}/>
+                        </div>
+                        <div className="crm-edit-field"><label>Email</label>
+                          <input type="email" value={contactForm.email} onChange={e=>setContactForm(p=>({...p,email:e.target.value}))}
+                            style={ contactForm.email && !isValidEmail(contactForm.email) ? { borderColor:'#fca5a5' } : undefined } />
+                          {contactForm.email && !isValidEmail(contactForm.email) && (
+                            <div style={{ fontSize:11, color:'#dc2626', marginTop:3 }}>Enter a valid email like name@example.com</div>
+                          )}
+                        </div>
                         <div style={{display:'flex',gap:12}}>
                           <label style={{fontSize:12,display:'flex',gap:6,alignItems:'center',cursor:'pointer'}}>
                             <input type="checkbox" checked={contactForm.is_decision_maker} onChange={e=>setContactForm(p=>({...p,is_decision_maker:e.target.checked}))}/>Decision Maker
