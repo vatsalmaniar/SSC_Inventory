@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
-import PhoneInput, { isValidPhone, isValidEmail } from '../components/PhoneInput'
+import PhoneInput, { isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -199,6 +199,12 @@ export default function CustomerDetail() {
   }
 
   async function save() {
+    const pocSplit = splitPhone(editData.poc_no || '')
+    const dirSplit = splitPhone(editData.director_no || '')
+    if (editData.poc_no && !isValidPhone(pocSplit.dial, pocSplit.digits)) { toast('Invalid POC phone format'); return }
+    if (editData.director_no && !isValidPhone(dirSplit.dial, dirSplit.digits)) { toast('Invalid Director phone format'); return }
+    if (editData.poc_email && !isValidEmail(editData.poc_email)) { toast('Invalid POC email format'); return }
+    if (editData.director_email && !isValidEmail(editData.director_email)) { toast('Invalid Director email format'); return }
     setSaving(true)
     const { error } = await sb.from('customers').update({
       customer_name:    editData.customer_name,
@@ -1176,6 +1182,27 @@ function EditForm({ editData, setEditData }) {
       <input type={type} value={editData[key]||''} onChange={e => set(key, e.target.value)} placeholder={ph} />
     </div>
   )
+  const phn = (label, key) => {
+    const { dial, digits } = splitPhone(editData[key] || '')
+    return (
+      <div className="od-edit-field">
+        <label>{label}</label>
+        <PhoneInput dial={dial} digits={digits}
+          onChange={({ dial: d, digits: dg }) => set(key, dg ? `${d}${dg}` : '')}/>
+      </div>
+    )
+  }
+  const emailInp = (label, key) => {
+    const v = editData[key] || ''
+    const bad = v && !isValidEmail(v)
+    return (
+      <div className="od-edit-field"><label>{label}</label>
+        <input type="email" value={v} onChange={e => set(key, e.target.value)}
+          style={ bad ? { borderColor:'#fca5a5' } : undefined } />
+        {bad && <div style={{ fontSize:11, color:'#dc2626', marginTop:3 }}>Enter a valid email</div>}
+      </div>
+    )
+  }
   const sel = (label, key, opts) => (
     <div className="od-edit-field">
       <label>{label}</label>
@@ -1226,12 +1253,12 @@ function EditForm({ editData, setEditData }) {
       <div style={{ marginTop:8 }}>{ta('Shipping Address','shipping_address','Full shipping address')}</div>
 
       <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.7px', margin:'12px 0 8px' }}>Point of Contact</div>
-      <div className="od-edit-row">{inp('POC Name','poc_name')}{inp('POC Phone','poc_no','tel')}</div>
-      <div className="od-edit-row"><div style={{ flex:1 }}>{inp('POC Email','poc_email','email')}</div><div style={{ flex:1 }}></div></div>
+      <div className="od-edit-row">{inp('POC Name','poc_name')}{phn('POC Phone','poc_no')}</div>
+      <div className="od-edit-row"><div style={{ flex:1 }}>{emailInp('POC Email','poc_email')}</div><div style={{ flex:1 }}></div></div>
 
       <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.7px', margin:'12px 0 8px' }}>Director / Decision Maker</div>
-      <div className="od-edit-row">{inp('Director Name','director_name')}{inp('Director Phone','director_no','tel')}</div>
-      <div className="od-edit-row"><div style={{ flex:1 }}>{inp('Director Email','director_email','email')}</div><div style={{ flex:1 }}></div></div>
+      <div className="od-edit-row">{inp('Director Name','director_name')}{phn('Director Phone','director_no')}</div>
+      <div className="od-edit-row"><div style={{ flex:1 }}>{emailInp('Director Email','director_email')}</div><div style={{ flex:1 }}></div></div>
 
       <div style={{ fontSize:10, fontWeight:700, color:'#92400e', textTransform:'uppercase', letterSpacing:'0.7px', margin:'16px 0 8px' }}>Visual Inspection Notes</div>
       <div style={{ marginBottom:8 }}>{ta('Shopfloor Observation','vi_shopfloor','e.g. Shop floor filled with machines, active production…')}</div>
