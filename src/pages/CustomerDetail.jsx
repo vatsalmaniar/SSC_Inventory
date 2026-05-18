@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
-import PhoneInput, { isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
+import PhoneInput, { PhoneDisplay, isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -675,7 +675,7 @@ ${oppsHTML}
                             <Field label="POC Name"  val={customer.poc_name} />
                             <div className="c360-field">
                               <label>POC Phone</label>
-                              <div className="val">{customer.poc_no ? <a href={'tel:'+customer.poc_no} style={{ color:'#1a4dab', textDecoration:'none' }}>{customer.poc_no}</a> : '—'}</div>
+                              <div className="val">{customer.poc_no ? <a href={'tel:'+customer.poc_no} style={{ color:'#1a4dab', textDecoration:'none' }}><PhoneDisplay value={customer.poc_no}/></a> : '—'}</div>
                             </div>
                             <div className="c360-field" style={{ gridColumn:'span 2' }}>
                               <label>POC Email</label>
@@ -688,7 +688,7 @@ ${oppsHTML}
                             <Field label="Director Name" val={customer.director_name} />
                             <div className="c360-field">
                               <label>Director Phone</label>
-                              <div className="val">{customer.director_no ? <a href={'tel:'+customer.director_no} style={{ color:'#1a4dab', textDecoration:'none' }}>{customer.director_no}</a> : '—'}</div>
+                              <div className="val">{customer.director_no ? <a href={'tel:'+customer.director_no} style={{ color:'#1a4dab', textDecoration:'none' }}><PhoneDisplay value={customer.director_no}/></a> : '—'}</div>
                             </div>
                             <div className="c360-field" style={{ gridColumn:'span 2' }}>
                               <label>Director Email</label>

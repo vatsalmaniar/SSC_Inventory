@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import { fmt } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
-import PhoneInput, { isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
+import PhoneInput, { PhoneDisplay, isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -531,7 +531,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                             <Field label="POC Name" val={vendor.poc_name} />
                             <div className="c360-field">
                               <label>POC Phone</label>
-                              <div className="val">{vendor.poc_phone ? <a href={'tel:'+vendor.poc_phone} style={{ color:'#1a4dab', textDecoration:'none' }}>{vendor.poc_phone}</a> : '—'}</div>
+                              <div className="val">{vendor.poc_phone ? <a href={'tel:'+vendor.poc_phone} style={{ color:'#1a4dab', textDecoration:'none' }}><PhoneDisplay value={vendor.poc_phone}/></a> : '—'}</div>
                             </div>
                             <div className="c360-field" style={{ gridColumn:'span 2' }}>
                               <label>POC Email</label>
@@ -544,7 +544,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                             <Field label="Director Name" val={vendor.director_name} />
                             <div className="c360-field">
                               <label>Director Phone</label>
-                              <div className="val">{vendor.director_no ? <a href={'tel:'+vendor.director_no} style={{ color:'#1a4dab', textDecoration:'none' }}>{vendor.director_no}</a> : '—'}</div>
+                              <div className="val">{vendor.director_no ? <a href={'tel:'+vendor.director_no} style={{ color:'#1a4dab', textDecoration:'none' }}><PhoneDisplay value={vendor.director_no}/></a> : '—'}</div>
                             </div>
                             <div className="c360-field" style={{ gridColumn:'span 2' }}>
                               <label>Director Email</label>

@@ -35,6 +35,21 @@ export function isValidEmail(s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s).trim())
 }
 
+// Read-only display of a stored phone string. Renders flag + dial code + digits.
+// Use inside a span/link wrapper; doesn't apply colors itself.
+export function PhoneDisplay({ value }) {
+  if (!value) return <>—</>
+  const { dial, digits } = splitPhone(value)
+  if (!digits) return <>—</>
+  const entry = DIAL_CODES.find(c => c.code === dial) || DIAL_CODES[0]
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontSize: '0.9em' }}>{entry.flag}</span>
+      <span>{dial} {digits}</span>
+    </span>
+  )
+}
+
 // Split a stored phone string (e.g. "+919876543210") into { dial, digits }
 export function splitPhone(stored) {
   const s = String(stored || '').trim()
