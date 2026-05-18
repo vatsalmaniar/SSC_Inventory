@@ -146,6 +146,7 @@ export default function OrderDetail() {
   const [isNextBatch, setIsNextBatch]             = useState(false)
   const [batches, setBatches]                     = useState([])
   const [linkedPOs, setLinkedPOs]                 = useState([])
+  const [poEarliestDelivery, setPoEarliestDelivery] = useState({})
   const [poCoveredItemIds, setPoCoveredItemIds]   = useState(new Set())
   const [custCode, setCustCode]                   = useState('')
 
@@ -223,13 +224,24 @@ export default function OrderDetail() {
       bg.push(sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery,created_at').eq('order_id', id).order('created_at', { ascending: false }).then(async ({ data: pos }) => {
         setLinkedPOs(pos || [])
         const poIds = (pos || []).map(p => p.id)
-        if (!poIds.length) { setPoCoveredItemIds(new Set()); return }
-        const { data: pis } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
-        setPoCoveredItemIds(new Set((pis || []).map(pi => pi.order_item_id)))
+        if (!poIds.length) { setPoCoveredItemIds(new Set()); setPoEarliestDelivery({}); return }
+        // Pull line-level coverage + earliest pending delivery date per PO.
+        // Pending = qty > received_qty. We want the soonest arrival per PO.
+        const { data: pis } = await sb.from('po_items').select('po_id, order_item_id, delivery_date, qty, received_qty').in('po_id', poIds)
+        setPoCoveredItemIds(new Set((pis || []).filter(pi => pi.order_item_id).map(pi => pi.order_item_id)))
+        const earliest = {}
+        ;(pis || []).forEach(pi => {
+          const pending = (pi.qty || 0) > (pi.received_qty || 0)
+          if (!pending || !pi.delivery_date) return
+          const cur = earliest[pi.po_id]
+          if (!cur || pi.delivery_date < cur) earliest[pi.po_id] = pi.delivery_date
+        })
+        setPoEarliestDelivery(earliest)
       }))
     } else {
       setLinkedPOs([])
       setPoCoveredItemIds(new Set())
+      setPoEarliestDelivery({})
     }
     Promise.all(bg)
   }
@@ -1142,6 +1154,12 @@ if (match) {
                                 {po.vendor_name || '—'}
                                 {po.total_amount ? <span style={{marginLeft:8,color:'var(--gray-400)'}}>· ₹{Number(po.total_amount).toLocaleString('en-IN',{maximumFractionDigits:0})}</span> : ''}
                               </div>
+                              {poEarliestDelivery[po.id] && (
+                                <div style={{fontSize:11.5,color:'#1d4ed8',marginTop:4,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
+                                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                  Expected delivery: {fmt(poEarliestDelivery[po.id])}
+                                </div>
+                              )}
                             </div>
                             <div style={{display:'flex',alignItems:'center',gap:10}}>
                               <span className={'pill pill-' + pillCls} style={{fontSize:11}}>{label}</span>
