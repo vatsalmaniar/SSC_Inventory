@@ -109,25 +109,20 @@ export default function BillingList() {
   const totalValue = filtered.reduce((s, b) => s + batchValue(b), 0)
   const overrides  = filtered.filter(b => b.credit_override).length
 
-  // Quick filters (broad groupings)
-  const QUICK_FILTERS = [
-    { key: 'everything',    label: 'All' },
-    { key: 'action',        label: 'Action Required' },
-    { key: 'pi',            label: 'PI Stage', tone: 'warn' },
-    { key: 'waiting',       label: 'Waiting' },
-    { key: 'all',           label: 'All Active' },
-    { key: 'override',      label: 'Overrides', tone: 'warn' },
-    { key: 'dispatched_fc', label: 'Delivered' },
+  // Single-row filters — keeps semantic groupings + the few stages
+  // billing team actually triages by, mirroring OrdersList shape.
+  const FILTERS = [
+    { key: 'everything',         label: 'All' },
+    { key: 'action',             label: 'Action Required' },
+    { key: 'pi',                 label: 'PI Stage',        tone: 'warn' },
+    { key: 'goods_issued',       label: 'Credit Check' },
+    { key: 'override',           label: 'Overrides',       tone: 'warn' },
+    { key: 'goods_issue_posted', label: 'Invoice Pending' },
+    { key: 'delivery_ready',     label: 'E-Way Pending' },
+    { key: 'dispatched_fc',      label: 'Delivered' },
   ]
 
-  // Per-stage filters (every status independently)
-  const STAGE_FILTERS = BILLING_BATCH_STATUSES.map(key => ({
-    key, label: STATUS_LABELS[key] || key, color: STATUS_COLORS[key],
-  }))
-
-  const activeQuickLabel = QUICK_FILTERS.find(f => f.key === filter)?.label
-  const activeStageLabel = STAGE_FILTERS.find(f => f.key === filter)?.label
-  const activeLabel      = activeQuickLabel || activeStageLabel || 'Billing'
+  const activeLabel = FILTERS.find(f => f.key === filter)?.label || 'Billing'
   const fileName = `SSC_Billing_${activeLabel.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}`
 
   function downloadSummary() {
@@ -318,28 +313,11 @@ export default function BillingList() {
           </div>
         </div>
 
-        {/* Broad groupings */}
         <div className="o-filter-row">
-          {QUICK_FILTERS.map(({ key, label, tone }) => {
+          {FILTERS.map(({ key, label, tone }) => {
             const count = counts[key]
             return (
               <button key={key} className={`o-chip ${filter === key ? 'on' : ''} ${tone || ''}`} onClick={() => setFilter(key)}>
-                {label}
-                {count > 0 && <span className="o-chip-n">{count}</span>}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Per-stage filters */}
-        <div className="o-filter-row" style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--o-line)' }}>
-          <span style={{ fontSize: 11, color: 'var(--o-muted)', fontFamily: 'Geist Mono,monospace', alignSelf: 'center', marginRight: 6, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Stage</span>
-          {STAGE_FILTERS.map(({ key, label, color }) => {
-            const count = counts[key] || 0
-            if (count === 0 && filter !== key) return null
-            return (
-              <button key={key} className={`o-chip ${filter === key ? 'on' : ''}`} onClick={() => setFilter(key)} style={{ '--chip-accent': color }}>
-                <span style={{ display:'inline-block', width:6, height:6, borderRadius:'50%', background: color, marginRight:6 }}/>
                 {label}
                 {count > 0 && <span className="o-chip-n">{count}</span>}
               </button>
