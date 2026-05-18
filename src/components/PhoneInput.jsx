@@ -61,8 +61,9 @@ export function splitPhone(stored) {
   return { dial: '+91', digits: s.replace(/\D/g, '') }
 }
 
-export default function PhoneInput({ dial, digits, onChange, placeholder = '', disabled = false }) {
+export default function PhoneInput({ dial, digits, onChange, label = null, placeholder = '', disabled = false }) {
   const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
   const ref = useRef(null)
   useEffect(() => {
     function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
@@ -73,33 +74,42 @@ export default function PhoneInput({ dial, digits, onChange, placeholder = '', d
   const entry = DIAL_CODES.find(c => c.code === dial) || DIAL_CODES[0]
   const valid = !digits || isValidPhone(dial, digits)
 
+  const accentColor = !valid ? '#dc2626' : (focused || open) ? '#5a3df0' : '#e2e8f0'
+  const borderWidth = (focused || open || !valid) ? 2 : 1
+
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: `1px solid ${valid ? '#e2e8f0' : '#fca5a5'}`, background: 'transparent' }}>
+    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'stretch', borderRadius: 12, border: `${borderWidth}px solid ${accentColor}`, background: 'white', overflow: 'visible', transition: 'border-color 0.12s, border-width 0.12s' }}>
       <button type="button" disabled={disabled} onClick={() => setOpen(v => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: 0, background: 'transparent', border: 'none', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', color: '#0f172a' }}>
-        <span style={{ fontWeight: 600, letterSpacing: '0.02em' }}>{entry.iso}</span>
-        <span style={{ fontSize: 15, lineHeight: 1 }}>{entry.flag}</span>
-        <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M3 5l3 3 3-3"/></svg>
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', background: '#f8fafc', border: 'none', borderRight: '1px solid #eef2f7', borderRadius: '11px 0 0 11px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', minWidth: 76 }}>
+        <span style={{ fontSize: 20, lineHeight: 1 }}>{entry.flag}</span>
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#64748b" strokeWidth="2" style={{ transition: 'transform 0.15s', transform: open ? 'rotate(180deg)' : 'rotate(0)' }}><path d="M3 5l3 3 3-3"/></svg>
       </button>
-      <span style={{ fontFamily: 'var(--mono, monospace)', fontSize: 13, color: '#475569' }}>{entry.code}</span>
-      <input
-        type="tel"
-        inputMode="numeric"
-        value={digits}
-        disabled={disabled}
-        placeholder={placeholder || (Array.isArray(entry.len) ? `${entry.len[0]}–${entry.len[1]} digits` : `${entry.len} digits`)}
-        onChange={e => onChange({ dial, digits: e.target.value.replace(/\D/g, '') })}
-        style={{ flex: 1, border: 'none', padding: '2px 0', fontSize: 14, fontFamily: 'inherit', outline: 'none', minWidth: 0, background: 'transparent', color: '#0f172a' }}
-      />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: label ? '8px 14px' : '10px 14px', minWidth: 0 }}>
+        {label && <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.2, marginBottom: 2 }}>{label}</div>}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: 16, color: '#0f172a', fontWeight: 500 }}>{entry.code}</span>
+          <input
+            type="tel"
+            inputMode="numeric"
+            value={digits}
+            disabled={disabled}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            placeholder={placeholder || (Array.isArray(entry.len) ? `${entry.len[0]}–${entry.len[1]} digits` : `${'0'.repeat(Math.min(entry.len, 10))}`)}
+            onChange={e => onChange({ dial, digits: e.target.value.replace(/\D/g, '') })}
+            style={{ flex: 1, border: 'none', padding: 0, fontSize: 16, fontFamily: 'inherit', outline: 'none', minWidth: 0, background: 'transparent', color: '#0f172a', fontWeight: 500 }}
+          />
+        </div>
+      </div>
       {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999, minWidth: 220, maxHeight: 260, overflowY: 'auto' }}>
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999, minWidth: 240, maxHeight: 280, overflowY: 'auto' }}>
           {DIAL_CODES.map(c => (
             <button key={c.code} type="button"
               onClick={() => { onChange({ dial: c.code, digits }); setOpen(false) }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 12px', background: c.code === dial ? '#eff6ff' : 'white', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>
-              <span style={{ fontWeight: 600, minWidth: 26, color: '#0f172a' }}>{c.iso}</span>
-              <span style={{ fontSize: 15 }}>{c.flag}</span>
-              <span style={{ fontFamily: 'var(--mono, monospace)', fontWeight: 600, minWidth: 44, color: '#475569' }}>{c.code}</span>
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', background: c.code === dial ? '#f5f3ff' : 'white', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>
+              <span style={{ fontSize: 17 }}>{c.flag}</span>
+              <span style={{ fontWeight: 600, minWidth: 28, color: '#0f172a' }}>{c.iso}</span>
+              <span style={{ fontFamily: 'var(--mono, monospace)', fontWeight: 600, minWidth: 48, color: '#475569' }}>{c.code}</span>
               <span style={{ color: '#64748b', fontSize: 12 }}>{c.name}</span>
             </button>
           ))}
