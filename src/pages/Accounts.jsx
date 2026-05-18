@@ -198,33 +198,60 @@ export default function Accounts() {
     const parties = []
     let curParty = null
     let curBills = 0
-    // raw[0] = column headers ("Date","Ref. No.","Party's Name","Pending",…)
+    let curOverdue = 0
+    // raw[0] = column headers ("Date","Ref. No.","Party's Name","Pending",…,"Due on")
     // raw[1] = sub-header row ("Amount", …)
     // Detail rows have a numeric Excel-serial date in col A.
     // Party-header rows: only col C has the party name.
     // Subtotal rows: cols A/B/C empty, col D (Pending) > 0.
+
+    // Find the "Due on" column dynamically — Tally versions shift it
+    // (seen at col K and col M across exports). Auto-detect by header text.
+    const header = raw[0] || []
+    let dueOnIdx = -1
+    for (let i = 0; i < header.length; i++) {
+      const h = String(header[i] || '').toLowerCase().replace(/[\s.]/g, '')
+      if (h === 'dueon' || h === 'duedate' || h === 'due') { dueOnIdx = i; break }
+    }
+
+    // Excel serial → JS Date. 25569 = days between 1900-01-01 and 1970-01-01.
+    function serialToDate(s) {
+      if (typeof s !== 'number' || s < 30000) return null
+      return new Date(Math.round((s - 25569) * 86400 * 1000))
+    }
+    const today = new Date(); today.setHours(0,0,0,0)
+
     for (let i = 2; i < raw.length; i++) {
       const r = raw[i] || []
       const a = r[0]
       const b = String(r[1] || '').trim()
       const c = String(r[2] || '').trim().replace(/\s+/g, ' ')
       const pending = parseFloat(r[3]) || 0
-      // Overdue = bills older than 90 days (covers most customers' credit terms).
-      // 30-60 and 60-90 buckets typically fall within terms (45 / 60 / 90 day customers).
-      const overdue =
-        (parseFloat(r[7]) || 0) +  // 90 to 120
-        (parseFloat(r[8]) || 0) +  // 120 to 240
-        (parseFloat(r[9]) || 0)    // > 240
       const hasDate = typeof a === 'number' && a > 30000
       // Party header: name present, no date/ref/amount
       if (c && !hasDate && !b && pending === 0) {
         curParty = c
         curBills = 0
+        curOverdue = 0
         continue
       }
-      // Detail bill row
+      // Detail bill row — per-bill overdue check:
+      // if Due-on is in the past (< today), this bill's Pending amount is overdue.
+      // Falls back to aging buckets (90+ days) if Due-on column is missing.
       if (hasDate && curParty) {
         curBills++
+        let billOverdue = 0
+        if (dueOnIdx >= 0) {
+          const due = serialToDate(r[dueOnIdx])
+          if (due && due < today) billOverdue = pending
+        } else {
+          // Legacy fallback: 90+ aging buckets
+          billOverdue =
+            (parseFloat(r[7]) || 0) +
+            (parseFloat(r[8]) || 0) +
+            (parseFloat(r[9]) || 0)
+        }
+        curOverdue += billOverdue
         continue
       }
       // Per-party subtotal — finalize the current party. (Grand total row at end has curParty=null → skipped.)
@@ -232,11 +259,12 @@ export default function Accounts() {
         parties.push({
           party_name_raw: curParty,
           outstanding_inr: pending,
-          overdue_inr: overdue,
+          overdue_inr: curOverdue,
           bill_count: curBills,
         })
         curParty = null
         curBills = 0
+        curOverdue = 0
       }
     }
     return parties
