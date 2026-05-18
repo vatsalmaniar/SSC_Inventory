@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
+import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
+const PAGE_SIZE = 50
 const WITH_ACCOUNTS = ['goods_issued','credit_check','goods_issue_posted','delivery_ready']
 
 const STATUS_LABELS = {
@@ -34,8 +36,10 @@ export default function FCModule() {
   const [filter, setFilter] = useState('action')
   const [search, setSearch] = useState('')
   const [showTest, setShowTest] = useState(false)
+  const [page, setPage] = useState(1)
 
   useEffect(() => { init() }, [])
+  useEffect(() => { setPage(1) }, [filter, search])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -68,6 +72,7 @@ export default function FCModule() {
 
   function matchFilter(b) {
     const s = effStatus(b)
+    if (filter === 'everything') return true
     if (filter === 'all') return actionStatuses.includes(s) || waitStatuses.includes(s)
     if (filter === 'action') return actionStatuses.includes(s)
     if (filter === 'waiting') return waitStatuses.includes(s)
@@ -76,9 +81,16 @@ export default function FCModule() {
   }
 
   const counts = {
-    action: batches.filter(b => actionStatuses.includes(effStatus(b))).length,
-    waiting: batches.filter(b => waitStatuses.includes(effStatus(b))).length,
-    dispatched_fc: batches.filter(b => effStatus(b) === 'dispatched_fc').length,
+    everything:        batches.length,
+    action:            batches.filter(b => actionStatuses.includes(effStatus(b))).length,
+    waiting:           batches.filter(b => waitStatuses.includes(effStatus(b))).length,
+    all:               batches.filter(b => actionStatuses.includes(effStatus(b)) || waitStatuses.includes(effStatus(b))).length,
+    delivery_created:  batches.filter(b => effStatus(b) === 'delivery_created').length,
+    picking:           batches.filter(b => effStatus(b) === 'picking').length,
+    packing:           batches.filter(b => effStatus(b) === 'packing').length,
+    invoice_generated: batches.filter(b => effStatus(b) === 'invoice_generated').length,
+    eway_generated:    batches.filter(b => effStatus(b) === 'eway_generated').length,
+    dispatched_fc:     batches.filter(b => effStatus(b) === 'dispatched_fc').length,
   }
   const q = search.trim().toLowerCase()
   const filtered = batches.filter(matchFilter).filter(b =>
@@ -95,12 +107,147 @@ export default function FCModule() {
   }, 0)
 
   const FILTERS = [
-    { key: 'action',        label: 'Action Required' },
-    { key: 'waiting',       label: 'With Accounts', tone: 'warn' },
-    { key: 'all',           label: 'All Active' },
-    { key: 'dispatched_fc', label: 'Delivered' },
+    { key: 'everything',        label: 'All' },
+    { key: 'action',            label: 'Action Required' },
+    { key: 'delivery_created',  label: 'Picking' },
+    { key: 'picking',           label: 'Packing' },
+    { key: 'packing',           label: 'Goods Issue' },
+    { key: 'invoice_generated', label: 'Delivery Ready' },
+    { key: 'eway_generated',    label: 'E-Way Done' },
+    { key: 'waiting',           label: 'With Accounts', tone: 'warn' },
+    { key: 'dispatched_fc',     label: 'Delivered' },
   ]
   const centerLabel = user.center ? ` — ${user.center}` : ''
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  const activeLabel = FILTERS.find(f => f.key === filter)?.label || 'FC'
+  const fileName = `SSC_FC_${activeLabel.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}`
+
+  function batchValue(b) {
+    return (b.dispatched_items || []).length
+      ? (b.dispatched_items).reduce((sum, i) => sum + (i.total_price || 0), 0)
+      : (b.orders?.order_items || []).reduce((sum, i) => sum + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.lp_unit_price || 0))), 0)
+  }
+
+  function downloadSummary() {
+    if (!filtered.length) { alert('No batches to export. Adjust filters and try again.'); return }
+    const rows = filtered.map(b => ({
+      'DC #':       b.dc_number || '',
+      'Order #':    b.orders?.order_number || '',
+      'Customer':   b.orders?.customer_name || '',
+      'Batch #':    b.batch_no || '',
+      'Centre':     b.fulfilment_center || '',
+      'Date':       fmt(b.created_at),
+      'Invoice #':  b.invoice_number || '',
+      'Items':      (b.dispatched_items || b.orders?.order_items || []).length,
+      'Value (₹)':  Math.round(batchValue(b)),
+      'Stage':      STATUS_LABELS[effStatus(b)] || effStatus(b),
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'FC Batches')
+    XLSX.writeFile(wb, fileName + '_Summary.xlsx')
+  }
+
+  async function downloadDetailed() {
+    if (!filtered.length) { alert('No batches to export. Adjust filters and try again.'); return }
+    let ExcelJS
+    try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
+    try {
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'SSC ERP'; wb.created = new Date()
+      const ws = wb.addWorksheet('FC Detailed', { views: [{ state: 'frozen', ySplit: 1 }] })
+      const cols = [
+        { header: 'Sr No',         key: 'sr_no',         width: 6 },
+        { header: 'Batch Date',    key: 'batch_date',    width: 12 },
+        { header: 'DC #',          key: 'dc_number',     width: 16 },
+        { header: 'Order No',      key: 'order_number',  width: 22 },
+        { header: 'Batch #',       key: 'batch_no',      width: 8 },
+        { header: 'Customer',      key: 'customer_name', width: 32 },
+        { header: 'Centre',        key: 'centre',        width: 12 },
+        { header: 'Invoice #',     key: 'invoice',       width: 18 },
+        { header: 'Item Code',     key: 'item_code',     width: 26 },
+        { header: 'Qty',           key: 'qty',           width: 8 },
+        { header: 'Value',         key: 'total_value',   width: 14, style: { numFmt: '₹#,##,##0.00' } },
+        { header: 'Stage',         key: 'stage',         width: 18 },
+      ]
+      ws.columns = cols
+      const stageStyle = (s) => {
+        if (s === 'dispatched_fc') return { bg: 'FFBBF7D0', fg: 'FF14532D' }
+        if (['eway_generated','delivery_ready','invoice_generated'].includes(s)) return { bg: 'FFD1FAE5', fg: 'FF065F46' }
+        if (['picking','packing','delivery_created'].includes(s)) return { bg: 'FFE0E7FF', fg: 'FF3730A3' }
+        if (WITH_ACCOUNTS.includes(s)) return { bg: 'FFFEF3C7', fg: 'FF92400E' }
+        return { bg: 'FFF1F5F9', fg: 'FF334155' }
+      }
+      let rowCounter = 0
+      filtered.forEach(b => {
+        const items = b.dispatched_items?.length ? b.dispatched_items : (b.orders?.order_items || [])
+        const stage = effStatus(b)
+        const sStyle = stageStyle(stage)
+        const base = {
+          batch_date: fmt(b.created_at),
+          dc_number: b.dc_number || '',
+          order_number: b.orders?.order_number || '',
+          batch_no: b.batch_no || '',
+          customer_name: b.orders?.customer_name || '',
+          centre: b.fulfilment_center || '',
+          invoice: b.invoice_number || '',
+          stage: STATUS_LABELS[stage] || stage,
+        }
+        const pushRow = (data) => {
+          const row = ws.addRow(data)
+          const sCell = row.getCell('stage')
+          sCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sStyle.bg } }
+          sCell.font = { bold: true, color: { argb: sStyle.fg } }
+          sCell.alignment = { horizontal: 'center', vertical: 'middle' }
+        }
+        if (!items.length) {
+          rowCounter += 1
+          pushRow({ ...base, sr_no: rowCounter, item_code: '', qty: '', total_value: '' })
+        } else {
+          items.forEach(it => {
+            rowCounter += 1
+            const cancelVal = (it.cancelled_qty || 0) * (it.unit_price_after_disc || it.lp_unit_price || 0)
+            const netValue  = (it.total_price || 0) - cancelVal
+            pushRow({
+              ...base, sr_no: rowCounter,
+              item_code: it.item_code || '',
+              qty: it.qty ?? it.dispatched_qty ?? '',
+              total_value: netValue,
+            })
+          })
+        }
+      })
+      const header = ws.getRow(1)
+      header.height = 24
+      header.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A2540' } }
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+        cell.alignment = { vertical: 'middle', horizontal: 'left' }
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FF143055' } } }
+      })
+      const lastRow = ws.rowCount
+      for (let r = 2; r <= lastRow; r++) {
+        const row = ws.getRow(r)
+        row.eachCell({ includeEmpty: true }, cell => { cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } } })
+        if (r % 2 === 0) {
+          row.eachCell({ includeEmpty: true }, cell => {
+            const isTinted = cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor?.argb !== 'FFFFFFFF'
+            if (!isTinted) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
+          })
+        }
+      }
+      ws.autoFilter = { from: { row:1, column:1 }, to: { row:1, column: cols.length } }
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = fileName + '_Detailed.xlsx'
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
+  }
 
   return (
     <Layout pageTitle="Fulfilment Center" pageKey="fc">
@@ -121,6 +268,14 @@ export default function FCModule() {
                 Test Mode
               </label>
             )}
+            <button className="o-dl-btn" onClick={downloadSummary} title="Summary Excel">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v9m-3-3 3 3 3-3M3 14h10"/></svg>
+              Summary
+            </button>
+            <button className="o-dl-btn" onClick={downloadDetailed} title="Detailed Excel">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 6h12M6 2v12"/></svg>
+              Detailed
+            </button>
             <button className="btn-ghost" onClick={() => navigate('/fc/grn')}>GRNs</button>
           </div>
         </div>
@@ -147,7 +302,7 @@ export default function FCModule() {
 
         <div className="o-filter-row">
           {FILTERS.map(({ key, label, tone }) => {
-            const count = key === 'all' ? counts.action + counts.waiting : counts[key]
+            const count = counts[key]
             return (
               <button key={key} className={`o-chip ${filter === key ? 'on' : ''} ${tone || ''}`} onClick={() => setFilter(key)}>
                 {label}
@@ -179,8 +334,9 @@ export default function FCModule() {
                 <div style={{ fontSize:13, color:'var(--o-muted)' }}>Nothing to action right now.</div>
               </div>
             ) : (
+              <>
               <div className="ol-table">
-                {filtered.map(b => {
+                {paginated.map(b => {
                   const s = effStatus(b)
                   const isCancelled = b.orders?.status === 'cancelled'
                   const isDelivered = s === 'dispatched_fc'
@@ -215,6 +371,25 @@ export default function FCModule() {
                   )
                 })}
               </div>
+              {filtered.length > 0 && (
+                <div className="ol-foot">
+                  <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+                  {totalPages > 1 && (
+                    <div className="ol-pages">
+                      <button className="ol-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                        const show = totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                        const ellipsis = !show && Math.abs(p - safePage) === 2
+                        if (show) return <button key={p} className={`ol-page-btn ${p === safePage ? 'on' : ''}`} onClick={() => setPage(p)}>{p}</button>
+                        if (ellipsis) return <span key={'e'+p} style={{ padding:'5px 4px', color:'var(--o-muted-2)' }}>…</span>
+                        return null
+                      })}
+                      <button className="ol-page-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>Next ›</button>
+                    </div>
+                  )}
+                </div>
+              )}
+              </>
             )}
           </div>
         )}

@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
+import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
+
+const PAGE_SIZE = 50
 
 const STATUS_LABELS = { three_way_check:'3-Way Check', invoice_pending:'Invoice Pending', inward_complete:'Inward Complete' }
 const STATUS_COLORS = { three_way_check:'#F59E0B', invoice_pending:'#1E54B7', inward_complete:'#22C55E' }
@@ -33,8 +36,10 @@ export default function PurchaseInvoiceList() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('action')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
 
   useEffect(() => { init() }, [])
+  useEffect(() => { setPage(1) }, [filter, search])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -76,6 +81,120 @@ export default function PurchaseInvoiceList() {
   )
   const totalAmount = filtered.reduce((s, i) => s + (i.total_amount || 0), 0)
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  const activeLabel = FILTERS.find(f => f.key === filter)?.label || 'Inward Billing'
+  const fileName = `SSC_InwardBilling_${activeLabel.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}`
+
+  function downloadSummary() {
+    if (!filtered.length) { alert('No invoices to export. Adjust filters and try again.'); return }
+    const rows = filtered.map(inv => ({
+      'Invoice #':       inv.invoice_number || '',
+      'Vendor':          inv.vendor_name || '',
+      'Invoice Date':    inv.invoice_date ? fmt(inv.invoice_date) : '',
+      'Created':         fmt(inv.created_at),
+      'Amount (₹)':      Math.round(inv.invoice_amount || 0),
+      'GST (₹)':         Math.round(inv.gst_amount || 0),
+      'Total (₹)':       Math.round(inv.total_amount || 0),
+      'Stage':           STATUS_LABELS[inv.status || 'three_way_check'] || (inv.status || ''),
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Inward Billing')
+    XLSX.writeFile(wb, fileName + '_Summary.xlsx')
+  }
+
+  async function downloadDetailed() {
+    if (!filtered.length) { alert('No invoices to export. Adjust filters and try again.'); return }
+    let ExcelJS
+    try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
+    try {
+      // Fetch PO + GRN numbers for the filtered set so the export includes them
+      const poIds = [...new Set(filtered.map(i => i.po_id).filter(Boolean))]
+      const grnIds = [...new Set(filtered.map(i => i.grn_id).filter(Boolean))]
+      const poMap = {}; const grnMap = {}
+      if (poIds.length) {
+        const { data: pos } = await sb.from('purchase_orders').select('id,po_number').in('id', poIds)
+        ;(pos || []).forEach(p => { poMap[p.id] = p.po_number })
+      }
+      if (grnIds.length) {
+        const { data: grns } = await sb.from('grn').select('id,grn_number').in('id', grnIds)
+        ;(grns || []).forEach(g => { grnMap[g.id] = g.grn_number })
+      }
+
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'SSC ERP'; wb.created = new Date()
+      const ws = wb.addWorksheet('Inward Billing Detailed', { views: [{ state: 'frozen', ySplit: 1 }] })
+      const cols = [
+        { header: 'Sr No',        key: 'sr_no',        width: 6 },
+        { header: 'Created',      key: 'created',      width: 12 },
+        { header: 'Invoice #',    key: 'invoice',      width: 20 },
+        { header: 'Invoice Date', key: 'invoice_date', width: 12 },
+        { header: 'Vendor',       key: 'vendor',       width: 32 },
+        { header: 'PO #',         key: 'po',           width: 18 },
+        { header: 'GRN #',        key: 'grn',          width: 22 },
+        { header: 'Amount',       key: 'amount',       width: 14, style: { numFmt: '₹#,##,##0.00' } },
+        { header: 'GST',          key: 'gst',          width: 12, style: { numFmt: '₹#,##,##0.00' } },
+        { header: 'Total',        key: 'total',        width: 14, style: { numFmt: '₹#,##,##0.00' } },
+        { header: 'Stage',        key: 'stage',        width: 18 },
+      ]
+      ws.columns = cols
+      const stageStyle = (s) => {
+        if (s === 'inward_complete') return { bg: 'FFDCFCE7', fg: 'FF166534' }
+        if (s === 'invoice_pending') return { bg: 'FFDBEAFE', fg: 'FF1E40AF' }
+        return { bg: 'FFFEF3C7', fg: 'FF92400E' }
+      }
+      filtered.forEach((inv, idx) => {
+        const stage = inv.status || 'three_way_check'
+        const sStyle = stageStyle(stage)
+        const row = ws.addRow({
+          sr_no: idx + 1,
+          created: fmt(inv.created_at),
+          invoice: inv.invoice_number || '',
+          invoice_date: inv.invoice_date ? fmt(inv.invoice_date) : '',
+          vendor: inv.vendor_name || '',
+          po: poMap[inv.po_id] || '',
+          grn: grnMap[inv.grn_id] || '',
+          amount: inv.invoice_amount || 0,
+          gst: inv.gst_amount || 0,
+          total: inv.total_amount || 0,
+          stage: STATUS_LABELS[stage] || stage,
+        })
+        const sCell = row.getCell('stage')
+        sCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sStyle.bg } }
+        sCell.font = { bold: true, color: { argb: sStyle.fg } }
+        sCell.alignment = { horizontal: 'center', vertical: 'middle' }
+      })
+      const header = ws.getRow(1)
+      header.height = 24
+      header.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A2540' } }
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+        cell.alignment = { vertical: 'middle', horizontal: 'left' }
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FF143055' } } }
+      })
+      const lastRow = ws.rowCount
+      for (let r = 2; r <= lastRow; r++) {
+        const row = ws.getRow(r)
+        row.eachCell({ includeEmpty: true }, cell => { cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } } })
+        if (r % 2 === 0) {
+          row.eachCell({ includeEmpty: true }, cell => {
+            const isTinted = cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor?.argb !== 'FFFFFFFF'
+            if (!isTinted) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
+          })
+        }
+      }
+      ws.autoFilter = { from: { row:1, column:1 }, to: { row:1, column: cols.length } }
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = fileName + '_Detailed.xlsx'
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
+  }
+
   return (
     <Layout pageTitle="Inward Billing" pageKey="billing">
       <div className="orders-app">
@@ -89,6 +208,14 @@ export default function PurchaseInvoiceList() {
             </div>
           </div>
           <div className="page-meta">
+            <button className="o-dl-btn" onClick={downloadSummary} title="Summary Excel">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v9m-3-3 3 3 3-3M3 14h10"/></svg>
+              Summary
+            </button>
+            <button className="o-dl-btn" onClick={downloadDetailed} title="Detailed Excel">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 6h12M6 2v12"/></svg>
+              Detailed
+            </button>
             <button className="btn-ghost" onClick={() => navigate('/billing')}>Dashboard</button>
           </div>
         </div>
@@ -144,8 +271,9 @@ export default function PurchaseInvoiceList() {
                 <div style={{ fontSize: 13, color: 'var(--o-muted)' }}>Nothing to show right now.</div>
               </div>
             ) : (
+              <>
               <div className="ol-table">
-                {filtered.map(inv => {
+                {paginated.map(inv => {
                   const stage = inv.status || 'three_way_check'
                   return (
                     <div key={inv.id} className="ol-row ol-data" style={{ gridTemplateColumns: '180px minmax(0, 1.4fr) 110px 110px 110px 110px 140px' }} onClick={() => navigate('/procurement/invoices/' + inv.id)}>
@@ -175,6 +303,23 @@ export default function PurchaseInvoiceList() {
                   )
                 })}
               </div>
+              {filtered.length > 0 && (
+                <div className="ol-foot">
+                  <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+                  <div className="ol-pages">
+                    <button className="ol-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                      const show = totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                      const ellipsis = !show && Math.abs(p - safePage) === 2
+                      if (show) return <button key={p} className={`ol-page-btn ${p === safePage ? 'on' : ''}`} onClick={() => setPage(p)}>{p}</button>
+                      if (ellipsis) return <span key={'e'+p} style={{ padding:'5px 4px', color:'var(--o-muted-2)' }}>…</span>
+                      return null
+                    })}
+                    <button className="ol-page-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>Next ›</button>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </div>
         )}
