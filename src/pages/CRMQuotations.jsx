@@ -72,7 +72,7 @@ export default function CRMQuotations() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
     setUser({ id: session.user.id, name: profile?.name||'', role: profile?.role||'sales' })
-    if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
+    if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/not-authorized?from=CRM'); return }
     const { data: repList } = await sb.from('profiles').select('id,name').in('role',['sales','admin','management']).order('name')
     setReps(repList || [])
     await loadQuotes()

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
@@ -51,7 +52,15 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
     gstin: '',
   })
 
-  useEffect(() => { load() }, [])
+  const navigate = useNavigate()
+
+  useEffect(() => { (async () => {
+    const { data: { session } } = await sb.auth.getSession()
+    if (!session) { navigate('/login'); return }
+    const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
+    if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/not-authorized?from=CRM'); return }
+    load()
+  })() }, [])
 
   async function load() {
     let allCustomers = []

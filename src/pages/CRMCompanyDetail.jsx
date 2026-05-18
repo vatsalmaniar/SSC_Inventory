@@ -40,6 +40,7 @@ export default function CRMCompanyDetail() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
+    if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/not-authorized?from=CRM'); return }
     setUser({ name: profile?.name || '', role: profile?.role || 'sales', id: session.user.id })
     const [compRes, contactsRes, oppsRes, repsRes] = await Promise.all([
       sb.from('crm_companies').select('*, profiles(name)').eq('id', id).single(),

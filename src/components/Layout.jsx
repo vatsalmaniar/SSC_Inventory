@@ -16,7 +16,7 @@ const NAV_ITEMS = [
     key: 'crm',
     label: 'CRM',
     path: '/crm',
-    roles: ['sales', 'ops', 'admin', 'management'],
+    roles: ['sales', 'admin', 'management'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
     sub: [
       { key: 'crm-dash',  label: 'Dashboard',     path: '/crm' },
@@ -331,7 +331,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
   async function doSearch(q) {
     const role = user.role
-    const canCRM = ['sales', 'ops', 'admin', 'management'].includes(role)
+    const canCRM = ['sales', 'admin', 'management'].includes(role)
     const canOrders = ['sales', 'ops', 'admin', 'management', 'accounts', 'fc_kaveri', 'fc_godawari'].includes(role)
     const canProcurement = ['ops', 'admin', 'management', 'accounts'].includes(role)
     const canItems = ['ops', 'admin', 'management', 'accounts'].includes(role)

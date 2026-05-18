@@ -61,6 +61,7 @@ const BillingList = lazy(() => import('./pages/BillingList'))
 const BillingOrderDetail = lazy(() => import('./pages/BillingOrderDetail'))
 const UserManagement = lazy(() => import('./pages/UserManagement'))
 const ChangePassword = lazy(() => import('./pages/ChangePassword'))
+const NotAuthorized = lazy(() => import('./pages/NotAuthorized'))
 
 export default function App() {
   return (
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/change-password" element={<ChangePassword />} />
+          <Route path="/not-authorized" element={<NotAuthorized />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/uploads" element={<Accounts />} />
           <Route path="/inventory" element={<Sales />} />
