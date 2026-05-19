@@ -116,6 +116,7 @@ export default function BillingList() {
     { key: 'action',             label: 'Action Required' },
     { key: 'pi',                 label: 'PI Stage',        tone: 'warn' },
     { key: 'goods_issued',       label: 'Credit Check' },
+    { key: 'credit_check',       label: 'GI Posted' },
     { key: 'override',           label: 'Overrides',       tone: 'warn' },
     { key: 'goods_issue_posted', label: 'Invoice Pending' },
     { key: 'delivery_ready',     label: 'E-Way Pending' },
