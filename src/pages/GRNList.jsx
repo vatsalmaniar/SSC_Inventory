@@ -15,12 +15,12 @@ const GRN_STATUS_LABELS = { draft:'GRN Created', checking:'Checking', confirmed:
 const GRN_STATUS_COLORS = { draft:'#94A3B8', checking:'#F59E0B', confirmed:'#1E54B7', invoice_matched:'#0F766E', inward_posted:'#22C55E' }
 
 const FILTERS = [
-  { key:'all', label:'All' },
-  { key:'draft', label:'Created' },
-  { key:'checking', label:'Checking', tone:'warn' },
-  { key:'confirmed', label:'Confirmed' },
-  { key:'invoice_matched', label:'Matched' },
-  { key:'inward_posted', label:'Posted' },
+  { key:'all',             label:'All' },
+  { key:'draft',           label:'GRN Created' },
+  { key:'checking',        label:'Checking',          tone:'warn' },
+  { key:'confirmed',       label:'Confirmed' },
+  { key:'invoice_matched', label:'Invoice Matched' },
+  { key:'inward_posted',   label:'Inward Posted' },
 ]
 const TYPE_FILTERS = [
   { key:'all', label:'All Types' },

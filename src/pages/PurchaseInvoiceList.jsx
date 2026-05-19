@@ -23,10 +23,10 @@ function fmtCr(val) {
 }
 
 const FILTERS = [
-  { key:'action', label:'3-Way Check', tone:'warn' },
-  { key:'invoice_pending', label:'Invoice Pending' },
-  { key:'inward_complete', label:'Inward Complete' },
-  { key:'all', label:'All' },
+  { key:'all',              label:'All' },
+  { key:'three_way_check',  label:'3-Way Check',     tone:'warn' },
+  { key:'invoice_pending',  label:'Invoice Pending' },
+  { key:'inward_complete',  label:'Inward Complete' },
 ]
 
 export default function PurchaseInvoiceList() {
@@ -34,7 +34,7 @@ export default function PurchaseInvoiceList() {
   const [userRole, setUserRole] = useState('')
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('action')
+  const [filter, setFilter] = useState('three_way_check')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 
@@ -62,7 +62,7 @@ export default function PurchaseInvoiceList() {
 
   function matchFilter(inv) {
     const s = inv.status || 'three_way_check'
-    if (filter === 'action') return s === 'three_way_check'
+    if (filter === 'three_way_check') return s === 'three_way_check'
     if (filter === 'invoice_pending') return s === 'invoice_pending'
     if (filter === 'inward_complete') return s === 'inward_complete'
     if (filter === 'all') return true
@@ -70,7 +70,7 @@ export default function PurchaseInvoiceList() {
   }
 
   const counts = {
-    action: invoices.filter(i => (i.status || 'three_way_check') === 'three_way_check').length,
+    three_way_check: invoices.filter(i => (i.status || 'three_way_check') === 'three_way_check').length,
     invoice_pending: invoices.filter(i => i.status === 'invoice_pending').length,
     inward_complete: invoices.filter(i => i.status === 'inward_complete').length,
     all: invoices.length,
@@ -223,7 +223,7 @@ export default function PurchaseInvoiceList() {
         </div>
 
         <div className="kpi-row">
-          <KpiTile variant="hero" tone="deep" label="3-Way Check" value={counts.action} sub="verify PO·GRN·invoice" chart="bars" onClick={() => setFilter('action')}/>
+          <KpiTile variant="hero" tone="deep" label="3-Way Check" value={counts.three_way_check} sub="verify PO·GRN·invoice" chart="bars" onClick={() => setFilter('three_way_check')}/>
           <KpiTile variant="hero" tone="forest" label="Inward Complete" value={counts.inward_complete} sub="fully processed" chart="bars" onClick={() => setFilter('inward_complete')}/>
           <KpiTile variant="hero" tone="teal" label="Invoice Pending" value={counts.invoice_pending} sub="awaiting entry" chart="line" onClick={() => setFilter('invoice_pending')}/>
           <KpiTile label="Total Value" value={fmtCr(totalAmount)} sub="filtered amount"/>

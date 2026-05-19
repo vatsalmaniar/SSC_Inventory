@@ -106,16 +106,19 @@ export default function FCModule() {
     return s + v
   }, 0)
 
+  // Every UI stage label as its own chip (matches row pill labels)
   const FILTERS = [
-    { key: 'everything',        label: 'All' },
-    { key: 'action',            label: 'Action Required' },
-    { key: 'delivery_created',  label: 'Picking' },
-    { key: 'picking',           label: 'Packing' },
-    { key: 'packing',           label: 'Goods Issue' },
-    { key: 'invoice_generated', label: 'Delivery Ready' },
-    { key: 'eway_generated',    label: 'E-Way Done' },
-    { key: 'waiting',           label: 'With Accounts', tone: 'warn' },
-    { key: 'dispatched_fc',     label: 'Delivered' },
+    { key: 'everything',         label: 'All' },
+    { key: 'delivery_created',   label: 'Picking' },
+    { key: 'picking',            label: 'Packing' },
+    { key: 'packing',            label: 'Goods Issue' },
+    { key: 'goods_issued',       label: 'With Accounts',    tone: 'warn' },
+    { key: 'credit_check',       label: 'Credit Check' },
+    { key: 'goods_issue_posted', label: 'GI Posted' },
+    { key: 'invoice_generated',  label: 'Delivery Ready' },
+    { key: 'delivery_ready',     label: 'E-Way Pending' },
+    { key: 'eway_generated',     label: 'Ready to Deliver' },
+    { key: 'dispatched_fc',      label: 'Delivered' },
   ]
   const centerLabel = user.center ? ` — ${user.center}` : ''
 
