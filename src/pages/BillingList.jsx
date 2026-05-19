@@ -111,15 +111,21 @@ export default function BillingList() {
 
   // Single-row filters — keeps semantic groupings + the few stages
   // billing team actually triages by, mirroring OrdersList shape.
+  // Every UI stage gets its own chip so people can see each bucket at a glance.
+  // Labels match what's shown in the row's stage pill (intentional inversion
+  // for credit_check vs goods_issued — see STATUS_LABELS at top of file).
   const FILTERS = [
     { key: 'everything',         label: 'All' },
-    { key: 'action',             label: 'Action Required' },
-    { key: 'pi',                 label: 'PI Stage',        tone: 'warn' },
+    { key: 'override',           label: 'Overrides',          tone: 'warn' },
+    { key: 'pi_requested',       label: 'Issue PI',           tone: 'warn' },
+    { key: 'pi_generated',       label: 'PI Sent' },
+    { key: 'pi_payment_pending', label: 'PI Payment Pending' },
     { key: 'goods_issued',       label: 'Credit Check' },
     { key: 'credit_check',       label: 'GI Posted' },
-    { key: 'override',           label: 'Overrides',       tone: 'warn' },
     { key: 'goods_issue_posted', label: 'Invoice Pending' },
+    { key: 'invoice_generated',  label: 'Waiting for FC' },
     { key: 'delivery_ready',     label: 'E-Way Pending' },
+    { key: 'eway_generated',     label: 'E-Way Done' },
     { key: 'dispatched_fc',      label: 'Delivered' },
   ]
 
