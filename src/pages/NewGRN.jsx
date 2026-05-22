@@ -75,10 +75,11 @@ export default function NewGRN() {
     if (po.vendor_name) { setVendorText(po.vendor_name); setVendorName(po.vendor_name); setVendorId(po.vendor_id || '') }
 
     // Load pending items for this PO
-    const { data: poItems } = await sb.from('po_items').select('id,item_code,qty,received_qty').eq('po_id', poId).order('sr_no')
+    const { data: poItems } = await sb.from('po_items').select('id,item_code,qty,received_qty,sr_no').eq('po_id', poId).order('sr_no')
     const pending = (poItems || []).filter(pi => pi.qty > (pi.received_qty || 0)).map(pi => ({
       po_item_id: pi.id,
       item_code: pi.item_code,
+      sr_no: pi.sr_no,
       ordered_qty: pi.qty,
       received_qty_so_far: pi.received_qty || 0,
       pending_qty: pi.qty - (pi.received_qty || 0),
@@ -133,10 +134,11 @@ export default function NewGRN() {
 
   async function selectPOForRow(idx, po) {
     // Load pending items for this PO
-    const { data: poItems } = await sb.from('po_items').select('id,item_code,qty,received_qty').eq('po_id', po.id).order('sr_no')
+    const { data: poItems } = await sb.from('po_items').select('id,item_code,qty,received_qty,sr_no').eq('po_id', po.id).order('sr_no')
     const pending = (poItems || []).filter(pi => pi.qty > (pi.received_qty || 0)).map(pi => ({
       po_item_id: pi.id,
       item_code: pi.item_code,
+      sr_no: pi.sr_no,
       ordered_qty: pi.qty,
       received_qty_so_far: pi.received_qty || 0,
       pending_qty: pi.qty - (pi.received_qty || 0),
@@ -248,6 +250,15 @@ export default function NewGRN() {
         if (parseFloat(item.received_qty) > item.pending_qty) {
           toast(`${item.item_code}: received qty exceeds pending (${item.pending_qty})`); return
         }
+      }
+      // Guard: no two rows may point at the same PO line (would over-receive one
+      // line and orphan its sibling — the dup-link bug that stalls confirm_grn).
+      const seenPoItems = new Set()
+      for (const item of validItems) {
+        if (item.po_item_id && seenPoItems.has(item.po_item_id)) {
+          toast(`${item.item_code} is added on two rows against the same PO line. Pick a different PO line (each line can be received once).`, 'error'); return
+        }
+        if (item.po_item_id) seenPoItems.add(item.po_item_id)
       }
     } else if (isSample) {
       if (!selectedSR) { toast('Please select a Sample order'); return }
@@ -517,6 +528,14 @@ export default function NewGRN() {
                       </td>
                       <td>
                         {item._poItems.length > 0 ? (
+                          (() => {
+                            // PO lines already chosen by OTHER rows of the same PO — disable them
+                            // so two rows can't point at the same PO line (the dup-link bug).
+                            const usedElsewhere = new Set(
+                              items.filter((r, i) => i !== idx && r._poId === item._poId && r.po_item_id)
+                                   .map(r => r.po_item_id)
+                            )
+                            return (
                           <select
                             value={item.po_item_id}
                             onChange={e => {
@@ -526,12 +545,16 @@ export default function NewGRN() {
                             style={{ width: '100%', padding: '7px 8px', border: '1px solid var(--gray-200)', borderRadius: 6, fontSize: 12, fontFamily: 'var(--mono)', background: 'white', cursor: 'pointer' }}
                           >
                             <option value="">Select item...</option>
-                            {item._poItems.map(pi => (
-                              <option key={pi.po_item_id} value={pi.po_item_id}>
-                                {pi.item_code} (Pending: {pi.pending_qty})
+                            {item._poItems.map(pi => {
+                              const taken = usedElsewhere.has(pi.po_item_id) && pi.po_item_id !== item.po_item_id
+                              return (
+                              <option key={pi.po_item_id} value={pi.po_item_id} disabled={taken}>
+                                {pi.item_code}{pi.sr_no ? ` · Line ${pi.sr_no}` : ''} (Pending: {pi.pending_qty}){taken ? ' — already added' : ''}
                               </option>
-                            ))}
+                            )})}
                           </select>
+                            )
+                          })()
                         ) : item._poId ? (
                           <span style={{ fontSize: 11, color: 'var(--gray-400)', padding: '0 8px' }}>All items received</span>
                         ) : (
