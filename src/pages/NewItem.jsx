@@ -73,7 +73,6 @@ export default function NewItem() {
     const e = {}
     if (!form.item_code.trim()) e.item_code = 'Item code is required'
     if (!form.brand.trim())     e.brand     = 'Brand is required'
-    if (!form.category.trim())  e.category  = 'Category is required'
     if (!form.type.trim())      e.type      = 'Type is required'
     setErrors(e)
     return Object.keys(e).length === 0
@@ -87,7 +86,7 @@ export default function NewItem() {
     const { data, error } = await sb.rpc('create_item', {
       p_item_code:   form.item_code.trim(),
       p_brand:       form.brand.trim(),
-      p_category:    form.category.trim(),
+      p_category:    form.category.trim() || null,
       p_subcategory: form.subcategory.trim() || null,
       p_type:        form.type,
       p_series:      form.series.trim() || null,
@@ -176,11 +175,10 @@ export default function NewItem() {
                     {errors.type && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.type}</div>}
                   </Field>
 
-                  <Field label="Category" required>
+                  <Field label="Category">
                     <input style={inputStyle('category')} value={form.category} list="item-categories"
                       onChange={e => set('category', e.target.value)} placeholder="Pick or type a category" autoComplete="off" />
                     <datalist id="item-categories">{categories.map(c => <option key={c} value={c} />)}</datalist>
-                    {errors.category && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.category}</div>}
                   </Field>
 
                   <Field label="Subcategory">

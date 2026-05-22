@@ -92,7 +92,6 @@ BEGIN
 
   IF p_item_code IS NULL OR btrim(p_item_code) = '' THEN RAISE EXCEPTION 'Item code is required'; END IF;
   IF p_brand    IS NULL OR btrim(p_brand)    = '' THEN RAISE EXCEPTION 'Brand is required'; END IF;
-  IF p_category IS NULL OR btrim(p_category) = '' THEN RAISE EXCEPTION 'Category is required'; END IF;
   IF p_type     IS NULL OR btrim(p_type)     = '' THEN RAISE EXCEPTION 'Type is required'; END IF;
   IF p_type NOT IN ('SI','CI') THEN RAISE EXCEPTION 'Type must be SI or CI'; END IF;
 
@@ -117,7 +116,7 @@ BEGIN
     v_item_no,
     btrim(p_item_code),
     btrim(p_brand),
-    btrim(p_category),
+    NULLIF(btrim(COALESCE(p_category,'')), ''),
     NULLIF(btrim(COALESCE(p_subcategory,'')), ''),
     NULLIF(btrim(COALESCE(p_series,'')), ''),
     p_type,
