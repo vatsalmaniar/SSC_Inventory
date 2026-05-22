@@ -72,11 +72,9 @@ export default function NewOrder() {
   }
 
   async function fetchItems(q) {
-    const { data } = await sb.from('items')
-      .select('item_code,brand,category,type')
-      .or(`item_code.ilike.%${q}%,brand.ilike.%${q}%`)
-      .order('item_code')
-      .limit(15)
+    // Fuzzy match: finds "12A 230HBAC" when user types "12A230HBAC".
+    // Server-side, top-20 by similarity — every master item stays searchable.
+    const { data } = await sb.rpc('search_items_fuzzy', { p_query: q, p_limit: 20 })
     return data || []
   }
 

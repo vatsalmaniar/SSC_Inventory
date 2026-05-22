@@ -76,6 +76,7 @@ export default function ItemDetail() {
   const navigate = useNavigate()
 
   const [item, setItem]         = useState(null)
+  const [auditNames, setAuditNames] = useState({})
   const [loading, setLoading]   = useState(true)
   const [tab, setTab]           = useState('summary')
   const [orders, setOrders]     = useState([])
@@ -93,6 +94,14 @@ export default function ItemDetail() {
     const { data: itemData } = await sb.from('items').select('*').eq('id', id).single()
     if (!itemData) { navigate('/items'); return }
     setItem(itemData)
+
+    // Resolve audit names (created_by / updated_by → profile name)
+    const auditIds = [itemData.created_by, itemData.updated_by].filter(Boolean)
+    if (auditIds.length) {
+      const { data: profs } = await sb.from('profiles').select('id,name').in('id', auditIds)
+      const map = {}; (profs || []).forEach(p => { map[p.id] = p.name })
+      setAuditNames(map)
+    }
 
     const [ordItemsRes, poItemsRes, transferRes] = await Promise.all([
       sb.from('order_items')
@@ -238,6 +247,10 @@ export default function ItemDetail() {
                     { label: 'Series',      val: item.series || '—' },
                     { label: 'Type',        val: <TypeBadge type={item.type} /> },
                     { label: 'Added On',    val: fmt(item.created_at) },
+                    { label: 'Added By',    val: item.created_by ? (auditNames[item.created_by] || '—') : <span style={{ color:'var(--gray-400)' }}>Legacy / unknown</span> },
+                    ...(item.updated_by && item.updated_by !== item.created_by
+                      ? [{ label: 'Last Edited By', val: (auditNames[item.updated_by] || '—') + (item.updated_at ? ' · ' + fmt(item.updated_at) : '') }]
+                      : []),
                   ].map(f => (
                     <div key={f.label}>
                       <div style={{ fontSize: 10, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>{f.label}</div>

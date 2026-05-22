@@ -48,10 +48,27 @@ export default function ItemMaster() {
     const cat = opts.cat ?? filterCategory
     const type = opts.type ?? filterType
     if (!opts.silent) setLoading(true)
+
+    // SEARCH path — fuzzy (finds "12A 230HBAC" when user types "12A230HBAC").
+    // Server-side top-200 by similarity, then client filter + paginate.
+    if (q.trim()) {
+      const { data } = await sb.rpc('search_items_fuzzy', { p_query: q.trim(), p_limit: 200 })
+      let rows = data || []
+      if (brand) rows = rows.filter(r => r.brand === brand)
+      if (cat)   rows = rows.filter(r => r.category === cat)
+      if (type)  rows = rows.filter(r => r.type === type)
+      const from = (p - 1) * PAGE_SIZE
+      setItems(rows.slice(from, from + PAGE_SIZE))
+      setTotal(rows.length)
+      setPage(p)
+      setLoading(false); setSearching(false)
+      return
+    }
+
+    // BROWSE path — server-side pagination (every item reachable, no cap).
     let query = sb.from('items')
       .select('id,item_no,item_code,brand,category,subcategory,series,type', { count: 'exact' })
       .order('item_no', { ascending: true })
-    if (q.trim()) query = query.or(`item_code.ilike.%${q.trim()}%,brand.ilike.%${q.trim()}%,category.ilike.%${q.trim()}%,subcategory.ilike.%${q.trim()}%`)
     if (brand) query = query.eq('brand', brand)
     if (cat) query = query.eq('category', cat)
     if (type) query = query.eq('type', type)
@@ -97,6 +114,14 @@ export default function ItemMaster() {
               <span>Product Catalog</span>
             </div>
           </div>
+          {['admin','management'].includes(userRole) && (
+            <div className="page-meta">
+              <button className="btn-primary" onClick={() => navigate('/items/new')}>
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
+                New Item
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="o-toolbar">
