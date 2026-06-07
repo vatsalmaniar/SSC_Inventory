@@ -412,6 +412,46 @@ export default function BillingOrderDetail() {
     setSaving(false); await loadOrder()
   }
 
+  // ── EARLY CREDIT CHECK (new flow): runs at delivery_created, before FC picking ──
+  // Approve → credit_checked=true (FC can pick). Hold → credit_override=true (blocked).
+  // credit_checked_at marks a genuine early approval so the later goods_issued gate auto-passes.
+  const earlyApproveGuard = useRef(false)
+  async function handleEarlyCreditApprove() {
+    if (earlyApproveGuard.current) return
+    earlyApproveGuard.current = true
+    setSaving(true)
+    if (activeBatch) {
+      const { error } = await sb.from('order_dispatches').update({
+        credit_checked: true, credit_override: false,
+        credit_checked_at: new Date().toISOString(), credit_checked_by: user.id,
+        updated_at: new Date().toISOString(),
+      }).eq('id', activeBatch.id)
+      if (error) { toast(friendlyError(error, 'Failed to approve credit.')); setSaving(false); earlyApproveGuard.current = false; return }
+    }
+    await logActivity('Credit check approved — order cleared for picking. ✓')
+    const fcRole = (activeBatch?.fulfilment_center === 'Godawari') ? 'fc_godawari' : 'fc_kaveri'
+    await notifyUsers([fcRole], `${order.order_number} — Credit approved. Ready for picking.`, 'credit_approved')
+    toast('Credit approved', 'success')
+    setSaving(false); earlyApproveGuard.current = false; await loadOrder()
+  }
+  const earlyHoldGuard = useRef(false)
+  async function handleEarlyCreditHold() {
+    if (earlyHoldGuard.current) return
+    earlyHoldGuard.current = true
+    setSaving(true)
+    if (activeBatch) {
+      const { error } = await sb.from('order_dispatches').update({
+        credit_override: true, credit_checked: false,
+        updated_at: new Date().toISOString(),
+      }).eq('id', activeBatch.id)
+      if (error) { toast(friendlyError(error, 'Failed to put order on hold.')); setSaving(false); earlyHoldGuard.current = false; return }
+    }
+    await logActivity('Credit on hold — payment pending. Awaiting approval. ⚠️')
+    await notifyUsers(['admin'], `${order.order_number} — On hold (credit). Payment pending — needs approval.`, 'credit_override')
+    toast('Order put on hold', 'warning')
+    setSaving(false); earlyHoldGuard.current = false; await loadOrder()
+  }
+
   // goods_issued + PI order → auto-pass credit check (payment already collected via PI)
   async function handlePICreditAutoPass() {
     setSaving(true)
@@ -485,6 +525,10 @@ const mentionSuggestions = mentionQuery !== null
   const isTempDC      = activeDC?.startsWith('Temp/')
   const isWaitingFC   = batchStatus === 'invoice_generated'
   const isCreditOverride  = (activeBatch?.credit_override ?? order.credit_override) === true
+  // Early credit check (new flow): a genuine early approval sets credit_checked_at.
+  // Pre-launch in-flight batches have it null → they keep the legacy goods_issued credit check.
+  const creditChecked     = activeBatch?.credit_checked === true
+  const earlyCleared      = activeBatch?.credit_checked_at != null
   const activeInvPdfUrl       = activeBatch ? activeBatch.invoice_pdf_url   : (order.invoice_pdf_url   || null)
   const activeEwayPdfUrl      = activeBatch ? activeBatch.eway_pdf_url      : (order.eway_pdf_url      || null)
   const activeEInvoicePdfUrl  = activeBatch ? activeBatch.einvoice_pdf_url  : (order.einvoice_pdf_url  || null)
@@ -521,13 +565,8 @@ const mentionSuggestions = mentionQuery !== null
                   {order.order_type === 'SO' ? 'Standard Order' : 'Customised Order'}
                   &nbsp;·&nbsp;{batchFC || '—'}
                   <span className={'od-status-badge ' + (isCancelled ? 'cancelled' : isWaitingFC ? 'delivery' : isCreditOverride ? 'pending' : 'active')}>
-                    {isCancelled ? 'Cancelled' : isWaitingFC ? 'Waiting for FC' : isCreditOverride ? '⚠️ Credit Override' : 'Billing'}
+                    {isCancelled ? 'Cancelled' : isWaitingFC ? 'Waiting for FC' : isCreditOverride ? 'On Hold' : 'Billing'}
                   </span>
-                  {isCreditOverride && (
-                    <span style={{marginLeft:8,background:'#fee2e2',color:'#be123c',borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700}}>
-                      CREDIT OVERRIDE
-                    </span>
-                  )}
                 </div>
                 <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a4dab',color:'inherit'}}>{order.customer_name}</span></div>
                 <div className="od-header-num" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'center'}}>
@@ -617,8 +656,8 @@ const mentionSuggestions = mentionQuery !== null
               <div className="od-cancelled-banner" style={{background:'#fff1f2',border:'1px solid #fecdd3',color:'#be123c'}}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
                 <div>
-                  <div className="od-cancelled-banner-label">⚠️ Credit Override — Payment Pending</div>
-                  <div>This order was processed with a credit override. Payment is outstanding.</div>
+                  <div className="od-cancelled-banner-label">On Hold — Payment Pending</div>
+                  <div>This order is on hold for credit approval. Payment is outstanding.</div>
                 </div>
               </div>
             )}
@@ -882,7 +921,8 @@ const mentionSuggestions = mentionQuery !== null
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">
-                    {batchStatus === 'goods_issued'       && 'Action — Credit Check'}
+                    {batchStatus === 'delivery_created'   && 'Action — Credit Check'}
+                    {batchStatus === 'goods_issued'       && (earlyCleared ? 'Action — Post Goods Issue' : 'Action — Credit Check')}
                     {batchStatus === 'credit_check'       && 'Action — Post Goods Issue'}
                     {batchStatus === 'goods_issue_posted' && 'Action — Generate Invoice'}
                     {batchStatus === 'delivery_ready'     && 'Action — E-Way Bill'}
@@ -890,8 +930,44 @@ const mentionSuggestions = mentionQuery !== null
                 </div>
                 <div className="od-card-body">
 
-                  {/* STEP 1: Credit Check — PI Order or Advance (auto-pass) */}
-                  {batchStatus === 'goods_issued' && (isPIOrder || isAdvanceOrder) && (
+                  {/* NEW EARLY CREDIT CHECK — at delivery_created, before FC picking */}
+                  {batchStatus === 'delivery_created' && !creditChecked && !isCreditOverride && (
+                    <div>
+                      <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:6}}>
+                        Does this customer have a pending payment?
+                        {order.credit_terms && <><br/><span style={{color:'var(--gray-400)'}}>Credit Terms: {order.credit_terms}</span></>}
+                      </p>
+                      <div style={{display:'flex',gap:8}}>
+                        <button disabled={saving} onClick={handleEarlyCreditHold}
+                          style={{flex:1,padding:'10px 14px',borderRadius:10,border:'2px solid #fca5a5',background:'#fef2f2',color:'#dc2626',fontWeight:600,fontSize:13,cursor:'pointer',fontFamily:'var(--font)'}}>
+                          ⚠️ Pending — Take Approval
+                        </button>
+                        <button disabled={saving} onClick={handleEarlyCreditApprove}
+                          style={{flex:1,padding:'10px 14px',borderRadius:10,border:'2px solid #86efac',background:'#f0fdf4',color:'#16a34a',fontWeight:600,fontSize:13,cursor:'pointer',fontFamily:'var(--font)'}}>
+                          ✓ No Pending — Approve
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {batchStatus === 'delivery_created' && isCreditOverride && !creditChecked && (
+                    <div style={{background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:10,padding:'12px 16px'}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'#dc2626',marginBottom:6}}>On Hold — payment pending</div>
+                      <p style={{fontSize:12,color:'var(--gray-600)',margin:'0 0 12px'}}>This order is held for credit approval. Approve to release it for picking.</p>
+                      <button disabled={saving} onClick={handleEarlyCreditApprove}
+                        style={{padding:'9px 18px',borderRadius:10,border:'none',background:'#16a34a',color:'white',fontWeight:600,fontSize:13,cursor:'pointer',fontFamily:'var(--font)'}}>
+                        {saving ? 'Saving...' : 'Approve & Release'}
+                      </button>
+                    </div>
+                  )}
+                  {batchStatus === 'delivery_created' && creditChecked && (
+                    <div style={{background:'#f0fdf4',border:'1px solid #86efac',borderRadius:10,padding:'12px 16px'}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'#166534'}}>✓ Credit cleared</div>
+                      <p style={{fontSize:12,color:'var(--gray-500)',margin:'4px 0 0'}}>Awaiting Fulfilment Centre to pick the order.</p>
+                    </div>
+                  )}
+
+                  {/* STEP 1: Credit Check — PI Order or Advance (auto-pass) [LEGACY in-flight only] */}
+                  {batchStatus === 'goods_issued' && !earlyCleared && (isPIOrder || isAdvanceOrder) && (
                     <div>
                       <div style={{background: isAdvanceOrder ? '#f0fdf4' : '#faf5ff', border: `1px solid ${isAdvanceOrder ? '#bbf7d0' : '#e9d5ff'}`, borderRadius:10,padding:'12px 16px',marginBottom:14}}>
                         <div style={{fontSize:12,fontWeight:700,color: isAdvanceOrder ? '#166534' : '#7e22ce',marginBottom:4}}>
@@ -910,8 +986,8 @@ const mentionSuggestions = mentionQuery !== null
                     </div>
                   )}
 
-                  {/* STEP 1: Credit Check — Normal Order */}
-                  {batchStatus === 'goods_issued' && !isPIOrder && !isAdvanceOrder && (
+                  {/* STEP 1: Credit Check — Normal Order [LEGACY in-flight only; new orders cleared early] */}
+                  {batchStatus === 'goods_issued' && !earlyCleared && !isPIOrder && !isAdvanceOrder && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:6}}>
                         Does this customer have a pending payment?
@@ -938,8 +1014,8 @@ const mentionSuggestions = mentionQuery !== null
                     </div>
                   )}
 
-                  {/* STEP 2: GI Posted */}
-                  {batchStatus === 'credit_check' && !showGIConfirm && (
+                  {/* STEP 2: GI Posted (legacy credit_check status, or new orders cleared early at goods_issued) */}
+                  {(batchStatus === 'credit_check' || (batchStatus === 'goods_issued' && earlyCleared)) && !showGIConfirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Post the Goods Issue entry in the system.</p>
                       <button className="od-mark-complete-btn" style={{background:'#1a4dab',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
@@ -949,7 +1025,7 @@ const mentionSuggestions = mentionQuery !== null
                       </button>
                     </div>
                   )}
-                  {batchStatus === 'credit_check' && showGIConfirm && (
+                  {(batchStatus === 'credit_check' || (batchStatus === 'goods_issued' && earlyCleared)) && showGIConfirm && (
                     <div style={{background:'#e8f2fc',border:'1px solid #c2d9f5',borderRadius:10,padding:16}}>
                       <p style={{fontSize:13,color:'#1a4dab',fontWeight:600,marginBottom:4}}>Confirm Goods Issue Posted?</p>
                       <p style={{fontSize:12,color:'var(--gray-500)',marginBottom:14}}>Invoice number will be entered from Tally when uploading the PDF.</p>
@@ -1203,7 +1279,7 @@ const mentionSuggestions = mentionQuery !== null
 
                       {isCreditOverride && (
                         <div style={{background:'#fff1f2',border:'1px solid #fecdd3',borderRadius:8,padding:'6px 10px',marginTop:4}}>
-                          <div style={{fontSize:10,color:'#be123c',fontWeight:700}}>CREDIT OVERRIDE — Payment pending</div>
+                          <div style={{fontSize:10,color:'#be123c',fontWeight:700}}>On Hold — Payment pending</div>
                         </div>
                       )}
 

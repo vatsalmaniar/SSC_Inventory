@@ -55,7 +55,7 @@ export default function FCModule() {
   async function loadBatches(center, testMode = false) {
     setLoading(true)
     let q = sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, freight, order_items(id, qty, dispatched_qty, total_price, unit_price_after_disc, lp_unit_price, cancelled_qty))')
+      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_checked, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, freight, order_items(id, qty, dispatched_qty, total_price, unit_price_after_disc, lp_unit_price, cancelled_qty))')
       .eq('orders.is_test', testMode)
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
@@ -366,11 +366,12 @@ export default function FCModule() {
                         <div className="ol-items">{itemsCount}</div>
                         <div className="ol-val">₹{batchVal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
                       </div>
-                      <div className="ol-cell ol-status-cell">
+                      <div className="ol-cell ol-status-cell" style={{ flexDirection:'column', alignItems:'flex-end', gap: 2 }}>
                         <span className="ol-status-pill" style={{ '--stage-color': statusColor(stageKey) }}>
                           <span className="ol-status-dot"/>
                           {STATUS_LABELS[stageKey] || stageKey}
                         </span>
+                        {s === 'delivery_created' && b.credit_checked === false && <span style={{ fontSize: 10, color: '#B45309', fontWeight: 600 }}>Awaiting credit</span>}
                       </div>
                     </div>
                   )

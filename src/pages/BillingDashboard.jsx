@@ -97,7 +97,7 @@ export default function BillingDashboard() {
               <KpiTile variant="hero" tone="deep" label="Action Needed" value={actionNeeded.length} sub="credit · invoice · e-way" chart="bars" onClick={() => navigate('/billing/list')}/>
               <KpiTile variant="hero" tone="forest" label="Delivered FYTD" value={deliveredOrders.length} sub="completed orders" chart="bars" onClick={() => navigate('/billing/list')}/>
               <KpiTile variant="hero" tone="teal" label="PI Phase" value={piOrders.length} sub={`${piOrders.filter(o=>o.status==='pi_requested').length} to issue`} chart="line" onClick={() => navigate('/billing/list')}/>
-              <KpiTile label="Credit Overrides" value={overrideOrders.length} sub="payment pending" accent={overrideOrders.length > 0 ? 'amber' : null} onClick={() => navigate('/billing/list')}/>
+              <KpiTile label="On Hold" value={overrideOrders.length} sub="credit — payment pending" accent={overrideOrders.length > 0 ? 'amber' : null} onClick={() => navigate('/billing/list')}/>
               <KpiTile label="Purchase Invoices" value={purchaseInvCount} sub="awaiting match" accent={purchaseInvCount > 0 ? 'amber' : null} onClick={() => navigate('/procurement/invoices')}/>
             </div>
 
@@ -146,8 +146,8 @@ export default function BillingDashboard() {
               <ListCard title="PI Orders" eyebrow="Awaiting Payment" badge={`${piOrders.length} orders`} badgeColor="#92400E"
                 items={piOrders.slice(0, 8)} emptyText="No PI orders in progress"
                 onClick={(o) => navigate('/billing/' + o.id)}/>
-              <ListCard title="Credit Overrides" eyebrow="Payment Pending · Review" badge={`${overrideOrders.length} orders`} badgeColor="#B91C1C"
-                items={overrideOrders.slice(0, 8)} emptyText="No credit overrides"
+              <ListCard title="On Hold" eyebrow="Credit · Payment Pending" badge={`${overrideOrders.length} orders`} badgeColor="#B91C1C"
+                items={overrideOrders.slice(0, 8)} emptyText="No orders on hold"
                 onClick={(o) => navigate('/billing/' + o.id)}
                 showOverride/>
             </div>
@@ -214,7 +214,7 @@ function ListCard({ title, eyebrow, badge, badgeColor, items, emptyText, onClick
             </div>
             <div style={{ textAlign: 'right' }}>
               <StatusPill status={o.status}/>
-              {showOverride && o.credit_override && <div style={{ fontSize: 10, color: '#B91C1C', fontWeight: 600, marginTop: 2 }}>⚠ Override</div>}
+              {showOverride && o.credit_override && <div style={{ fontSize: 10, color: '#B91C1C', fontWeight: 600, marginTop: 2 }}>On Hold</div>}
             </div>
           </div>
         ))}

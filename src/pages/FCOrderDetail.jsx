@@ -711,6 +711,21 @@ export default function FCOrderDetail() {
           </div>
         </div>
 
+        {/* Prominent credit gate banner — so FC immediately sees why a batch can't be picked */}
+        {activeBatch && activeBatch.status === 'delivery_created' && activeBatch.credit_checked === false && (
+          <div style={{
+            margin:'0 0 14px', display:'flex', alignItems:'center', gap:10, borderRadius:12, padding:'12px 16px',
+            background: activeBatch.credit_override ? '#fef2f2' : '#fffbeb',
+            border: `1px solid ${activeBatch.credit_override ? '#fecaca' : '#fde68a'}`,
+            color: activeBatch.credit_override ? '#b91c1c' : '#b45309', fontWeight:600, fontSize:13.5,
+          }}>
+            <span style={{ width:9, height:9, borderRadius:'50%', flexShrink:0, background: activeBatch.credit_override ? '#dc2626' : '#f59e0b' }}/>
+            {activeBatch.credit_override
+              ? 'On Hold — payment pending. Cannot pick until Accounts approves the credit.'
+              : 'Awaiting Credit Check — cannot pick until Accounts approves the credit.'}
+          </div>
+        )}
+
         {/* Pipeline bar */}
         <div className={'od-pipeline-bar' + (withAccounts ? ' od-pipeline-partial' : isDelivered ? '' : ' od-pipeline-delivery')}>
           <div className="od-pipeline-stages">
@@ -920,8 +935,14 @@ export default function FCOrderDetail() {
                 <div className="od-card-header"><div className="od-card-title">Action — {stageLabel(batchStatus)}</div></div>
                 <div className="od-card-body">
 
-                  {/* Picking */}
-                  {batchStatus === 'delivery_created' && !confirm && (
+                  {/* Picking — gated by early credit check */}
+                  {batchStatus === 'delivery_created' && !confirm && activeBatch && activeBatch.credit_checked === false && (
+                    <div style={{background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:10,padding:'12px 14px'}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'#92400e',marginBottom:4}}>Awaiting credit clearance</div>
+                      <p style={{fontSize:12,color:'#92400e',margin:0}}>This order cannot be picked until Accounts completes the credit check.</p>
+                    </div>
+                  )}
+                  {batchStatus === 'delivery_created' && !confirm && !(activeBatch && activeBatch.credit_checked === false) && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Pick all items for this order from storage.</p>
                       <button className="od-mark-complete-btn" style={{background:'#15803d',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}

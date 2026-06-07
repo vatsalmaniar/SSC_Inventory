@@ -6,15 +6,17 @@ import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
-const BILLING_BATCH_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
+const BILLING_BATCH_STATUSES = ['delivery_created','pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 
 const STATUS_LABELS = {
+  delivery_created:'Credit Check',
   pi_requested:'Issue PI', pi_generated:'PI Sent', pi_payment_pending:'PI Payment Pending',
   goods_issued:'Credit Check', credit_check:'GI Posted', goods_issue_posted:'Invoice Pending',
   invoice_generated:'Waiting for FC', delivery_ready:'E-Way Pending',
   eway_generated:'E-Way Done', dispatched_fc:'Delivered', cancelled:'Cancelled',
 }
 const STATUS_COLORS = {
+  delivery_created:'#D97706',
   pi_requested:'#B45309', pi_generated:'#92400E', pi_payment_pending:'#78350F',
   goods_issued:'#D97706', credit_check:'#65A30D', goods_issue_posted:'#16A34A',
   invoice_generated:'#059669', delivery_ready:'#0F766E',
@@ -22,6 +24,13 @@ const STATUS_COLORS = {
 }
 function statusColor(s) { return STATUS_COLORS[s] || '#94A3B8' }
 function effStatus(b) { return b.status || 'goods_issued' }
+// A delivery_created batch awaiting Accounts credit clearance (new early-credit-check flow).
+function needsCredit(b) { return b.status === 'delivery_created' && b.credit_checked === false }
+// Pill label: a cleared delivery_created batch is just awaiting FC pick, not credit.
+function rowStageLabel(b, stageKey) {
+  if (stageKey === 'delivery_created') return b.credit_checked ? 'Awaiting Pick' : 'Credit Check'
+  return STATUS_LABELS[stageKey] || stageKey
+}
 
 const PAGE_SIZE = 50
 
@@ -33,6 +42,7 @@ export default function BillingList() {
   const [filter, setFilter] = useState('action')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [showTest, setShowTest] = useState(false)
 
   useEffect(() => { init() }, [])
   useEffect(() => { setPage(1) }, [filter, search])
@@ -47,12 +57,12 @@ export default function BillingList() {
     await loadBatches()
   }
 
-  async function loadBatches() {
+  async function loadBatches(testMode = false) {
     setLoading(true)
     const { data } = await sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, credit_terms, freight, engineer_name, account_owner, order_items(id, item_code, qty, dispatched_qty, total_price, unit_price_after_disc, cancelled_qty, line_status))')
+      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, credit_checked, credit_checked_at, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, credit_terms, freight, engineer_name, account_owner, order_items(id, item_code, qty, dispatched_qty, total_price, unit_price_after_disc, cancelled_qty, line_status))')
       .in('status', BILLING_BATCH_STATUSES)
-      .eq('orders.is_test', false)
+      .eq('orders.is_test', testMode)
       .neq('orders.order_type', 'SAMPLE')
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
@@ -66,8 +76,12 @@ export default function BillingList() {
 
   function matchFilter(b) {
     const s = effStatus(b)
+    // A delivery_created batch belongs in billing ONLY while it needs credit attention.
+    // Once cleared (awaiting pick) it's the FC's job — keep it out of every billing view.
+    if (s === 'delivery_created' && !(needsCredit(b) || b.credit_override === true)) return false
     if (filter === 'everything') return true
-    if (filter === 'action')   return actionStatuses.includes(s)
+    if (filter === 'creditcheck') return needsCredit(b)
+    if (filter === 'action')   return actionStatuses.includes(s) || needsCredit(b)
     if (filter === 'pi')       return piStatuses.includes(s)
     if (filter === 'waiting')  return waitingStatuses.includes(s)
     if (filter === 'all')      return s !== 'dispatched_fc'
@@ -77,7 +91,8 @@ export default function BillingList() {
 
   const counts = {
     everything: batches.length,
-    action:     batches.filter(b => actionStatuses.includes(effStatus(b))).length,
+    creditcheck: batches.filter(needsCredit).length,
+    action:     batches.filter(b => actionStatuses.includes(effStatus(b)) || needsCredit(b)).length,
     pi:         batches.filter(b => piStatuses.includes(effStatus(b))).length,
     waiting:    batches.filter(b => waitingStatuses.includes(effStatus(b))).length,
     all:        batches.filter(b => effStatus(b) !== 'dispatched_fc').length,
@@ -116,11 +131,12 @@ export default function BillingList() {
   // for credit_check vs goods_issued — see STATUS_LABELS at top of file).
   const FILTERS = [
     { key: 'everything',         label: 'All' },
-    { key: 'override',           label: 'Overrides',          tone: 'warn' },
+    { key: 'creditcheck',        label: 'Credit Check',       tone: 'warn' },
+    { key: 'override',           label: 'On Hold',            tone: 'warn' },
     { key: 'pi_requested',       label: 'Issue PI',           tone: 'warn' },
     { key: 'pi_generated',       label: 'PI Sent' },
     { key: 'pi_payment_pending', label: 'PI Payment Pending' },
-    { key: 'goods_issued',       label: 'Credit Check' },
+    { key: 'goods_issued',       label: 'Credit Check (old)' },
     { key: 'credit_check',       label: 'GI Posted' },
     { key: 'goods_issue_posted', label: 'Invoice Pending' },
     { key: 'invoice_generated',  label: 'Waiting for FC' },
@@ -288,6 +304,12 @@ export default function BillingList() {
             </div>
           </div>
           <div className="page-meta">
+            {user.role === 'admin' && (
+              <label className={`o-test-toggle ${showTest ? 'on' : ''}`}>
+                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); loadBatches(e.target.checked) }} style={{accentColor:'#B45309',width:13,height:13}}/>
+                Test Mode
+              </label>
+            )}
             <div className="o-dl-group">
               <button className="o-dl-btn" onClick={downloadSummary} title="Summary Excel">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -390,9 +412,9 @@ export default function BillingList() {
                         <div className="ol-cell ol-status-cell" style={{ flexDirection:'column', alignItems:'flex-end', gap: 2 }}>
                           <span className="ol-status-pill" style={{ '--stage-color': statusColor(stageKey) }}>
                             <span className="ol-status-dot"/>
-                            {STATUS_LABELS[stageKey] || stageKey}
+                            {rowStageLabel(b, stageKey)}
                           </span>
-                          {!isCancelled && b.credit_override && <span style={{ fontSize: 10, color: '#B91C1C', fontWeight: 600 }}>⚠ Override</span>}
+                          {!isCancelled && b.credit_override && <span style={{ fontSize: 10, color: '#B91C1C', fontWeight: 600 }}>On Hold</span>}
                         </div>
                       </div>
                     )

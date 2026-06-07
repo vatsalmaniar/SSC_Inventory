@@ -570,7 +570,12 @@ export default function OrderDetail() {
       : `Full Dispatch — all items sent via ${fcCenter}. Delivery Created. DC: ${dcNum}`)
     if (!isPIOrder) {
       const fcRole = fcCenter === 'Godawari' ? 'fc_godawari' : 'fc_kaveri'
-      await notifyUsers([fcRole], `${order.order_number} — Dispatched to ${fcCenter}. Ready for picking.`, 'order_dispatched')
+      // Sample orders skip credit check → FC can pick. Normal orders need Accounts credit clearance first.
+      if (order.order_type === 'SAMPLE') {
+        await notifyUsers([fcRole], `${order.order_number} — Dispatched to ${fcCenter}. Ready for picking.`, 'order_dispatched')
+      } else {
+        await notifyUsers(['accounts'], `${order.order_number} — Dispatched to ${fcCenter}. Awaiting credit check before picking.`, 'order_dispatched')
+      }
     }
     toast('Dispatch created', 'success')
     await loadOrder(); setSaving(false)
@@ -627,7 +632,12 @@ export default function OrderDetail() {
       : `Partial Dispatch via ${fcCenter} — ${summary}. Delivery Created. DC: ${dcNum}`)
     if (!isPIOrder) {
       const fcRole = fcCenter === 'Godawari' ? 'fc_godawari' : 'fc_kaveri'
-      await notifyUsers([fcRole], `${order.order_number} — Partial dispatch to ${fcCenter}. Ready for picking.`, 'order_dispatched')
+      // Sample orders skip credit check → FC can pick. Normal orders need Accounts credit clearance first.
+      if (order.order_type === 'SAMPLE') {
+        await notifyUsers([fcRole], `${order.order_number} — Partial dispatch to ${fcCenter}. Ready for picking.`, 'order_dispatched')
+      } else {
+        await notifyUsers(['accounts'], `${order.order_number} — Partial dispatch to ${fcCenter}. Awaiting credit check before picking.`, 'order_dispatched')
+      }
     }
     toast('Partial dispatch created', 'success')
     await loadOrder(); setSaving(false)
@@ -970,8 +980,8 @@ if (match) {
               <div className="od-pending-banner" style={{background:'#fef2f2',border:'1px solid #fca5a5',color:'#991b1b'}}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
                 <div>
-                  <div className="od-pending-banner-label">⚠️ Credit Override — Take Approval Required</div>
-                  <div>Payment was pending when credit check was done. Approval needed.</div>
+                  <div className="od-pending-banner-label">On Hold — Credit Approval Required</div>
+                  <div>Payment is pending. Accounts/admin must approve before this order can proceed.</div>
                 </div>
               </div>
             )}
@@ -999,6 +1009,17 @@ if (match) {
                     {hasUndispatched ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, (i.qty || 0) - (i.dispatched_qty || 0) - (i.cancelled_qty || 0)), 0)} units pending next batch. ` : ''}
                     Currently: {{'delivery_created':'Delivery Created','goods_issued':'Goods Issued','pending_billing':'Pending Billing','credit_check':'Credit Check','goods_issue_posted':'Goods Issue Posted','invoice_generated':'Invoice Generated','delivery_ready':'Delivery Ready','eway_pending':'Ready for E-Way Bill','eway_generated':'E-Way Bill Generated'}[order.status] || order.status}
                   </div>
+                  {batches.some(b => b.status === 'delivery_created' && b.credit_checked === false && b.credit_override === true) ? (
+                    <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8, width:'fit-content', background:'#fef2f2', border:'1px solid #fecaca', color:'#b91c1c', borderRadius:8, padding:'7px 13px', fontSize:12.5, fontWeight:600 }}>
+                      <span style={{ width:7, height:7, borderRadius:'50%', background:'#dc2626', flexShrink:0 }}/>
+                      On Hold — credit approval required before picking
+                    </div>
+                  ) : batches.some(b => b.status === 'delivery_created' && b.credit_checked === false) ? (
+                    <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8, width:'fit-content', background:'#fffbeb', border:'1px solid #fde68a', color:'#b45309', borderRadius:8, padding:'7px 13px', fontSize:12.5, fontWeight:600 }}>
+                      <span style={{ width:7, height:7, borderRadius:'50%', background:'#f59e0b', flexShrink:0 }}/>
+                      Awaiting Credit Check — Accounts must approve before picking
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}
