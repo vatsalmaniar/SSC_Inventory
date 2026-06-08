@@ -10,6 +10,7 @@ const Accounts = lazy(() => import('./pages/Accounts'))
 const Sales = lazy(() => import('./pages/Sales'))
 const Orders = lazy(() => import('./pages/Orders'))
 const OrdersList = lazy(() => import('./pages/OrdersList'))
+const Waitlist = lazy(() => import('./pages/Waitlist'))
 const NewOrder = lazy(() => import('./pages/NewOrder'))
 const OrderDetail = lazy(() => import('./pages/OrderDetail'))
 const OpsOrders = lazy(() => import('./pages/OpsOrders'))
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="/sales" element={<Navigate to="/inventory" replace />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/list" element={<OrdersList />} />
+          <Route path="/orders/waitlist" element={<Waitlist />} />
           <Route path="/orders/new" element={<NewOrder />} />
           <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="/ops" element={<OpsOrders />} />

@@ -144,6 +144,13 @@ export default function OrderDetail() {
   const [dispatchType, setDispatchType]           = useState('full') // 'full' | 'partial'
   const [pendingPartialSelected, setPendingPartialSelected] = useState([])
   const [isNextBatch, setIsNextBatch]             = useState(false)
+  // FIFO jump warning (an older order is ahead in line for an item being dispatched)
+  const [showJumpWarn, setShowJumpWarn]           = useState(false)
+  const [jumpRows, setJumpRows]                   = useState([])
+  const [jumpType, setJumpType]                   = useState('full') // which dispatch to run after confirm
+  const [jumpReason, setJumpReason]               = useState('')
+  const [jumpNote, setJumpNote]                   = useState('')
+  const jumpSubmitGuard                           = useRef(false)
   const [batches, setBatches]                     = useState([])
   const [linkedPOs, setLinkedPOs]                 = useState([])
   const [poEarliestDelivery, setPoEarliestDelivery] = useState({})
@@ -307,6 +314,7 @@ export default function OrderDetail() {
       received_via:     order.received_via     || '',
       freight:          String(order.freight   || '0'),
       credit_terms:     order.credit_terms     || '',
+      partial_deliveries_allowed: order.partial_deliveries_allowed ?? null,
       notes:            order.notes            || '',
     })
     setEditItems((order.order_items || []).map(item => ({
@@ -367,7 +375,7 @@ export default function OrderDetail() {
       customer_name: editData.customer_name.trim(), customer_gst: editData.customer_gst.trim(),
       dispatch_address: editData.dispatch_address.trim(), po_number: editData.po_number.trim(),
       order_date: editData.order_date, order_type: editData.order_type, received_via: editData.received_via,
-      freight: parseFloat(editData.freight) || 0, credit_terms: editData.credit_terms, notes: editData.notes,
+      freight: parseFloat(editData.freight) || 0, credit_terms: editData.credit_terms, partial_deliveries_allowed: editData.partial_deliveries_allowed, notes: editData.notes,
       edited_by: user.name, updated_at: new Date().toISOString(),
     }).eq('id', id)
     if (hdrErr) { toast('Failed to update order: ' + hdrErr.message); setSaving(false); return }
@@ -385,6 +393,9 @@ export default function OrderDetail() {
       }))
     })
     if (itemsErr) { toast('Failed to save items: ' + itemsErr.message); setSaving(false); return }
+    if (editData.partial_deliveries_allowed !== order.partial_deliveries_allowed) {
+      await logActivity(`Partial Deliveries changed to ${editData.partial_deliveries_allowed ? 'Allowed' : 'Full delivery only'}`)
+    }
     const msg = reason.trim() ? `Order edited — ${reason.trim()}` : 'Order edited — details updated'
     await logActivity(msg)
     await notifyUsers([], `${order.order_number} — Order edited by ${user.name}.${reason.trim() ? ` Reason: ${reason.trim()}` : ''}`, 'order_edited')
@@ -404,7 +415,7 @@ export default function OrderDetail() {
       customer_name: editData.customer_name.trim(), customer_gst: editData.customer_gst.trim(),
       dispatch_address: editData.dispatch_address.trim(), po_number: editData.po_number.trim(),
       order_date: editData.order_date, order_type: editData.order_type, received_via: editData.received_via,
-      freight: parseFloat(editData.freight) || 0, credit_terms: editData.credit_terms, notes: editData.notes,
+      freight: parseFloat(editData.freight) || 0, credit_terms: editData.credit_terms, partial_deliveries_allowed: editData.partial_deliveries_allowed, notes: editData.notes,
       edited_by: user.name, updated_at: new Date().toISOString(),
     }).eq('id', id)
     if (hdrErr) { toast('Failed to update order: ' + hdrErr.message); setSaving(false); return }
@@ -422,6 +433,9 @@ export default function OrderDetail() {
       }))
     })
     if (itemsErr) { toast('Failed to save items: ' + itemsErr.message); setSaving(false); return }
+    if (editData.partial_deliveries_allowed !== order.partial_deliveries_allowed) {
+      await logActivity(`Partial Deliveries changed to ${editData.partial_deliveries_allowed ? 'Allowed' : 'Full delivery only'}`)
+    }
     const { data: updatedOrder } = await sb.from('orders').select('order_type').eq('id', id).single()
     const { error } = await sb.rpc('approve_order', {
       order_id: id, approver_name: user.name,
@@ -489,18 +503,23 @@ export default function OrderDetail() {
     setStockStatuses(s => ({ ...s, [itemId]: status }))
     const { error } = await sb.from('order_items').update({ stock_status: status }).eq('id', itemId)
     if (error) { toast('Failed to update stock status'); setStockStatuses(s => ({ ...s, [itemId]: prev })); return }
+    // Audit: record who marked the item's stock status, on the order timeline
+    if (status !== prev) {
+      const itm = (order.order_items || []).find(i => i.id === itemId)
+      await logActivity(`Marked ${itm?.item_code || 'item'} as ${status === 'in_stock' ? 'In Stock' : status === 'out_of_stock' ? 'Out of Stock' : status}`)
+    }
     // Log out-of-stock only once per item
     if (status === 'out_of_stock') {
-      const { data: existing } = await sb.from('stock_outage_log').select('id').eq('order_item_id', itemId).maybeSingle()
+      const { data: existing } = await sb.from('stock_outage_log').select('id').eq('item_id', itemId).maybeSingle()
       if (!existing) {
         const item = (order.order_items || []).find(i => i.id === itemId)
         await sb.from('stock_outage_log').insert({
           order_id: id,
-          order_item_id: itemId,
+          item_id: itemId,
           item_code: item?.item_code || '',
           order_number: order?.order_number || '',
-          reported_by: user.id,
-          reported_by_name: user.name,
+          logged_by: user.id,
+          logged_by_name: user.name,
         })
       }
     }
@@ -537,10 +556,71 @@ export default function OrderDetail() {
     }
   }
 
+  // ── FIFO jump check: is an OLDER, shippable order waiting on any item we're about to dispatch? ──
+  // Read-only. Returns the older orders that are genuinely ahead in line (on-hold and
+  // not-yet-shippable older orders are filtered out, so we only warn on real queue-jumps).
+  async function findOlderWaiting(itemCodes) {
+    const codes = [...new Set(itemCodes.filter(Boolean))]
+    if (!codes.length || !order?.order_date) return []
+    const { data } = await sb.from('order_items')
+      .select('item_code,qty,dispatched_qty,cancelled_qty,order_id,orders!inner(id,order_number,customer_name,order_date,status,is_test,partial_deliveries_allowed,credit_override)')
+      .in('item_code', codes)
+      .eq('stock_status', 'out_of_stock')
+      .lt('orders.order_date', order.order_date)
+      .eq('orders.is_test', order.is_test || false)
+    const DEAD = ['cancelled', 'dispatched_fc', 'closed']
+    const candidates = (data || []).filter(it => {
+      const o = it.orders
+      if (!o || o.id === id || DEAD.includes(o.status)) return false
+      if (o.credit_override === true) return false  // On Hold → can't ship now → not a jump
+      return ((it.qty || 0) - (it.dispatched_qty || 0) - (it.cancelled_qty || 0)) > 0
+    })
+    // Full-only older orders that are also short on OTHER items can't ship now → suppress.
+    const fullOnlyIds = [...new Set(candidates.filter(c => c.orders.partial_deliveries_allowed === false).map(c => c.order_id))]
+    const unshippable = new Set()
+    if (fullOnlyIds.length) {
+      const { data: shorts } = await sb.from('order_items')
+        .select('order_id,item_code').in('order_id', fullOnlyIds).eq('stock_status', 'out_of_stock')
+      for (const s of (shorts || [])) if (!codes.includes(s.item_code)) unshippable.add(s.order_id)
+    }
+    const seen = new Set(); const rows = []
+    for (const c of candidates) {
+      if (unshippable.has(c.order_id) || seen.has(c.order_id)) continue
+      seen.add(c.order_id)
+      rows.push({ order_id: c.orders.id, order_number: c.orders.order_number, customer_name: c.orders.customer_name, order_date: c.orders.order_date, item_code: c.item_code })
+    }
+    return rows.sort((a, b) => (a.order_date || '').localeCompare(b.order_date || ''))
+  }
+
+  // After the user supplies a reason in the jump warning, log it and run the original dispatch.
+  async function proceedAfterJump() {
+    if (jumpSubmitGuard.current) return
+    if (!jumpReason) { toast('Please select a reason'); return }
+    if (jumpReason === 'Other' && !jumpNote.trim()) { toast('Please write the reason'); return }
+    jumpSubmitGuard.current = true
+    const rows = jumpRows.map(r => ({
+      dispatched_order_id: id, dispatched_order_number: order.order_number,
+      skipped_order_id: r.order_id, skipped_order_number: r.order_number,
+      item_code: r.item_code, reason: jumpReason, reason_note: jumpNote.trim() || null,
+      created_by: user.id, created_by_name: user.name,
+    }))
+    await sb.from('dispatch_skip_log').insert(rows)
+    await logActivity(`Dispatched ahead of ${jumpRows.length} older order(s) — reason: ${jumpReason}${jumpNote.trim() ? ' — ' + jumpNote.trim() : ''}`)
+    const t = jumpType
+    setShowJumpWarn(false); setJumpReason(''); setJumpNote(''); setJumpRows([])
+    jumpSubmitGuard.current = false
+    if (t === 'full') await fullyDispatch(true); else await confirmPartialItems(true)
+  }
+
   // ── Full dispatch — set delivery_created (or pi_requested for Against PI / Advance orders) ──
-  async function fullyDispatch() {
+  async function fullyDispatch(skipJumpCheck = false) {
     setShowDispatchModal(false)
     setDispatchType('full')
+    if (!skipJumpCheck) {
+      const codes = (order.order_items || []).filter(i => (i.qty - (i.dispatched_qty || 0) - (i.cancelled_qty || 0)) > 0).map(i => i.item_code)
+      const olders = await findOlderWaiting(codes)
+      if (olders.length) { setJumpRows(olders); setJumpType('full'); setJumpReason(''); setJumpNote(''); setShowJumpWarn(true); return }
+    }
     setSaving(true)
     const isPIOrder = (order.credit_terms === 'Against PI' || order.credit_terms === 'Advance') && order.order_type !== 'SAMPLE'
     const rpcCalls = (order.order_items || [])
@@ -594,7 +674,7 @@ export default function OrderDetail() {
   }
 
   // ── Partial: validate and save ──
-  async function confirmPartialItems() {
+  async function confirmPartialItems(skipJumpCheck = false) {
     const selected = partialItems.filter(i => i.checked && parseFloat(i.dispatchQty) > 0)
     if (!selected.length) { toast('Select at least one item with a dispatch quantity.'); return }
     for (const item of selected) {
@@ -605,6 +685,10 @@ export default function OrderDetail() {
       }
     }
     setShowPartialModal(false)
+    if (!skipJumpCheck) {
+      const olders = await findOlderWaiting(selected.map(i => i.item_code))
+      if (olders.length) { setJumpRows(olders); setJumpType('partial'); setJumpReason(''); setJumpNote(''); setShowJumpWarn(true); return }
+    }
     setSaving(true)
     const isPIOrder = (order.credit_terms === 'Against PI' || order.credit_terms === 'Advance') && order.order_type !== 'SAMPLE'
     const partialRpcCalls = selected.map(item => sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: parseFloat(item.dispatchQty) }))
@@ -1084,6 +1168,18 @@ if (match) {
                       <div className="od-edit-field">
                         <label>Freight (₹)</label>
                         <input type="number" value={editData.freight} onChange={e => setEditData(p => ({ ...p, freight: e.target.value }))} min="0" />
+                      </div>
+                    </div>
+                    <div className="od-edit-row">
+                      <div className="od-edit-field" style={{ gridColumn: '1 / -1' }}>
+                        <label>Partial Deliveries Allowed?</label>
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                          <button type="button" onClick={() => setEditData(p => ({ ...p, partial_deliveries_allowed: !(p.partial_deliveries_allowed === true) }))}
+                            style={{ position:'relative', width:46, height:26, borderRadius:13, border:'none', cursor:'pointer', background: editData.partial_deliveries_allowed===true ? '#16a34a' : 'var(--gray-300)', transition:'background .15s', padding:0, flexShrink:0 }}>
+                            <span style={{ position:'absolute', top:3, left: editData.partial_deliveries_allowed===true ? 23 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s', boxShadow:'0 1px 3px rgba(0,0,0,0.25)' }}/>
+                          </button>
+                          <span style={{ fontSize:13, fontWeight:600, color: editData.partial_deliveries_allowed===true ? '#16a34a' : 'var(--gray-500)' }}>{editData.partial_deliveries_allowed===true ? 'Yes — partial allowed' : 'No — full delivery only'}</span>
+                        </div>
                       </div>
                     </div>
                     <div className="od-edit-row">
@@ -2033,6 +2129,49 @@ if (match) {
         </div>
       )}
 
+      {/* ── FIFO Jump Warning: an older order is ahead in line ── */}
+      {showJumpWarn && (
+        <div className="od-drawer-scrim" onClick={e => { if (e.target === e.currentTarget) setShowJumpWarn(false) }}>
+          <div className="od-drawer" style={{ width: 'min(560px, 95vw)' }}>
+            <div className="od-drawer-head">
+              <div style={{ fontWeight: 700, fontSize: 15, color: '#92400e' }}>⚠ Older order is ahead in line</div>
+              <button className="od-drawer-close" onClick={() => setShowJumpWarn(false)}>✕</button>
+            </div>
+            <div className="od-drawer-body">
+              <p style={{ fontSize: 13, color: 'var(--gray-600)', marginBottom: 12 }}>
+                These older order(s) are waiting on item(s) you're about to dispatch. If you proceed, you're putting this order ahead — please record why:
+              </p>
+              <div style={{ border: '1px solid var(--gray-200)', borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+                {jumpRows.map((r, i) => (
+                  <div key={r.order_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderBottom: i < jumpRows.length - 1 ? '1px solid var(--gray-100)' : 'none', fontSize: 12.5 }}>
+                    <span><span style={{ fontFamily: 'Geist Mono, monospace', color: 'var(--ssc-blue)' }}>{r.order_number}</span> · {r.customer_name}</span>
+                    <span style={{ fontFamily: 'Geist Mono, monospace', color: '#92400e' }}>{r.item_code}</span>
+                  </div>
+                ))}
+              </div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-600)', display: 'block', marginBottom: 6 }}>Reason for dispatching this order first <span style={{ color: '#dc2626' }}>*</span></label>
+              <select value={jumpReason} onChange={e => setJumpReason(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--gray-200)', fontFamily: 'var(--font)', fontSize: 13, marginBottom: 10 }}>
+                <option value="">Select a reason…</option>
+                <option>Payment Pending</option>
+                <option>Customer not allowing</option>
+                <option>Partial Dispatch not allowed</option>
+                <option>Newer order urgent / deadline</option>
+                <option>Key-account priority</option>
+                <option>Other</option>
+              </select>
+              <textarea value={jumpNote} onChange={e => setJumpNote(e.target.value)}
+                placeholder={jumpReason === 'Other' ? 'Write the reason (required)…' : 'Add a note (optional)…'}
+                rows={2} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--gray-200)', fontFamily: 'var(--font)', fontSize: 13, resize: 'vertical' }} />
+            </div>
+            <div className="od-drawer-foot">
+              <button className="od-btn" onClick={() => setShowJumpWarn(false)}>Cancel</button>
+              <button className="od-btn od-btn-approve" disabled={saving} onClick={proceedAfterJump}>Proceed & Dispatch →</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Dispatch Modal: FC Center + Full/Partial ── */}
       {showDispatchModal && (
         <div className="od-drawer-scrim" onClick={e => { if (e.target === e.currentTarget) setShowDispatchModal(false) }}>
@@ -2062,21 +2201,28 @@ if (match) {
               <div>
                 <div style={{ fontFamily: 'Geist Mono, monospace', fontSize: 10.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5B6878', marginBottom: 8 }}>Dispatch Type</div>
                 <div style={{ display: 'flex', gap: 12 }}>
-                  <button className="od-dispatch-choice-btn" onClick={fullyDispatch} disabled={saving}>
+                  <button className="od-dispatch-choice-btn" onClick={() => fullyDispatch()} disabled={saving}>
                     <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#10B981',marginBottom:8}}>
                       <path d="M5 13l4 4L19 7"/>
                     </svg>
                     <div style={{ fontWeight: 600, fontSize: 14, color: '#0B1B30' }}>Full Delivery</div>
                     <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4 }}>Send entire order to FC for delivery</div>
                   </button>
-                  <button className="od-dispatch-choice-btn" onClick={openPartialDispatch} disabled={saving}>
-                    <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#F59E0B',marginBottom:8}}>
-                      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-                    </svg>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#0B1B30' }}>Partial Delivery</div>
-                    <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4 }}>Select items and qty to send now</div>
-                  </button>
+                  {order.partial_deliveries_allowed !== false && (
+                    <button className="od-dispatch-choice-btn" onClick={openPartialDispatch} disabled={saving}>
+                      <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#F59E0B',marginBottom:8}}>
+                        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                      </svg>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: '#0B1B30' }}>Partial Delivery</div>
+                      <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4 }}>Select items and qty to send now</div>
+                    </button>
+                  )}
                 </div>
+                {order.partial_deliveries_allowed === false && (
+                  <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', marginTop: 10 }}>
+                    This customer order is <strong>Full delivery only</strong> — partial dispatch is not allowed.
+                  </div>
+                )}
               </div>
             </div>
             <div className="od-drawer-foot">
@@ -2162,7 +2308,7 @@ if (match) {
             </div>
             <div className="od-drawer-foot">
               <button className="od-btn" onClick={() => setShowPartialModal(false)}>Cancel</button>
-              <button className="od-btn od-btn-approve" onClick={confirmPartialItems} disabled={saving}>
+              <button className="od-btn od-btn-approve" onClick={() => confirmPartialItems()} disabled={saving}>
                 {saving ? 'Saving...' : 'Confirm Delivery →'}
               </button>
             </div>

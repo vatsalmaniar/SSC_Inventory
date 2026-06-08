@@ -34,6 +34,7 @@ const NAV_ITEMS = [
     sub: [
       { key: 'orders-dash', label: 'Dashboard',  path: '/orders' },
       { key: 'orders-list', label: 'All Orders',  path: '/orders/list' },
+      { key: 'orders-waitlist', label: 'Waiting for Stock', path: '/orders/waitlist' },
     ],
   },
   {

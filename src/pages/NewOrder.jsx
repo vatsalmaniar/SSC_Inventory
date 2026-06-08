@@ -36,6 +36,7 @@ export default function NewOrder() {
   const [showCOConfirm, setShowCOConfirm] = useState(false)
   const [receivedVia, setReceivedVia] = useState('Mobile')
   const [freight, setFreight]         = useState('0')
+  const [partialAllowed, setPartialAllowed] = useState(false) // toggle: off = full delivery only
   const [notes, setNotes]             = useState('')
 
   // Test mode (admin only)
@@ -203,6 +204,7 @@ export default function NewOrder() {
       engineer_name:     user.name,
       received_via:      receivedVia,
       freight:           parseFloat(freight) || 0,
+      partial_deliveries_allowed: partialAllowed,
       credit_terms:      creditTerms.trim(),
       account_owner:     accountOwner.trim(),
       notes:             notes.trim(),
@@ -526,6 +528,14 @@ export default function NewOrder() {
             <div className="no-field" style={{ flex: 1 }}>
               <label>Freight Charges (₹) <span className="req">*</span></label>
               <input type="number" value={freight} onChange={e => setFreight(e.target.value)} min="0" placeholder="0" />
+              <label style={{ marginTop: 12 }}>Partial Deliveries Allowed?</label>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <button type="button" onClick={() => setPartialAllowed(v => !v)}
+                  style={{ position:'relative', width:46, height:26, borderRadius:13, border:'none', cursor:'pointer', background: partialAllowed ? '#16a34a' : 'var(--gray-300)', transition:'background .15s', padding:0, flexShrink:0 }}>
+                  <span style={{ position:'absolute', top:3, left: partialAllowed ? 23 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s', boxShadow:'0 1px 3px rgba(0,0,0,0.25)' }}/>
+                </button>
+                <span style={{ fontSize:13, fontWeight:600, color: partialAllowed ? '#16a34a' : 'var(--gray-500)' }}>{partialAllowed ? 'Yes — partial allowed' : 'No — full delivery only'}</span>
+              </div>
             </div>
             <div className="no-totals-summary">
               <div className="no-total-line">
