@@ -627,12 +627,17 @@ export default function OrderDetail() {
       if (olders.length) { setJumpRows(olders); setJumpType('full'); setJumpReason(''); setJumpNote(''); setShowJumpWarn(true); return }
     }
     setSaving(true)
-    const increments = (order.order_items || [])
-      .filter(item => item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0) > 0)
-      .map(item => ({ order_item_id: item.id, qty: item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0) }))
-    const itemsJson = (order.order_items || []).map(i => ({
-      order_item_id: i.id, item_code: i.item_code, qty: i.qty,
-      unit_price: i.unit_price_after_disc, total_price: i.total_price,
+    // Batch JSON must mirror the increments — remaining qty only, cancelled and
+    // already-dispatched qty excluded. GI-posting walks dispatched_items to apply
+    // posted_qty, so an overstated list trips the posted<=dispatched CHECK (and
+    // FC would be told to pick cancelled goods).
+    const pending = (order.order_items || [])
+      .map(i => ({ ...i, remaining: i.qty - (i.dispatched_qty || 0) - (i.cancelled_qty || 0) }))
+      .filter(i => i.remaining > 0)
+    const increments = pending.map(i => ({ order_item_id: i.id, qty: i.remaining }))
+    const itemsJson = pending.map(i => ({
+      order_item_id: i.id, item_code: i.item_code, qty: i.remaining,
+      unit_price: i.unit_price_after_disc, total_price: (i.unit_price_after_disc || 0) * i.remaining,
       customer_ref_no: i.customer_ref_no || null,
     }))
     // One atomic RPC: line increments + order status + batch + PI flag succeed or
@@ -1416,7 +1421,7 @@ if (match) {
                             return item.qty > deliveredQty
                           }).map(item => {
                             const dispQty    = item.dispatched_qty || 0
-                            const pendingQty = item.qty - dispQty
+                            const pendingQty = Math.max(0, item.qty - dispQty - (item.cancelled_qty || 0))
                             const itemBatch  = batches.find(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))
                             return (
                               <tr key={item.id}>
@@ -1466,7 +1471,7 @@ if (match) {
                         <tbody>
                           {(order.order_items || []).filter(item => batches.some(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))).map(item => {
                             const dispQty    = batches.filter(b => b.status === 'dispatched_fc').reduce((s, b) => { const di = (b.dispatched_items || []).find(i => i.order_item_id === item.id); return s + (di?.qty || 0) }, 0)
-                            const pendingQty = item.qty - dispQty
+                            const pendingQty = Math.max(0, item.qty - dispQty - (item.cancelled_qty || 0))
                             const itemBatch  = batches.find(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))
                             return (
                               <tr key={item.id}>
