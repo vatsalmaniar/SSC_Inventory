@@ -592,7 +592,9 @@ export default function OrderDetail() {
     return rows.sort((a, b) => (a.order_date || '').localeCompare(b.order_date || ''))
   }
 
-  // After the user supplies a reason in the jump warning, log it and run the original dispatch.
+  // After the user supplies a reason in the jump warning, run the original dispatch.
+  // The skip is logged via onDispatched only once the dispatch RPC has succeeded,
+  // so a failed dispatch never leaves a phantom queue-jump entry.
   async function proceedAfterJump() {
     if (jumpSubmitGuard.current) return
     if (!jumpReason) { toast('Please select a reason'); return }
@@ -604,16 +606,19 @@ export default function OrderDetail() {
       item_code: r.item_code, reason: jumpReason, reason_note: jumpNote.trim() || null,
       created_by: user.id, created_by_name: user.name,
     }))
-    await sb.from('dispatch_skip_log').insert(rows)
-    await logActivity(`Dispatched ahead of ${jumpRows.length} older order(s) — reason: ${jumpReason}${jumpNote.trim() ? ' — ' + jumpNote.trim() : ''}`)
+    const reasonLine = `Dispatched ahead of ${jumpRows.length} older order(s) — reason: ${jumpReason}${jumpNote.trim() ? ' — ' + jumpNote.trim() : ''}`
+    const logSkip = async () => {
+      await sb.from('dispatch_skip_log').insert(rows)
+      await logActivity(reasonLine)
+    }
     const t = jumpType
     setShowJumpWarn(false); setJumpReason(''); setJumpNote(''); setJumpRows([])
     jumpSubmitGuard.current = false
-    if (t === 'full') await fullyDispatch(true); else await confirmPartialItems(true)
+    if (t === 'full') await fullyDispatch(true, logSkip); else await confirmPartialItems(true, logSkip)
   }
 
   // ── Full dispatch — set delivery_created (or pi_requested for Against PI / Advance orders) ──
-  async function fullyDispatch(skipJumpCheck = false) {
+  async function fullyDispatch(skipJumpCheck = false, onDispatched = null) {
     setShowDispatchModal(false)
     setDispatchType('full')
     if (!skipJumpCheck) {
@@ -622,28 +627,23 @@ export default function OrderDetail() {
       if (olders.length) { setJumpRows(olders); setJumpType('full'); setJumpReason(''); setJumpNote(''); setShowJumpWarn(true); return }
     }
     setSaving(true)
-    const isPIOrder = (order.credit_terms === 'Against PI' || order.credit_terms === 'Advance') && order.order_type !== 'SAMPLE'
-    const rpcCalls = (order.order_items || [])
+    const increments = (order.order_items || [])
       .filter(item => item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0) > 0)
-      .map(item => sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0) }))
-    const rpcResults = await Promise.all(rpcCalls)
-    const failed = rpcResults.find(r => r.error)
-    if (failed) { toast('Failed to update items: ' + failed.error.message + '. Please refresh and try again.'); setSaving(false); return }
-    const { error } = await sb.from('orders').update({
-      status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
-    }).eq('id', id)
-    if (error) { toast(friendlyError(error)); setSaving(false); return }
+      .map(item => ({ order_item_id: item.id, qty: item.qty - (item.dispatched_qty || 0) - (item.cancelled_qty || 0) }))
     const itemsJson = (order.order_items || []).map(i => ({
       order_item_id: i.id, item_code: i.item_code, qty: i.qty,
       unit_price: i.unit_price_after_disc, total_price: i.total_price,
       customer_ref_no: i.customer_ref_no || null,
     }))
-    const { data: batchData } = await sb.rpc('create_order_dispatch', {
-      p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,
+    // One atomic RPC: line increments + order status + batch + PI flag succeed or
+    // roll back together (sql/dispatch_atomic_phase2.sql). is_pi comes back from
+    // the server so order status and batch can never disagree.
+    const { data: batchData, error } = await sb.rpc('dispatch_order_batch', {
+      p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson, p_increments: increments,
     })
-    if (isPIOrder && batchData?.id) {
-      await sb.from('order_dispatches').update({ pi_required: true, status: 'pi_requested' }).eq('id', batchData.id)
-    }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
+    if (onDispatched) await onDispatched()
+    const isPIOrder = batchData?.is_pi === true
     const dcNum = batchData?.dc_number || '—'
     await logActivity(isPIOrder
       ? `Full Dispatch — ${order.credit_terms}. PI required before delivery. DC: ${dcNum}`
@@ -674,7 +674,7 @@ export default function OrderDetail() {
   }
 
   // ── Partial: validate and save ──
-  async function confirmPartialItems(skipJumpCheck = false) {
+  async function confirmPartialItems(skipJumpCheck = false, onDispatched = null) {
     const selected = partialItems.filter(i => i.checked && parseFloat(i.dispatchQty) > 0)
     if (!selected.length) { toast('Select at least one item with a dispatch quantity.'); return }
     for (const item of selected) {
@@ -690,26 +690,20 @@ export default function OrderDetail() {
       if (olders.length) { setJumpRows(olders); setJumpType('partial'); setJumpReason(''); setJumpNote(''); setShowJumpWarn(true); return }
     }
     setSaving(true)
-    const isPIOrder = (order.credit_terms === 'Against PI' || order.credit_terms === 'Advance') && order.order_type !== 'SAMPLE'
-    const partialRpcCalls = selected.map(item => sb.rpc('increment_dispatched_qty', { p_item_id: item.id, p_add_qty: parseFloat(item.dispatchQty) }))
-    const partialRpcResults = await Promise.all(partialRpcCalls)
-    const partialFailed = partialRpcResults.find(r => r.error)
-    if (partialFailed) { toast('Failed to update items: ' + partialFailed.error.message + '. Please refresh and try again.'); setSaving(false); return }
+    const increments = selected.map(item => ({ order_item_id: item.id, qty: parseFloat(item.dispatchQty) }))
     const summary = selected.map(i => `${i.item_code}: ${i.dispatchQty} units`).join(', ')
-    const { error } = await sb.from('orders').update({
-      status: isPIOrder ? 'pi_requested' : 'delivery_created', fulfilment_center: fcCenter, updated_at: new Date().toISOString(),
-    }).eq('id', id)
-    if (error) { toast(friendlyError(error)); setSaving(false); return }
     const itemsJson = selected.map(i => {
       const full = (order.order_items || []).find(o => o.id === i.id) || {}
       return { order_item_id: i.id, item_code: i.item_code, qty: parseFloat(i.dispatchQty), unit_price: full.unit_price_after_disc, total_price: (full.unit_price_after_disc || 0) * parseFloat(i.dispatchQty), customer_ref_no: full.customer_ref_no || null }
     })
-    const { data: batchData } = await sb.rpc('create_order_dispatch', {
-      p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson,
+    // One atomic RPC: line increments + order status + batch + PI flag succeed or
+    // roll back together (sql/dispatch_atomic_phase2.sql).
+    const { data: batchData, error } = await sb.rpc('dispatch_order_batch', {
+      p_order_id: id, p_fulfilment_center: fcCenter, p_items: itemsJson, p_increments: increments,
     })
-    if (isPIOrder && batchData?.id) {
-      await sb.from('order_dispatches').update({ pi_required: true, status: 'pi_requested' }).eq('id', batchData.id)
-    }
+    if (error) { toast(friendlyError(error)); setSaving(false); return }
+    if (onDispatched) await onDispatched()
+    const isPIOrder = batchData?.is_pi === true
     const dcNum = batchData?.dc_number || '—'
     await logActivity(isPIOrder
       ? `Partial Dispatch via ${fcCenter} — ${summary}. ${order.credit_terms} — PI required before delivery. DC: ${dcNum}`
