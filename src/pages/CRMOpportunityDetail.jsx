@@ -156,6 +156,22 @@ export default function CRMOpportunityDetail() {
 
   const [showConvertModal, setShowConvertModal] = useState(false)
   const [convertOrderType, setConvertOrderType] = useState('SO')
+  const [convertPartialAllowed, setConvertPartialAllowed] = useState(false) // toggle: off = full delivery only
+  const [convertLowValueReason, setConvertLowValueReason] = useState('')
+  const [convertPoFile, setConvertPoFile] = useState(null)
+  const [convertPoFileName, setConvertPoFileName] = useState('')
+
+  function handleConvertPoFile(e) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    if (f.size > 200 * 1024) {
+      toast('File is too large. Maximum file size allowed: 200 KB')
+      e.target.value = ''
+      return
+    }
+    setConvertPoFile(f)
+    setConvertPoFileName(f.name)
+  }
   const [showSampleModal, setShowSampleModal]   = useState(false)
   const [sampleCustomer, setSampleCustomer]     = useState(null)
   const [sampleItems, setSampleItems]           = useState([])
@@ -360,6 +376,10 @@ export default function CRMOpportunityDetail() {
     setSamplePoNumber('')
     setSampleReceivedVia('Visit')
     setConvertOrderType('SO')
+    setConvertPartialAllowed(false)
+    setConvertLowValueReason('')
+    setConvertPoFile(null)
+    setConvertPoFileName('')
     setShowConvertModal(true)
   }
 
@@ -374,8 +394,28 @@ export default function CRMOpportunityDetail() {
       if (!item.lp_unit_price) { toast('LP Price required for: ' + item.item_code); return }
       if (!item.dispatch_date) { toast('Dispatch date required for: ' + item.item_code); return }
     }
+    // Low-value order check — same rule as the New Order form
+    const convTotal = validItems.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0) + (parseFloat(sampleFreight) || 0)
+    if (convTotal < 8000) {
+      const words = convertLowValueReason.trim().split(/\s+/).filter(Boolean)
+      if (words.length < 7) {
+        toast('Order value is below ₹8,000. Please provide a reason (minimum 7 words).', 'error')
+        return
+      }
+    }
     setSubmittingSample(true)
     const { data: { session } } = await sb.auth.getSession()
+    // Upload customer PO document first if provided — same flow as the New Order form
+    let poDocUrl = null
+    if (convertPoFile) {
+      const ext  = convertPoFile.name.split('.').pop()
+      const path = `orders/${Date.now()}.${ext}`
+      const { error: upErr } = await sb.storage.from('po-documents').upload(path, convertPoFile)
+      if (!upErr) {
+        const { data: { publicUrl } } = sb.storage.from('po-documents').getPublicUrl(path)
+        poDocUrl = publicUrl
+      }
+    }
     const { data: order, error } = await sb.from('orders').insert({
       customer_name:     sampleCustomer.customer_name,
       customer_gst:      sampleGst.trim() || '',
@@ -386,9 +426,12 @@ export default function CRMOpportunityDetail() {
       engineer_name:     user.name,
       received_via:      sampleReceivedVia,
       freight:           parseFloat(sampleFreight) || 0,
+      partial_deliveries_allowed: convertPartialAllowed,
       credit_terms:      sampleCustomer.credit_terms || '',
       account_owner:     sampleCustomer.account_owner || '',
       notes:             sampleNotes.trim(),
+      po_document_url:   poDocUrl,
+      low_value_reason:  convTotal < 8000 ? convertLowValueReason.trim() : null,
       submitted_by_name: user.name,
       created_by:        session.user.id,
       is_test:           false,
@@ -2175,6 +2218,30 @@ export default function CRMOpportunityDetail() {
                       <input value={sampleNotes} onChange={e => setSampleNotes(e.target.value)} />
                     </div>
                   </div>
+                  <div className="no-row full" style={{ marginTop: 4 }}>
+                    <div className="no-field">
+                      <label>Customer PO Document (optional)</label>
+                      <label className="no-file-label">
+                        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx" onChange={handleConvertPoFile} style={{ display: 'none' }} />
+                        <div className={'no-file-box' + (convertPoFileName ? ' has-file' : '')}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width: 20, height: 20 }}>
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                          </svg>
+                          <span>{convertPoFileName || 'Click to upload PO (PDF, image, Excel)'}</span>
+                          {convertPoFileName && (
+                            <button
+                              type="button"
+                              onClick={e => { e.preventDefault(); setConvertPoFile(null); setConvertPoFileName('') }}
+                              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', fontSize: 16 }}
+                            >×</button>
+                          )}
+                        </div>
+                      </label>
+                      <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>Maximum file size allowed: 200 KB</div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Items */}
@@ -2244,6 +2311,14 @@ export default function CRMOpportunityDetail() {
                     <div className="no-field" style={{ flex:1 }}>
                       <label>Freight Charges (₹)</label>
                       <input type="number" value={sampleFreight} onChange={e => setSampleFreight(e.target.value)} min="0" placeholder="0" />
+                      <label style={{ marginTop: 12 }}>Partial Deliveries Allowed?</label>
+                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <button type="button" onClick={() => setConvertPartialAllowed(v => !v)}
+                          style={{ position:'relative', width:46, height:26, borderRadius:13, border:'none', cursor:'pointer', background: convertPartialAllowed ? '#16a34a' : 'var(--gray-300)', transition:'background .15s', padding:0, flexShrink:0 }}>
+                          <span style={{ position:'absolute', top:3, left: convertPartialAllowed ? 23 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s', boxShadow:'0 1px 3px rgba(0,0,0,0.25)' }}/>
+                        </button>
+                        <span style={{ fontSize:13, fontWeight:600, color: convertPartialAllowed ? '#16a34a' : 'var(--gray-500)' }}>{convertPartialAllowed ? 'Yes — partial allowed' : 'No — full delivery only'}</span>
+                      </div>
                     </div>
                     <div className="no-totals-summary">
                       <div className="no-total-line"><span>Subtotal</span><span>₹{convSubtotal.toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
@@ -2252,6 +2327,26 @@ export default function CRMOpportunityDetail() {
                     </div>
                   </div>
                 </div>
+
+                {/* Low value warning — same rule as the New Order form */}
+                {convGrandTotal > 0 && convGrandTotal < 8000 && (
+                  <div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'14px 16px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                      <svg fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24" style={{width:16,height:16,flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      <span style={{fontSize:12,fontWeight:700,color:'#dc2626'}}>Order value is below ₹8,000 — reason required</span>
+                    </div>
+                    <textarea
+                      value={convertLowValueReason}
+                      onChange={e => setConvertLowValueReason(e.target.value)}
+                      placeholder="Why is this order below ₹8,000? Please explain in detail (minimum 7 words)..."
+                      rows={2}
+                      style={{width:'100%',border:'1px solid #fca5a5',borderRadius:8,padding:'8px 10px',fontSize:12,fontFamily:'var(--font)',color:'var(--gray-900)',resize:'none',outline:'none',boxSizing:'border-box',background:'white',lineHeight:1.5}}
+                    />
+                    <div style={{fontSize:10,color: convertLowValueReason.trim().split(/\s+/).filter(Boolean).length >= 7 ? '#16a34a' : '#dc2626',marginTop:4,fontWeight:500}}>
+                      {convertLowValueReason.trim().split(/\s+/).filter(Boolean).length}/7 words minimum
+                    </div>
+                  </div>
+                )}
 
               </div>
 
