@@ -995,7 +995,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
         try {
           await sb.from('notifications').insert(final.map(t => ({
             user_name: t.name, user_id: t.id, message: msg,
-            order_id: id,                         // repurposed — stores PO UUID for click-through
+            po_id: id,
             order_number: po.po_number,
             from_name: userName,
             email_type: 'po_mention',

@@ -228,9 +228,26 @@ export default function OrderDetail() {
       bg.push(sb.from('customer_payments_snapshot').select('outstanding_inr,overdue_inr,imported_at').ilike('party_name_raw', data.customer_name).maybeSingle().then(({ data: pay }) => setPayments(pay || null)))
     }
     if (data?.order_type === 'CO') {
-      bg.push(sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery,created_at').eq('order_id', id).order('created_at', { ascending: false }).then(async ({ data: pos }) => {
-        setLinkedPOs(pos || [])
-        const poIds = (pos || []).map(p => p.id)
+      bg.push((async () => {
+        // Linked POs = header-linked (order_id) ∪ line-linked (po_items.order_item_id).
+        // The line route catches POs that club multiple COs, where the header
+        // can only point at one of them.
+        const itemIds = (data?.order_items || []).map(oi => oi.id)
+        const lineLinks = []
+        for (let i = 0; i < itemIds.length; i += 150) {
+          const { data: rows } = await sb.from('po_items').select('po_id, order_item_id').in('order_item_id', itemIds.slice(i, i + 150))
+          if (rows?.length) lineLinks.push(...rows)
+        }
+        const { data: headerPos } = await sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery,created_at').eq('order_id', id)
+        let pos = headerPos || []
+        const extraIds = [...new Set(lineLinks.map(l => l.po_id))].filter(pid => !pos.some(p => p.id === pid))
+        if (extraIds.length) {
+          const { data: extraPos } = await sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery,created_at').in('id', extraIds)
+          if (extraPos?.length) pos = [...pos, ...extraPos]
+        }
+        pos.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+        setLinkedPOs(pos)
+        const poIds = pos.map(p => p.id)
         if (!poIds.length) { setPoCoveredItemIds(new Set()); setPoEarliestDelivery({}); return }
         // Pull line-level coverage + earliest pending delivery date per PO.
         // Pending = qty > received_qty. We want the soonest arrival per PO.
@@ -244,7 +261,7 @@ export default function OrderDetail() {
           if (!cur || pi.delivery_date < cur) earliest[pi.po_id] = pi.delivery_date
         })
         setPoEarliestDelivery(earliest)
-      }))
+      })())
     } else {
       setLinkedPOs([])
       setPoCoveredItemIds(new Set())
@@ -892,8 +909,20 @@ if (match) {
   // ── Notify ops/admin about linked POs when a CO is cancelled ──
   async function notifyOpsForLinkedPOs() {
     try {
-      const { data: linkedPos } = await sb.from('purchase_orders').select('id,po_number,status').eq('order_id', id)
-      if (!linkedPos?.length) return
+      const { data: headerPos } = await sb.from('purchase_orders').select('id,po_number,status').eq('order_id', id)
+      let linkedPos = headerPos || []
+      // Also catch POs linked only at line level (a PO clubbing multiple COs
+      // has just one CO on its header — the others connect via po_items).
+      const cancelItemIds = (order?.order_items || []).map(oi => oi.id)
+      if (cancelItemIds.length) {
+        const { data: lineLinks } = await sb.from('po_items').select('po_id').in('order_item_id', cancelItemIds)
+        const extraIds = [...new Set((lineLinks || []).map(l => l.po_id))].filter(pid => !linkedPos.some(p => p.id === pid))
+        if (extraIds.length) {
+          const { data: extraPos } = await sb.from('purchase_orders').select('id,po_number,status').in('id', extraIds)
+          if (extraPos?.length) linkedPos = [...linkedPos, ...extraPos]
+        }
+      }
+      if (!linkedPos.length) return
 
       const PRE_APPROVAL  = ['draft','pending_approval']
       const POST_APPROVAL = ['approved','placed','acknowledged','delivery_confirmation','partially_received']
@@ -912,14 +941,17 @@ if (match) {
         for (const t of targets) {
           rows.push({
             user_name: t.name, user_id: t.id, message: msg,
-            order_id: po.id,                  // repurposed: stores PO UUID for click-through
+            po_id: po.id,
             order_number: po.po_number,
             from_name: user.name,
             email_type: 'po_linked_co_cancelled',
           })
         }
       }
-      if (rows.length) await sb.from('notifications').insert(rows)
+      if (rows.length) {
+        const { error: notifErr } = await sb.from('notifications').insert(rows)
+        if (notifErr) console.error('notifyOpsForLinkedPOs insert failed:', notifErr)
+      }
     } catch (e) { console.error('notifyOpsForLinkedPOs:', e) }
   }
 

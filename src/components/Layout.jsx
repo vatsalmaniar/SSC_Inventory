@@ -245,7 +245,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
   async function loadNotifs(userId) {
     const { data } = await sb.from('notifications')
-      .select('id,user_id,user_name,message,order_id,order_number,from_name,is_read,email_type,created_at')
+      .select('id,user_id,user_name,message,order_id,po_id,order_number,from_name,is_read,email_type,created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(30)
@@ -289,9 +289,9 @@ export default function Layout({ children, pageTitle, pageKey }) {
       navigate('/procurement/vendors')
       return
     }
-    // PO-linked: CO was cancelled — navigate to the PO detail page (order_id stores PO UUID here)
+    // PO-linked: CO was cancelled, or tagged on a PO — go to the PO detail page
     if (n.email_type === 'po_linked_co_cancelled' || n.email_type === 'po_mention') {
-      if (n.order_id) navigate('/procurement/po/' + n.order_id)
+      if (n.po_id) navigate('/procurement/po/' + n.po_id)
       return
     }
     // Order-linked notifications

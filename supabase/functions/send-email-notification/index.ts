@@ -79,9 +79,9 @@ function esc(s: string): string {
 
 function buildEmail(recipientName: string, r: any, extra: { customer?: string; dc?: string; fc?: string } = {}): string {
   const cfg = TYPE_CONFIG[r.email_type] || { emoji: '🔔', color: '#1a4dab', bg: '#eff6ff', label: 'Notification' }
-  const link = r.order_id
-    ? ((r.email_type === 'po_linked_co_cancelled' || r.email_type === 'po_mention') ? `${APP_URL}/procurement/po/${r.order_id}` : `${APP_URL}/orders/${r.order_id}`)
-    : ''
+  const link = (r.email_type === 'po_linked_co_cancelled' || r.email_type === 'po_mention')
+    ? (r.po_id ? `${APP_URL}/procurement/po/${r.po_id}` : '')
+    : (r.order_id ? `${APP_URL}/orders/${r.order_id}` : '')
   const time = fmtTime(r.created_at)
 
   return `<!DOCTYPE html>

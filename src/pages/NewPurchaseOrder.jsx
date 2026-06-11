@@ -17,6 +17,19 @@ function emptyItem() {
   return { item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', from_stock: false }
 }
 
+// Coverage is looked up by po_items.order_item_id directly — not via the PO
+// header's order_id — so a covering PO line is found no matter which CO the
+// PO header points to (required once one PO can club multiple COs).
+// Chunked: >~150 UUIDs in one .in() exceeds PostgREST's 8 KB URL cap.
+async function fetchCoveredItemIds(itemIds) {
+  const covered = new Set()
+  for (let i = 0; i < itemIds.length; i += 150) {
+    const { data } = await sb.from('po_items').select('order_item_id').in('order_item_id', itemIds.slice(i, i + 150))
+    for (const r of (data || [])) covered.add(r.order_item_id)
+  }
+  return covered
+}
+
 export default function NewPurchaseOrder() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -83,10 +96,12 @@ export default function NewPurchaseOrder() {
 
   async function fetchPendingCOs(q) {
     // Search CO orders by order_number or customer_name
+    // Test Mode (admin): search test COs so dummy orders can be walked
+    // end-to-end without touching live data
     const { data: coOrders } = await sb.from('orders')
       .select('id,order_number,customer_name,order_items(id,line_status,procurement_source)')
       .eq('order_type', 'CO')
-      .eq('is_test', false)
+      .eq('is_test', isTest)
       .in('status', ['inv_check', 'inventory_check', 'dispatch', 'pending', 'confirmed'])
       .or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`)
       .order('created_at', { ascending: false })
@@ -95,14 +110,8 @@ export default function NewPurchaseOrder() {
 
     // Check item-level coverage — show COs that still have uncovered items
     // A line is covered if it has a po_items row OR procurement_source = 'stock'
-    const coIds = coOrders.map(o => o.id)
-    const { data: linkedPos } = await sb.from('purchase_orders').select('id,order_id').in('order_id', coIds)
-    let coveredByPo = new Set()
-    if (linkedPos?.length) {
-      const poIds = linkedPos.map(p => p.id)
-      const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
-      coveredByPo = new Set((poItems || []).map(pi => pi.order_item_id))
-    }
+    const allItemIds = coOrders.flatMap(o => (o.order_items || []).map(oi => oi.id))
+    const coveredByPo = await fetchCoveredItemIds(allItemIds)
 
     return coOrders.filter(o => {
       const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
@@ -119,13 +128,7 @@ export default function NewPurchaseOrder() {
     if (!order) return
 
     // Find which CO items already have POs (item-level coverage)
-    const { data: existingPos } = await sb.from('purchase_orders').select('id').eq('order_id', coId)
-    let coveredByPo = new Set()
-    if (existingPos?.length) {
-      const poIds = existingPos.map(p => p.id)
-      const { data: poItems } = await sb.from('po_items').select('order_item_id').in('po_id', poIds).not('order_item_id', 'is', null)
-      coveredByPo = new Set((poItems || []).map(pi => pi.order_item_id))
-    }
+    const coveredByPo = await fetchCoveredItemIds((order.order_items || []).map(oi => oi.id))
 
     // Only active (non-cancelled, non-short-closed) lines are candidates for procurement
     const allItems = (order.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')

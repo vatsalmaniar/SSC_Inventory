@@ -61,7 +61,6 @@ export default function ProcurementDashboard() {
       .order('created_at', { ascending: false })
     let coList = coData || []
     if (coList.length) {
-      const coIds = coList.map(o => o.id)
       // Chunk .in() so the URL doesn't exceed PostgREST's ~8 KB cap and get truncated
       async function chunkedFetch(builderFn, ids, chunkSize = 150) {
         const all = []
@@ -71,19 +70,14 @@ export default function ProcurementDashboard() {
         }
         return all
       }
-      const linkedPos = await chunkedFetch(
-        (slice) => sb.from('purchase_orders').select('id,order_id').in('order_id', slice),
-        coIds
+      // Coverage by po_items.order_item_id directly — not via the PO header's
+      // order_id — so lines on a PO clubbing multiple COs still count.
+      const allItemIds = coList.flatMap(o => (o.order_items || []).map(oi => oi.id))
+      const poItems = await chunkedFetch(
+        (slice) => sb.from('po_items').select('order_item_id').in('order_item_id', slice),
+        allItemIds
       )
-      let coveredSet = new Set()
-      if (linkedPos.length) {
-        const poIds = linkedPos.map(p => p.id)
-        const poItems = await chunkedFetch(
-          (slice) => sb.from('po_items').select('order_item_id').in('po_id', slice).not('order_item_id', 'is', null),
-          poIds
-        )
-        coveredSet = new Set(poItems.map(pi => pi.order_item_id))
-      }
+      const coveredSet = new Set(poItems.map(pi => pi.order_item_id))
       coList = coList.map(o => {
         // Only count active lines; covered = PO line OR procurement_source='stock'
         const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')

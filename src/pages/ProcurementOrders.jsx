@@ -77,20 +77,19 @@ export default function ProcurementOrders() {
         (slice) => sb.from('purchase_orders').select('id,order_id,status').in('order_id', slice),
         coIds
       )
-      let coveredSet = new Set()
       const posByCo = {}
-      if (linkedPos.length) {
-        for (const p of linkedPos) {
-          if (!posByCo[p.order_id]) posByCo[p.order_id] = []
-          posByCo[p.order_id].push({ id: p.id, status: p.status })
-        }
-        const poIds = linkedPos.map(p => p.id)
-        const poItems = await chunkedFetch(
-          (slice) => sb.from('po_items').select('order_item_id').in('po_id', slice).not('order_item_id', 'is', null),
-          poIds
-        )
-        coveredSet = new Set(poItems.map(pi => pi.order_item_id))
+      for (const p of linkedPos) {
+        if (!posByCo[p.order_id]) posByCo[p.order_id] = []
+        posByCo[p.order_id].push({ id: p.id, status: p.status })
       }
+      // Coverage by po_items.order_item_id directly — not via the PO header's
+      // order_id — so lines on a PO clubbing multiple COs still count.
+      const allItemIds = coOrders.flatMap(o => (o.order_items || []).map(oi => oi.id))
+      const poItems = await chunkedFetch(
+        (slice) => sb.from('po_items').select('order_item_id').in('order_item_id', slice),
+        allItemIds
+      )
+      const coveredSet = new Set(poItems.map(pi => pi.order_item_id))
       coOrders = coOrders.map(o => {
         // Only count active (non-cancelled / non-short-closed) lines for coverage
         const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
