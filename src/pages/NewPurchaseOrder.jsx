@@ -14,17 +14,21 @@ const FC_ADDRESSES = {
 }
 
 function emptyItem() {
-  return { item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', from_stock: false }
+  return { item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', from_stock: false, co_id: null, co_number: '' }
 }
 
 // Coverage is looked up by po_items.order_item_id directly — not via the PO
 // header's order_id — so a covering PO line is found no matter which CO the
 // PO header points to (required once one PO can club multiple COs).
+// Cancelled POs do NOT count as coverage (their items need procuring again).
 // Chunked: >~150 UUIDs in one .in() exceeds PostgREST's 8 KB URL cap.
 async function fetchCoveredItemIds(itemIds) {
   const covered = new Set()
   for (let i = 0; i < itemIds.length; i += 150) {
-    const { data } = await sb.from('po_items').select('order_item_id').in('order_item_id', itemIds.slice(i, i + 150))
+    const { data } = await sb.from('po_items')
+      .select('order_item_id, purchase_orders!inner(status)')
+      .in('order_item_id', itemIds.slice(i, i + 150))
+      .neq('purchase_orders.status', 'cancelled')
     for (const r of (data || [])) covered.add(r.order_item_id)
   }
   return covered
@@ -60,8 +64,8 @@ export default function NewPurchaseOrder() {
   // Test mode
   const [isTest, setIsTest] = useState(false)
 
-  // CO order prefill
-  const [coOrder, setCOOrder] = useState(null)
+  // CO orders — one or more (clubbed PO: multiple COs for one supplier)
+  const [coOrders, setCoOrders] = useState([])
   const [coText, setCOText] = useState('')
   const [sscNotes, setSscNotes] = useState('')
 
@@ -90,7 +94,7 @@ export default function NewPurchaseOrder() {
     // If creating from a CO order via URL param, pre-fill
     if (orderId) {
       setPoType('CO')
-      await loadCOOrder(orderId)
+      await addCO(orderId)
     }
   }
 
@@ -98,7 +102,7 @@ export default function NewPurchaseOrder() {
     // Search CO orders by order_number or customer_name
     // Test Mode (admin): search test COs so dummy orders can be walked
     // end-to-end without touching live data
-    const { data: coOrders } = await sb.from('orders')
+    const { data: matches } = await sb.from('orders')
       .select('id,order_number,customer_name,order_items(id,line_status,procurement_source)')
       .eq('order_type', 'CO')
       .eq('is_test', isTest)
@@ -106,14 +110,15 @@ export default function NewPurchaseOrder() {
       .or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`)
       .order('created_at', { ascending: false })
       .limit(20)
-    if (!coOrders?.length) return []
+    if (!matches?.length) return []
 
     // Check item-level coverage — show COs that still have uncovered items
     // A line is covered if it has a po_items row OR procurement_source = 'stock'
-    const allItemIds = coOrders.flatMap(o => (o.order_items || []).map(oi => oi.id))
+    const allItemIds = matches.flatMap(o => (o.order_items || []).map(oi => oi.id))
     const coveredByPo = await fetchCoveredItemIds(allItemIds)
 
-    return coOrders.filter(o => {
+    return matches.filter(o => {
+      if (coOrders.some(c => c.id === o.id)) return false // already on this PO
       const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
       if (!activeItems.length) return false
       const uncovered = activeItems.filter(oi => !coveredByPo.has(oi.id) && oi.procurement_source !== 'stock')
@@ -121,7 +126,14 @@ export default function NewPurchaseOrder() {
     })
   }
 
-  async function loadCOOrder(coId) {
+  function coNotesFor(list) {
+    if (!list.length) return ''
+    if (list.length === 1) return `Customer: ${list[0].customer_name}`
+    return 'Customers: ' + list.map(c => `${c.customer_name} (${c.order_number})`).join(' | ')
+  }
+
+  async function addCO(coId) {
+    if (coOrders.some(c => c.id === coId)) { toast('This CO is already on the PO'); return }
     const { data: order } = await sb.from('orders')
       .select('id,order_number,customer_name,order_items(id,item_code,description,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty,procurement_source)')
       .eq('id', coId).single()
@@ -150,19 +162,22 @@ export default function NewPurchaseOrder() {
       }
     }
 
-    setCOOrder({ ...order, _coveredCount: coveredCount, _totalItems: allItems.length })
-    setCOText(order.order_number + ' — ' + order.customer_name)
-    setSscCoNo(order.order_number)
-    setSscNotes(`Customer: ${order.customer_name}`)
+    const co = { id: order.id, order_number: order.order_number, customer_name: order.customer_name, _coveredCount: coveredCount, _totalItems: allItems.length }
+    const nextCOs = [...coOrders, co]
+    setCoOrders(nextCOs)
+    setCOText('')
+    setSscCoNo(nextCOs.map(c => c.order_number).join(', '))
+    setSscNotes(coNotesFor(nextCOs))
 
     if (!uncovered.length) {
-      // All items already covered — show empty state
-      setItems([emptyItem()])
+      toast(`All items on ${order.order_number} already have POs or are closed from stock`)
       return
     }
 
     const prefilled = uncovered.map(oi => ({
       order_item_id: oi.id,
+      co_id: order.id,
+      co_number: order.order_number,
       item_code: oi.item_code || '',
       description: oi.description || '',
       qty: String(oi.qty || ''),
@@ -174,17 +189,32 @@ export default function NewPurchaseOrder() {
       item_type: typeByCode.get(oi.item_code) || '',
       from_stock: false,
     }))
-    setItems(prefilled)
+    // First CO replaces the blank starter rows; further COs append below
+    setItems(prev => {
+      const kept = prev.filter(it => it.item_code.trim() || it.co_id)
+      return [...kept, ...prefilled]
+    })
+  }
+
+  function removeCO(coId) {
+    const nextCOs = coOrders.filter(c => c.id !== coId)
+    setCoOrders(nextCOs)
+    setSscCoNo(nextCOs.map(c => c.order_number).join(', '))
+    setSscNotes(coNotesFor(nextCOs))
+    setItems(prev => {
+      const next = prev.filter(it => it.co_id !== coId)
+      return next.length ? next : [emptyItem(), emptyItem(), emptyItem()]
+    })
   }
 
   function selectCO(co) {
-    loadCOOrder(co.id)
+    addCO(co.id)
   }
 
   function handlePoTypeChange(type) {
     setPoType(type)
     if (type !== 'CO') {
-      setCOOrder(null)
+      setCoOrders([])
       setCOText('')
       setSscCoNo('')
       setSscNotes('')
@@ -281,7 +311,7 @@ export default function NewPurchaseOrder() {
 
   async function submitPO(submitForApproval) {
     if (submitGuard.current) return
-    if (isCO && !coOrder)   { toast('Please select a Custom Order (SSC CO No.)'); return }
+    if (isCO && !coOrders.length) { toast('Please select a Custom Order (SSC CO No.)'); return }
     if (!filledItems.length){ toast('Add at least one line item'); return }
 
     // Close-as-Stock path: every filled line is "From Stock", no PO created
@@ -304,6 +334,12 @@ export default function NewPurchaseOrder() {
     if (!vendorId)          { toast('Please select a vendor'); return }
     if (!fulfilmentCenter)  { toast('Please select a delivery address'); return }
     if (fulfilmentCenter === 'Customer' && !deliveryCustName) { toast('Please select a customer for delivery address'); return }
+    // Clubbed PO to a customer address: every CO's goods land at ONE address —
+    // allowed when intended (e.g. several COs of the same customer), but confirm.
+    if (isCO && coOrders.length > 1 && fulfilmentCenter === 'Customer') {
+      const ok = window.confirm(`This clubbed PO covers ${coOrders.length} customer orders (${coOrders.map(c => c.order_number).join(', ')}), and ALL goods will be delivered to one customer address:\n\n${deliveryCustName}\n\nContinue?`)
+      if (!ok) return
+    }
     for (const item of poLines) {
       if (!item.qty || parseFloat(item.qty) <= 0) { toast(`Qty is required for item: ${item.item_code}`); return }
       if (item.lp_unit_price === '' || item.lp_unit_price === undefined || parseFloat(item.lp_unit_price) < 0) { toast(`LP Price is required for item: ${item.item_code}`); return }
@@ -350,8 +386,10 @@ export default function NewPurchaseOrder() {
         po_number:         tempNum,
         vendor_id:         vendorId,
         vendor_name:       vendorName,
-        order_id:          coOrder?.id || orderId || null,
-        order_number:      coOrder?.order_number || null,
+        // Header keeps the FIRST CO for back-compat; the full set of linked COs
+        // is derived from po_items.order_item_id (line-level truth)
+        order_id:          coOrders[0]?.id || orderId || null,
+        order_number:      coOrders[0]?.order_number || null,
         status:            submitForApproval ? 'pending_approval' : 'draft',
         po_date:           poDate,
         expected_delivery: expectedDelivery || null,
@@ -359,7 +397,7 @@ export default function NewPurchaseOrder() {
         delivery_address:  fulfilmentCenter === 'Customer' ? deliveryAddress.trim() || null : FC_ADDRESSES[fulfilmentCenter] || null,
         delivery_customer_name: fulfilmentCenter === 'Customer' ? deliveryCustName || null : null,
         notes:             notes.trim() || null,
-        reference:         sscCoNo.trim() || coOrder?.order_number || null,
+        reference:         sscCoNo.trim() || coOrders.map(c => c.order_number).join(', ') || null,
         ssc_notes:         sscNotes.trim() || null,
         purchase_requisition: purchaseRequisition.trim() || null,
         po_document_url:   poDocUrl,
@@ -426,22 +464,40 @@ export default function NewPurchaseOrder() {
 
       <div className="no-body">
         <div className="no-page-title">New Purchase Order</div>
-        <div className="no-page-sub">{isCO && coOrder ? `Creating PO against ${coOrder.order_number} — ${coOrder.customer_name}` : 'Fill in the details below to create a new purchase order.'}</div>
+        <div className="no-page-sub">{isCO && coOrders.length === 1 ? `Creating PO against ${coOrders[0].order_number} — ${coOrders[0].customer_name}` : isCO && coOrders.length > 1 ? `Clubbed PO against ${coOrders.length} customer orders` : 'Fill in the details below to create a new purchase order.'}</div>
 
         {/* ── CO Order Info Banner ── */}
-        {isCO && coOrder && (
-          <div style={{ display:'flex', alignItems:'center', gap:10, background: coOrder._coveredCount > 0 ? '#fffbeb' : '#eff6ff', border: coOrder._coveredCount > 0 ? '1px solid #fde68a' : '1px solid #bfdbfe', borderRadius:10, padding:'12px 16px', marginBottom:4 }}>
-            <svg fill="none" stroke={coOrder._coveredCount > 0 ? '#b45309' : '#1d4ed8'} strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color: coOrder._coveredCount > 0 ? '#92400e' : '#1e40af' }}>Against Custom Order {coOrder.order_number}</div>
-              <div style={{ fontSize:12, color: coOrder._coveredCount > 0 ? '#b45309' : '#3b82f6' }}>
-                {coOrder._coveredCount > 0
-                  ? `${coOrder._coveredCount}/${coOrder._totalItems} items already have POs — showing ${coOrder._totalItems - coOrder._coveredCount} remaining`
-                  : `Customer: ${coOrder.customer_name} — Items auto-filled from order`}
+        {isCO && coOrders.length > 0 && (() => {
+          const anyCovered = coOrders.some(c => c._coveredCount > 0)
+          const single = coOrders.length === 1 ? coOrders[0] : null
+          return (
+            <div style={{ display:'flex', alignItems:'flex-start', gap:10, background: anyCovered ? '#fffbeb' : '#eff6ff', border: anyCovered ? '1px solid #fde68a' : '1px solid #bfdbfe', borderRadius:10, padding:'12px 16px', marginBottom:4 }}>
+              <svg fill="none" stroke={anyCovered ? '#b45309' : '#1d4ed8'} strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <div>
+                {single ? (
+                  <>
+                    <div style={{ fontSize:13, fontWeight:600, color: single._coveredCount > 0 ? '#92400e' : '#1e40af' }}>Against Custom Order {single.order_number}</div>
+                    <div style={{ fontSize:12, color: single._coveredCount > 0 ? '#b45309' : '#3b82f6' }}>
+                      {single._coveredCount > 0
+                        ? `${single._coveredCount}/${single._totalItems} items already have POs — showing ${single._totalItems - single._coveredCount} remaining`
+                        : `Customer: ${single.customer_name} — Items auto-filled from order`}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize:13, fontWeight:600, color: anyCovered ? '#92400e' : '#1e40af' }}>Clubbed PO — {coOrders.length} customer orders</div>
+                    {coOrders.map(c => (
+                      <div key={c.id} style={{ fontSize:12, color: anyCovered ? '#b45309' : '#3b82f6' }}>
+                        <span style={{ fontFamily:'var(--mono)', fontWeight:600 }}>{c.order_number}</span> · {c.customer_name}
+                        {c._coveredCount > 0 ? ` — ${c._coveredCount}/${c._totalItems} items already covered` : ''}
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* ── Vendor Information ── */}
         <div className="no-card">
@@ -573,11 +629,12 @@ export default function NewPurchaseOrder() {
             <div className="no-field">
               <label>{isCO ? 'SSC CO No.' : 'PO / Reference Number'} {isCO && <span className="req">*</span>}</label>
               {isCO ? (
+                <>
                 <Typeahead
                   value={coText}
-                  onChange={v => { setCOText(v); if (!v.trim()) { setCOOrder(null); setSscCoNo(''); setSscNotes(''); setItems([emptyItem(), emptyItem(), emptyItem()]) } }}
+                  onChange={v => setCOText(v)}
                   onSelect={selectCO}
-                  placeholder="Type CO number or customer name..."
+                  placeholder={coOrders.length ? 'Add another CO — type CO number or customer name...' : 'Type CO number or customer name...'}
                   fetchFn={fetchPendingCOs}
                   strictSelect
                   renderItem={co => (
@@ -587,6 +644,18 @@ export default function NewPurchaseOrder() {
                     </div>
                   )}
                 />
+                {coOrders.length > 0 && (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:6 }}>
+                    {coOrders.map(c => (
+                      <span key={c.id} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:6, padding:'3px 8px', fontSize:11 }}>
+                        <span style={{ fontFamily:'var(--mono)', fontWeight:600, color:'#1d4ed8' }}>{c.order_number}</span>
+                        <span style={{ color:'var(--gray-500)' }}>{c.customer_name}</span>
+                        <button type="button" onClick={() => removeCO(c.id)} title={`Remove ${c.order_number} and its items from this PO`} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--gray-400)', fontSize:14, lineHeight:1, padding:0 }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                </>
               ) : (
                 <input value={sscCoNo} onChange={e => setSscCoNo(e.target.value)} placeholder="e.g. Reference, Indent No." />
               )}
@@ -604,7 +673,7 @@ export default function NewPurchaseOrder() {
                 value={sscNotes}
                 onChange={e => setSscNotes(e.target.value)}
                 placeholder={isCO ? 'Auto-filled with customer name' : 'Internal notes for team reference'}
-                style={isCO && coOrder ? { background: 'var(--gray-50)' } : {}}
+                style={isCO && coOrders.length ? { background: 'var(--gray-50)' } : {}}
               />
             </div>
           </div>
@@ -701,6 +770,12 @@ export default function NewPurchaseOrder() {
                             style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:4, flexShrink:0,
                               background: isCI ? '#fef3c7' : '#dcfce7', color: isCI ? '#92400e' : '#166534' }}>
                             {item.item_type}
+                          </span>
+                        )}
+                        {isCO && coOrders.length > 1 && item.co_number && (
+                          <span title={`Belongs to ${item.co_number}`}
+                            style={{ fontSize:9, fontWeight:600, padding:'2px 5px', borderRadius:4, flexShrink:0, fontFamily:'var(--mono)', background:'#eef2ff', color:'#3730a3' }}>
+                            {item.co_number.replace(/^(Temp|SSC)\//, '').replace(/\/\d{2}-\d{2}$/, '')}
                           </span>
                         )}
                       </div>

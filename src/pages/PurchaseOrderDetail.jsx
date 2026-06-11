@@ -102,6 +102,14 @@ export default function PurchaseOrderDetail() {
   const [confirmingRelink,   setConfirmingRelink]   = useState(false)
   const [relinking,          setRelinking]          = useState(false)
 
+  // Linked COs — header link ∪ line-level links. A clubbed PO carries lines
+  // from several COs while the header stores only the first one.
+  const [linkedOrders, setLinkedOrders] = useState([])
+  const [oiOrderMap, setOiOrderMap] = useState({})   // order_item_id -> order_id
+  const isMultiCO = linkedOrders.length > 1
+  const cancelledLinked = linkedOrders.filter(o => o.status === 'cancelled')
+  const shortCO = n => (n || '').replace(/^(Temp|SSC)\//, '').replace(/\/\d{2}-\d{2}$/, '')
+
   // Send PO to Vendor
   const [showEmailModal, setShowEmailModal]   = useState(false)
   const [vendorContacts, setVendorContacts]   = useState([])
@@ -164,15 +172,8 @@ export default function PurchaseOrderDetail() {
           setActiveCOsForRelink(activeCOs || [])
         }
       })
-      // Stock-closed CO lines (CI or SI) on the same CO — show for approver visibility.
-      // Filter to active lines only — a cancelled stock-flagged line shouldn't surface.
-      sb.from('order_items').select('id,item_code,qty,description,line_status')
-        .eq('order_id', poRes.data.order_id)
-        .eq('procurement_source', 'stock')
-        .then(({ data }) => setCoStockClosedItems((data || []).filter(it => (it.line_status || 'active') === 'active')))
     } else {
       setSourceCOStatus(null)
-      setCoStockClosedItems([])
     }
     const [itemsRes, datesRes, commentsRes] = await Promise.all([
       sb.from('po_items').select('*').eq('po_id', id).order('sr_no'),
@@ -182,6 +183,32 @@ export default function PurchaseOrderDetail() {
     setItems(itemsRes.data || [])
     setDeliveryDates(datesRes.data || [])
     setComments(commentsRes.data || [])
+
+    // Resolve all linked COs (header ∪ line-level) + their stock-closed lines.
+    // Stock-closed banner covers every linked CO, not just the header one.
+    try {
+      const lineOiIds = [...new Set((itemsRes.data || []).map(pi => pi.order_item_id).filter(Boolean))]
+      let oiRows = []
+      if (lineOiIds.length) {
+        const { data } = await sb.from('order_items').select('id,order_id').in('id', lineOiIds)
+        oiRows = data || []
+      }
+      const omap = {}
+      for (const r of oiRows) omap[r.id] = r.order_id
+      setOiOrderMap(omap)
+      const orderIds = [...new Set([...(poRes.data.order_id ? [poRes.data.order_id] : []), ...oiRows.map(r => r.order_id).filter(Boolean)])]
+      if (orderIds.length) {
+        const [{ data: ords }, { data: stockRows }] = await Promise.all([
+          sb.from('orders').select('id,order_number,customer_name,status').in('id', orderIds),
+          sb.from('order_items').select('id,item_code,qty,description,line_status').in('order_id', orderIds).eq('procurement_source', 'stock'),
+        ])
+        setLinkedOrders(ords || [])
+        setCoStockClosedItems((stockRows || []).filter(it => (it.line_status || 'active') === 'active'))
+      } else {
+        setLinkedOrders([])
+        setCoStockClosedItems([])
+      }
+    } catch (e) { console.error('linked orders lookup:', e) }
 
     // Detect most recent "PO emailed" activity
     const emailActivity = (commentsRes.data || []).filter(c => c.is_activity && (c.message || '').includes('📧 PO emailed')).pop()
@@ -227,10 +254,31 @@ export default function PurchaseOrderDetail() {
     if (error) { toast('Failed to untick: ' + error.message); return }
     await logActivity(`Reverted "From Stock" on ${itemCode} (CO ${po.order_number}) — now needs PO`)
     toast(`${itemCode} unticked — now needs PO on ${po.order_number}`, 'success')
-    // Refresh the banner list (active stock-flagged lines only)
+    // Refresh the banner list (active stock-flagged lines only, across all linked COs)
+    const ids = linkedOrders.length ? linkedOrders.map(o => o.id) : (po.order_id ? [po.order_id] : [])
+    if (!ids.length) return
     const { data } = await sb.from('order_items').select('id,item_code,qty,description,line_status')
-      .eq('order_id', po.order_id).eq('procurement_source', 'stock')
+      .in('order_id', ids).eq('procurement_source', 'stock')
     setCoStockClosedItems((data || []).filter(it => (it.line_status || 'active') === 'active'))
+  }
+
+  // Line-scoped cancellation: remove a single PO line whose CO was cancelled,
+  // leaving the other COs' lines on this clubbed PO untouched.
+  async function removeLineForCancelledCO(pi, coNumber) {
+    if (!['ops','admin','management'].includes(userRole)) { toast('Ops / admin / management only'); return }
+    if ((pi.received_qty || 0) > 0) { toast('This line already has goods received via GRN — it cannot be removed'); return }
+    const postApproval = !['draft','pending_approval'].includes(po.status)
+    const msg = postApproval
+      ? `Remove line ${pi.item_code} × ${pi.qty} (${coNumber}) from ${po.po_number}?\n\nThis PO is already with the vendor. Confirm ONLY after the vendor has agreed to amend the order.`
+      : `Remove line ${pi.item_code} × ${pi.qty} from ${po.po_number}?\n\nIts customer order ${coNumber} was cancelled. The rest of the PO stays as is.`
+    if (!window.confirm(msg)) return
+    const { error } = await sb.from('po_items').delete().eq('id', pi.id)
+    if (error) { toast(friendlyError(error, 'Failed to remove the line')); return }
+    const newTotal = items.filter(it => it.id !== pi.id).reduce((s, it) => s + (Number(it.total_price) || 0), 0)
+    await sb.from('purchase_orders').update({ total_amount: newTotal, updated_at: new Date().toISOString() }).eq('id', id)
+    await logActivity(`Removed line ${pi.item_code} × ${pi.qty} — its CO ${coNumber} was cancelled. PO total updated to ${fmtINR(newTotal)}`)
+    toast(`Line removed — ${pi.item_code}`, 'success')
+    await loadPO(true)
   }
 
   // ── Status transitions ──
@@ -739,7 +787,9 @@ SSC Control Pvt. Ltd.`
     <table class="ref-table">
       <tr><td>PO No.</td><td class="mono">${esc(poNumber)}</td></tr>
       <tr><td>PO Date</td><td>${poDate}</td></tr>
-      ${po.order_number ? `<tr><td>Linked Order</td><td class="mono">${esc(po.order_number)}</td></tr>` : ''}
+      ${linkedOrders.length > 1
+        ? `<tr><td>Linked Orders</td><td class="mono" style="font-size:10px">${esc(linkedOrders.map(o => o.order_number).join(', '))}</td></tr>`
+        : po.order_number ? `<tr><td>Linked Order</td><td class="mono">${esc(po.order_number)}</td></tr>` : ''}
       ${po.reference && !po.order_number ? `<tr><td>Reference</td><td>${esc(po.reference)}</td></tr>` : ''}
       <tr><td>Deliver To</td><td>${po.fulfilment_center === 'Customer' ? esc(po.delivery_customer_name || 'Customer') : (esc(po.fulfilment_center) || '—')}</td></tr>
     </table>
@@ -778,7 +828,7 @@ SSC Control Pvt. Ltd.`
     ${items.map((item, idx) => `
     <tr>
       <td style="color:#94a3b8">${idx + 1}</td>
-      <td class="code">${esc(item.item_code) || '—'}</td>
+      <td class="code">${esc(item.item_code) || '—'}${linkedOrders.length > 1 && oiOrderMap[item.order_item_id] ? `<div style="font-size:9px;color:#64748b;margin-top:2px">${esc((linkedOrders.find(o => o.id === oiOrderMap[item.order_item_id]) || {}).order_number || '')}</div>` : ''}</td>
       <td class="c" style="font-weight:700">${item.qty}</td>
       <td class="r">${(Number(item.lp_unit_price)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td class="c">${item.discount_pct || 0}%</td>
@@ -1250,7 +1300,64 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
           </div>
         )}
 
-        {sourceCOStatus === 'cancelled' && ['draft','pending_approval'].includes(po.status) && (
+        {/* Multi-CO (clubbed) PO: line-scoped cancelled-CO handling. The whole-PO
+            cancel/relink banners below only apply to single-CO POs. */}
+        {isMultiCO && cancelledLinked.length > 0 && !isCancelled && (
+          <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderLeft:'4px solid #dc2626', borderRadius:10, padding:'14px 18px', marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+              <svg fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}>
+                <path d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/>
+              </svg>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700, fontSize:13, color:'#b91c1c', marginBottom:3 }}>
+                  {cancelledLinked.length === linkedOrders.length
+                    ? 'All linked customer orders cancelled'
+                    : `${cancelledLinked.length} of ${linkedOrders.length} linked customer orders cancelled`}
+                </div>
+                {cancelledLinked.length === linkedOrders.length ? (
+                  <div style={{ fontSize:12, color:'#dc2626' }}>
+                    Every CO on this clubbed PO has been cancelled. Please cancel this PO{['draft','pending_approval'].includes(po.status) ? '' : ' after agreeing the cancellation with the vendor'}.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize:12, color:'#dc2626', marginBottom:8 }}>
+                      Only the lines of the cancelled CO{cancelledLinked.length > 1 ? 's' : ''} are affected — the other customer orders on this PO are still active. Do NOT cancel the whole PO.
+                      {!['draft','pending_approval'].includes(po.status) && ' This PO is already with the vendor — agree an amendment with the vendor before removing lines.'}
+                    </div>
+                    {cancelledLinked.map(co => {
+                      const affected = items.filter(pi => oiOrderMap[pi.order_item_id] === co.id)
+                      return (
+                        <div key={co.id} style={{ background:'white', border:'1px solid #fecaca', borderRadius:8, padding:'8px 12px', marginBottom:6 }}>
+                          <div style={{ fontSize:12, fontWeight:600, color:'#b91c1c', marginBottom: affected.length ? 6 : 0 }}>
+                            <span style={{ fontFamily:'var(--mono)', textDecoration:'line-through' }}>{co.order_number}</span> · {co.customer_name} — {affected.length} line{affected.length !== 1 ? 's' : ''} on this PO
+                          </div>
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                            {affected.map(pi => (
+                              <span key={pi.id} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'#b91c1c', background:'#fef2f2', border:'1px solid #fecaca', padding:'3px 8px', borderRadius:6 }}>
+                                {pi.item_code} × {pi.qty}
+                                {(pi.received_qty || 0) > 0 ? (
+                                  <span style={{ fontSize:9, fontWeight:700, color:'#92400e' }} title="Goods already received via GRN — line cannot be removed">GRN</span>
+                                ) : ['ops','admin','management'].includes(userRole) ? (
+                                  <button type="button" onClick={() => removeLineForCancelledCO(pi, co.order_number)} title="Remove this cancelled line from the PO"
+                                    style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#dc2626', color:'white', border:'none', borderRadius:5, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)' }}>
+                                    <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{ width:9, height:9 }}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                                    Remove line
+                                  </button>
+                                ) : null}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!isMultiCO && sourceCOStatus === 'cancelled' && ['draft','pending_approval'].includes(po.status) && (
           <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'flex-start', gap:12, fontSize:13, color:'#b91c1c', marginBottom:16 }}>
             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
             <div>
@@ -1260,7 +1367,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
           </div>
         )}
 
-        {sourceCOStatus === 'cancelled' && ['approved','placed','acknowledged','delivery_confirmation','partially_received'].includes(po.status) && (
+        {!isMultiCO && sourceCOStatus === 'cancelled' && ['approved','placed','acknowledged','delivery_confirmation','partially_received'].includes(po.status) && (
           <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderLeft:'4px solid #ea580c', borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'flex-start', gap:12, marginBottom:16 }}>
             <div style={{ width:28, height:28, borderRadius:'50%', background:'#ffedd5', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
               <svg fill="none" stroke="#ea580c" strokeWidth="2.2" viewBox="0 0 24 24" style={{ width:16, height:16 }}>
@@ -1405,13 +1512,22 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     <div className="od-detail-field"><label>Vendor Code</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{vendorCode || '—'}</div></div>
                     <div className="od-detail-field"><label>Submitted By</label><div className="val"><OwnerChip name={po.submitted_by_name} /></div></div>
                     <div className="od-detail-field"><label>Payment Terms</label><div className="val">{po.payment_terms || '—'}</div></div>
-                    {po.order_number && (
+                    {(linkedOrders.length > 0 || po.order_number) && (
                       <div className="od-detail-field">
-                        <label>Linked Order</label>
-                        <div className="val">
-                          <span style={{ fontFamily:'var(--mono)', color:'#1a4dab', cursor: po.order_id ? 'pointer' : 'default', textDecoration: po.order_id ? 'underline' : 'none' }} onClick={() => po.order_id && navigate('/orders/' + po.order_id)}>
-                            {po.order_number}
-                          </span>
+                        <label>Linked Order{isMultiCO ? 's' : ''}</label>
+                        <div className="val" style={isMultiCO ? { display:'flex', flexDirection:'column', gap:3 } : undefined}>
+                          {linkedOrders.length > 0 ? linkedOrders.map(o => (
+                            <span key={o.id} onClick={() => navigate('/orders/' + o.id)}
+                              style={{ fontFamily:'var(--mono)', cursor:'pointer', textDecoration:'underline',
+                                color: o.status === 'cancelled' ? '#b91c1c' : '#1a4dab' }}
+                              title={o.status === 'cancelled' ? 'This CO has been cancelled' : undefined}>
+                              {o.order_number}{isMultiCO ? ` · ${o.customer_name}` : ''}{o.status === 'cancelled' ? ' (cancelled)' : ''}
+                            </span>
+                          )) : (
+                            <span style={{ fontFamily:'var(--mono)', color:'#1a4dab', cursor: po.order_id ? 'pointer' : 'default', textDecoration: po.order_id ? 'underline' : 'none' }} onClick={() => po.order_id && navigate('/orders/' + po.order_id)}>
+                              {po.order_number}
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1477,13 +1593,13 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
             {/* Line Items */}
             {/* Stock-closed lines from the linked CO — for approver/reviewer visibility */}
-            {po.order_id && coStockClosedItems.length > 0 && (
+            {linkedOrders.length > 0 && coStockClosedItems.length > 0 && (
               <div className="od-card" style={{ borderColor:'#bbf7d0', background:'#f0fdf4' }}>
                 <div style={{ padding:'12px 16px', display:'flex', alignItems:'flex-start', gap:10 }}>
                   <svg fill="none" stroke="#166534" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0, marginTop:2 }}><path d="M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:12, fontWeight:700, color:'#166534', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:4 }}>
-                      {coStockClosedItems.length} item{coStockClosedItems.length>1?'s':''} on {po.order_number} closed from stock — not on this PO
+                      {coStockClosedItems.length} item{coStockClosedItems.length>1?'s':''} {isMultiCO ? 'across the linked COs' : `on ${po.order_number}`} closed from stock — not on this PO
                     </div>
                     <div style={{ fontSize:11, color:'#15803d', marginBottom:8 }}>
                       These lines were marked "From Stock" and will be dispatched from existing inventory. This PO covers the remaining lines that need procurement.
@@ -1586,7 +1702,21 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                         return (
                           <tr key={item.id || idx}>
                             <td style={{ paddingLeft:20, color:'var(--gray-400)', fontSize:11 }}>{item.sr_no || idx + 1}</td>
-                            <td className="mono">{item.item_code || '—'}</td>
+                            <td className="mono">
+                              {item.item_code || '—'}
+                              {isMultiCO && (() => {
+                                const lo = linkedOrders.find(o => o.id === oiOrderMap[item.order_item_id])
+                                if (!lo) return null
+                                const dead = lo.status === 'cancelled'
+                                return (
+                                  <span title={`${lo.order_number} · ${lo.customer_name}${dead ? ' (cancelled)' : ''}`}
+                                    style={{ marginLeft:6, fontSize:9, fontWeight:600, padding:'2px 5px', borderRadius:4, fontFamily:'var(--mono)',
+                                      background: dead ? '#fef2f2' : '#eef2ff', color: dead ? '#b91c1c' : '#3730a3', textDecoration: dead ? 'line-through' : 'none' }}>
+                                    {shortCO(lo.order_number)}
+                                  </span>
+                                )
+                              })()}
+                            </td>
                             <td>{item.qty}</td>
                             <td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
                             <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td>

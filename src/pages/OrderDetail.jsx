@@ -251,10 +251,14 @@ export default function OrderDetail() {
         if (!poIds.length) { setPoCoveredItemIds(new Set()); setPoEarliestDelivery({}); return }
         // Pull line-level coverage + earliest pending delivery date per PO.
         // Pending = qty > received_qty. We want the soonest arrival per PO.
+        // Cancelled POs stay in the linked list (visibility) but their lines
+        // don't count as coverage and don't produce an ETA.
+        const cancelledPoIds = new Set(pos.filter(p => p.status === 'cancelled').map(p => p.id))
         const { data: pis } = await sb.from('po_items').select('po_id, order_item_id, delivery_date, qty, received_qty').in('po_id', poIds)
-        setPoCoveredItemIds(new Set((pis || []).filter(pi => pi.order_item_id).map(pi => pi.order_item_id)))
+        const activePis = (pis || []).filter(pi => !cancelledPoIds.has(pi.po_id))
+        setPoCoveredItemIds(new Set(activePis.filter(pi => pi.order_item_id).map(pi => pi.order_item_id)))
         const earliest = {}
-        ;(pis || []).forEach(pi => {
+        activePis.forEach(pi => {
           const pending = (pi.qty || 0) > (pi.received_qty || 0)
           if (!pending || !pi.delivery_date) return
           const cur = earliest[pi.po_id]

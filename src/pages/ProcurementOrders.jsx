@@ -25,71 +25,103 @@ export default function ProcurementOrders() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [tab, setTab] = useState('pending')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [testMode, setTestMode] = useState(false)
   const PAGE_SIZE = 50
 
-  useEffect(() => { init() }, [])
+  useEffect(() => { init() }, [testMode])
 
   async function init() {
+    setLoading(true)
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     if (!['ops','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
+    setIsAdmin(profile?.role === 'admin')
 
     const [coDataRes, orphanPosRes] = await Promise.all([
       sb.from('orders')
         .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status,procurement_source)')
-        .eq('is_test', false).eq('order_type', 'CO')
-        .neq('status', 'pending')
+        .eq('is_test', testMode).eq('order_type', 'CO')
+        // Procurement-relevant stages only. Late-stage orders (dispatched etc.)
+        // are out of procurement scope — without this filter, the cancelled-PO
+        // coverage fix would resurface ~70 old fulfilled COs as "uncovered".
+        .in('status', ['inv_check', 'inventory_check', 'dispatch', 'cancelled'])
         .gte('created_at', FY_START)
         .order('created_at', { ascending: false }),
-      sb.from('purchase_orders').select('id,order_id,status').in('status', ORPHAN_PO_STATUSES).not('order_id', 'is', null),
+      sb.from('purchase_orders').select('id,order_id,status').in('status', ORPHAN_PO_STATUSES).eq('is_test', testMode),
     ])
+
+    // Chunk .in() lookups — once we cross ~150 UUIDs the URL exceeds PostgREST's
+    // 8 KB cap and the query gets silently truncated (= COs falsely shown as
+    // uncovered because their POs fall outside the truncated set).
+    async function chunkedFetch(builderFn, ids, chunkSize = 150) {
+      const all = []
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const slice = ids.slice(i, i + chunkSize)
+        const { data, error } = await builderFn(slice)
+        if (error) { console.error('chunkedFetch error:', error); continue }
+        if (data?.length) all.push(...data)
+      }
+      return all
+    }
 
     let coOrders = coDataRes.data || []
     const orphanPosAll = orphanPosRes.data || []
     if (orphanPosAll.length) {
+      // Cancelled COs touched by post-approval POs but missing from the main
+      // list (e.g. pre-FY). Checked via BOTH the PO header and the PO lines —
+      // a clubbed PO's non-header COs only connect at line level.
       const existingIds = new Set(coOrders.map(o => o.id))
-      const missingIds = [...new Set(orphanPosAll.map(p => p.order_id))].filter(id => !existingIds.has(id))
+      const orphanPoIds = orphanPosAll.map(p => p.id)
+      const lineOiRows = await chunkedFetch(
+        (slice) => sb.from('po_items').select('order_item_id').in('po_id', slice).not('order_item_id', 'is', null),
+        orphanPoIds
+      )
+      const lineCoRows = await chunkedFetch(
+        (slice) => sb.from('order_items').select('id,order_id').in('id', slice),
+        [...new Set(lineOiRows.map(r => r.order_item_id))]
+      )
+      const candidateIds = [...new Set([
+        ...orphanPosAll.map(p => p.order_id).filter(Boolean),
+        ...lineCoRows.map(r => r.order_id).filter(Boolean),
+      ])]
+      const missingIds = candidateIds.filter(cid => !existingIds.has(cid))
       if (missingIds.length) {
         const { data: extraCos } = await sb.from('orders')
           .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status,procurement_source)')
-          .in('id', missingIds).eq('status', 'cancelled')
+          .in('id', missingIds).eq('status', 'cancelled').eq('is_test', testMode)
         if (extraCos?.length) coOrders = [...coOrders, ...extraCos]
       }
     }
 
     if (coOrders.length) {
       const coIds = coOrders.map(o => o.id)
-      // Chunk .in() lookups — once we cross ~150 UUIDs the URL exceeds PostgREST's
-      // 8 KB cap and the query gets silently truncated (= COs falsely shown as
-      // uncovered because their POs fall outside the truncated set).
-      async function chunkedFetch(builderFn, ids, chunkSize = 150) {
-        const all = []
-        for (let i = 0; i < ids.length; i += chunkSize) {
-          const slice = ids.slice(i, i + chunkSize)
-          const { data, error } = await builderFn(slice)
-          if (error) { console.error('chunkedFetch error:', error); continue }
-          if (data?.length) all.push(...data)
-        }
-        return all
+      // CO → POs map, built from BOTH routes: header order_id AND line-level
+      // links (clubbed POs carry lines of COs the header doesn't mention).
+      const oiToCo = {}
+      for (const o of coOrders) for (const oi of (o.order_items || [])) oiToCo[oi.id] = o.id
+      const posByCo = {}
+      const addPo = (coId, poId, status) => {
+        if (!coId || !poId) return
+        if (!posByCo[coId]) posByCo[coId] = []
+        if (!posByCo[coId].some(x => x.id === poId)) posByCo[coId].push({ id: poId, status })
       }
       const linkedPos = await chunkedFetch(
         (slice) => sb.from('purchase_orders').select('id,order_id,status').in('order_id', slice),
         coIds
       )
-      const posByCo = {}
-      for (const p of linkedPos) {
-        if (!posByCo[p.order_id]) posByCo[p.order_id] = []
-        posByCo[p.order_id].push({ id: p.id, status: p.status })
-      }
+      for (const p of linkedPos) addPo(p.order_id, p.id, p.status)
       // Coverage by po_items.order_item_id directly — not via the PO header's
       // order_id — so lines on a PO clubbing multiple COs still count.
+      // Cancelled POs do NOT count (their items need procuring again).
       const allItemIds = coOrders.flatMap(o => (o.order_items || []).map(oi => oi.id))
       const poItems = await chunkedFetch(
-        (slice) => sb.from('po_items').select('order_item_id').in('order_item_id', slice),
+        (slice) => sb.from('po_items').select('order_item_id, po_id, purchase_orders!inner(status)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
         allItemIds
       )
       const coveredSet = new Set(poItems.map(pi => pi.order_item_id))
+      for (const pi of poItems) addPo(oiToCo[pi.order_item_id], pi.po_id, pi.purchase_orders?.status)
       coOrders = coOrders.map(o => {
         // Only count active (non-cancelled / non-short-closed) lines for coverage
         const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
@@ -163,6 +195,12 @@ export default function ProcurementOrders() {
               </button>
             )}
           </div>
+          {isAdmin && (
+            <label style={{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:testMode ? '#b45309' : 'var(--gray-500)',fontWeight:testMode ? 600 : 400,background:testMode ? '#fef3c7' : 'transparent',border:testMode ? '1px solid #fde68a' : '1px solid transparent',borderRadius:8,padding:'6px 12px',transition:'all 0.15s',marginLeft:10,flexShrink:0}}>
+              <input type="checkbox" checked={testMode} onChange={e => { setTestMode(e.target.checked); setPage(1) }} style={{accentColor:'#b45309',width:14,height:14}} />
+              Test Mode
+            </label>
+          )}
         </div>
 
         <div className="o-filter-row">

@@ -72,9 +72,10 @@ export default function ProcurementDashboard() {
       }
       // Coverage by po_items.order_item_id directly — not via the PO header's
       // order_id — so lines on a PO clubbing multiple COs still count.
+      // Cancelled POs do NOT count (their items need procuring again).
       const allItemIds = coList.flatMap(o => (o.order_items || []).map(oi => oi.id))
       const poItems = await chunkedFetch(
-        (slice) => sb.from('po_items').select('order_item_id').in('order_item_id', slice),
+        (slice) => sb.from('po_items').select('order_item_id, purchase_orders!inner(status)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
         allItemIds
       )
       const coveredSet = new Set(poItems.map(pi => pi.order_item_id))
