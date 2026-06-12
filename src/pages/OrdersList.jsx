@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
+import { orderNetValue, ordersTotalValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
@@ -84,13 +86,8 @@ function isPendingDelivery(o) {
   return true
 }
 function isInFCFlow(o) { return FC_ACTIVE_STATUSES.includes(o.status) }
-function totalValue(o) {
-  // Net of cancellations: original total_price minus cancelled-qty value per line
-  return (o.order_items || []).reduce((s, r) => {
-    const cancelVal = (r.cancelled_qty || 0) * (r.unit_price_after_disc || r.unit_price || 0)
-    return s + (r.total_price || 0) - cancelVal
-  }, 0) + (o.freight || 0)
-}
+// Canonical order value (net goods, cancelled excluded, no freight) — shared.
+const totalValue = orderNetValue
 function pendingValue(o) {
   // Pending visibility = qty - posted_qty - cancelled_qty (per dispatch pipeline rules — pending until GI-posted)
   return (o.order_items || []).reduce((s, i) => {
@@ -181,12 +178,21 @@ export default function OrdersList() {
 
   async function loadOrders(testMode = false, salesUserId = null) {
     setLoading(true)
-    let q = sb.from('orders')
-      .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,order_items(id,sr_no,item_code,qty,dispatched_qty,posted_qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,customer_ref_no,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
-      .gte('created_at', FY_START).eq('is_test', testMode)
-      .order('created_at', { ascending: false })
-    if (salesUserId) q = q.eq('created_by', salesUserId)
-    const { data } = await q
+    // Fetch ALL FY orders, paging past PostgREST's 1000-row cap (there are
+    // 1400+ orders/FY — a single query silently dropped the oldest 400+,
+    // which made the Cancelled chip read 11 instead of 25). fetchAll pages
+    // with .range() and a stable created_at+id sort.
+    const { data, error, truncated } = await fetchAll((from, to) => {
+      let q = sb.from('orders')
+        .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,order_items(id,sr_no,item_code,qty,dispatched_qty,posted_qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,customer_ref_no,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
+        .gte('created_at', FY_START).eq('is_test', testMode)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+      if (salesUserId) q = q.eq('created_by', salesUserId)
+      return q.range(from, to)
+    })
+    if (error) console.error('OrdersList load error:', error)
+    if (truncated) console.warn('OrdersList: order list hit the fetch ceiling — consider server-side pagination.')
     setOrders(data || [])
     setLoading(false)
   }
@@ -215,7 +221,7 @@ export default function OrdersList() {
   const safePage = Math.min(page, totalPages)
   const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  const sumTotal = filtered.filter(o => o.status !== 'cancelled').reduce((s, o) => s + totalValue(o), 0)
+  const sumTotal = ordersTotalValue(filtered)
   const sumPending = filtered.filter(o => o.status !== 'cancelled').reduce((s, o) => s + pendingValue(o), 0)
 
   const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'Orders'

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
@@ -54,15 +55,21 @@ export default function FCModule() {
 
   async function loadBatches(center, testMode = false) {
     setLoading(true)
-    let q = sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_checked, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, freight, order_items(id, qty, dispatched_qty, total_price, unit_price_after_disc, lp_unit_price, cancelled_qty))')
-      .eq('orders.is_test', testMode)
-      .gte('created_at', FY_START)
-      .order('created_at', { ascending: false })
-      .limit(500)
-    if (center) q = q.eq('fulfilment_center', center)
-    q = q.not('status', 'in', '(pi_requested,pi_generated,pi_payment_pending)')
-    const { data } = await q
+    // Page past the row cap — was .limit(500) but there are 1300+ FC batches/FY,
+    // so the oldest ~800 (incl. delivered) were hidden from the chips/list.
+    const { data, error, truncated } = await fetchAll((from, to) => {
+      let q = sb.from('order_dispatches')
+        .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_checked, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, freight, order_items(id, qty, dispatched_qty, total_price, unit_price_after_disc, lp_unit_price, cancelled_qty))')
+        .eq('orders.is_test', testMode)
+        .gte('created_at', FY_START)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+      if (center) q = q.eq('fulfilment_center', center)
+      q = q.not('status', 'in', '(pi_requested,pi_generated,pi_payment_pending)')
+      return q.range(from, to)
+    })
+    if (error) console.error('FCModule load error:', error)
+    if (truncated) console.warn('FCModule: batch list hit the fetch ceiling — consider server-side pagination.')
     setBatches(data || [])
     setLoading(false)
   }

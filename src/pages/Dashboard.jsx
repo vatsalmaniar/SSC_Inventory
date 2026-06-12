@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START, FY_LABEL, fmtMoneyShort } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import '../styles/dashboard.css'
 
@@ -66,7 +67,8 @@ export default function Dashboard() {
     const queries = []
 
     queries.push(sb.from('crm_opportunities').select('estimated_value_inr,stage').not('stage','in','(WON,LOST,ON_HOLD)'))
-    queries.push(sb.from('orders').select('status').gte('created_at', FY_START).eq('is_test', false))
+    // Page past the 1000-row cap so order counts reflect all 1400+ FY orders.
+    queries.push(fetchAll((from, to) => sb.from('orders').select('status').gte('created_at', FY_START).eq('is_test', false).order('id').range(from, to)))
     if (isAdmin) {
       queries.push(sb.from('purchase_orders').select('status,total_amount').eq('is_test', false).gte('created_at', FY_START))
       queries.push(sb.from('inventory').select('quantity'))

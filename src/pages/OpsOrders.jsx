@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { fmt, FY_START } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -84,10 +85,18 @@ export default function OpsOrders() {
 
   async function loadOrders(silent) {
     if (!silent) setLoading(true)
-    const { data } = await sb.from('orders')
-      .select('id,order_number,customer_name,account_owner,engineer_name,order_date,status,freight,order_items(id,qty,dispatched_qty,posted_qty,total_price,unit_price_after_disc,cancelled_qty,line_status)')
-      .gte('created_at', FY_START).eq('is_test', false)
-      .order('created_at', { ascending: false })
+    // Page past PostgREST's 1000-row cap — 1400+ orders/FY would otherwise
+    // silently drop the oldest 400+ from every count and filter here too.
+    const { data, error, truncated } = await fetchAll((from, to) =>
+      sb.from('orders')
+        .select('id,order_number,customer_name,account_owner,engineer_name,order_date,status,freight,order_items(id,qty,dispatched_qty,posted_qty,total_price,unit_price_after_disc,cancelled_qty,line_status)')
+        .gte('created_at', FY_START).eq('is_test', false)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)
+    )
+    if (error) console.error('OpsOrders load error:', error)
+    if (truncated) console.warn('OpsOrders: order list hit the fetch ceiling — consider server-side pagination.')
     setOrders(data || [])
     setLoading(false)
   }

@@ -25,7 +25,7 @@ Every commit that closes one of these qualifies → update LEARNING.md in the sa
 
 ---
 
-## 0. The four hard rules
+## 0. The five hard rules
 
 Carry these into every change. They override convenience and aesthetics.
 
@@ -33,6 +33,7 @@ Carry these into every change. They override convenience and aesthetics.
 2. **"Confirm twice" is on you, not the user.** Read the code twice — pass 1 to list dependents, pass 2 to reason about each one under your change. Only then edit. Never ship-and-hope; the user is not your safety net.
 3. **Never push to git or deploy to Vercel without explicit "go live" from the user.** Always build, test on localhost, walk the user through the change, get approval, then push.
 4. **Database safety:** Never DELETE/DROP rows, columns, tables, or policies from Supabase without explicit user confirmation. Schema changes are additive by default.
+5. **Never load a full table/filter in one query — PostgREST silently caps at 1,000 rows.** Any `sb.from(X).select(...)` that intends to load "all of something" returns at most 1,000 rows with NO error — the rest vanish, and every count/total/chip computed from it is silently wrong. This already bit us twice: items (only 1,000 of 9,700 searchable) and orders (Cancelled chip read 11 not 25; Total Order Value read 6.8 Cr not 9.2 Cr once orders crossed 1,000/FY). For a full set use `fetchAll()` ([src/lib/fetchAll.js](src/lib/fetchAll.js)); for a big list use server-side pagination (`.range(from, to)` per page). Before writing any `.select()` that loads a collection, ask: *"can this table exceed 1,000 rows in a year?"* If yes, you may not load it in one query. See §2.10.
 
 These were not theoretical — each one is the scar of a real incident in this project.
 
@@ -168,6 +169,33 @@ SELECT column_name, data_type FROM information_schema.columns
 WHERE table_name = '<name>' ORDER BY ordinal_position;
 ```
 Frontend code referencing a column is **not proof** that column exists — code can lie.
+
+### 2.10 The 1,000-row cap is the most dangerous bug in this codebase (Hard Rule #5)
+**Symptom:** A list/dashboard silently shows wrong totals once a table crosses 1,000 rows. The page looks fine — no error, no blank screen — the numbers are just quietly wrong. Hit twice: items (only 1,000 of 9,700 searchable) and orders (Cancelled chip read 11 not 25; Total Order Value read 6.8 Cr not the true 9.2 Cr once FY orders passed 1,000).
+
+**Cause:** PostgREST caps any single `select` at `db.max-rows` (1,000 here). `sb.from('orders').select(...).gte('created_at', FY_START)` returns the **newest 1,000 rows and silently drops the rest**. Every count/sum/chip computed in the browser from that array is then understated. `.limit(500)` is the same trap, lower.
+
+**Fix — for a FULL set, use `fetchAll` ([src/lib/fetchAll.js](src/lib/fetchAll.js)):**
+```js
+const { data, error, truncated } = await fetchAll((from, to) =>
+  sb.from('orders').select('...').gte('created_at', FY_START).eq('is_test', false)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })   // unique tiebreaker — REQUIRED for stable paging
+    .range(from, to)
+)
+```
+It pages in 1,000-row windows until done, with a 100k-row ceiling that sets `truncated` + logs (never silent). Always add a unique tiebreaker (`.order('id')`) alongside your sort, or rows at a page boundary can skip/duplicate.
+
+**Fix — for a BIG list the user browses, use server-side pagination** (`.range(from, to)` for the visible page only + a count) rather than loading everything. ItemMaster / CustomerMaster / VendorMaster already do this.
+
+**The rule (Hard Rule #5):** before any `.select()` that loads a collection, ask *"can this table exceed 1,000 rows in a year?"* If yes, you may **not** load it in one query. Pages already converted: OrdersList, Orders, OpsOrders, BillingList, BillingDashboard, FCModule, FCDashboard, SalesModule, Dashboard. Tables already past 1,000 (audit any new page touching them): notifications (10k), items (9.7k), customers (4.2k), po_items (2.5k), orders/dispatches (1.4k each).
+
+### 2.11 One canonical formula per business metric — never inline math twice
+**Symptom:** `/orders` showed 9.28 Cr and `/orders/list` showed 9.25 Cr on the same data. Not a bug in either — each page had rolled its own "order value" formula and they disagreed (one included cancelled orders, the other added freight).
+
+**Cause:** the same business number was computed inline in multiple files. They drift the moment one is edited.
+
+**Fix:** any metric shown in more than one place gets ONE shared helper. Order value lives in [src/lib/orderValue.js](src/lib/orderValue.js): `orderNetValue(order)` / `ordersTotalValue(orders)` — **cancelled orders contribute 0, partial cancels are netted out, freight is excluded** (freight is logistics, not order value). Every page imports it; no page re-derives the math. Same principle as fmt.js, fetchAll.js — if you catch yourself writing a value/total/ratio reduce() that exists elsewhere, extract it to lib instead.
 
 ---
 
@@ -1345,6 +1373,41 @@ A one-line "what each page does" map for the new agent — saves them from grepp
 - `Sales` — Live Inventory search (used by sales + FC roles)
 - `Accounts` (`/uploads`) — daily warehouse XLS upload + Pending Payments (Tally) upload
 - `Dashboard` — home tiles
+
+---
+
+## 26. Early Credit Check — moving a pipeline gate earlier (2026-06-07, shipped)
+
+Moved the credit check from **late** (`goods_issued`, after FC had already picked/packed/issued) to **early** (`delivery_created`, before picking) so held orders don't waste warehouse effort. Reusable lessons:
+
+### 26.1 Model a gate as a FLAG, not a new status
+A new pipeline *status* would touch ~15 label/filter maps (the 2026-05-08 blank-page risk) + the cancel RPC + any status constraint, and an order can vanish if one map is missed. Instead we used a boolean **`order_dispatches.credit_checked`** flag *on the existing* `delivery_created` status. Zero new status → no map sweep, orders can't disappear. This is how **SAP SD / Oracle OM** do it: credit is a **block/hold on the document**, evaluated at a milestone, released from a worklist — not a workflow stage.
+
+### 26.2 Inert-first rollout (grandfather existing rows)
+- Add the column **`DEFAULT true`** so every existing row is auto-cleared the moment the column is added (no separate backfill). In-flight orders never get blocked; only NEW orders (RPC sets `false`) hit the gate.
+- Add a **`credit_checked_at` timestamp** (null for backfilled rows, set on a genuine approval) to **disambiguate in-flight (legacy flow) from genuinely-processed (new flow)**. This let the old late-stage credit-check code stay 100% intact for the 20+ in-flight orders while new orders auto-skip it.
+
+### 26.3 Enforce in the TRIGGER, not RLS
+`order_dispatches` RLS is `authenticated_full_access` (wide open) and picking is a **direct client UPDATE** (no RPC). The only server-side enforcement point is the `BEFORE UPDATE` trigger (`validate_dispatch_status_change`). Put the credit check **before** the `IF auth.uid() IS NULL THEN RETURN NEW` early-return so it's **universal** (covers service-role/RPC writes) AND **PAT-testable**.
+
+### 26.4 Zero-footprint DB verification (when you can't create dummy data)
+Wrap the whole test — DDL + `CREATE OR REPLACE FUNCTION` + insert rows + asserts — inside a `DO $$ ... RAISE EXCEPTION 'results=...' $$`. The final RAISE forces a **full rollback** (Postgres DDL is transactional), so **nothing persists**; results come back in the error message. We proved the gate + RPC bypass against **real** orders without creating a single row. Always add a post-check `count(*)` to confirm zero footprint.
+
+### 26.5 Test-only switch for single-DB testing
+One Supabase, no staging. To let the user test the real flow without touching production, scope the new behavior to test orders inside the RPC: `IF is_test THEN <new logic> ELSE credit_checked := true`. Real orders behave exactly as before during testing; swap to the all-orders version at go-live.
+
+### 26.6 Go-live ordering — deploy frontend BEFORE activating the DB
+If you apply the gate+RPC first, new orders get `credit_checked=false`, the gate blocks picking, but the OLD deployed frontend has no Approve button → **stranded orders**. Correct order: (1) push frontend, (2) **confirm it's live**, (3) then apply the DB gate/RPC. Never reverse.
+
+### 26.7 Verify a Vercel deploy without the vercel/gh CLI
+Both CLIs were unauthenticated in this env. Vite **content-hashes** bundles, so poll production `index.html` for `assets/index-<hash>.js`; when it matches your local `dist/index.html`, the new build is live.
+
+### 26.8 Gotchas hit this session
+- **Supabase Management API via Python `urllib`** → Cloudflare **error 1010** unless you send a browser-like `User-Agent` (e.g. `curl/8.4.0`). Plain `curl` works out of the box.
+- **Test orders share the real number counter.** Testing burned real CO numbers (~0624–0631), leaving permanent gaps — can't roll the counter back once a real order lands above the gap. TODO: give test orders a separate series (e.g. `TEST-CO####`). `order_number_counters` also has pre-existing corrupted rows (full order numbers in the `fy` column).
+- **BillingList hardcoded `is_test=false`** — was missing the admin Test Mode toggle every list page is supposed to have. Added it.
+- **UI:** drop jargon (renamed "Credit Override" → **"On Hold"** everywhere); avoid bright emoji (🔴/⏳) that clash with the palette — use small **muted CSS dots** instead.
+- The final `create_order_dispatch` return jsonb **omits `credit_checked`** — read the column directly if a caller needs it.
 
 ---
 

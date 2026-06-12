@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { MO, FY_START } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
+import { ordersTotalValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -103,22 +105,31 @@ export default function Orders() {
 
   async function loadData(role, uid) {
     setLoading(true)
-    let q = sb.from('orders')
-      .select('id,order_number,customer_name,status,order_type,created_at,created_by,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
-      .gte('created_at', FY_START).eq('is_test', role === 'demo')
-      .order('created_at', { ascending: false })
-    if (role === 'sales') q = q.eq('created_by', uid)
-    const [ordersRes, repsRes] = await Promise.all([
-      q,
+    // Page past PostgREST's 1000-row cap — otherwise this dashboard's
+    // Total Order Value under-reported (showed ~6.8 Cr of the true 9.2 Cr).
+    const [ordersData, repsRes] = await Promise.all([
+      fetchAll((from, to) => {
+        let q = sb.from('orders')
+          .select('id,order_number,customer_name,status,order_type,created_at,created_by,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
+          .gte('created_at', FY_START).eq('is_test', role === 'demo')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+        if (role === 'sales') q = q.eq('created_by', uid)
+        return q.range(from, to)
+      }),
       sb.from('profiles').select('id,name,role').in('role',['sales','admin','management']),
     ])
-    setOrders(ordersRes.data || [])
+    if (ordersData.error) console.error('Orders load error:', ordersData.error)
+    if (ordersData.truncated) console.warn('Orders: hit fetch ceiling — consider server-side pagination.')
+    setOrders(ordersData.data || [])
     setReps(repsRes.data || [])
     setLoading(false)
   }
 
   const today = new Date().toISOString().slice(0, 10)
-  const totalValue = orders.reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0), 0)
+  // Canonical "Total Order Value" — net goods, cancelled orders excluded, no
+  // freight (shared with /orders/list so the two headline numbers agree).
+  const totalValue = ordersTotalValue(orders)
   const dispatchedValue = orders.reduce((s, o) => {
     const delivered = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc')
     const v = delivered.reduce((bs, b) => bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)

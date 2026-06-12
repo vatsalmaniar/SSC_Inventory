@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import '../styles/orders.css'
 
@@ -54,13 +55,20 @@ export default function SalesModule() {
 
   async function loadOrders(testMode = false) {
     setLoading(true)
-    const { data } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,order_type,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,eway_bill_number,dispatched_items)')
-      .in('status', BILLING_MODULE_STATUSES)
-      .gte('created_at', FY_START)
-      .eq('is_test', testMode)
-      .neq('order_type', 'SAMPLE')
-      .order('created_at', { ascending: false })
+    // Page past the 1000-row cap (1100+ billing-stage orders/FY).
+    const { data, error, truncated } = await fetchAll((from, to) =>
+      sb.from('orders')
+        .select('id,order_number,customer_name,status,order_type,credit_override,created_at,order_items(id,qty,dispatched_qty,total_price,unit_price_after_disc,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,eway_bill_number,dispatched_items)')
+        .in('status', BILLING_MODULE_STATUSES)
+        .gte('created_at', FY_START)
+        .eq('is_test', testMode)
+        .neq('order_type', 'SAMPLE')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)
+    )
+    if (error) console.error('SalesModule load error:', error)
+    if (truncated) console.warn('SalesModule: hit fetch ceiling — consider server-side pagination.')
     setOrders(data || [])
     setLoading(false)
   }

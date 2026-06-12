@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
@@ -59,13 +60,21 @@ export default function BillingList() {
 
   async function loadBatches(testMode = false) {
     setLoading(true)
-    const { data } = await sb.from('order_dispatches')
-      .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, credit_checked, credit_checked_at, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, credit_terms, freight, engineer_name, account_owner, order_items(id, item_code, qty, dispatched_qty, total_price, unit_price_after_disc, cancelled_qty, line_status))')
-      .in('status', BILLING_BATCH_STATUSES)
-      .eq('orders.is_test', testMode)
-      .neq('orders.order_type', 'SAMPLE')
-      .gte('created_at', FY_START)
-      .order('created_at', { ascending: false })
+    // Page past PostgREST's 1000-row cap — 1300+ billing batches/FY would
+    // otherwise silently drop the oldest few hundred from every chip/total.
+    const { data, error, truncated } = await fetchAll((from, to) =>
+      sb.from('order_dispatches')
+        .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, credit_checked, credit_checked_at, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, credit_terms, freight, engineer_name, account_owner, order_items(id, item_code, qty, dispatched_qty, total_price, unit_price_after_disc, cancelled_qty, line_status))')
+        .in('status', BILLING_BATCH_STATUSES)
+        .eq('orders.is_test', testMode)
+        .neq('orders.order_type', 'SAMPLE')
+        .gte('created_at', FY_START)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)
+    )
+    if (error) console.error('BillingList load error:', error)
+    if (truncated) console.warn('BillingList: batch list hit the fetch ceiling — consider server-side pagination.')
     setBatches(data || [])
     setLoading(false)
   }

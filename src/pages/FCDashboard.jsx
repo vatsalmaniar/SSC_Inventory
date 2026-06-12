@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -62,13 +63,19 @@ export default function FCDashboard() {
 
   async function loadOrders(fc) {
     setLoading(true)
-    let q = sb.from('orders')
-      .select('id,order_number,customer_name,status,fulfilment_center,credit_override,order_type,created_at,order_dispatches(id,batch_no,dc_number,pi_number,pi_required,status)')
-      .in('status', FC_ALL_STATUSES)
-      .gte('created_at', FY_START).eq('is_test', false)
-      .order('updated_at', { ascending: false })
-    if (fc) q = q.eq('fulfilment_center', fc)
-    const { data } = await q
+    // Page past the 1000-row cap (1100+ FC-stage orders/FY).
+    const { data, error, truncated } = await fetchAll((from, to) => {
+      let q = sb.from('orders')
+        .select('id,order_number,customer_name,status,fulfilment_center,credit_override,order_type,created_at,order_dispatches(id,batch_no,dc_number,pi_number,pi_required,status)')
+        .in('status', FC_ALL_STATUSES)
+        .gte('created_at', FY_START).eq('is_test', false)
+        .order('updated_at', { ascending: false })
+        .order('id', { ascending: false })
+      if (fc) q = q.eq('fulfilment_center', fc)
+      return q.range(from, to)
+    })
+    if (error) console.error('FCDashboard load error:', error)
+    if (truncated) console.warn('FCDashboard: hit fetch ceiling — consider server-side pagination.')
     setOrders(data || [])
     setLoading(false)
   }

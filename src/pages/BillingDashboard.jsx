@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -39,12 +40,19 @@ export default function BillingDashboard() {
     if (!['accounts','ops','admin','management','demo'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name: profile?.name || '', role })
     setLoading(true)
-    const { data } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,credit_override,order_type,created_at,order_dispatches(id,batch_no,invoice_number,pi_number,pi_required,credit_override)')
-      .in('status', BILLING_STATUSES)
-      .gte('created_at', FY_START).eq('is_test', false)
-      .neq('order_type', 'SAMPLE')
-      .order('updated_at', { ascending: false })
+    // Page past the 1000-row cap (1100+ billing-stage orders/FY).
+    const { data, error, truncated } = await fetchAll((from, to) =>
+      sb.from('orders')
+        .select('id,order_number,customer_name,status,credit_override,order_type,created_at,order_dispatches(id,batch_no,invoice_number,pi_number,pi_required,credit_override)')
+        .in('status', BILLING_STATUSES)
+        .gte('created_at', FY_START).eq('is_test', false)
+        .neq('order_type', 'SAMPLE')
+        .order('updated_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)
+    )
+    if (error) console.error('BillingDashboard load error:', error)
+    if (truncated) console.warn('BillingDashboard: hit fetch ceiling — consider server-side pagination.')
     setOrders(data || [])
     const { count: piCount } = await sb.from('purchase_invoices').select('id', { count:'exact', head:true }).in('status', ['three_way_check','invoice_pending']).eq('is_test', false).gte('created_at', FY_START)
     setPurchaseInvCount(piCount || 0)
