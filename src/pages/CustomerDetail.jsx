@@ -99,7 +99,7 @@ export default function CustomerDetail() {
   const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', phoneCC:'+91', whatsapp:'', whatsappCC:'+91', email:'' })
   const [savingContact, setSavingContact] = useState(false)
   const [showCreditCheck, setShowCreditCheck] = useState(false)
-  const [ccForm, setCcForm]           = useState({ gst:'', mca:'', thirdparty:'' })
+  const [ccForm, setCcForm]           = useState({ gst:'', mca:'', thirdparty:'', net_profit_pct:'', interest_coverage:'', current_ratio:'', debtor_turnover:'', debt_to_equity:'', creditor_turnover:'' })
   const [savingCC, setSavingCC]       = useState(false)
   const [showPdfModal, setShowPdfModal] = useState(false)
   const [pdfInclude, setPdfInclude]   = useState({ orders: true, opportunities: true })
@@ -249,16 +249,26 @@ export default function CustomerDetail() {
       toast('Please fill at least one finding'); return
     }
     setSavingCC(true)
+    const numOrNull = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n }
+    const ratioFields = {
+      credit_check_net_profit_pct:    numOrNull(ccForm.net_profit_pct),
+      credit_check_interest_coverage: numOrNull(ccForm.interest_coverage),
+      credit_check_current_ratio:     numOrNull(ccForm.current_ratio),
+      credit_check_debtor_turnover:   numOrNull(ccForm.debtor_turnover),
+      credit_check_debt_to_equity:    numOrNull(ccForm.debt_to_equity),
+      credit_check_creditor_turnover: numOrNull(ccForm.creditor_turnover),
+    }
     const { error } = await sb.from('customers').update({
       credit_check_gst:      ccForm.gst || null,
       credit_check_mca:      ccForm.mca || null,
       credit_check_3rdparty: ccForm.thirdparty || null,
+      ...ratioFields,
       credit_check_by:       userName,
       credit_check_at:       new Date().toISOString(),
       credit_check_status:   'completed',
     }).eq('id', id)
     if (error) { toast(friendlyError(error)); setSavingCC(false); return }
-    setCustomer(p => ({ ...p, credit_check_gst: ccForm.gst||null, credit_check_mca: ccForm.mca||null, credit_check_3rdparty: ccForm.thirdparty||null, credit_check_by: userName, credit_check_at: new Date().toISOString(), credit_check_status:'completed' }))
+    setCustomer(p => ({ ...p, credit_check_gst: ccForm.gst||null, credit_check_mca: ccForm.mca||null, credit_check_3rdparty: ccForm.thirdparty||null, ...ratioFields, credit_check_by: userName, credit_check_at: new Date().toISOString(), credit_check_status:'completed' }))
     setShowCreditCheck(false); setSavingCC(false)
     toast('Credit check saved', 'success')
   }
@@ -517,7 +527,7 @@ ${oppsHTML}
                   </>
                 )}
                 {userRole === 'admin' && customer.approval_status !== 'pending' && customer.credit_check_status === 'pending' && customer.created_at >= NEW_CUSTOMER_FLOOR && (
-                  <button className="c360-btn c360-btn-amber" onClick={() => { setCcForm({ gst: customer.credit_check_gst||'', mca: customer.credit_check_mca||'', thirdparty: customer.credit_check_3rdparty||'' }); setShowCreditCheck(true) }}>
+                  <button className="c360-btn c360-btn-amber" onClick={() => { setCcForm({ gst: customer.credit_check_gst||'', mca: customer.credit_check_mca||'', thirdparty: customer.credit_check_3rdparty||'', net_profit_pct: customer.credit_check_net_profit_pct ?? '', interest_coverage: customer.credit_check_interest_coverage ?? '', current_ratio: customer.credit_check_current_ratio ?? '', debtor_turnover: customer.credit_check_debtor_turnover ?? '', debt_to_equity: customer.credit_check_debt_to_equity ?? '', creditor_turnover: customer.credit_check_creditor_turnover ?? '' }); setShowCreditCheck(true) }}>
                     Credit Check
                   </button>
                 )}
@@ -791,6 +801,30 @@ ${oppsHTML}
                           {customer.credit_check_gst && <div><div style={{ fontSize:10, fontWeight:600, color:'#166534', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:2 }}>GST</div><div style={{ fontSize:12, color:'var(--gray-700)', lineHeight:1.5 }}>{customer.credit_check_gst}</div></div>}
                           {customer.credit_check_mca && <div><div style={{ fontSize:10, fontWeight:600, color:'#166534', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:2 }}>MCA</div><div style={{ fontSize:12, color:'var(--gray-700)', lineHeight:1.5 }}>{customer.credit_check_mca}</div></div>}
                           {customer.credit_check_3rdparty && <div><div style={{ fontSize:10, fontWeight:600, color:'#166534', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:2 }}>3rd Party</div><div style={{ fontSize:12, color:'var(--gray-700)', lineHeight:1.5 }}>{customer.credit_check_3rdparty}</div></div>}
+                          {(() => {
+                            const ratios = [
+                              ['Net Profit (%)',     customer.credit_check_net_profit_pct],
+                              ['Interest Coverage (×)', customer.credit_check_interest_coverage],
+                              ['Current Ratio (×)',  customer.credit_check_current_ratio],
+                              ['Debtor Turnover (×)', customer.credit_check_debtor_turnover],
+                              ['Debt-to-Equity (×)', customer.credit_check_debt_to_equity],
+                              ['Creditor Turnover (×)', customer.credit_check_creditor_turnover],
+                            ].filter(([, v]) => v !== null && v !== undefined && v !== '')
+                            if (!ratios.length) return null
+                            return (
+                              <div style={{ borderTop:'1px solid #bbf7d0', paddingTop:8 }}>
+                                <div style={{ fontSize:10, fontWeight:600, color:'#166534', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>Financial Ratios</div>
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 10px' }}>
+                                  {ratios.map(([label, v]) => (
+                                    <div key={label} style={{ display:'flex', justifyContent:'space-between', fontSize:11.5 }}>
+                                      <span style={{ color:'var(--gray-500)' }}>{label}</span>
+                                      <span style={{ fontWeight:700, color:'var(--gray-800)' }}>{v}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
                           {customer.credit_check_by && (
                             <div style={{ borderTop:'1px solid #bbf7d0', paddingTop:8, marginTop:2, display:'flex', alignItems:'center', gap:6 }}>
                               <div style={{ width:22, height:22, borderRadius:'50%', background:ownerColor(customer.credit_check_by), color:'white', fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -1131,7 +1165,7 @@ ${oppsHTML}
               </div>
               <button onClick={() => setShowCreditCheck(false)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>✕</button>
             </div>
-            <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+            <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:14, maxHeight:'60vh', overflowY:'auto' }}>
               {[['gst','1. GST Check','Findings from GST verification...'],['mca','2. Balance Sheet & PnL (MCA)','Findings from MCA records...'],['thirdparty','3. 3rd Party Compliance Check','Findings from third-party compliance...']].map(([field,label,ph]) => (
                 <div key={field}>
                   <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</div>
@@ -1139,6 +1173,27 @@ ${oppsHTML}
                     style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box', resize:'vertical' }} />
                 </div>
               ))}
+
+              {/* Financial Ratios (optional) */}
+              <div style={{ borderTop:'1px solid #fde68a', paddingTop:14 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#92400e', marginBottom:10, textTransform:'uppercase', letterSpacing:'0.4px' }}>4. Financial Ratios <span style={{ fontWeight:500, textTransform:'none', color:'#b45309' }}>(optional)</span></div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                  {[
+                    ['net_profit_pct','Net Profit Ratio (%)','e.g. 8.5'],
+                    ['interest_coverage','Interest Coverage Ratio (×)','e.g. 3.2'],
+                    ['current_ratio','Current Ratio (×)','e.g. 1.45'],
+                    ['debtor_turnover','Debtor Turnover (×)','e.g. 6.0'],
+                    ['debt_to_equity','Debt-to-Equity (×)','e.g. 0.8'],
+                    ['creditor_turnover','Creditor Turnover (×)','e.g. 5.5'],
+                  ].map(([field,label,ph]) => (
+                    <div key={field}>
+                      <div style={{ fontSize:10.5, fontWeight:600, color:'#64748b', marginBottom:4 }}>{label}</div>
+                      <input type="number" step="0.01" value={ccForm[field]} onChange={e => setCcForm(p => ({ ...p, [field]: e.target.value }))} placeholder={ph}
+                        style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
             <div style={{ padding:'0 20px 18px', display:'flex', gap:8, justifyContent:'flex-end' }}>
               <button onClick={() => setShowCreditCheck(false)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
