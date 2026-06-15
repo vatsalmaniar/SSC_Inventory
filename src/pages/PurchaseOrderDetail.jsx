@@ -455,16 +455,38 @@ SSC Control Pvt. Ltd.`
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
       await new Promise(r => setTimeout(r, 300))
 
+      // The on-screen template adds 40px top/bottom body padding for the in-browser
+      // "View PO" tab. html2canvas renders that padding on top of the jsPDF page margin,
+      // which pushes the content a sliver over one A4 page -> a blank trailing page in the
+      // emailed PDF. Neutralise the vertical padding for the capture only (the page margin
+      // below already provides the top/bottom gutter). View PO is untouched.
+      doc.body.style.paddingTop = '0'
+      doc.body.style.paddingBottom = '0'
+
       // Grow the iframe to match content height so html2canvas can capture everything
       const contentHeight = doc.body.scrollHeight
       iframe.style.height = contentHeight + 'px'
       await new Promise(r => setTimeout(r, 100))
 
+      // html2pdf renders by deep-cloning the captured element (doc.body) into a container in
+      // the MAIN app document — but the template's CSS lives in <head><style>, which is NOT
+      // inside body, so the clone arrives unstyled (only inline element styles survive). That
+      // is why the emailed PDF lost all layout. Re-inject the stylesheet into html2canvas's
+      // own isolated render clone via onclone: it styles the PDF without leaking the global
+      // `*{}` / `body{}` rules onto the live app UI (the §6.1 style-leak we must avoid).
+      const pdfCss = (html.match(/<style>([\s\S]*?)<\/style>/i) || [])[1] || ''
+
       const blob = await html2pdf().set({
         margin: [8, 10, 10, 10],
         filename: `${poNumber.split('/')[1] || poNumber}.pdf`,
         image: { type: 'jpeg', quality: 0.96 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860, logging: false },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 860, logging: false,
+          onclone: (clonedDoc) => {
+            if (!pdfCss) return
+            const s = clonedDoc.createElement('style')
+            s.textContent = pdfCss
+            clonedDoc.head.appendChild(s)
+          } },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css', 'legacy'] },
       }).from(doc.body).outputPdf('blob')
@@ -679,8 +701,9 @@ SSC Control Pvt. Ltd.`
   body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff;padding:40px 48px;max-width:860px;margin:0 auto;line-height:1.5}
   .mono{font-family:'Geist Mono',monospace}
 
-  /* Header */
-  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
+  /* Header — table layout so html2canvas (emailed PDF) renders columns, not a vertical stack */
+  .header{width:100%;border-collapse:collapse;margin-bottom:32px}
+  .header td{vertical-align:top}
   .co-name{font-size:17px;font-weight:700;color:#0f172a;margin-bottom:2px}
   .co-sub{font-size:11px;color:#64748b;margin-bottom:8px}
   .co-addr{font-size:10.5px;color:#475569;line-height:1.6}
@@ -691,8 +714,9 @@ SSC Control Pvt. Ltd.`
   /* Divider */
   .divider{border:none;border-top:1px solid #e2e8f0;margin:20px 0}
 
-  /* Meta grid */
-  .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px}
+  /* Meta grid — table layout (html2canvas has no CSS-grid support) */
+  .meta-grid{width:100%;border-collapse:collapse;margin-bottom:28px;table-layout:fixed}
+  .meta-grid td{vertical-align:top;width:50%}
   .meta-section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.7px;color:#94a3b8;margin-bottom:6px}
   .meta-name{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:3px}
   .meta-addr{font-size:11px;color:#475569;line-height:1.6}
@@ -703,7 +727,8 @@ SSC Control Pvt. Ltd.`
   .ref-table tr td:last-child{font-weight:600;color:#0f172a}
 
   /* Terms row */
-  .terms{display:flex;gap:32px;font-size:11px;color:#475569;margin-bottom:20px}
+  .terms{font-size:11px;color:#475569;margin-bottom:20px}
+  .terms span{display:inline-block;margin-right:32px}
   .terms span strong{color:#0f172a;font-weight:600}
 
   /* Items table */
@@ -719,8 +744,8 @@ SSC Control Pvt. Ltd.`
   table.items td.c{text-align:center}
   table.items td.code{font-family:'Geist Mono',monospace;font-size:11px;font-weight:500}
 
-  /* Totals */
-  .totals-wrap{display:flex;justify-content:flex-end;margin-top:12px}
+  /* Totals — right-aligned via a wrapper table (no flex) */
+  .totals-wrap{width:100%;border-collapse:collapse;margin-top:12px}
   .totals-table{width:300px;border-collapse:collapse}
   .totals-table td{padding:5px 0;font-size:11.5px}
   .totals-table td.lbl{color:#64748b}
@@ -733,14 +758,15 @@ SSC Control Pvt. Ltd.`
   /* Notes */
   .notes-box{margin:12px 0;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px}
 
-  /* Signatures */
-  .sig-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:32px;padding-top:20px;border-top:1px solid #e2e8f0}
-  .sig-cell{text-align:center;font-size:10px;color:#64748b}
+  /* Signatures — table layout (no CSS grid) */
+  .sig-row{width:100%;border-collapse:collapse;margin-top:32px;border-top:1px solid #e2e8f0}
+  .sig-cell{text-align:center;font-size:10px;color:#64748b;width:33.33%;padding:20px 8px 0;vertical-align:top}
   .sig-line{border-top:1px solid #94a3b8;margin:28px 20px 8px}
   .sig-name{font-weight:600;color:#0f172a;font-size:11px}
 
-  /* Footer */
-  .footer{margin-top:24px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}
+  /* Footer — table layout (no flex) */
+  .footer{width:100%;border-collapse:collapse;margin-top:24px;border-top:1px solid #e2e8f0}
+  .footer td{padding-top:14px;vertical-align:middle}
   .footer-left{font-size:10px;color:#94a3b8;line-height:1.6}
   .footer-right{font-size:10px;color:#94a3b8;text-align:right}
 
@@ -753,36 +779,39 @@ SSC Control Pvt. Ltd.`
 <body>
 
 <!-- Header -->
-<div class="header">
-  <div>
-    <div class="co-name">SSC Control Pvt. Ltd.</div>
-    <div class="co-sub">Engineering Industry. Powering Progress.</div>
-    <div style="font-size:10px;color:#64748b;margin-bottom:8px;letter-spacing:0.2px">Industrial Automation &nbsp;|&nbsp; Product Distribution &nbsp;|&nbsp; Safety Solutions &nbsp;|&nbsp; Robotics</div>
-    <div class="co-addr">
-      E/12, Siddhivinayak Towers, B/H DCP Office<br/>
-      Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
-      GSTIN: 24ABGCS0605M1ZE
-    </div>
-  </div>
-  <div style="text-align:right">
-    <img src="${window.location.origin}/logo/ssc-60-years.png" alt="SSC 60 Years" style="height:95px;width:auto;display:block;margin-left:auto;margin-bottom:10px"/>
-    <div class="doc-type-badge">${isCO ? 'Customer Order' : 'Stock Order'}</div>
-    <div class="doc-title">Purchase Order</div>
-  </div>
-</div>
+<table class="header">
+  <tr>
+    <td>
+      <div class="co-name">SSC Control Pvt. Ltd.</div>
+      <div class="co-sub">Engineering Industry. Powering Progress.</div>
+      <div style="font-size:10px;color:#64748b;margin-bottom:8px;letter-spacing:0.2px">Industrial Automation &nbsp;|&nbsp; Product Distribution &nbsp;|&nbsp; Safety Solutions &nbsp;|&nbsp; Robotics</div>
+      <div class="co-addr">
+        E/12, Siddhivinayak Towers, B/H DCP Office<br/>
+        Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
+        GSTIN: 24ABGCS0605M1ZE
+      </div>
+    </td>
+    <td style="text-align:right;width:210px">
+      <img src="${window.location.origin}/logo/ssc-60-years.png" alt="SSC 60 Years" style="height:95px;width:auto;display:block;margin-left:auto;margin-bottom:10px"/>
+      <div class="doc-type-badge">${isCO ? 'Customer Order' : 'Stock Order'}</div>
+      <div class="doc-title">Purchase Order</div>
+    </td>
+  </tr>
+</table>
 
 <hr class="divider"/>
 
 <!-- Vendor + Reference -->
-<div class="meta-grid">
-  <div>
+<table class="meta-grid">
+  <tr>
+  <td style="padding-right:12px">
     <div class="meta-section-label">Vendor</div>
     <div class="meta-name">${esc(po.vendor_name) || '—'}</div>
     ${vendorCode ? `<div style="font-size:11px;color:#475569;margin-top:2px">Vendor Code: <strong style="font-family:'Geist Mono',monospace">${esc(vendorCode)}</strong></div>` : ''}
     ${vendorDetail?.billing_address ? `<div style="font-size:11px;color:#475569;margin-top:6px;line-height:1.6">${esc(vendorDetail.billing_address).replace(/\n/g,'<br/>')}</div>` : ''}
     ${vendorDetail?.gst ? `<div style="font-size:11px;color:#475569;margin-top:4px">GSTIN: <strong style="font-family:'Geist Mono',monospace">${esc(vendorDetail.gst)}</strong></div>` : ''}
-  </div>
-  <div>
+  </td>
+  <td style="padding-left:12px">
     <div class="meta-section-label">Reference</div>
     <table class="ref-table">
       <tr><td>PO No.</td><td class="mono">${esc(poNumber)}</td></tr>
@@ -793,8 +822,9 @@ SSC Control Pvt. Ltd.`
       ${po.reference && !po.order_number ? `<tr><td>Reference</td><td>${esc(po.reference)}</td></tr>` : ''}
       <tr><td>Deliver To</td><td>${po.fulfilment_center === 'Customer' ? esc(po.delivery_customer_name || 'Customer') : (esc(po.fulfilment_center) || '—')}</td></tr>
     </table>
-  </div>
-</div>
+  </td>
+  </tr>
+</table>
 
 <hr class="divider"/>
 
@@ -814,21 +844,21 @@ SSC Control Pvt. Ltd.`
 <table class="items">
   <thead>
     <tr>
-      <th style="width:40px">#</th>
+      <th style="width:28px">#</th>
       <th>Item Code</th>
-      <th class="c" style="width:60px">Qty</th>
-      <th class="r" style="width:90px">LP Price</th>
-      <th class="c" style="width:60px">Disc %</th>
-      <th class="r" style="width:90px">Unit Price</th>
-      <th class="r" style="width:100px">Amount</th>
-      <th class="c" style="width:90px">Delivery</th>
+      <th class="c" style="width:44px">Qty</th>
+      <th class="r" style="width:72px">LP Price</th>
+      <th class="c" style="width:50px">Disc %</th>
+      <th class="r" style="width:72px">Unit Price</th>
+      <th class="r" style="width:82px">Amount</th>
+      <th class="c" style="width:74px">Delivery</th>
     </tr>
   </thead>
   <tbody>
     ${items.map((item, idx) => `
     <tr>
       <td style="color:#94a3b8">${idx + 1}</td>
-      <td class="code">${esc(item.item_code) || '—'}${linkedOrders.length > 1 && oiOrderMap[item.order_item_id] ? `<div style="font-size:9px;color:#64748b;margin-top:2px">${esc((linkedOrders.find(o => o.id === oiOrderMap[item.order_item_id]) || {}).order_number || '')}</div>` : ''}</td>
+      <td class="code"><span style="white-space:nowrap">${esc(item.item_code) || '—'}</span>${item.description ? `<div style="font-family:'Geist',sans-serif;font-size:9.5px;color:#64748b;margin-top:3px;white-space:normal;line-height:1.4">${esc(item.description)}</div>` : ''}${linkedOrders.length > 1 && oiOrderMap[item.order_item_id] ? `<div style="font-size:9px;color:#64748b;margin-top:2px">${esc((linkedOrders.find(o => o.id === oiOrderMap[item.order_item_id]) || {}).order_number || '')}</div>` : ''}</td>
       <td class="c" style="font-weight:700">${item.qty}</td>
       <td class="r">${(Number(item.lp_unit_price)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td class="c">${item.discount_pct || 0}%</td>
@@ -840,36 +870,45 @@ SSC Control Pvt. Ltd.`
 </table>
 
 <!-- Totals -->
-<div class="totals-wrap">
-  <table class="totals-table">
-    <tr><td class="lbl">Subtotal</td><td class="val">${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
-    <tr class="grand"><td class="lbl">Total Amount</td><td class="val">₹ ${grandTotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
-  </table>
-</div>
+<table class="totals-wrap">
+  <tr>
+    <td></td>
+    <td style="width:300px">
+      <table class="totals-table">
+        <tr><td class="lbl">Subtotal</td><td class="val">${subtotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+        <tr class="grand"><td class="lbl">Total Amount</td><td class="val">₹ ${grandTotal.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
 
 <div class="words">Amount in words: <strong>${numToWords(grandTotal)}</strong></div>
 
 ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po.notes)}</div>` : ''}
 
 <!-- Signatures -->
-<div class="sig-row">
-  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">${esc(po.submitted_by_name || 'Procurement')}</div>Prepared By</div>
-  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">${esc(po.approved_by || 'Management')}</div>Approved By</div>
-  <div class="sig-cell"><div class="sig-line"></div><div class="sig-name">Authorised Signatory</div>For SSC Control Pvt. Ltd.</div>
-</div>
+<table class="sig-row">
+  <tr>
+    <td class="sig-cell"><div class="sig-line"></div><div class="sig-name">${esc(po.submitted_by_name || 'Procurement')}</div>Prepared By</td>
+    <td class="sig-cell"><div class="sig-line"></div><div class="sig-name">${esc(po.approved_by || 'Management')}</div>Approved By</td>
+    <td class="sig-cell"><div class="sig-line"></div><div class="sig-name">Authorised Signatory</div>For SSC Control Pvt. Ltd.</td>
+  </tr>
+</table>
 
 <!-- Footer -->
-<div class="footer">
-  <div class="footer-left">
-    SSC Control Pvt. Ltd. &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; CIN: U51909GJ2021PTC122539<br/>
-    Ahmedabad: E/12, Siddhivinayak Towers, Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
-    Baroda: 31 GIDC Estate, B/h Bank Of Baroda, Makarpura, Vadodara – 390 010
-  </div>
-  <div class="footer-right">
-    sales@ssccontrol.com<br/>
-    www.ssccontrol.com
-  </div>
-</div>
+<table class="footer">
+  <tr>
+    <td class="footer-left">
+      SSC Control Pvt. Ltd. &nbsp;|&nbsp; GSTIN: 24ABGCS0605M1ZE &nbsp;|&nbsp; CIN: U51909GJ2021PTC122539<br/>
+      Ahmedabad: E/12, Siddhivinayak Towers, Off. SG Highway, Makarba, Ahmedabad – 380 051<br/>
+      Baroda: 31 GIDC Estate, B/h Bank Of Baroda, Makarpura, Vadodara – 390 010
+    </td>
+    <td class="footer-right">
+      sales@ssccontrol.com<br/>
+      www.ssccontrol.com
+    </td>
+  </tr>
+</table>
 
 </body></html>`
   }

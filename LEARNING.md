@@ -518,6 +518,28 @@ Supabase Edge Function request bodies are capped at ~6 MB. A base64-encoded PDF 
 ### 6.6 Resend rate limits
 Resend allows 5 req/sec by default. For batch goods-issue emails (multiple recipients per batch), serialize sends or batch into one email with multiple `to` addresses. Otherwise expect `429 rate_limit_exceeded` for late recipients.
 
+### 6.7 html2pdf drops `<head><style>` — the PDF arrives unstyled
+**Symptom (2026-06-16):** The emailed PO PDF rendered with **no CSS at all** — columns collapsed, no table borders, totals left-aligned, signatures cramped — even though the on-screen "View PO" (same `buildPoHtml`) looked perfect. Easy to misdiagnose as "html2canvas doesn't support grid/flex"; the real cause is broader.
+
+**Cause:** `html2pdf.js` `.from(element)` → `toContainer()` **deep-clones only the captured element** (here `iframe.contentDocument.body`) into a container in the **main app document**. The print template's CSS lives in `<head><style>`, which is *not inside `<body>`*, so it is **never cloned**. The clone lands in the main app, where those class rules don't exist → everything renders unstyled. Only **inline** element styles (e.g. `style="font-weight:600"`) survive, which is why bold/padding partially showed. This is why "View PO" (a full `window.open` document, CSS in head applies normally in the browser) looked fine while the emailed PDF did not — and it affects **any** print template rendered through html2pdf, not just the PO.
+
+**Fix:** re-inject the stylesheet into html2canvas's **own isolated render clone** via the `onclone` hook (passed through `opt.html2canvas`). It styles the PDF and, crucially, does **not** leak the global `*{}` / `body{}` rules onto the live app (the §6.1 leak). Pattern:
+```js
+const pdfCss = (html.match(/<style>([\s\S]*?)<\/style>/i) || [])[1] || ''
+html2pdf().set({
+  html2canvas: { /* ... */, onclone: (clonedDoc) => {
+    if (!pdfCss) return
+    const s = clonedDoc.createElement('style'); s.textContent = pdfCss; clonedDoc.head.appendChild(s)
+  } },
+}).from(doc.body).outputPdf('blob')
+```
+
+**Two more gotchas fixed in the same pass:**
+- **Layout primitives:** html2canvas (1.4.1) has **no CSS-grid support** and only partial flex — even *with* CSS applied, `display:grid`/`flex` containers stack. Use **`<table>` layout** for any multi-column structure in a print template (header, two-col meta block, signature row, right-aligned totals). Tables render identically in html2canvas and the browser.
+- **Blank trailing page:** the template's on-screen `body{padding:40px ...}` is rendered by html2canvas *on top of* the jsPDF page margin, pushing content a sliver over one A4 page. Neutralise it for the capture only: `doc.body.style.paddingTop = doc.body.style.paddingBottom = '0'` before rendering (View PO untouched). Also keep description/long-text columns wide enough that they don't wrap into many lines and overflow the page.
+
+**When you migrate to server-side rendering (the real long-term fix):** none of this applies — a real browser engine (`page.pdf()` / Gotenberg) renders the HTML+`<head>` CSS natively. These workarounds exist only because html2pdf rasterises via a body-only clone. See the "PDF engine" decision notes; Gotenberg-on-a-small-container was the recommended long-term path.
+
 ---
 
 ## 7. Email notification architecture
