@@ -322,7 +322,7 @@ export default function CRMOpportunityDetail() {
   async function openSampleModal() {
     let cust = null
     if (opp.customer_id) {
-      const { data } = await sb.from('customers').select('customer_name,gst,billing_address,credit_terms,account_owner').eq('id', opp.customer_id).single()
+      const { data } = await sb.from('customers').select('customer_name,gst,billing_address,credit_terms,account_owner,account_status,approval_status').eq('id', opp.customer_id).single()
       cust = data
     }
     setSampleCustomer(cust)
@@ -352,7 +352,7 @@ export default function CRMOpportunityDetail() {
   async function openConvertModal() {
     let cust = null
     if (opp.customer_id) {
-      const { data } = await sb.from('customers').select('customer_name,gst,billing_address,credit_terms,account_owner').eq('id', opp.customer_id).single()
+      const { data } = await sb.from('customers').select('customer_name,gst,billing_address,credit_terms,account_owner,account_status,approval_status').eq('id', opp.customer_id).single()
       cust = data
     }
     setSampleCustomer(cust)
@@ -383,9 +383,20 @@ export default function CRMOpportunityDetail() {
     setShowConvertModal(true)
   }
 
+  // Block order creation for customers that must not receive new orders.
+  // Mirrors the New Order guards so CRM convert/sample can't bypass them.
+  function customerOrderBlock(c) {
+    if (!c) return null
+    if (c.approval_status === 'pending') return 'This customer is pending approval — orders cannot be placed until approved in Customer 360.'
+    if (c.account_status === 'Blacklisted') return 'This customer is blacklisted — orders cannot be placed.'
+    if (c.account_status === 'Converted') return 'This customer has been converted (legal name change). Use its successor record (same GST, new name).'
+    return null
+  }
+
   async function submitConvertOrder() {
     const validItems = sampleItems.filter(i => i.item_code?.trim())
     if (!sampleCustomer?.customer_name) { toast('No customer linked to this opportunity'); return }
+    { const block = customerOrderBlock(sampleCustomer); if (block) { toast(block); return } }
     if (!sampleDispatchAddr.trim()) { toast('Dispatch address is required'); return }
     if (!samplePoNumber.trim()) { toast('PO / Reference Number is required'); return }
     if (!validItems.length) { toast('Add at least one item'); return }
@@ -464,6 +475,7 @@ export default function CRMOpportunityDetail() {
   async function submitSample() {
     const validItems = sampleItems.filter(i => i.item_code?.trim())
     if (!sampleCustomer?.customer_name) { toast('No customer linked to this opportunity'); return }
+    { const block = customerOrderBlock(sampleCustomer); if (block) { toast(block); return } }
     if (!sampleDispatchAddr.trim()) { toast('Dispatch address is required'); return }
     if (!validItems.length) { toast('Add at least one item code'); return }
     for (const item of validItems) {
