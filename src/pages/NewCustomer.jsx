@@ -158,11 +158,17 @@ export default function NewCustomer() {
       return
     }
 
-    // Check if GST already exists — prevent duplicates
-    const { data: existingCust } = await sb.from('customers').select('id,customer_name').eq('gst', form.gst.trim()).maybeSingle()
-    if (existingCust) {
-      toast(`Customer with this GST already exists: ${existingCust.customer_name}`)
-      setErrors({ gst: 'This GST is already registered' })
+    // GST uniqueness — with one exception: a GST may be reused only when EVERY
+    // existing customer holding it is 'Converted' (legal-form change, e.g.
+    // Pvt Ltd → Ltd). If any same-GST record is still Active/Dormant/Blacklisted,
+    // block — that would fragment a live customer. (Use a list, not
+    // .maybeSingle(), since reuse means multiple rows can share a GST.)
+    const { data: sameGst } = await sb.from('customers')
+      .select('id,customer_name,account_status').eq('gst', form.gst.trim())
+    const blocking = (sameGst || []).filter(c => c.account_status !== 'Converted')
+    if (blocking.length > 0) {
+      toast(`Customer with this GST already exists: ${blocking[0].customer_name}`)
+      setErrors({ gst: 'This GST is already registered to an active customer' })
       return
     }
 

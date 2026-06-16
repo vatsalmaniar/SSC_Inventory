@@ -1276,7 +1276,7 @@ function EditForm({ editData, setEditData }) {
   return (
     <div className="od-edit-form">
       <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.7px', marginBottom:8 }}>Account Info</div>
-      <div className="od-edit-row">{inp('Customer Name','customer_name')}{sel('Account Status','account_status',['Active','Dormant','Blacklisted'])}</div>
+      <div className="od-edit-row">{inp('Customer Name','customer_name')}{sel('Account Status','account_status',['Active','Dormant','Blacklisted','Converted'])}</div>
       <div className="od-edit-row">
         <div className="od-edit-field">
           <label>Account Owner</label>

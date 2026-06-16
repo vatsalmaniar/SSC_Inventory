@@ -27,6 +27,7 @@ export default function NewOrder() {
   const [accountOwner, setAccountOwner]       = useState('')
   const [customerPending, setCustomerPending] = useState(false)
   const [customerBlacklisted, setCustomerBlacklisted] = useState(false)
+  const [customerConverted, setCustomerConverted] = useState(false)
   const [customerId, setCustomerId]           = useState(null)
 
   // Order header
@@ -88,6 +89,7 @@ export default function NewOrder() {
     setCustomerId(c.id)
     setCustomerPending(c.approval_status === 'pending')
     setCustomerBlacklisted(c.account_status === 'Blacklisted')
+    setCustomerConverted(c.account_status === 'Converted')
   }
 
   function handlePoFile(e) {
@@ -160,6 +162,7 @@ export default function NewOrder() {
     if (!customerId)            { toast('Please select a customer from the list — free-text names are not allowed.'); return }
     if (customerPending)        { toast('This customer is pending approval. Orders cannot be placed until the customer is approved in Customer 360.'); return }
     if (customerBlacklisted)    { toast('This customer is blacklisted. Orders cannot be placed for blacklisted customers.'); return }
+    if (customerConverted)      { toast('This customer has been converted (legal name change). Punch the order against its successor record instead.'); return }
     if (!dispatchAddr.trim())   { toast('Dispatch address is required'); return }
     if (effectiveOrderType !== 'SAMPLE' && !poNumber.trim()) { toast('PO / Reference Number is required'); return }
     if (!validItems.length)     { toast('Add at least one item'); return }
@@ -263,7 +266,7 @@ export default function NewOrder() {
               <label>Customer Name <span className="req">*</span></label>
               <Typeahead
                 value={customerInput}
-                onChange={v => { setCustomerInput(v); if (!v) { setCustomerPending(false); setCustomerId(null) } }}
+                onChange={v => { setCustomerInput(v); if (!v) { setCustomerPending(false); setCustomerBlacklisted(false); setCustomerConverted(false); setCustomerId(null) } }}
                 onSelect={selectCustomer}
                 placeholder="Search customer name..."
                 fetchFn={fetchCustomers}
@@ -297,6 +300,15 @@ export default function NewOrder() {
               <svg fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24" style={{ width:16, height:16, flexShrink:0 }}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
               <div style={{ fontSize:13, color:'#991b1b' }}>
                 <strong>Customer is blacklisted.</strong> Orders cannot be placed for blacklisted customers. Contact admin for details.
+              </div>
+            </div>
+          )}
+
+          {customerConverted && (
+            <div style={{ display:'flex', alignItems:'center', gap:10, background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'10px 14px', marginTop:4 }}>
+              <svg fill="none" stroke="#b45309" strokeWidth="2" viewBox="0 0 24 24" style={{ width:16, height:16, flexShrink:0 }}><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+              <div style={{ fontSize:13, color:'#92400e' }}>
+                <strong>Customer has been converted</strong> (legal name change). Punch the order against its successor record (same GST, new name) instead.
               </div>
             </div>
           )}
