@@ -96,6 +96,16 @@ export default function UserManagement() {
     setUsers(prev => prev.map(x => x.id === u.id ? { ...x, is_suspended: turningOn } : x))
   }
 
+  async function resetAuthenticator(u) {
+    if (!window.confirm(`Reset ${u.name}'s authenticator (2FA)?\n\nTheir current authenticator app will stop working. At next login they'll be shown a fresh QR code to set it up again. Their password is unchanged.`)) return
+    setBusyId(u.id)
+    const { data, error } = await sb.rpc('admin_reset_user_mfa', { p_user_id: u.id })
+    setBusyId(null)
+    if (error) { toast.error(error.message || 'Failed to reset authenticator'); return }
+    toast.success(data > 0 ? `${u.name}'s authenticator reset — they set up a fresh one at next login` : `${u.name} had no authenticator enrolled`)
+    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, has_mfa: false } : x))
+  }
+
   const roles = useMemo(() => {
     const set = new Set(users.map(u => u.role).filter(Boolean))
     return ['all', ...Array.from(set).sort()]
@@ -269,6 +279,14 @@ export default function UserManagement() {
                           background:'#fef3c7', color:'#b45309', border:'1px solid #fcd34d',
                         }}>⚠ Reset pending</span>
                       )}
+                      <span style={{
+                        padding:'3px 8px', borderRadius:6, fontSize:10.5, fontWeight:600,
+                        background: u.has_mfa ? '#eff6ff' : '#f1f5f9',
+                        color:      u.has_mfa ? '#1d4ed8' : '#94a3b8',
+                        border:     '1px solid ' + (u.has_mfa ? '#bfdbfe' : '#e2e8f0'),
+                      }}>
+                        {u.has_mfa ? '🔒 2FA on' : '2FA not set'}
+                      </span>
                     </div>
 
                     {/* Email row */}
@@ -341,6 +359,17 @@ export default function UserManagement() {
                         opacity: isSelf ? 0.4 : 1,
                       }}>
                       {u.is_suspended ? 'Reactivate' : 'Suspend'}
+                    </button>
+                    <button
+                      onClick={() => resetAuthenticator(u)}
+                      disabled={busy}
+                      title={u.has_mfa ? 'Reset authenticator — user re-enrolls 2FA at next login' : 'No authenticator enrolled'}
+                      style={{
+                        padding:'7px 12px', fontSize:11.5, fontWeight:600, borderRadius:7,
+                        cursor: busy ? 'not-allowed' : 'pointer',
+                        background: '#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe',
+                      }}>
+                      Reset 2FA
                     </button>
                   </div>
                 </div>
