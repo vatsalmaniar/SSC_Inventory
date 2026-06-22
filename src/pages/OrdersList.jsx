@@ -8,7 +8,7 @@ import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
-const REP_PALETTE = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const REP_PALETTE = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return REP_PALETTE[Math.abs(h)%REP_PALETTE.length] }
 function initials(name) { return (name||'').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?' }
 function OwnerChip({ name }) {
@@ -23,7 +23,7 @@ function OwnerChip({ name }) {
 
 const STATUS_COLORS = {
   pending:            '#F59E0B', // amber
-  inv_check:          '#1E54B7', // SSC blue
+  inv_check:          '#1a73e8', // SSC blue
   inventory_check:    '#0EA5E9', // sky
   dispatch:           '#06B6D4', // cyan
   partial:            '#C2410C', partial_dispatch: '#C2410C', // deep orange

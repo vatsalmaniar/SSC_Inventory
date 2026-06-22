@@ -785,7 +785,7 @@ export default function Accounts() {
                 <button onClick={() => setShowConfirm(false)}
                   style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
                 <button onClick={confirmAndPush}
-                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background: dangerThreshold ? '#dc2626' : '#1a4dab', color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)' }}>
+                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background: dangerThreshold ? '#dc2626' : '#1a73e8', color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)' }}>
                   Confirm Upload
                 </button>
               </div>
@@ -815,7 +815,7 @@ export default function Accounts() {
             </div>
             <div style={{ padding:'0 24px 20px', display:'flex', gap:10, justifyContent:'flex-end' }}>
               <button onClick={() => setPayShowConfirm(false)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
-              <button onClick={confirmPayPush} style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a4dab', color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)' }}>Replace Snapshot</button>
+              <button onClick={confirmPayPush} style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a73e8', color:'white', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)' }}>Replace Snapshot</button>
             </div>
           </div>
         </div>

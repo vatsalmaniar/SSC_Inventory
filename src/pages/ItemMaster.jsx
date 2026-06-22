@@ -170,7 +170,7 @@ export default function ItemMaster() {
               <div className="ol-table">
                 {items.map(item => {
                   const isCI = item.type === 'CI'
-                  const typeColor = isCI ? '#C2410C' : item.type === 'SI' ? '#1E54B7' : '#94A3B8'
+                  const typeColor = isCI ? '#C2410C' : item.type === 'SI' ? '#1a73e8' : '#94A3B8'
                   return (
                     <div key={item.id} className="ol-row ol-data" style={{ gridTemplateColumns: '90px 200px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 90px' }} onClick={() => navigate('/items/' + item.id)}>
                       <div className="ol-cell" style={{ fontFamily: 'Geist Mono, monospace', fontSize: 11, color: 'var(--o-muted-2)', fontWeight: 600 }}>{item.item_no || '—'}</div>

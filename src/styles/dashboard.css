@@ -5,10 +5,10 @@
 .hd-wrap {
   display: flex;
   min-height: 100vh;
-  background: #F6F7F9;
+  background: #f8f9fa;
 }
 /* Set page background when dashboard's hd-content is rendered inside Layout */
-.ly-content:has(.hd-content), .ly-main:has(.hd-content) { background: #F6F7F9; }
+.ly-content:has(.hd-content), .ly-main:has(.hd-content) { background: #f8f9fa; }
 
 /* ── Sidebar ── */
 .hd-sidebar {
@@ -64,11 +64,11 @@
   position: relative;
 }
 .hd-nav-item:hover { background: #f4f7fd; color: #1a2d5a; }
-.hd-nav-item.active { background: #eef2fd; color: #1a4dab; font-weight: 600; }
+.hd-nav-item.active { background: #eef2fd; color: #1a73e8; font-weight: 600; }
 .hd-nav-item.active::before {
   content: '';
   position: absolute; left: 0; top: 6px; bottom: 6px;
-  width: 3px; background: #1a4dab; border-radius: 0 3px 3px 0;
+  width: 3px; background: #1a73e8; border-radius: 0 3px 3px 0;
 }
 .hd-nav-item.soon { opacity: 0.50; cursor: default; }
 .hd-nav-item.soon:hover { background: none; color: #5a6a8a; }
@@ -104,7 +104,7 @@
   transition: color 0.12s, background 0.12s;
 }
 .hd-topnav-item:hover { color: #1e2d5a; background: #f4f6fb; }
-.hd-topnav-item.active { color: #1a4dab; font-weight: 600; background: #eef2fd; }
+.hd-topnav-item.active { color: #1a73e8; font-weight: 600; background: #eef2fd; }
 
 .hd-user-chip {
   display: flex; align-items: center; gap: 9px;
@@ -166,7 +166,7 @@
 }
 .hd-stat-trend.up   { background: rgba(16,185,129,0.10); color: #047857; }
 .hd-stat-trend.warn { background: rgba(245,158,11,0.12); color: #B45309; }
-.hd-stat-trend.neu  { background: #F6F7F9; color: #5B6878; }
+.hd-stat-trend.neu  { background: #f8f9fa; color: #5B6878; }
 
 /* ── Module KPI tiles (matches Orders/FC/CRM dashboards) ── */
 .hd-module-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
@@ -185,7 +185,7 @@
 .hd-kpi-tile.hd-accent-amber { border-left: 3px solid #B45309; }
 
 .hd-kpi-hero { color: #fff; border: 0; }
-.hd-kpi-hero.hd-tone-deep   { background: linear-gradient(135deg, #0A2540 0%, #163E68 55%, #1E54B7 100%); }
+.hd-kpi-hero.hd-tone-deep   { background: linear-gradient(135deg, #1a73e8 0%, #163E68 55%, #1a73e8 100%); }
 .hd-kpi-hero.hd-tone-forest { background: linear-gradient(135deg, #064E3B 0%, #065F46 55%, #10B981 100%); }
 .hd-kpi-hero.hd-tone-teal   { background: linear-gradient(135deg, #134E4A 0%, #0F766E 55%, #14B8A6 100%); }
 .hd-kpi-hero .hd-kpi-label { color: rgba(255,255,255,0.75); }
@@ -202,7 +202,7 @@
 .hd-kpi-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; position: relative; z-index: 1; margin-top: auto; }
 .hd-kpi-sub { font-family: 'Geist Mono', monospace; font-size: 10.5px; color: #94A3B8; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hd-kpi-badge { font-family: 'Geist Mono', monospace; font-size: 9.5px; font-weight: 600; padding: 3px 7px; border-radius: 5px; background: rgba(245,158,11,0.15); color: #B45309; letter-spacing: 0.02em; flex: none; white-space: nowrap; }
-.hd-kpi-arrow { width: 22px; height: 22px; border-radius: 6px; background: #F6F7F9; color: #5B6878; display: grid; place-items: center; flex: none; }
+.hd-kpi-arrow { width: 22px; height: 22px; border-radius: 6px; background: #f8f9fa; color: #5B6878; display: grid; place-items: center; flex: none; }
 
 /* ── App grid ── */
 .hd-apps-section { margin-top: 8px; }
@@ -263,7 +263,7 @@
   margin-left: auto; flex-shrink: 0;
   color: #cbd5e1;
 }
-.hd-app-card:hover .hd-app-arrow { color: #1a4dab; }
+.hd-app-card:hover .hd-app-arrow { color: #1a73e8; }
 .hd-app-arrow svg { width: 16px; height: 16px; }
 
 /* ── Mobile ── */

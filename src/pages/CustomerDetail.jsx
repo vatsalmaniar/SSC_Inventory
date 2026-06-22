@@ -37,7 +37,7 @@ const STAGE_STYLES = {
   WON:               { background:'#f0fdf4', color:'#15803d' },
   LOST:              { background:'#fef2f2', color:'#dc2626' },
   ON_HOLD:           { background:'#fffbeb', color:'#b45309' },
-  QUOTATION_SENT:    { background:'#e8f2fc', color:'#1a4dab' },
+  QUOTATION_SENT:    { background:'#e8f2fc', color:'#1a73e8' },
   FOLLOW_UP:         { background:'#fff7ed', color:'#c2410c' },
   FINAL_NEGOTIATION: { background:'#fef9c3', color:'#854d0e' },
   BOM_RECEIVED:      { background:'#f5f3ff', color:'#7c3aed' },
@@ -369,15 +369,15 @@ body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff
 .mono{font-family:'Geist Mono',monospace}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #0f172a}
 .co-name{font-size:16px;font-weight:700;margin-bottom:2px}.co-sub{font-size:11px;color:#64748b;margin-bottom:6px}.co-addr{font-size:10px;color:#475569;line-height:1.6}
-.doc-title{font-size:24px;font-weight:700;text-align:right;letter-spacing:-0.5px;color:#1a4dab}
-.doc-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;padding:3px 10px;border-radius:4px;background:#eff6ff;color:#1a4dab;margin-bottom:6px}
+.doc-title{font-size:24px;font-weight:700;text-align:right;letter-spacing:-0.5px;color:#1a73e8}
+.doc-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;padding:3px 10px;border-radius:4px;background:#eff6ff;color:#1a73e8;margin-bottom:6px}
 .cust-block{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;padding:16px 20px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0}
 .cust-name{font-size:18px;font-weight:700;margin-bottom:4px}.cust-id{font-size:11px;color:#64748b;font-family:'Geist Mono',monospace;margin-bottom:8px}
 .field-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:3px}
 .field-val{font-size:12px;font-weight:500;margin-bottom:10px}
 .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:28px}
 .stat{background:#fff;padding:12px 16px}.stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:4px}
-.stat-val{font-size:16px;font-weight:700;color:#0f172a}.stat-val.green{color:#15803d}.stat-val.blue{color:#1a4dab}
+.stat-val{font-size:16px;font-weight:700;color:#0f172a}.stat-val.green{color:#15803d}.stat-val.blue{color:#1a73e8}
 .section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0f172a;margin-bottom:12px;margin-top:28px;padding-bottom:6px;border-bottom:2px solid #e2e8f0}
 .order-block{margin-bottom:16px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
 .order-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
@@ -648,7 +648,7 @@ ${oppsHTML}
                               <label>GST Certificate</label>
                               <div className="val">
                                 {customer.gst_cert_url
-                                  ? <a href={customer.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                  ? <a href={customer.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a73e8', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
                                       <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                       View PDF
                                     </a>
@@ -659,7 +659,7 @@ ${oppsHTML}
                               <div className="c360-field">
                                 <label>MSME Certificate</label>
                                 <div className="val">
-                                  <a href={customer.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                  <a href={customer.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a73e8', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
                                     <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                     View PDF
                                   </a>
@@ -685,11 +685,11 @@ ${oppsHTML}
                             <Field label="POC Name"  val={customer.poc_name} />
                             <div className="c360-field">
                               <label>POC Phone</label>
-                              <div className="val">{customer.poc_no ? <a href={'tel:'+customer.poc_no} style={{ color:'#1a4dab', textDecoration:'none' }}><PhoneDisplay value={customer.poc_no}/></a> : '—'}</div>
+                              <div className="val">{customer.poc_no ? <a href={'tel:'+customer.poc_no} style={{ color:'#1a73e8', textDecoration:'none' }}><PhoneDisplay value={customer.poc_no}/></a> : '—'}</div>
                             </div>
                             <div className="c360-field" style={{ gridColumn:'span 2' }}>
                               <label>POC Email</label>
-                              <div className="val">{customer.poc_email ? <a href={'mailto:'+customer.poc_email} style={{ color:'#1a4dab', textDecoration:'none' }}>{customer.poc_email}</a> : '—'}</div>
+                              <div className="val">{customer.poc_email ? <a href={'mailto:'+customer.poc_email} style={{ color:'#1a73e8', textDecoration:'none' }}>{customer.poc_email}</a> : '—'}</div>
                             </div>
                           </div>
 
@@ -698,11 +698,11 @@ ${oppsHTML}
                             <Field label="Director Name" val={customer.director_name} />
                             <div className="c360-field">
                               <label>Director Phone</label>
-                              <div className="val">{customer.director_no ? <a href={'tel:'+customer.director_no} style={{ color:'#1a4dab', textDecoration:'none' }}><PhoneDisplay value={customer.director_no}/></a> : '—'}</div>
+                              <div className="val">{customer.director_no ? <a href={'tel:'+customer.director_no} style={{ color:'#1a73e8', textDecoration:'none' }}><PhoneDisplay value={customer.director_no}/></a> : '—'}</div>
                             </div>
                             <div className="c360-field" style={{ gridColumn:'span 2' }}>
                               <label>Director Email</label>
-                              <div className="val">{customer.director_email ? <a href={'mailto:'+customer.director_email} style={{ color:'#1a4dab', textDecoration:'none' }}>{customer.director_email}</a> : '—'}</div>
+                              <div className="val">{customer.director_email ? <a href={'mailto:'+customer.director_email} style={{ color:'#1a73e8', textDecoration:'none' }}>{customer.director_email}</a> : '—'}</div>
                             </div>
                           </div>
 
@@ -765,7 +765,7 @@ ${oppsHTML}
                             <div>
                               <div style={{ fontSize:14, fontWeight:700, color:'var(--gray-900)' }}>{name}</div>
                               {title && <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:2 }}>{title}</div>}
-                              {phone && <a href={'tel:'+phone} style={{ display:'block', fontSize:13, color:'#1a4dab', marginTop:6, fontWeight:600, textDecoration:'none' }}>{phone}</a>}
+                              {phone && <a href={'tel:'+phone} style={{ display:'block', fontSize:13, color:'#1a73e8', marginTop:6, fontWeight:600, textDecoration:'none' }}>{phone}</a>}
                               {email && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>{email}</div>}
                             </div>
                           </div>
@@ -1047,7 +1047,7 @@ ${oppsHTML}
                         const ss = STAGE_STYLES[o.stage] || { background:'#f1f5f9', color:'#475569' }
                         return (
                           <tr key={o.id} onClick={() => navigate('/crm/opportunities/'+o.id)} style={{ cursor:'pointer' }}>
-                            <td className="mono" style={{ fontWeight:700, color:'#1a4dab' }}>{o.quotation_ref}</td>
+                            <td className="mono" style={{ fontWeight:700, color:'#1a73e8' }}>{o.quotation_ref}</td>
                             <td style={{ fontWeight:600, maxWidth:180 }}>
                               <div style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.opportunity_name||'—'}</div>
                             </td>
@@ -1224,7 +1224,7 @@ function SideRow({ label, val, accent }) {
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
       <span style={{ fontSize:12, color:'var(--gray-500)' }}>{label}</span>
-      <span style={{ fontSize:13, fontWeight:700, color: accent ? '#1a4dab' : 'var(--gray-900)' }}>{val}</span>
+      <span style={{ fontSize:13, fontWeight:700, color: accent ? '#1a73e8' : 'var(--gray-900)' }}>{val}</span>
     </div>
   )
 }

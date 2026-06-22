@@ -1,11 +1,11 @@
 /* SSC ERP — Procurement Forecast (cloud-design adapted, scoped under .pf-app) */
 
 .pf-app {
-  --ssc-deep: #0A2540;
+  --ssc-deep: #1a73e8;
   --ssc-mid: #163E68;
   --ssc-cyan: #3DD9D6;
-  --ssc-blue: #1E54B7;
-  --pf-bg: #F6F7F9;
+  --ssc-blue: #1a73e8;
+  --pf-bg: #f8f9fa;
   --pf-bg-2: #FBFBFD;
   --pf-surface: #FFFFFF;
   --pf-line: #E8EBF0;
@@ -45,7 +45,7 @@
 /* Buttons */
 .pf-app .btn-primary, .pf-app .btn-ghost { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
 .pf-app .btn-primary { background: var(--ssc-deep); color: #fff; border-color: var(--ssc-deep); font-weight: 500; }
-.pf-app .btn-primary:hover { background: #143055; }
+.pf-app .btn-primary:hover { background: #174ea6; }
 .pf-app .btn-primary:disabled { opacity: 0.55; cursor: default; }
 .pf-app .btn-ghost { background: var(--pf-surface); color: var(--pf-ink); border-color: var(--pf-line); }
 .pf-app .btn-ghost:hover { background: var(--pf-bg-2); }
@@ -105,7 +105,7 @@
 .pf-app .scl-item.off { opacity: 0.35; }
 .pf-app .scl-item:hover { opacity: 0.8; }
 .pf-app .scl-swatch { display: inline-block; width: 18px; height: 3px; border-radius: 2px; }
-.pf-app .scl-stock { background: #1E54B7; }
+.pf-app .scl-stock { background: #1a73e8; }
 .pf-app .scl-min { background: repeating-linear-gradient(to right, #EF4444 0 6px, transparent 6px 10px); }
 .pf-app .scl-po { background: repeating-linear-gradient(to right, #94A3B8 0 2px, transparent 2px 6px); }
 .pf-app .stock-chart { display: block; width: 100%; height: 360px; cursor: crosshair; }
@@ -175,7 +175,7 @@
 .pf-modal .modal-eyebrow { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6878; font-family: 'Geist Mono', monospace; }
 .pf-modal .modal-title { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }
 .pf-modal .modal-close { background: transparent; border: 1px solid #E8EBF0; border-radius: 9px; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; }
-.pf-modal .modal-close:hover { background: #F6F7F9; }
+.pf-modal .modal-close:hover { background: #f8f9fa; }
 .pf-modal .modal-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: #E8EBF0; border-top: 1px solid #E8EBF0; border-bottom: 1px solid #E8EBF0; }
 .pf-modal .ms-cell { background: #FBFBFD; padding: 12px 18px; }
 .pf-modal .ms-label { font-size: 10px; letter-spacing: 0.08em; color: #5B6878; font-family: 'Geist Mono', monospace; text-transform: uppercase; }
@@ -184,7 +184,7 @@
 .pf-modal .modal-toolbar { display: flex; justify-content: space-between; padding: 12px 22px; border-bottom: 1px solid #E8EBF0; }
 .pf-modal .chk-all { display: inline-flex; align-items: center; gap: 8px; background: transparent; border: 0; font: inherit; cursor: pointer; font-size: 12.5px; color: #0B1B30; padding: 4px 6px; border-radius: 6px; }
 .pf-modal .chk-all:hover { background: #FBFBFD; }
-.pf-modal .modal-search { display: flex; align-items: center; gap: 8px; background: #F6F7F9; border: 1px solid #E8EBF0; border-radius: 8px; padding: 5px 10px; color: #5B6878; }
+.pf-modal .modal-search { display: flex; align-items: center; gap: 8px; background: #f8f9fa; border: 1px solid #E8EBF0; border-radius: 8px; padding: 5px 10px; color: #5B6878; }
 .pf-modal .modal-search input { border: 0; background: transparent; outline: none; font: inherit; min-width: 200px; color: #0B1B30; }
 .pf-modal .modal-table { flex: 1; overflow-y: auto; }
 .pf-modal .mt-row { display: grid; grid-template-columns: 36px 1fr 100px 90px 100px; gap: 10px; padding: 10px 22px; align-items: center; border-bottom: 1px solid #EEF1F5; font-size: 12.5px; }
@@ -192,7 +192,7 @@
 .pf-modal .mt-row.unchecked { opacity: 0.55; }
 .pf-modal .mt-chk button { background: transparent; border: 0; padding: 0; cursor: pointer; }
 .pf-modal .mt-name { display: flex; flex-direction: column; gap: 2px; }
-.pf-modal .mt-id { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(30,84,183,0.08); color: #1E54B7; font-weight: 600; align-self: flex-start; font-family: 'Geist Mono', monospace; }
+.pf-modal .mt-id { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(30,84,183,0.08); color: #1a73e8; font-weight: 600; align-self: flex-start; font-family: 'Geist Mono', monospace; }
 .pf-modal .mt-code { font-size: 12px; font-family: 'Geist Mono', monospace; }
 .pf-modal .mt-num { text-align: right; font-family: 'Geist Mono', monospace; font-size: 12.5px; }
 .pf-modal .mt-input { width: 70px; padding: 4px 8px; border: 1px solid #FCD34D; border-radius: 6px; background: rgba(254,243,199,0.4); font: inherit; font-size: 12px; font-family: 'Geist Mono', monospace; text-align: right; outline: none; }
@@ -200,10 +200,10 @@
 .pf-modal .muted { color: #94A3B8; }
 .pf-modal .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid #E8EBF0; background: #FBFBFD; }
 .pf-modal .cb { width: 16px; height: 16px; border: 1.5px solid #E8EBF0; border-radius: 4px; display: grid; place-items: center; transition: all .12s; }
-.pf-modal .cb.on { background: #0A2540; border-color: #0A2540; }
+.pf-modal .cb.on { background: #1a73e8; border-color: #1a73e8; }
 .pf-modal .btn-primary, .pf-modal .btn-ghost { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
-.pf-modal .btn-primary { background: #0A2540; color: #fff; font-weight: 500; }
-.pf-modal .btn-primary:hover { background: #143055; }
+.pf-modal .btn-primary { background: #1a73e8; color: #fff; font-weight: 500; }
+.pf-modal .btn-primary:hover { background: #174ea6; }
 .pf-modal .btn-primary:disabled { opacity: 0.55; cursor: default; }
 .pf-modal .btn-ghost { background: #FFF; color: #0B1B30; border-color: #E8EBF0; }
 .pf-modal .btn-ghost:hover { background: #FBFBFD; }
@@ -217,7 +217,7 @@
 .pf-drawer .drawer-title { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }
 .pf-drawer .drawer-sub { font-size: 13px; color: #5B6878; margin-top: 4px; }
 .pf-drawer .drawer-close { background: transparent; border: 1px solid #E8EBF0; border-radius: 9px; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; }
-.pf-drawer .drawer-close:hover { background: #F6F7F9; }
+.pf-drawer .drawer-close:hover { background: #f8f9fa; }
 .pf-drawer .drawer-body { flex: 1; overflow-y: auto; padding: 22px 26px; display: flex; flex-direction: column; gap: 22px; }
 .pf-drawer .drawer-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 26px; border-top: 1px solid #E8EBF0; background: #FBFBFD; }
 .pf-drawer .sf-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
@@ -245,8 +245,8 @@
 .pf-drawer .cc-val span { font-size: 13px; color: #5B6878; font-weight: 400; }
 .pf-drawer .cc-formula { font-size: 11px; color: #5B6878; margin-top: 6px; font-family: 'Geist Mono', monospace; }
 .pf-drawer .btn-primary, .pf-drawer .btn-ghost { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
-.pf-drawer .btn-primary { background: #0A2540; color: #fff; font-weight: 500; }
-.pf-drawer .btn-primary:hover { background: #143055; }
+.pf-drawer .btn-primary { background: #1a73e8; color: #fff; font-weight: 500; }
+.pf-drawer .btn-primary:hover { background: #174ea6; }
 .pf-drawer .btn-ghost { background: #FFF; color: #0B1B30; border-color: #E8EBF0; }
 .pf-drawer .btn-ghost:hover { background: #FBFBFD; }
 

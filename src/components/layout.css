@@ -53,7 +53,7 @@
 .ly-logo-text {
   font-size: 15px;
   font-weight: 600;
-  color: #0e2d6a;
+  color: #1a73e8;
   letter-spacing: -0.3px;
 }
 
@@ -100,7 +100,7 @@
 .ly-nav-item:hover { background: #f4f6fb; color: #1e2d5a; }
 .ly-nav-item.active {
   background: #eef2fd;
-  color: #0A2540;
+  color: #1a73e8;
   font-weight: 600;
 }
 .ly-nav-item.active::before {
@@ -110,7 +110,7 @@
   top: 6px;
   bottom: 6px;
   width: 3px;
-  background: #0A2540;
+  background: #1a73e8;
   border-radius: 0 3px 3px 0;
 }
 .ly-nav-item.soon { opacity: 0.55; cursor: default; }
@@ -146,7 +146,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #0e2d6a;
+  background: #1a73e8;
   color: white;
   font-size: 10px;
   font-weight: 600;
@@ -185,7 +185,7 @@
 }
 .ly-collapse-btn:hover {
   background: #f0f2f8;
-  color: #0A2540;
+  color: #1a73e8;
 }
 
 /* ── Collapsed sidebar ── */
@@ -310,7 +310,7 @@
 }
 .ly-topbar-hamburger:hover {
   background: #eaeffa;
-  color: #0A2540;
+  color: #1a73e8;
 }
 .ly-topbar-app {
   font-size: 13px;
@@ -349,7 +349,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #0e2d6a;
+  background: #1a73e8;
   color: white;
   font-size: 10px;
   font-weight: 600;
@@ -375,7 +375,7 @@
 }
 .ly-user-avatar-lg {
   width: 40px; height: 40px; border-radius: 50%;
-  background: #0e2d6a; color: white;
+  background: #1a73e8; color: white;
   font-size: 14px; font-weight: 600;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
@@ -394,7 +394,7 @@
 .ly-user-menu-save {
   margin-top: 8px; width: 100%;
   padding: 8px 12px; font-family: inherit; font-size: 12px; font-weight: 600;
-  background: #0e2d6a; color: white; border: 0; border-radius: 8px;
+  background: #1a73e8; color: white; border: 0; border-radius: 8px;
   cursor: pointer; transition: background 0.15s;
 }
 .ly-user-menu-save:hover:not(:disabled) { background: #0a2150; }
@@ -453,7 +453,7 @@
   border-bottom: 1px solid #f0f2f8;
 }
 .ly-notif-markread {
-  font-size: 11px; font-weight: 600; color: #0A2540;
+  font-size: 11px; font-weight: 600; color: #1a73e8;
   background: none; border: none; cursor: pointer;
 }
 .ly-notif-markread:hover { text-decoration: underline; }

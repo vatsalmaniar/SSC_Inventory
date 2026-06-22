@@ -7,7 +7,7 @@ import '../styles/orders-redesign.css'
 const PAGE_SIZE = 50
 const TYPE_OPTIONS = ['Manufacturer','Distributor','Agent']
 const STATUS_OPTIONS = ['active','inactive']
-const TYPE_COLORS = { Manufacturer:'#1E54B7', Distributor:'#22C55E', Agent:'#0F766E' }
+const TYPE_COLORS = { Manufacturer:'#1a73e8', Distributor:'#22C55E', Agent:'#0F766E' }
 const STATUS_COLORS = { active:'#22C55E', inactive:'#EF4444' }
 
 export default function VendorMaster() {

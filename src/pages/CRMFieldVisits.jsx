@@ -10,7 +10,7 @@ import '../styles/crm.css'
 import '../styles/orders.css'
 import '../styles/crm-redesign.css'
 
-const _OC = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const _OC = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
 function OwnerChip({name}) { if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7,whiteSpace:'nowrap'}}><div style={{width:24,height:24,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
 
@@ -387,7 +387,7 @@ export default function CRMFieldVisits() {
             <div className="dl-table">
               {filtered.map(v => {
                 const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
-                const typeColor = v.visit_type==='SOLO' ? '#475569' : v.visit_type==='JOINT_PRINCIPAL' ? '#1a4dab' : '#0F766E'
+                const typeColor = v.visit_type==='SOLO' ? '#475569' : v.visit_type==='JOINT_PRINCIPAL' ? '#1a73e8' : '#0F766E'
                 return (
                   <div key={v.id} className="dl-row dl-data"
                     style={{ gridTemplateColumns: '1.6fr 130px 120px 1.4fr 1fr 160px' }}
@@ -456,13 +456,13 @@ export default function CRMFieldVisits() {
                   )}
                   <span className={`visit-type-pill visit-type-${viewVisit.visit_type}`} style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:4,
                     background: viewVisit.visit_type==='SOLO'?'#f1f5f9':viewVisit.visit_type==='JOINT_PRINCIPAL'?'#e8f2fc':'#f5f3ff',
-                    color: viewVisit.visit_type==='SOLO'?'#475569':viewVisit.visit_type==='JOINT_PRINCIPAL'?'#1a4dab':'#6d28d9'
+                    color: viewVisit.visit_type==='SOLO'?'#475569':viewVisit.visit_type==='JOINT_PRINCIPAL'?'#1a73e8':'#6d28d9'
                   }}>{VISIT_TYPE_LABELS[viewVisit.visit_type]}</span>
                 </div>
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <button onClick={() => openEditDrawer(viewVisit)} title="Edit visit"
-                  style={{ background:'#eff6ff', border:'1px solid #c2d9f5', borderRadius:6, padding:'5px 10px', fontSize:12, fontWeight:600, color:'#1a4dab', cursor:'pointer', fontFamily:'var(--font)', display:'flex', alignItems:'center', gap:5 }}>
+                  style={{ background:'#eff6ff', border:'1px solid #c2d9f5', borderRadius:6, padding:'5px 10px', fontSize:12, fontWeight:600, color:'#1a73e8', cursor:'pointer', fontFamily:'var(--font)', display:'flex', alignItems:'center', gap:5 }}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   Edit
                 </button>
@@ -512,13 +512,13 @@ export default function CRMFieldVisits() {
                 <div className="linked-opp-tile" onClick={() => navigate('/crm/opportunities/' + viewVisit.opportunity_id)}
                   style={{ padding:'10px 12px', borderRadius:8, border:'1px solid #c2d9f5', background:'#eff6ff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
                   <div style={{ minWidth:0 }}>
-                    <div className="linked-opp-label" style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#1a4dab', marginBottom:3 }}>Linked Opportunity</div>
+                    <div className="linked-opp-label" style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px', color:'#1a73e8', marginBottom:3 }}>Linked Opportunity</div>
                     <div style={{ fontSize:13, fontWeight:600, color:'var(--c-text)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{viewVisit.crm_opportunities.opportunity_name || '—'}</div>
                     {viewVisit.crm_opportunities.stage && (
                       <div style={{ fontSize:11, color:'var(--c-muted)', marginTop:2 }}>Stage: {viewVisit.crm_opportunities.stage}</div>
                     )}
                   </div>
-                  <svg className="linked-opp-arrow" fill="none" stroke="#1a4dab" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  <svg className="linked-opp-arrow" fill="none" stroke="#1a73e8" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18, flexShrink:0 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </div>
               )}
               {(viewVisit.visit_type === 'JOINT_PRINCIPAL' || viewVisit.visit_type === 'JOINT_SSC_TEAM') && (() => {
@@ -743,7 +743,7 @@ export default function CRMFieldVisits() {
                       }))}
                       style={{ fontSize:12, fontWeight:600, padding:'5px 14px', borderRadius:6, border:'1px solid', cursor:'pointer', fontFamily:'var(--font)',
                         background: form[opt.key] ? '#e8f2fc' : 'white',
-                        color: form[opt.key] ? '#1a4dab' : '#475569',
+                        color: form[opt.key] ? '#1a73e8' : '#475569',
                         borderColor: form[opt.key] ? '#c2d9f5' : '#e2e8f0',
                       }}>
                       {form[opt.key] ? '✓ ' : ''}{opt.label}

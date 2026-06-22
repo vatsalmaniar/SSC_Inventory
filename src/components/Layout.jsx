@@ -502,7 +502,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
           </div>
           {/* Global Search */}
           <div ref={searchRef} style={{position:'relative',flex:1,maxWidth:400,margin:'0 24px'}}>
-            <div style={{display:'flex',alignItems:'center',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:10,padding:'0 12px',gap:8,transition:'border-color 0.15s',borderColor:searchOpen?'#1a4dab':'var(--gray-200)'}}>
+            <div style={{display:'flex',alignItems:'center',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:10,padding:'0 12px',gap:8,transition:'border-color 0.15s',borderColor:searchOpen?'#1a73e8':'var(--gray-200)'}}>
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:15,height:15,color:'var(--gray-400)',flexShrink:0}}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               <input
                 ref={searchInputRef}
@@ -531,10 +531,10 @@ export default function Layout({ children, pageTitle, pageKey }) {
                         {searchResults.orders.map(o => (
                           <div key={o.id} onClick={() => goToResult('/orders/'+o.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',cursor:'pointer',borderTop:'1px solid var(--gray-50)'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
                             <div style={{width:28,height:28,borderRadius:7,background:'#e8f2fc',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                              <svg fill="none" stroke="#1a4dab" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+                              <svg fill="none" stroke="#1a73e8" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
                             </div>
                             <div style={{minWidth:0}}>
-                              <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#1a4dab'}}>{o.order_number}</div>
+                              <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#1a73e8'}}>{o.order_number}</div>
                               <div style={{fontSize:12,color:'var(--gray-500)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o.customer_name}</div>
                             </div>
                             <span style={{marginLeft:'auto',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'var(--gray-100)',color:'var(--gray-500)',flexShrink:0}}>{STATUS_LABEL[o.status] || o.status}</span>

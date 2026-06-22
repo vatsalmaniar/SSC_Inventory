@@ -79,7 +79,7 @@ function StagePill({ stage }) {
     LOST:           { background:'#fef2f2', color:'#dc2626' },
     ON_HOLD:        { background:'#fffbeb', color:'#b45309' },
     BOM_RECEIVED:       { background:'#f5f3ff', color:'#7c3aed' },
-    QUOTATION_SENT:     { background:'#e8f2fc', color:'#1a4dab' },
+    QUOTATION_SENT:     { background:'#e8f2fc', color:'#1a73e8' },
     FOLLOW_UP:          { background:'#fff7ed', color:'#c2410c' },
     FINAL_NEGOTIATION:  { background:'#fef9c3', color:'#854d0e' },
   }
@@ -1190,7 +1190,7 @@ export default function CRMOpportunityDetail() {
                           ].map(opt => (
                             <button key={opt.key} type="button" onClick={() => opt.set(!opt.val)}
                               style={{ fontSize:12, fontWeight:600, padding:'5px 14px', borderRadius:6, border:'1px solid', cursor:'pointer', fontFamily:'var(--font)',
-                                background: opt.val ? '#e8f2fc' : 'white', color: opt.val ? '#1a4dab' : '#475569',
+                                background: opt.val ? '#e8f2fc' : 'white', color: opt.val ? '#1a73e8' : '#475569',
                                 borderColor: opt.val ? '#c2d9f5' : '#e2e8f0',
                               }}>
                               {opt.val ? '✓ ' : ''}{opt.label}
@@ -1745,13 +1745,13 @@ export default function CRMOpportunityDetail() {
                     {quoteHistory.map((q, idx) => (
                       <div key={q.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom: idx < quoteHistory.length - 1 ? '1px solid var(--gray-100)' : 'none' }}>
                         <div>
-                          <div style={{ fontFamily:'var(--mono)', fontWeight:700, fontSize:13, color:'#1a4dab' }}>{q.full_ref}</div>
+                          <div style={{ fontFamily:'var(--mono)', fontWeight:700, fontSize:13, color:'#1a73e8' }}>{q.full_ref}</div>
                           <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>
                             {fmtINR(q.total_value)} · {q.items?.length || 0} items · {q.profiles?.name || '—'} · {fmtTs(q.created_at)}
                           </div>
                         </div>
                         <button onClick={() => printQuote(q)}
-                          style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', border:'1px solid #1a4dab', borderRadius:7, background:'#eff6ff', color:'#1a4dab', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', flexShrink:0, marginLeft:12 }}>
+                          style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', border:'1px solid #1a73e8', borderRadius:7, background:'#eff6ff', color:'#1a73e8', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', flexShrink:0, marginLeft:12 }}>
                           <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                           Download
                         </button>
@@ -1799,14 +1799,14 @@ export default function CRMOpportunityDetail() {
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
                   <div className="od-side-card-title" style={{ margin:0 }}>Contacts ({allContacts.length})</div>
                   <button onClick={() => setShowContactModal(true)}
-                    style={{ fontSize:11, fontWeight:700, color:'#1a4dab', background:'#eff6ff', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'var(--font)' }}>
+                    style={{ fontSize:11, fontWeight:700, color:'#1a73e8', background:'#eff6ff', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'var(--font)' }}>
                     + Add
                   </button>
                 </div>
                 {allContacts.length === 0 ? (
                   <div style={{ fontSize:12, color:'var(--gray-400)', textAlign:'center', padding:'10px 0' }}>
                     No contacts yet.<br/>
-                    <button onClick={() => setShowContactModal(true)} style={{ marginTop:6, fontSize:12, fontWeight:600, color:'#1a4dab', background:'none', border:'none', cursor:'pointer', fontFamily:'var(--font)' }}>+ Add Contact</button>
+                    <button onClick={() => setShowContactModal(true)} style={{ marginTop:6, fontSize:12, fontWeight:600, color:'#1a73e8', background:'none', border:'none', cursor:'pointer', fontFamily:'var(--font)' }}>+ Add Contact</button>
                   </div>
                 ) : (
                   <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -1818,7 +1818,7 @@ export default function CRMOpportunityDetail() {
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:13, fontWeight:700, color:'var(--gray-900)' }}>{c.name}</div>
                           {c.designation && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{c.designation}</div>}
-                          {c.phone && <a href={'tel:' + c.phone} style={{ display:'block', fontSize:12, color:'#1a4dab', marginTop:3, textDecoration:'none', fontWeight:500 }}>{c.phone}</a>}
+                          {c.phone && <a href={'tel:' + c.phone} style={{ display:'block', fontSize:12, color:'#1a73e8', marginTop:3, textDecoration:'none', fontWeight:500 }}>{c.phone}</a>}
                           {c.email && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{c.email}</div>}
                         </div>
                       </div>
@@ -1844,7 +1844,7 @@ export default function CRMOpportunityDetail() {
                   ) : (
                     stageActs.map((a, i) => {
                       const dateStr = fmtTs(a.created_at)
-                      const clr = a.activity_type === 'Won' ? '#15803d' : a.activity_type === 'Lost' ? '#dc2626' : '#1a4dab'
+                      const clr = a.activity_type === 'Won' ? '#15803d' : a.activity_type === 'Lost' ? '#dc2626' : '#1a73e8'
                       const stageLabel = a.notes || a.activity_type
                       return (
                         <div key={a.id} style={{ padding:'12px 16px', borderBottom: i < stageActs.length-1 ? '1px solid var(--gray-50)' : 'none', background: i === 0 ? 'white' : 'white' }}>
@@ -1869,7 +1869,7 @@ export default function CRMOpportunityDetail() {
                             </div>
                             <div style={{ display:'flex', justifyContent:'space-between', fontSize:11 }}>
                               <span style={{ color:'var(--gray-500)', minWidth:110 }}>Last Modified By:</span>
-                              <span style={{ fontWeight:600, color:'#1a4dab' }}>{a.profiles?.name || '—'}</span>
+                              <span style={{ fontWeight:600, color:'#1a73e8' }}>{a.profiles?.name || '—'}</span>
                             </div>
                             <div style={{ display:'flex', justifyContent:'space-between', fontSize:11 }}>
                               <span style={{ color:'var(--gray-500)', minWidth:110 }}>Last Modified:</span>
@@ -1920,31 +1920,31 @@ export default function CRMOpportunityDetail() {
               ].map(([key, label, count]) => (
                 <button key={key} onClick={() => setActTab(key)}
                   style={{ padding:'12px 18px', fontSize:13, fontWeight:700, border:'none', background:'none', cursor:'pointer', fontFamily:'var(--font)',
-                    color: actTab===key ? '#0e2d6a' : '#94a3b8',
-                    borderBottom: actTab===key ? '2px solid #0e2d6a' : '2px solid transparent',
+                    color: actTab===key ? '#1a73e8' : '#94a3b8',
+                    borderBottom: actTab===key ? '2px solid #1a73e8' : '2px solid transparent',
                     marginBottom:-2, transition:'color 0.15s',
                   }}>
-                  {label}{count > 0 ? <span style={{ marginLeft:5, fontSize:11, fontWeight:700, background: actTab===key ? '#e8f0fe' : '#f1f5f9', color: actTab===key ? '#0e2d6a' : '#94a3b8', borderRadius:10, padding:'1px 6px' }}>{count}</span> : null}
+                  {label}{count > 0 ? <span style={{ marginLeft:5, fontSize:11, fontWeight:700, background: actTab===key ? '#e8f0fe' : '#f1f5f9', color: actTab===key ? '#1a73e8' : '#94a3b8', borderRadius:10, padding:'1px 6px' }}>{count}</span> : null}
                 </button>
               ))}
               <div style={{ flex:1 }} />
               {actTab === 'activity' && (
                 <button onClick={() => { setActType('Call'); setActDiscussion(''); setActNotes(''); setActVisitType('Alone'); setActDate(new Date().toISOString().slice(0,10)); setActTime(''); setShowActModal(true) }}
-                  style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:8, border:'none', background:'#0e2d6a', color:'white', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', marginRight:4 }}>
+                  style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:8, border:'none', background:'#1a73e8', color:'white', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', marginRight:4 }}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:12,height:12}}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   Add Activity
                 </button>
               )}
               {actTab === 'notes' && (
                 <button onClick={() => { setActType('Note'); setActNotes(''); setShowActModal(true) }}
-                  style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:8, border:'none', background:'#0e2d6a', color:'white', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', marginRight:4 }}>
+                  style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:8, border:'none', background:'#1a73e8', color:'white', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', marginRight:4 }}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:12,height:12}}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   Add Note
                 </button>
               )}
               {actTab === 'tasks' && (
                 <button onClick={() => { setTaskType('Call'); setTaskDueDate(''); setTaskNotes(''); setTaskAssignee(user.id); setShowTaskModal(true) }}
-                  style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:8, border:'none', background:'#0e2d6a', color:'white', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', marginRight:4 }}>
+                  style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', borderRadius:8, border:'none', background:'#1a73e8', color:'white', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)', marginRight:4 }}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:12,height:12}}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   Add Task
                 </button>
@@ -2041,7 +2041,7 @@ export default function CRMOpportunityDetail() {
               const hasCreated = logActs.some(a => a.activity_type === 'Created')
               const fallback = !hasCreated && opp ? [{ id:'created', profiles:{ name: null }, notes:'Opportunity created', activity_type:'Created', created_at: opp.created_at }] : []
               const all = [...logActs, ...fallback].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
-              const DOT_CLR = { 'Stage Change':'#d97706', 'Quotation':'#16a34a', 'Won':'#15803d', 'Lost':'#dc2626', 'Created':'#1a4dab' }
+              const DOT_CLR = { 'Stage Change':'#d97706', 'Quotation':'#16a34a', 'Won':'#15803d', 'Lost':'#dc2626', 'Created':'#1a73e8' }
               return (
                 <div style={{ padding:'8px 20px' }}>
                   {all.length === 0 && <div style={{ padding:'32px 0', fontSize:13, color:'var(--gray-400)', textAlign:'center' }}>No log entries yet.</div>}
@@ -2146,7 +2146,7 @@ export default function CRMOpportunityDetail() {
         const convGrandTotal = convSubtotal + (parseFloat(sampleFreight)||0)
         return (
           <div className="od-drawer-scrim" onClick={e => { if (e.target===e.currentTarget) setShowConvertModal(false) }}>
-            <div className="od-drawer" style={{ width: 'min(820px, 95vw)', background: '#F6F7F9' }}>
+            <div className="od-drawer" style={{ width: 'min(820px, 95vw)', background: '#f8f9fa' }}>
 
               {/* Header */}
               <div className="od-drawer-head" style={{ background: '#FFFFFF' }}>
@@ -2159,7 +2159,7 @@ export default function CRMOpportunityDetail() {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
                 </button>
               </div>
-              <div className="od-drawer-body" style={{ background: '#F6F7F9', display:'flex', flexDirection:'column', gap:12 }}>
+              <div className="od-drawer-body" style={{ background: '#f8f9fa', display:'flex', flexDirection:'column', gap:12 }}>
 
                 {/* Customer Info */}
                 <div className="no-card" style={{ margin:0 }}>
@@ -2385,7 +2385,7 @@ export default function CRMOpportunityDetail() {
         const sampleGrandTotal = sampleSubtotal + (parseFloat(sampleFreight)||0)
         return (
           <div className="od-drawer-scrim" onClick={e => { if (e.target===e.currentTarget) setShowSampleModal(false) }}>
-            <div className="od-drawer" style={{ width: 'min(820px, 95vw)', background: '#F6F7F9' }}>
+            <div className="od-drawer" style={{ width: 'min(820px, 95vw)', background: '#f8f9fa' }}>
 
               {/* Header */}
               <div className="od-drawer-head" style={{ background: '#FFFFFF' }}>
@@ -2399,7 +2399,7 @@ export default function CRMOpportunityDetail() {
                 </button>
               </div>
 
-              <div className="od-drawer-body" style={{ background: '#F6F7F9', display:'flex', flexDirection:'column', gap:12 }}>
+              <div className="od-drawer-body" style={{ background: '#f8f9fa', display:'flex', flexDirection:'column', gap:12 }}>
 
                 {/* ── Customer Info card ── */}
                 <div className="no-card" style={{ margin:0 }}>

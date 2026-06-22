@@ -8,7 +8,7 @@ import '../styles/crm-redesign.css'
 import { friendlyError } from '../lib/errorMsg'
 
 const SR_STATUSES = ['Pending','Dispatched','Delivered']
-const STATUS_COLORS = { Pending:'#F59E0B', Dispatched:'#1E54B7', Delivered:'#22C55E' }
+const STATUS_COLORS = { Pending:'#F59E0B', Dispatched:'#1a73e8', Delivered:'#22C55E' }
 
 export default function CRMSampleRequests() {
   const navigate = useNavigate()

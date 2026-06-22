@@ -1,4 +1,4 @@
-.no-page { min-height: 100vh; background: #F6F7F9; font-family: 'Geist', -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; color: #0B1B30; line-height: 1.45; }
+.no-page { min-height: 100vh; background: #f8f9fa; font-family: 'Geist', -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; color: #0B1B30; line-height: 1.45; }
 .no-page, .no-page * { font-family: 'Geist', -apple-system, system-ui, sans-serif; }
 .no-page .mono { font-family: 'Geist Mono', monospace; }
 /* Tone down inline 700/800 weights to match new design */

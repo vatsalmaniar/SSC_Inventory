@@ -14,7 +14,7 @@ function fmtCr(val) {
 }
 
 const STATUS_LABELS = { inv_check:'Order Approved', inventory_check:'Inventory Check', dispatch:'Ready to Ship', cancelled:'Cancelled' }
-const STATUS_COLORS = { inv_check:'#1E54B7', inventory_check:'#0EA5E9', dispatch:'#06B6D4', cancelled:'#EF4444' }
+const STATUS_COLORS = { inv_check:'#1a73e8', inventory_check:'#0EA5E9', dispatch:'#06B6D4', cancelled:'#EF4444' }
 
 const PRE_APPROVAL_PO_STATUSES = ['draft', 'pending_approval']
 const ORPHAN_PO_STATUSES = ['approved','placed','acknowledged','delivery_confirmation','partially_received']

@@ -1,4 +1,4 @@
-.acc-page { min-height: 100vh; background: #F6F7F9; font-family: 'Geist', -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; color: #0B1B30; line-height: 1.45; }
+.acc-page { min-height: 100vh; background: #f8f9fa; font-family: 'Geist', -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; color: #0B1B30; line-height: 1.45; }
 .acc-page, .acc-page * { font-family: 'Geist', -apple-system, system-ui, sans-serif; }
 .acc-page .mono { font-family: 'Geist Mono', monospace; }
 .acc-page [style*="font-weight: 700"], .acc-page [style*="font-weight:700"] { font-weight: 600 !important; }
@@ -11,7 +11,7 @@
 /* ── Tabs ── */
 .acc-tabs { background: #f1f5f9; border: 1px solid #e2e8f0; }
 .acc-tab { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; background: transparent; color: #475569; font-family: var(--font); }
-.acc-tab.on { background: #1a4dab; color: white; }
+.acc-tab.on { background: #1a73e8; color: white; }
 
 /* ── Warehouse status ── */
 .acc-status-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }

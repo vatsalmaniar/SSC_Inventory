@@ -404,7 +404,7 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
           {/* Account Owner */}
           <Card title="Account Owner">
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:'50%', background:'#1a4dab', color:'white', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <div style={{ width:36, height:36, borderRadius:'50%', background:'#1a73e8', color:'white', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 {ownerName.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}
               </div>
               <div>

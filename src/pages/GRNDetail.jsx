@@ -60,6 +60,7 @@ export default function GRNDetail() {
   const [linkedPos, setLinkedPos] = useState([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')  // overview | items
   const [userRole, setUserRole] = useState('')
   const [userName, setUserName] = useState('')
 
@@ -482,6 +483,17 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                 </div>
               )}
 
+              {/* ── Tabs ── */}
+              <div className="od-tabs">
+                <button className={'od-tab'+(activeTab==='overview'?' on':'')} onClick={()=>setActiveTab('overview')}>Overview</button>
+                <button className={'od-tab'+(activeTab==='items'?' on':'')} onClick={()=>setActiveTab('items')}>Items<span className="od-tab-count">{grnItems.length}</span></button>
+              </div>
+
+              <div className="od-tab-content">
+
+                {/* Overview panel */}
+                <div className="od-tabpanel" hidden={activeTab!=='overview'}>
+
               {/* Document References */}
               <div className="od-card">
                 <div className="od-card-header"><div className="od-card-title">Receipt Information</div></div>
@@ -522,13 +534,13 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                               onClick={() => navigate('/procurement/po/' + p.id)}
                               style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, padding:'8px 10px', border:'1px solid var(--gray-100)', borderRadius:6, cursor:'pointer', background:'#f9fafb' }}>
                               <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:180 }}>
-                                <span style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:700, color:'#1a4dab' }}>{p.po_number}</span>
+                                <span style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:700, color:'#1a73e8' }}>{p.po_number}</span>
                                 <span style={{ fontSize:11, color:'var(--gray-500)' }}>· {p.vendor_name || '—'}</span>
                               </div>
                               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                 {p.total_amount > 0 && <span style={{ fontSize:11, color:'var(--gray-700)', fontWeight:600 }}>₹{Number(p.total_amount).toLocaleString('en-IN', { maximumFractionDigits:0 })}</span>}
                                 <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:10, background:'#eff6ff', color:'#1d4ed8', textTransform:'capitalize' }}>{(p.status || '').replace(/_/g, ' ')}</span>
-                                <span style={{ fontSize:11, color:'#1a4dab' }}>→</span>
+                                <span style={{ fontSize:11, color:'#1a73e8' }}>→</span>
                               </div>
                             </div>
                           ))}
@@ -575,6 +587,11 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                   </div>
                 </div>
               )}
+
+                </div>{/* end Overview panel */}
+
+                {/* Items panel */}
+                <div className="od-tabpanel" hidden={activeTab!=='items'}>
 
               {/* Items Table */}
               <div className="od-card">
@@ -650,6 +667,11 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                   )}
                 </div>
               </div>
+
+                </div>{/* end Items panel */}
+
+                {/* Overview (cont.) — Action + Notes */}
+                <div className="od-tabpanel" hidden={activeTab!=='overview'}>
 
               {/* Action card */}
               {!isConfirmed && !editMode && (
@@ -764,8 +786,10 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                   </div>
                 </div>
               )}
+                </div>{/* end Overview (cont.) panel */}
 
-            </div>
+              </div>{/* end od-tab-content */}
+            </div>{/* end od-main */}
 
             {/* ── RIGHT SIDEBAR ── */}
             <div className="od-sidebar">

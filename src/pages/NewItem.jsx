@@ -149,7 +149,7 @@ export default function NewItem() {
                                 <span style={{ fontFamily:'var(--mono)', fontSize:11, fontWeight:700, color:'var(--gray-400)' }}>{s.item_no}</span>
                                 <span style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:600, color:'var(--gray-800)' }}>{s.item_code}</span>
                                 <span style={{ fontSize:11, color:'var(--gray-400)' }}>· {[s.brand, s.category].filter(Boolean).join(' · ')}</span>
-                                <span style={{ marginLeft:'auto', fontSize:11, color:'#1a4dab' }}>open →</span>
+                                <span style={{ marginLeft:'auto', fontSize:11, color:'#1a73e8' }}>open →</span>
                               </div>
                             ))}
                           </div>

@@ -14,13 +14,13 @@ const STAGE_LABELS = {
 }
 const STAGE_COLORS = {
   LEAD_CAPTURED:'#6366f1', CONTACTED:'#0ea5e9', QUALIFIED:'#8b5cf6',
-  BOM_RECEIVED:'#a855f7', QUOTATION_SENT:'#1a4dab', FOLLOW_UP:'#f59e0b',
+  BOM_RECEIVED:'#a855f7', QUOTATION_SENT:'#1a73e8', FOLLOW_UP:'#f59e0b',
   FINAL_NEGOTIATION:'#d97706', WON:'#22c55e', LOST:'#ef4444', ON_HOLD:'#94a3b8',
 }
 const SCENARIOS = ['NEW_CUST_NEW_PROD','OLD_CUST_NEW_PROD','NEW_CUST_OLD_PROD','DORMANT_REVIVAL']
 const SCENARIO_LABELS = { NEW_CUST_NEW_PROD:'New Cust · New Prod', OLD_CUST_NEW_PROD:'Old Cust · New Prod', NEW_CUST_OLD_PROD:'New Cust · Old Prod', DORMANT_REVIVAL:'Dormant Revival' }
 
-const _OC = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const _OC = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
 function initials(n) { return (n||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?' }
 

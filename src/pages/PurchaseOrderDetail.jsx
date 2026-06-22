@@ -62,6 +62,7 @@ export default function PurchaseOrderDetail() {
   const [deliveryDates, setDeliveryDates] = useState([])
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')  // overview | items | delivery
   const [userRole, setUserRole]   = useState('')
   const [userName, setUserName]   = useState('')
 
@@ -607,7 +608,7 @@ SSC Control Pvt. Ltd.`
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;-webkit-font-smoothing:antialiased">
 <div style="max-width:600px;margin:0 auto;padding:32px 16px">
   <div style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
-    <div style="height:4px;background:#1a4dab"></div>
+    <div style="height:4px;background:#1a73e8"></div>
     <div style="padding:28px 28px 24px;text-align:center;border-bottom:1px solid #f1f5f9">
       <img src="https://app.ssccontrol.com/logo/ssc-60-years.png" alt="SSC Control — 60 Years" style="height:80px;width:auto;margin-bottom:10px"/>
       <div style="font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-0.2px">SSC Control Pvt. Ltd.</div>
@@ -1253,14 +1254,14 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 </div>
                 <div className="od-header-title">
                   {po.vendor_name && (
-                    <span onClick={() => po.vendor_id && navigate('/vendors/' + po.vendor_id)} style={{ cursor: po.vendor_id ? 'pointer' : 'default', borderBottom: po.vendor_id ? '1px dotted #1a4dab' : 'none', color:'inherit' }}>
+                    <span onClick={() => po.vendor_id && navigate('/vendors/' + po.vendor_id)} style={{ cursor: po.vendor_id ? 'pointer' : 'default', borderBottom: po.vendor_id ? '1px dotted #1a73e8' : 'none', color:'inherit' }}>
                       {po.vendor_name}
                     </span>
                   )}
                 </div>
                 <div className="od-header-num">
                   {po.po_number} · {fmt(po.po_date || po.created_at)}
-                  {po.order_number && <span style={{ marginLeft:8, color:'var(--gray-400)' }}>· Linked: <span style={{ fontFamily:'var(--mono)', color:'#1a4dab' }}>{po.order_number}</span></span>}
+                  {po.order_number && <span style={{ marginLeft:8, color:'var(--gray-400)' }}>· Linked: <span style={{ fontFamily:'var(--mono)', color:'#1a73e8' }}>{po.order_number}</span></span>}
                 </div>
               </div>
             </div>
@@ -1283,7 +1284,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               )}
               {!editMode && ['placed','acknowledged','delivery_confirmation','partially_received'].includes(po.status) && (
                 <button className="od-btn" onClick={openSendEmailModal}
-                  style={{ background: lastEmailed ? '#f0fdf4' : '#1a4dab', color: lastEmailed ? '#15803d' : 'white', borderColor: lastEmailed ? '#bbf7d0' : '#1a4dab', gap:6 }}>
+                  style={{ background: lastEmailed ? '#f0fdf4' : '#1a73e8', color: lastEmailed ? '#15803d' : 'white', borderColor: lastEmailed ? '#bbf7d0' : '#1a73e8', gap:6 }}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}>
                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
                     <polyline points="22,6 12,13 2,6"/>
@@ -1479,6 +1480,19 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
           {/* ── LEFT ── */}
           <div className="od-main">
 
+            {/* ── Tabs ── */}
+            <div className="od-tabs">
+              <button className={'od-tab'+(activeTab==='overview'?' on':'')} onClick={()=>setActiveTab('overview')}>Overview</button>
+              <button className={'od-tab'+(activeTab==='items'?' on':'')} onClick={()=>setActiveTab('items')}>Order Details<span className="od-tab-count">{items.length}</span></button>
+              {grns.length>0 && <button className={'od-tab'+(activeTab==='delivery'?' on':'')} onClick={()=>setActiveTab('delivery')}>Delivery History<span className="od-tab-count">{grns.length}</span></button>}
+              {deliveryDates.length>0 && <button className={'od-tab'+(activeTab==='dates'?' on':'')} onClick={()=>setActiveTab('dates')}>Delivery Dates<span className="od-tab-count">{deliveryDates.length}</span></button>}
+            </div>
+
+            <div className="od-tab-content">
+
+              {/* Overview panel */}
+              <div className="od-tabpanel" hidden={activeTab!=='overview'}>
+
             {/* PO Information */}
             <div className="od-card">
               <div className="od-card-header"><div className="od-card-title">PO Information</div></div>
@@ -1544,7 +1558,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       <label>Vendor</label>
                       <div className="val">
                         {po.vendor_id ? (
-                          <span onClick={() => navigate('/vendors/' + po.vendor_id)} style={{ color:'#1a4dab', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted' }}>{po.vendor_name}</span>
+                          <span onClick={() => navigate('/vendors/' + po.vendor_id)} style={{ color:'#1a73e8', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted' }}>{po.vendor_name}</span>
                         ) : (po.vendor_name || '—')}
                       </div>
                     </div>
@@ -1558,12 +1572,12 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                           {linkedOrders.length > 0 ? linkedOrders.map(o => (
                             <span key={o.id} onClick={() => navigate('/orders/' + o.id)}
                               style={{ fontFamily:'var(--mono)', cursor:'pointer', textDecoration:'underline',
-                                color: o.status === 'cancelled' ? '#b91c1c' : '#1a4dab' }}
+                                color: o.status === 'cancelled' ? '#b91c1c' : '#1a73e8' }}
                               title={o.status === 'cancelled' ? 'This CO has been cancelled' : undefined}>
                               {o.order_number}{isMultiCO ? ` · ${o.customer_name}` : ''}{o.status === 'cancelled' ? ' (cancelled)' : ''}
                             </span>
                           )) : (
-                            <span style={{ fontFamily:'var(--mono)', color:'#1a4dab', cursor: po.order_id ? 'pointer' : 'default', textDecoration: po.order_id ? 'underline' : 'none' }} onClick={() => po.order_id && navigate('/orders/' + po.order_id)}>
+                            <span style={{ fontFamily:'var(--mono)', color:'#1a73e8', cursor: po.order_id ? 'pointer' : 'default', textDecoration: po.order_id ? 'underline' : 'none' }} onClick={() => po.order_id && navigate('/orders/' + po.order_id)}>
                               {po.order_number}
                             </span>
                           )}
@@ -1586,7 +1600,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                         <label>PO Document</label>
                         <div className="val">
                           <span onClick={viewPoPdf}
-                            style={{ fontSize:12, color:'#1a4dab', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, cursor:'pointer' }}>
+                            style={{ fontSize:12, color:'#1a73e8', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, cursor:'pointer' }}>
                             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View PO
                           </span>
@@ -1603,7 +1617,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                           <div className="val" style={{ display:'flex', flexDirection:'column', gap:4 }}>
                             {urls.map((url, i) => (
                               <a key={i} href={url} target="_blank" rel="noreferrer"
-                                style={{ fontSize:12, color:'#1a4dab', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, textDecoration:'none' }}>
+                                style={{ fontSize:12, color:'#1a73e8', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, textDecoration:'none' }}>
                                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                 {urls.length > 1 ? `Document ${i + 1}` : 'View Document'}
                               </a>
@@ -1629,6 +1643,11 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 )}
               </div>
             </div>
+
+              </div>{/* end Overview panel */}
+
+              {/* Line Items panel */}
+              <div className="od-tabpanel" hidden={activeTab!=='items'}>
 
             {/* Line Items */}
             {/* Stock-closed lines from the linked CO — for approver/reviewer visibility */}
@@ -1667,7 +1686,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div className="od-card">
               <div className="od-card-header">
                 <div className="od-card-title">
-                  Line Items ({editMode ? editItems.filter(i => i.item_code?.trim()).length : items.length})
+                  Order Details ({editMode ? editItems.filter(i => i.item_code?.trim()).length : items.length})
                 </div>
               </div>
               {editMode ? (
@@ -1726,18 +1745,22 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       <tr>
                         <th style={{ paddingLeft:20 }}>#</th>
                         <th>Item Code</th>
-                        <th>Qty</th>
+                        <th>Delivery Date</th>
+                        <th style={{ textAlign:'center' }}>Qty</th>
+                        <th style={{ textAlign:'center' }}>Received</th>
+                        <th style={{ textAlign:'center' }}>Pending</th>
                         <th>LP Price</th>
                         <th>Disc %</th>
                         <th>Unit Price</th>
-                        <th style={{ textAlign:'right' }}>Received</th>
-                        <th>Delivery Date</th>
-                        <th className="right" style={{ paddingRight:20 }}>Total</th>
+                        <th className="right">Total</th>
+                        <th className="right" style={{ paddingRight:20 }}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((item, idx) => {
-                        const pct = item.qty > 0 ? Math.min(100, ((item.received_qty || 0) / item.qty) * 100) : 0
+                        const rec    = item.received_qty || 0
+                        const pend   = Math.max(0, (item.qty || 0) - rec)
+                        const status = (item.qty || 0) > 0 && rec >= (item.qty || 0) ? 'done' : rec > 0 ? 'partial' : 'pending'
                         return (
                           <tr key={item.id || idx}>
                             <td style={{ paddingLeft:20, color:'var(--gray-400)', fontSize:11 }}>{item.sr_no || idx + 1}</td>
@@ -1755,21 +1778,21 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                                   </span>
                                 )
                               })()}
+                              {item.description && <div style={{ fontSize:11, color:'var(--gray-400)', fontFamily:'var(--font)', fontWeight:400, marginTop:2 }}>{item.description}</div>}
                             </td>
-                            <td>{item.qty}</td>
+                            <td style={{ fontSize:12 }}>{item.delivery_date ? fmt(item.delivery_date) : '—'}</td>
+                            <td style={{ textAlign:'center' }}>{item.qty}</td>
+                            <td style={{ textAlign:'center', color: rec > 0 ? '#15803d' : 'var(--gray-400)', fontWeight:600 }}>{rec || '—'}</td>
+                            <td style={{ textAlign:'center', color: pend > 0 ? '#b45309' : 'var(--gray-400)', fontWeight:600 }}>{pend || '—'}</td>
                             <td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
                             <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td>
                             <td>{fmtINR(item.unit_price_after_disc || item.unit_price)}</td>
-                            <td style={{ textAlign:'right' }}>
-                              <div style={{ display:'flex', alignItems:'center', gap:6, justifyContent:'flex-end' }}>
-                                <span style={{ fontWeight:600, color: pct >= 100 ? '#15803d' : pct > 0 ? '#b45309' : 'var(--gray-500)' }}>{item.received_qty || 0}</span>
-                                <div style={{ width:40, height:4, borderRadius:2, background:'var(--gray-100)', overflow:'hidden' }}>
-                                  <div style={{ width: pct + '%', height:'100%', borderRadius:2, background: pct >= 100 ? '#16a34a' : '#f59e0b' }} />
-                                </div>
-                              </div>
+                            <td className="right">{fmtINR(item.total_price)}</td>
+                            <td className="right" style={{ paddingRight:20 }}>
+                              {status === 'done'    && <span className="od-sf-pill done">✓ Received</span>}
+                              {status === 'partial' && <span className="od-sf-pill partial">Partial</span>}
+                              {status === 'pending' && <span className="od-sf-pill pend">Pending</span>}
                             </td>
-                            <td>{item.delivery_date ? fmt(item.delivery_date) : '—'}</td>
-                            <td className="right" style={{ paddingRight:20 }}>{fmtINR(item.total_price)}</td>
                           </tr>
                         )
                       })}
@@ -1784,6 +1807,10 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               )}
             </div>
 
+              </div>{/* end Line Items panel */}
+
+              {grns.length > 0 && (
+              <div className="od-tabpanel" hidden={activeTab!=='delivery'}>
             {/* Delivery History */}
             {grns.length > 0 && (
               <div className="od-card">
@@ -1843,8 +1870,32 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 </div>
               </div>
             )}
+              </div>
+              )}{/* end Delivery History panel */}
 
-          </div>
+              {deliveryDates.length > 0 && (
+              <div className="od-tabpanel" hidden={activeTab!=='dates'}>
+                <div className="od-card">
+                  <div className="od-card-header"><div className="od-card-title">Delivery Date History</div></div>
+                  <div style={{ padding:'12px 16px', display:'flex', flexDirection:'column', gap:8 }}>
+                    {deliveryDates.map((d, i) => (
+                      <div key={d.id} style={{ padding:'8px 10px', borderRadius:8, background: i === 0 ? '#eff6ff' : 'var(--gray-50)', border:'1px solid ' + (i === 0 ? '#bfdbfe' : 'var(--gray-100)') }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <div style={{ fontSize:13, fontWeight:600, color: i === 0 ? '#1d4ed8' : 'var(--gray-700)' }}>{fmt(d.expected_date)}</div>
+                          {d.item_code && <span style={{ fontSize:10, fontFamily:'var(--mono)', color:'var(--gray-500)', background:'var(--gray-100)', padding:'1px 6px', borderRadius:4 }}>{d.item_code}</span>}
+                        </div>
+                        {d.previous_date && <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:2 }}>was: {fmt(d.previous_date)}</div>}
+                        {d.reason && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>{d.reason}</div>}
+                        <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:2 }}>{d.changed_by} · {fmt(d.created_at)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              )}{/* end Delivery Dates panel */}
+
+            </div>{/* end od-tab-content */}
+          </div>{/* end od-main */}
 
           {/* ── RIGHT SIDEBAR ── */}
           <div className="od-sidebar">
@@ -1986,26 +2037,6 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               </div>
             </div>
 
-            {/* Delivery Date History */}
-            {deliveryDates.length > 0 && (
-              <div className="od-side-card">
-                <div className="od-side-card-title">Delivery Date History</div>
-                <div style={{ padding:'0 16px 14px', display:'flex', flexDirection:'column', gap:8 }}>
-                  {deliveryDates.map((d, i) => (
-                    <div key={d.id} style={{ padding:'8px 10px', borderRadius:8, background: i === 0 ? '#eff6ff' : 'var(--gray-50)', border:'1px solid ' + (i === 0 ? '#bfdbfe' : 'var(--gray-100)') }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <div style={{ fontSize:13, fontWeight:600, color: i === 0 ? '#1d4ed8' : 'var(--gray-700)' }}>{fmt(d.expected_date)}</div>
-                        {d.item_code && <span style={{ fontSize:10, fontFamily:'var(--mono)', color:'var(--gray-500)', background:'var(--gray-100)', padding:'1px 6px', borderRadius:4 }}>{d.item_code}</span>}
-                      </div>
-                      {d.previous_date && <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:2 }}>was: {fmt(d.previous_date)}</div>}
-                      {d.reason && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>{d.reason}</div>}
-                      <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:2 }}>{d.changed_by} · {fmt(d.created_at)}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
           </div>
         </div>
       </div>
@@ -2087,7 +2118,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 <tbody>
                   {deliveryItemDates.map((item, idx) => (
                     <tr key={item.id} style={{ borderBottom: '1px solid #EEF1F5' }}>
-                      <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12, fontWeight: 600, color: '#1E54B7' }}>{item.item_code}</td>
+                      <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12, fontWeight: 600, color: '#1a73e8' }}>{item.item_code}</td>
                       <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace' }}>{item.qty}</td>
                       <td style={{ padding: '10px', textAlign: 'center', color: '#5B6878', fontSize: 11 }}>{item.original_date ? fmtShort(item.original_date) : '—'}</td>
                       <td style={{ padding: '10px', textAlign: 'center' }}>
@@ -2188,8 +2219,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 const key = c.email.toLowerCase()
                 const checked = !!recipientSel[key]
                 return (
-                  <label key={key} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:8, border:'1px solid', borderColor: checked ? '#1a4dab' : '#e2e8f0', background: checked ? '#eff6ff' : 'white', cursor:'pointer', marginBottom:6 }}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleRecipient(c.email)} style={{ accentColor:'#1a4dab', width:15, height:15 }} />
+                  <label key={key} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:8, border:'1px solid', borderColor: checked ? '#1a73e8' : '#e2e8f0', background: checked ? '#eff6ff' : 'white', cursor:'pointer', marginBottom:6 }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleRecipient(c.email)} style={{ accentColor:'#1a73e8', width:15, height:15 }} />
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:13, fontWeight:600, color:'#0f172a' }}>{c.name} <span style={{ fontSize:10, fontWeight:600, padding:'1px 6px', borderRadius:10, background:'#f1f5f9', color:'#64748b', marginLeft:4 }}>{c.role}</span></div>
                       <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{c.email}</div>
@@ -2270,13 +2301,13 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 {!excludePoPdf && (
                   <button onClick={previewPoPdf} disabled={previewingPdf || sendingEmail}
                     title="Open the PDF in a new tab to verify before sending — uses the same renderer the email does"
-                    style={{ padding:'10px 18px', border:'1px solid #1a4dab', borderRadius:8, background:'white', color:'#1a4dab', fontSize:13, fontWeight:700, cursor: previewingPdf || sendingEmail ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: previewingPdf || sendingEmail ? 0.5 : 1, display:'inline-flex', alignItems:'center', gap:6 }}>
+                    style={{ padding:'10px 18px', border:'1px solid #1a73e8', borderRadius:8, background:'white', color:'#1a73e8', fontSize:13, fontWeight:700, cursor: previewingPdf || sendingEmail ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: previewingPdf || sendingEmail ? 0.5 : 1, display:'inline-flex', alignItems:'center', gap:6 }}>
                     <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     {previewingPdf ? 'Generating…' : 'Preview PDF'}
                   </button>
                 )}
                 <button onClick={sendEmailToVendor} disabled={sendingEmail || previewingPdf || selectedCount === 0}
-                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a4dab', color:'white', fontSize:13, fontWeight:700, cursor: sendingEmail || previewingPdf || selectedCount === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: sendingEmail || previewingPdf || selectedCount === 0 ? 0.5 : 1 }}>
+                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a73e8', color:'white', fontSize:13, fontWeight:700, cursor: sendingEmail || previewingPdf || selectedCount === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: sendingEmail || previewingPdf || selectedCount === 0 ? 0.5 : 1 }}>
                   {sendingEmail ? 'Sending…' : 'Send Email'}
                 </button>
               </div>

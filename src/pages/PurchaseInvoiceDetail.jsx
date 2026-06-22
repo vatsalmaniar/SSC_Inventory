@@ -700,7 +700,7 @@ export default function PurchaseInvoiceDetail() {
                         </div>
                         <div style={{display:'flex',gap:16,flexWrap:'wrap',marginTop:12}}>
                           {inv.vendor_invoice_url && (
-                            <a href={inv.vendor_invoice_url} target="_blank" rel="noopener noreferrer" style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:13,color:'#1a4dab',fontWeight:600}}>
+                            <a href={inv.vendor_invoice_url} target="_blank" rel="noopener noreferrer" style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:13,color:'#1a73e8',fontWeight:600}}>
                               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                               Vendor Invoice PDF
                             </a>

@@ -9,7 +9,7 @@ import '../styles/orders-redesign.css'
 const PAGE_SIZE = 50
 
 const STATUS_LABELS = { three_way_check:'3-Way Check', invoice_pending:'Invoice Pending', inward_complete:'Inward Complete' }
-const STATUS_COLORS = { three_way_check:'#F59E0B', invoice_pending:'#1E54B7', inward_complete:'#22C55E' }
+const STATUS_COLORS = { three_way_check:'#F59E0B', invoice_pending:'#1a73e8', inward_complete:'#22C55E' }
 
 function fmtINR(val) {
   if (!val) return '₹0'

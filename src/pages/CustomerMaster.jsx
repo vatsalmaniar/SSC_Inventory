@@ -14,10 +14,10 @@ const NEW_CUSTOMER_FLOOR = '2026-04-06'
 const CREDIT_COLORS = {
   'Against PI':'#94A3B8', 'Against Delivery':'#C2410C',
   '7 Days':'#D97706', '15 Days':'#F59E0B', '30 Days':'#22C55E',
-  '45 Days':'#0F766E', '60 Days':'#1E54B7', '75 Days':'#1E40AF', '90 Days':'#5B21B6',
+  '45 Days':'#0F766E', '60 Days':'#1a73e8', '75 Days':'#1E40AF', '90 Days':'#5B21B6',
 }
 
-const REP_PALETTE = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const REP_PALETTE = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return REP_PALETTE[Math.abs(h)%REP_PALETTE.length] }
 function initials(name) { return (name||'').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?' }
 function isNewCustomer(created_at) { if (!created_at) return false; return created_at >= NEW_CUSTOMER_FLOOR }

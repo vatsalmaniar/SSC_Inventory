@@ -1,11 +1,11 @@
 /* SSC CRM redesign — cloud-design adapted, scoped under .crm-app */
 
 .crm-app {
-  --ssc-deep: #0A2540;
+  --ssc-deep: #1a73e8;
   --ssc-mid: #163E68;
   --ssc-cyan: #3DD9D6;
-  --ssc-blue: #1E54B7;
-  --c-bg: #F6F7F9;
+  --ssc-blue: #1a73e8;
+  --c-bg: #f8f9fa;
   --c-bg-2: #FBFBFD;
   --c-surface: #FFFFFF;
   --c-line: #E8EBF0;
@@ -24,7 +24,7 @@
   --stage-CONTACTED:        #0ea5e9;
   --stage-QUALIFIED:        #8b5cf6;
   --stage-BOM_RECEIVED:     #a855f7;
-  --stage-QUOTATION_SENT:   #1a4dab;
+  --stage-QUOTATION_SENT:   #1a73e8;
   --stage-FOLLOW_UP:        #f59e0b;
   --stage-FINAL_NEGOTIATION:#d97706;
   --stage-WON:              #22c55e;
@@ -55,7 +55,7 @@
 /* Buttons */
 .crm-app .btn-primary, .crm-app .btn-ghost { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
 .crm-app .btn-primary { background: var(--ssc-deep); color: #fff; border-color: var(--ssc-deep); font-weight: 500; }
-.crm-app .btn-primary:hover { background: #143055; }
+.crm-app .btn-primary:hover { background: #174ea6; }
 .crm-app .btn-ghost { background: var(--c-surface); color: var(--c-ink); border-color: var(--c-line); }
 .crm-app .btn-ghost:hover { background: var(--c-bg-2); }
 
@@ -82,7 +82,7 @@
 .crm-app .kpi-tile:hover { border-color: var(--c-muted-2); }
 .crm-app .kpi-tile.accent-bad { border-left: 3px solid #DC2626; }
 .crm-app .kpi-hero { color: #fff; border: 0; }
-.crm-app .kpi-hero.tone-deep   { background: linear-gradient(135deg, #0A2540 0%, #163E68 55%, #1E54B7 100%); }
+.crm-app .kpi-hero.tone-deep   { background: linear-gradient(135deg, #1a73e8 0%, #163E68 55%, #1a73e8 100%); }
 .crm-app .kpi-hero.tone-forest { background: linear-gradient(135deg, #064E3B 0%, #065F46 55%, #10B981 100%); }
 .crm-app .kpi-hero.tone-teal   { background: linear-gradient(135deg, #134E4A 0%, #0F766E 55%, #14B8A6 100%); }
 .crm-app .kpi-hero:hover { border: 0; }

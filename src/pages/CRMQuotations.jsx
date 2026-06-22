@@ -28,7 +28,7 @@ function fmtINR(v) {
   return '₹' + Math.round(v||0).toLocaleString('en-IN')
 }
 
-const _OC = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const _OC = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<(n||'').length;i++) h=(n||'').charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
 function initials(n) { return (n||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?' }
 function quoteCustomerName(q) {
@@ -555,7 +555,7 @@ export default function CRMQuotations() {
                   Download
                 </button>
                 <button onClick={() => openReviseQuote(viewQuote)} title="Revise — creates a new revision"
-                  style={{ background:'#eff6ff', border:'1px solid #c2d9f5', borderRadius:6, padding:'5px 10px', fontSize:12, fontWeight:600, color:'#1a4dab', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+                  style={{ background:'#eff6ff', border:'1px solid #c2d9f5', borderRadius:6, padding:'5px 10px', fontSize:12, fontWeight:600, color:'#1a73e8', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   Revise
                 </button>
@@ -575,11 +575,11 @@ export default function CRMQuotations() {
                 <div className="linked-opp-tile" onClick={() => navigate('/crm/opportunities/' + viewQuote.opportunity_id)}
                   style={{ padding:'10px 12px', borderRadius:8, border:'1px solid #c2d9f5', background:'#eff6ff', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
                   <div>
-                    <div className="linked-opp-label" style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px', color:'#1a4dab', marginBottom:3 }}>Linked Opportunity</div>
+                    <div className="linked-opp-label" style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px', color:'#1a73e8', marginBottom:3 }}>Linked Opportunity</div>
                     <div style={{ fontSize:13, fontWeight:600, color:'var(--c-text)' }}>{viewQuote.crm_opportunities.opportunity_name}</div>
                     {viewQuote.crm_opportunities.stage && <div style={{ fontSize:11, color:'var(--c-muted)', marginTop:1 }}>Stage: {viewQuote.crm_opportunities.stage}</div>}
                   </div>
-                  <svg className="linked-opp-arrow" fill="none" stroke="#1a4dab" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  <svg className="linked-opp-arrow" fill="none" stroke="#1a73e8" strokeWidth="2" viewBox="0 0 24 24" style={{ width:18, height:18 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </div>
               )}
 
@@ -648,16 +648,16 @@ export default function CRMQuotations() {
                     {viewQuote._all_revisions.map((rev, idx) => (
                       <div key={rev.id} className={rev.revision === viewQuote.revision ? 'qu-rev-row qu-rev-current' : 'qu-rev-row'} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom: idx < viewQuote._all_revisions.length - 1 ? '1px solid var(--gray-100)' : 'none', background: rev.revision === viewQuote.revision ? '#eff6ff' : 'transparent' }}>
                         <div>
-                          <div className="qu-rev-ref" style={{ fontFamily:'var(--mono)', fontWeight:700, fontSize:13, color:'#1a4dab' }}>
+                          <div className="qu-rev-ref" style={{ fontFamily:'var(--mono)', fontWeight:700, fontSize:13, color:'#1a73e8' }}>
                             {rev.full_ref}
-                            {rev.revision === viewQuote.revision && <span className="qu-rev-badge" style={{ fontSize:10, fontWeight:600, marginLeft:8, padding:'2px 6px', background:'#dbeafe', color:'#1a4dab', borderRadius:4 }}>CURRENT</span>}
+                            {rev.revision === viewQuote.revision && <span className="qu-rev-badge" style={{ fontSize:10, fontWeight:600, marginLeft:8, padding:'2px 6px', background:'#dbeafe', color:'#1a73e8', borderRadius:4 }}>CURRENT</span>}
                           </div>
                           <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>
                             {fmtINR(rev.total_value)} · {(rev.items||[]).length} items · {rev.profiles?.name || '—'} · {fmtTs(rev.created_at)}
                           </div>
                         </div>
                         <button onClick={() => printQuote({ ...rev, crm_opportunities: viewQuote.crm_opportunities, customer_id: viewQuote.customer_id, customer_name: viewQuote.customer_name, company_freetext: viewQuote.company_freetext })}
-                          style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', border:'1px solid #1a4dab', borderRadius:7, background:'#eff6ff', color:'#1a4dab', fontSize:11, fontWeight:600, cursor:'pointer', flexShrink:0, marginLeft:12 }}>
+                          style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', border:'1px solid #1a73e8', borderRadius:7, background:'#eff6ff', color:'#1a73e8', fontSize:11, fontWeight:600, cursor:'pointer', flexShrink:0, marginLeft:12 }}>
                           <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                           Download
                         </button>

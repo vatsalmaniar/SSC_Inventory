@@ -49,7 +49,7 @@
   border-radius: 20px;
   white-space: nowrap;
 }
-.c360-badge-blue   { background: #e8f2fc; color: #1a4dab; }
+.c360-badge-blue   { background: #e8f2fc; color: #1a73e8; }
 .c360-badge-green  { background: #d4f5e2; color: #14653a; }
 .c360-badge-amber  { background: #fef3c7; color: #7a4b00; }
 .c360-badge-red    { background: #fee2e2; color: #9b1c1c; }
@@ -77,48 +77,59 @@
 }
 .c360-stat-label { font-size: 10px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.5px; }
 .c360-stat-value { font-size: 16px; font-weight: 800; color: var(--gray-900); }
-.c360-stat-value.accent { color: #1a4dab; }
+.c360-stat-value.accent { color: #1a73e8; }
 .c360-stat-value.green  { color: #14653a; }
 
 /* ── Tab navigation ── */
+/* Folder-style tabs (matches .od-tabs on the order page) */
 .c360-tabs {
   display: flex;
-  gap: 0;
-  background: white;
-  border-radius: 12px;
-  border: 1px solid var(--gray-200);
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--gray-200);
+  border-radius: 0;
+  box-shadow: none;
   margin: 12px 0;
-  padding: 0 8px;
+  padding: 0 4px;
   overflow-x: auto;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
 }
 .c360-tab {
-  padding: 13px 16px;
+  position: relative;
+  top: 1px;
+  padding: 11px 16px;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--gray-500);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
+  font-weight: 500;
+  color: #5B6878;
+  background: #f1f4f9;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 9px 9px 0 0;
   cursor: pointer;
   font-family: var(--font);
   white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
-  margin-bottom: -1px;
+  transition: background 0.12s, color 0.12s;
 }
-.c360-tab:hover { color: var(--gray-800); }
-.c360-tab.active { color: #1a4dab; border-bottom-color: #1a4dab; }
+.c360-tab:hover { background: #e7ecf4; color: #0B1B30; }
+.c360-tab.active {
+  background: var(--blue-800);
+  color: white;
+  font-weight: 600;
+  border-color: var(--blue-800);
+  box-shadow: 0 -1px 4px rgba(26,115,232,0.25);
+}
+.c360-tab.active:hover { background: var(--blue-900); }
 .c360-tab-count {
   display: inline-block;
   margin-left: 5px;
   font-size: 11px;
-  font-weight: 600;
-  background: var(--gray-100);
+  font-weight: 700;
+  background: rgba(11,27,48,0.06);
   color: var(--gray-500);
   border-radius: 10px;
   padding: 1px 7px;
 }
-.c360-tab.active .c360-tab-count { background: #e8f2fc; color: #1a4dab; }
+.c360-tab.active .c360-tab-count { background: rgba(255,255,255,0.25); color: white; }
 
 /* ── Tab content ── */
 .c360-content { animation: fadeIn 0.15s ease; }
@@ -224,7 +235,7 @@
 }
 .c360-contact-name  { font-size: 13px; font-weight: 700; color: var(--gray-900); }
 .c360-contact-title { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
-.c360-contact-phone { font-size: 12px; color: #1a4dab; margin-top: 4px; font-weight: 500; text-decoration: none; display: block; }
+.c360-contact-phone { font-size: 12px; color: #1a73e8; margin-top: 4px; font-weight: 500; text-decoration: none; display: block; }
 .c360-contact-email { font-size: 11px; color: var(--gray-500); margin-top: 1px; display: block; }
 
 /* ── VI card ── */
@@ -331,9 +342,9 @@
   transition: background 0.15s;
 }
 .c360-btn:hover { background: var(--gray-50); }
-.c360-btn-primary { background: #1a4dab; color: white; border-color: #1a4dab; }
-.c360-btn-primary:hover { background: #0e2d6a; }
-.c360-btn-approve { background: #0e2d6a; color: white; border-color: #0e2d6a; }
+.c360-btn-primary { background: #1a73e8; color: white; border-color: #1a73e8; }
+.c360-btn-primary:hover { background: #1a73e8; }
+.c360-btn-approve { background: #1a73e8; color: white; border-color: #1a73e8; }
 .c360-btn-danger  { color: #dc2626; border-color: #fecaca; }
 .c360-btn-danger:hover { background: #fef2f2; }
 .c360-btn-amber { background: #fffbeb; color: #92400e; border-color: #fde68a; }
@@ -354,6 +365,6 @@
   padding: 2px 8px;
   border-radius: 4px;
   background: #e8f2fc;
-  color: #1a4dab;
+  color: #1a73e8;
   white-space: nowrap;
 }

@@ -496,7 +496,7 @@ export default function NewCustomer() {
               <div className="od-card-header"><div className="od-card-title">Account Owner</div></div>
               <div className="od-card-body">
                 <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                  <div style={{ width:36, height:36, borderRadius:'50%', background:'#1a4dab', color:'white', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  <div style={{ width:36, height:36, borderRadius:'50%', background:'#1a73e8', color:'white', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                     {ownerName.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}
                   </div>
                   <div>

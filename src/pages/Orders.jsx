@@ -38,7 +38,7 @@ function initials(name) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-const REP_PALETTE = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const REP_PALETTE = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function repColor(id) {
   if (!id) return '#94A3B8'
   let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffffffff
@@ -159,7 +159,7 @@ export default function Orders() {
       label: { pending:'Pending Approval', approved:'Approved · Ops', fc:'At Fulfilment Centre', billing:'Billing / Accounts', delivered:'Delivered', cancelled:'Cancelled' }[g],
       count: list.length,
       value: list.reduce((s,o) => s + (o.order_items || []).reduce((a,i) => a + (i.total_price || 0), 0), 0),
-      color: { pending:'#F59E0B', approved:'#1E54B7', fc:'#0F766E', billing:'#D97706', delivered:'#10B981', cancelled:'#EF4444' }[g],
+      color: { pending:'#F59E0B', approved:'#1a73e8', fc:'#0F766E', billing:'#D97706', delivered:'#10B981', cancelled:'#EF4444' }[g],
     }
   }).filter(s => s.count > 0)
   const totalActiveCount = statusGroups.filter(s => s.id !== 'delivered' && s.id !== 'cancelled').reduce((a,b) => a+b.count, 0)
@@ -478,7 +478,7 @@ function DispatchGauge({ ordered, delivered }) {
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <defs>
           <linearGradient id="oGaugeGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#0A2540"/>
+            <stop offset="0%" stopColor="#1a73e8"/>
             <stop offset="100%" stopColor="#10B981"/>
           </linearGradient>
         </defs>
@@ -489,7 +489,7 @@ function DispatchGauge({ ordered, delivered }) {
       </svg>
       <div className="gauge-stats">
         <div className="gs-row">
-          <span className="gs-dot" style={{background: '#1E54B7'}}/>
+          <span className="gs-dot" style={{background: '#1a73e8'}}/>
           <span className="gs-label">Placed</span>
           <span className="gs-val">{ordered}</span>
         </div>
@@ -630,8 +630,8 @@ function OrderVsDispatchChart({ data }) {
       >
         <defs>
           <linearGradient id="oOrderedFill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#1E54B7" stopOpacity="0.22"/>
-            <stop offset="100%" stopColor="#1E54B7" stopOpacity="0"/>
+            <stop offset="0%" stopColor="#1a73e8" stopOpacity="0.22"/>
+            <stop offset="100%" stopColor="#1a73e8" stopOpacity="0"/>
           </linearGradient>
         </defs>
 
@@ -647,20 +647,20 @@ function OrderVsDispatchChart({ data }) {
         {showLines.ordered && (
           <>
             <path d={orderedArea} fill="url(#oOrderedFill)"/>
-            <path d={orderedPath} stroke="#1E54B7" strokeWidth="2.5" fill="none" strokeLinejoin="round"/>
+            <path d={orderedPath} stroke="#1a73e8" strokeWidth="2.5" fill="none" strokeLinejoin="round"/>
           </>
         )}
 
         {hoverIdx !== null && hover && !hover.isFuture && (
           <g>
             <line x1={x(hoverIdx)} x2={x(hoverIdx)} y1={P.t} y2={P.t + innerH} stroke="#94A3B8" strokeDasharray="2 3" strokeWidth="1"/>
-            {showLines.ordered && <circle cx={x(hoverIdx)} cy={y(hover.ordered)} r="5" fill="#fff" stroke="#1E54B7" strokeWidth="2.5"/>}
+            {showLines.ordered && <circle cx={x(hoverIdx)} cy={y(hover.ordered)} r="5" fill="#fff" stroke="#1a73e8" strokeWidth="2.5"/>}
             {showLines.delivered && <circle cx={x(hoverIdx)} cy={y(hover.delivered)} r="4" fill="#fff" stroke="#10B981" strokeWidth="2"/>}
           </g>
         )}
 
         {data.map((d, i) => (
-          <text key={i} x={x(i)} y={H - 20} fontSize="11" fill={d.isFuture ? '#CBD5E1' : d.isCurrent ? '#0A2540' : '#94A3B8'}
+          <text key={i} x={x(i)} y={H - 20} fontSize="11" fill={d.isFuture ? '#CBD5E1' : d.isCurrent ? '#1a73e8' : '#94A3B8'}
             fontWeight={d.isCurrent ? 700 : 400}
             textAnchor="middle"
             fontFamily="Geist Mono, monospace">{d.label}</text>
@@ -672,7 +672,7 @@ function OrderVsDispatchChart({ data }) {
           const gapPct = hover.ordered > 0 ? Math.round(((hover.ordered - hover.delivered) / hover.ordered) * 100) : 0
           return (
             <g transform={`translate(${tipX}, ${P.t + 8})`}>
-              <rect width="188" height="138" rx="10" fill="#0A2540"/>
+              <rect width="188" height="138" rx="10" fill="#1a73e8"/>
               <text x="14" y="22" fontSize="10" fill="#3DD9D6" fontFamily="Geist Mono, monospace" letterSpacing="0.06em">{hover.label} {hover.year}</text>
               <line x1="14" x2="174" y1="32" y2="32" stroke="rgba(255,255,255,0.1)"/>
               <text x="14" y="50" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">PLACED</text>

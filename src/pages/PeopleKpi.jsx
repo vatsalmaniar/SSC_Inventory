@@ -369,7 +369,7 @@ export default function PeopleKpi() {
             {['admin','management'].includes(user.role) && (
               <button onClick={syncSnapshots} disabled={syncing}
                 title="Re-fetch sales / customers / visits from live data and write to kpi_snapshots"
-                style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'8px 14px', border:'1px solid #1a4dab', borderRadius:8, background: syncing ? '#dbeafe' : '#1a4dab', color: syncing ? '#1e40af' : 'white', fontSize:12, fontWeight:700, cursor: syncing ? 'wait' : 'pointer', fontFamily:'var(--font)' }}>
+                style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'8px 14px', border:'1px solid #1a73e8', borderRadius:8, background: syncing ? '#dbeafe' : '#1a73e8', color: syncing ? '#1e40af' : 'white', fontSize:12, fontWeight:700, cursor: syncing ? 'wait' : 'pointer', fontFamily:'var(--font)' }}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14 }}><path d="M21 12a9 9 0 11-3.5-7.1M21 4v5h-5"/></svg>
                 {syncing ? `Syncing ${syncProgress.done}/${syncProgress.total}…` : 'Sync'}
               </button>
@@ -793,7 +793,7 @@ function TrendChart({ series, months, monthIdx, max = 80 }) {
         </g>
       ))}
       {months.map((_, i) => (
-        <text key={i} x={x(i)} y={H - 10} fontSize="10" fill={i === monthIdx ? '#0A2540' : '#94A3B8'} fontWeight={i === monthIdx ? 600 : 400} textAnchor="middle" fontFamily="Geist Mono, monospace">{MONTHS_LABELS[i]}</text>
+        <text key={i} x={x(i)} y={H - 10} fontSize="10" fill={i === monthIdx ? '#1a73e8' : '#94A3B8'} fontWeight={i === monthIdx ? 600 : 400} textAnchor="middle" fontFamily="Geist Mono, monospace">{MONTHS_LABELS[i]}</text>
       ))}
       <line x1={x(monthIdx)} x2={x(monthIdx)} y1={P.t} y2={H - P.b} stroke="#3DD9D6" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.7"/>
       {series.map((s, sIdx) => {
@@ -840,7 +840,7 @@ function RadarChart({ scores, defs = [], kras = {}, size = 240 }) {
           </g>
         )
       })}
-      <path d={valuePath} fill="rgba(10,37,64,0.15)" stroke="#0A2540" strokeWidth="2" strokeLinejoin="round"/>
+      <path d={valuePath} fill="rgba(10,37,64,0.15)" stroke="#1a73e8" strokeWidth="2" strokeLinejoin="round"/>
       {axes.map((a, i) => {
         const [x,y] = point(i, a.pct)
         return <circle key={a.code} cx={x} cy={y} r="4" fill="#fff" stroke={a.color} strokeWidth="2.5"/>
@@ -929,8 +929,8 @@ function KpiGrid({ emp, a, m, monthIdx, months, defs = [], kras = {}, isAdmin, s
               {isEditing ? (
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input type="number" step="any" autoFocus value={draft} onChange={e => setDraft(e.target.value)} onClick={e => e.stopPropagation()}
-                    style={{ flex: 1, padding: '6px 8px', fontSize: 14, border: '1.5px solid #0A2540', borderRadius: 5, fontFamily: 'Geist Mono, monospace', outline: 'none' }} />
-                  <button onClick={(e) => { e.stopPropagation(); commit() }} disabled={saving} style={{ padding: '6px 10px', background: '#0A2540', color: 'white', border: 0, borderRadius: 5, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✓</button>
+                    style={{ flex: 1, padding: '6px 8px', fontSize: 14, border: '1.5px solid #1a73e8', borderRadius: 5, fontFamily: 'Geist Mono, monospace', outline: 'none' }} />
+                  <button onClick={(e) => { e.stopPropagation(); commit() }} disabled={saving} style={{ padding: '6px 10px', background: '#1a73e8', color: 'white', border: 0, borderRadius: 5, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✓</button>
                   <button onClick={(e) => { e.stopPropagation(); cancel() }} style={{ padding: '6px 10px', background: 'white', border: '1.5px solid #E8EBF0', borderRadius: 5, fontSize: 12, cursor: 'pointer' }}>×</button>
                 </div>
               ) : (

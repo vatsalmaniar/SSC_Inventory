@@ -168,9 +168,9 @@ html[data-theme="dark"] .c360-page .c360-badge-gray  { background: #3C3C3C !impo
 /* c360 action buttons (Back / Edit / Download / Cancel) — white in base CSS */
 html[data-theme="dark"] .c360-page .c360-btn { background: #2D2D2D !important; color: #D4D4D4 !important; border-color: #3C3C3C !important; }
 html[data-theme="dark"] .c360-page .c360-btn:hover { background: #3C3C3C !important; }
-html[data-theme="dark"] .c360-page .c360-btn-primary { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
+html[data-theme="dark"] .c360-page .c360-btn-primary { background: #818CF8 !important; color: #1a73e8 !important; border-color: #818CF8 !important; }
 html[data-theme="dark"] .c360-page .c360-btn-primary:hover { background: #6366F1 !important; }
-html[data-theme="dark"] .c360-page .c360-btn-approve { background: #10B981 !important; color: #0A2540 !important; border-color: #10B981 !important; }
+html[data-theme="dark"] .c360-page .c360-btn-approve { background: #10B981 !important; color: #1a73e8 !important; border-color: #10B981 !important; }
 html[data-theme="dark"] .c360-page .c360-btn-danger { background: #2D2D2D !important; color: #FCA5A5 !important; border-color: rgba(239,68,68,0.4) !important; }
 html[data-theme="dark"] .c360-page .c360-btn-danger:hover { background: rgba(239,68,68,0.12) !important; }
 html[data-theme="dark"] .c360-page .c360-btn-amber { background: rgba(245,158,11,0.12) !important; color: #FBBF24 !important; border-color: rgba(245,158,11,0.4) !important; }
@@ -178,13 +178,13 @@ html[data-theme="dark"] .c360-page .c360-btn-amber { background: rgba(245,158,11
 /* ── Order Detail (.od-page) — buttons, pipe, batch, items table ── */
 html[data-theme="dark"] .od-page .od-btn { background: #2D2D2D !important; color: #D4D4D4 !important; border-color: #3C3C3C !important; }
 html[data-theme="dark"] .od-page .od-btn:hover { background: #3C3C3C !important; }
-html[data-theme="dark"] .od-page .od-btn-primary { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
+html[data-theme="dark"] .od-page .od-btn-primary { background: #818CF8 !important; color: #1a73e8 !important; border-color: #818CF8 !important; }
 html[data-theme="dark"] .od-page .od-btn-danger { background: #2D2D2D !important; color: #FCA5A5 !important; border-color: rgba(239,68,68,0.4) !important; }
 html[data-theme="dark"] .od-page .od-btn-danger:hover { background: rgba(239,68,68,0.12) !important; }
 
 /* Pipeline stages */
 html[data-theme="dark"] .od-page .od-pipe-stage { background: #252526 !important; color: #858585 !important; border-color: #3C3C3C !important; }
-html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #818CF8 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #818CF8 !important; color: #1a73e8 !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.active::after,
 html[data-theme="dark"] .od-page .od-pipe-stage.active::before { border-left-color: #818CF8 !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.done { background: #2D2D2D !important; color: #D4D4D4 !important; }
@@ -192,7 +192,7 @@ html[data-theme="dark"] .od-page .od-pipe-stage.done { background: #2D2D2D !impo
 /* Batch toggle buttons */
 html[data-theme="dark"] .od-page .od-batch-btn { background: #2D2D2D !important; color: #858585 !important; border-color: #3C3C3C !important; }
 html[data-theme="dark"] .od-page .od-batch-btn:hover { background: #3C3C3C !important; color: #D4D4D4 !important; }
-html[data-theme="dark"] .od-page .od-batch-btn.active { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
+html[data-theme="dark"] .od-page .od-batch-btn.active { background: #818CF8 !important; color: #1a73e8 !important; border-color: #818CF8 !important; }
 
 /* Edit field inputs */
 html[data-theme="dark"] .od-page .od-edit-field input,
@@ -216,7 +216,7 @@ html[data-theme="dark"] .od-page .od-cancelled-banner { background: rgba(239,68,
 /* Waiting for GRN banner — dark theme */
 html[data-theme="dark"] .od-page .od-grn-banner { background: rgba(59,130,246,0.12) !important; color: #93C5FD !important; border-color: rgba(59,130,246,0.4) !important; }
 html[data-theme="dark"] .od-page .od-grn-banner-sub { color: #BFDBFE !important; }
-html[data-theme="dark"] .od-page .od-grn-banner-btn { background: #3B82F6 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-grn-banner-btn { background: #3B82F6 !important; color: #1a73e8 !important; }
 html[data-theme="dark"] .od-page .od-grn-banner-btn:hover { background: #60A5FA !important; }
 
 /* Delivery in Progress banner (green) — dark theme */
@@ -280,7 +280,7 @@ html[data-theme="dark"] .od-dispatch-choice-btn > div:nth-of-type(1) { color: #D
 html[data-theme="dark"] .od-dispatch-choice-btn > div:nth-of-type(2) { color: #858585 !important; }
 
 /* Partial pipeline state colour */
-html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active { background: #FBBF24 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active { background: #FBBF24 !important; color: #1a73e8 !important; }
 html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active::after  { border-left-color: #FBBF24 !important; }
 html[data-theme="dark"] .od-page .od-pipeline-partial .od-pipe-stage.active::before { border-left-color: #F59E0B !important; }
 
@@ -350,10 +350,10 @@ html[data-theme="dark"] .od-page .od-pipe-stage { background: #252526 !important
 html[data-theme="dark"] .od-page .od-pipe-stage.done { background: #2D2D2D !important; color: #818CF8 !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.done::after  { border-left-color: #2D2D2D !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.done::before { border-left-color: #3C3C3C !important; }
-html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #818CF8 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipe-stage.active { background: #818CF8 !important; color: #1a73e8 !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.active::after  { border-left-color: #818CF8 !important; }
 html[data-theme="dark"] .od-page .od-pipe-stage.active::before { border-left-color: #818CF8 !important; }
-html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active { background: #10B981 !important; color: #0A2540 !important; }
+html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active { background: #10B981 !important; color: #1a73e8 !important; }
 html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active::after  { border-left-color: #10B981 !important; }
 html[data-theme="dark"] .od-page .od-pipeline-delivery .od-pipe-stage.active::before { border-left-color: #10B981 !important; }
 html[data-theme="dark"] .od-page .od-pipeline-cancelled .od-pipe-stage.active { background: rgba(239,68,68,0.2) !important; color: #FCA5A5 !important; }
@@ -361,8 +361,8 @@ html[data-theme="dark"] .od-page .od-pipeline-cancelled .od-pipe-stage.active::a
 html[data-theme="dark"] .od-page .od-pipeline-cancelled .od-pipe-stage.active::before { border-left-color: rgba(239,68,68,0.4) !important; }
 
 /* Item code / customer name links — keep them clickable-blue but visible on dark */
-html[data-theme="dark"] [style*="color:#1a4dab"],
-html[data-theme="dark"] [style*="color: #1a4dab"],
+html[data-theme="dark"] [style*="color:#1a73e8"],
+html[data-theme="dark"] [style*="color: #1a73e8"],
 html[data-theme="dark"] [style*="rgb(26, 77, 171)"],
 html[data-theme="dark"] [style*="rgb(26,77,171)"] { color: #818CF8 !important; }
 /* The customer-name link in OrderDetail is rendered via inline style; match
@@ -504,7 +504,7 @@ html[data-theme="dark"] .pf-app .bm-pill { background: #2D2D2D !important; borde
 html[data-theme="dark"] .pf-app .sc-filter-bar button.on,
 html[data-theme="dark"] .pf-app .btn-primary,
 html[data-theme="dark"] .pf-modal .btn-primary,
-html[data-theme="dark"] .pf-drawer .btn-primary { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
+html[data-theme="dark"] .pf-drawer .btn-primary { background: #818CF8 !important; color: #1a73e8 !important; border-color: #818CF8 !important; }
 
 /* KPI dashboard surfaces */
 html[data-theme="dark"] .kpi-app .card,
@@ -944,10 +944,10 @@ html[data-theme="dark"] .orders-app .view-toggle button.on,
 html[data-theme="dark"] .crm-app .view-toggle button.on,
 html[data-theme="dark"] .orders-app .o-timeline button.on,
 html[data-theme="dark"] .orders-app .o-datemode button.on,
-html[data-theme="dark"] .orders-app .ol-page-btn.on { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; font-weight: 600 !important; }
+html[data-theme="dark"] .orders-app .ol-page-btn.on { background: #818CF8 !important; color: #1a73e8 !important; border-color: #818CF8 !important; font-weight: 600 !important; }
 
 html[data-theme="dark"] .orders-app .btn-primary,
-html[data-theme="dark"] .crm-app .btn-primary { background: #818CF8 !important; color: #0A2540 !important; border-color: #818CF8 !important; }
+html[data-theme="dark"] .crm-app .btn-primary { background: #818CF8 !important; color: #1a73e8 !important; border-color: #818CF8 !important; }
 html[data-theme="dark"] .orders-app .btn-primary:hover,
 html[data-theme="dark"] .crm-app .btn-primary:hover { background: #6366F1 !important; }
 
@@ -958,8 +958,8 @@ html[data-theme="dark"] [style*="color:#0f172a"],
 html[data-theme="dark"] [style*="color: #0f172a"],
 html[data-theme="dark"] [style*="color:#181818"],
 html[data-theme="dark"] [style*="color: #181818"],
-html[data-theme="dark"] [style*="color:#0e2d6a"],
-html[data-theme="dark"] [style*="color: #0e2d6a"],
+html[data-theme="dark"] [style*="color:#1a73e8"],
+html[data-theme="dark"] [style*="color: #1a73e8"],
 html[data-theme="dark"] [style*="color:#0d1f4c"],
 html[data-theme="dark"] [style*="color: #0d1f4c"],
 html[data-theme="dark"] [style*="color:#1e2d5a"],
@@ -1002,14 +1002,14 @@ html[data-theme="dark"] [style*="color:var(--gray-300)"],
 html[data-theme="dark"] [style*="color: var(--gray-300)"] { color: #6A6A6A !important; }
 
 /* Blue text in inline (1A4DAB / 1E54B7 / 1d4ed8 / 2563eb / blue-700/800) → cyan */
-html[data-theme="dark"] [style*="color:#1A4DAB"],
-html[data-theme="dark"] [style*="color: #1A4DAB"],
-html[data-theme="dark"] [style*="color:#1a4dab"],
-html[data-theme="dark"] [style*="color: #1a4dab"],
-html[data-theme="dark"] [style*="color:#1E54B7"],
-html[data-theme="dark"] [style*="color: #1E54B7"],
-html[data-theme="dark"] [style*="color:#1e54b7"],
-html[data-theme="dark"] [style*="color: #1e54b7"],
+html[data-theme="dark"] [style*="color:#1a73e8"],
+html[data-theme="dark"] [style*="color: #1a73e8"],
+html[data-theme="dark"] [style*="color:#1a73e8"],
+html[data-theme="dark"] [style*="color: #1a73e8"],
+html[data-theme="dark"] [style*="color:#1a73e8"],
+html[data-theme="dark"] [style*="color: #1a73e8"],
+html[data-theme="dark"] [style*="color:#1a73e8"],
+html[data-theme="dark"] [style*="color: #1a73e8"],
 html[data-theme="dark"] [style*="color:#1d4ed8"],
 html[data-theme="dark"] [style*="color: #1d4ed8"],
 html[data-theme="dark"] [style*="color:#2563eb"],
@@ -1100,7 +1100,7 @@ html[data-theme="dark"] [style*="color: rgb(0"] { color: #D4D4D4 !important; }
 
 /* Re-allow accent colors inline (those starting with bright hex) — these match
    greens (#10B, #15, #16, #22, #06, #07), reds (#EF, #DC, #B9), ambers (#F5, #D9, #B4, #92),
-   purples (#8B, #A8, #7C), and blues (#1E54B7 = #1E5...) — keep these visible */
+   purples (#8B, #A8, #7C), and blues (#1a73e8 = #1E5...) — keep these visible */
 html[data-theme="dark"] [style*="color:#3DD"],
 html[data-theme="dark"] [style*="color: #3DD"],
 html[data-theme="dark"] [style*="color:#10B981"],
@@ -1132,7 +1132,7 @@ html[data-theme="dark"] [style*="color:#3DD9"] { color: revert !important; }
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   padding: 0;
 }
-.theme-toggle:hover { background: #F6F7F9; color: #0B1B30; }
+.theme-toggle:hover { background: #f8f9fa; color: #0B1B30; }
 .theme-toggle svg { width: 17px; height: 17px; }
 
 html[data-theme="dark"] .theme-toggle { border-color: #3C3C3C; color: #858585; }
@@ -1174,17 +1174,17 @@ html[data-theme="dark"] .ly-logo-icon { background: transparent !important; padd
 html[data-theme="dark"] .ly-collapsed-logo { background: transparent !important; }
 
 /* Wider sweep for dark-blue inline text — anything close to navy gets neutralised */
-html[data-theme="dark"] [style*="color:#0A2540"],
-html[data-theme="dark"] [style*="color: #0A2540"],
+html[data-theme="dark"] [style*="color:#1a73e8"],
+html[data-theme="dark"] [style*="color: #1a73e8"],
 html[data-theme="dark"] [style*="color:#0B1B30"],
 html[data-theme="dark"] [style*="color: #0B1B30"],
-html[data-theme="dark"] [style*="color:#0e2d6a"],
-html[data-theme="dark"] [style*="color: #0e2d6a"],
+html[data-theme="dark"] [style*="color:#1a73e8"],
+html[data-theme="dark"] [style*="color: #1a73e8"],
 html[data-theme="dark"] [style*="color:#163E68"],
 html[data-theme="dark"] [style*="color:#1a2d5a"],
 html[data-theme="dark"] [style*="color:#1e2d5a"],
-html[data-theme="dark"] [style*="color:#1a4dab"],
-html[data-theme="dark"] [style*="color:#1E54B7"] { color: #D4D4D4 !important; }
+html[data-theme="dark"] [style*="color:#1a73e8"],
+html[data-theme="dark"] [style*="color:#1a73e8"] { color: #D4D4D4 !important; }
 
 /* Common chart/value classes that often hold dark navy ink */
 html[data-theme="dark"] .donut-center,

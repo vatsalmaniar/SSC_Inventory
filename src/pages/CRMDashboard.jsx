@@ -22,7 +22,7 @@ const STAGE_COLORS = {
   CONTACTED:        '#0ea5e9',
   QUALIFIED:        '#8b5cf6',
   BOM_RECEIVED:     '#a855f7',
-  QUOTATION_SENT:   '#1a4dab',
+  QUOTATION_SENT:   '#1a73e8',
   FOLLOW_UP:        '#f59e0b',
   FINAL_NEGOTIATION:'#d97706',
   WON:              '#22c55e',
@@ -48,7 +48,7 @@ function repColor(id) {
   if (!id) return '#94A3B8'
   let h = 0
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffffffff
-  const palette = ['#1E54B7','#0F766E','#B45309','#0E7490','#15803d','#5B21B6','#0369A1','#B91C1C']
+  const palette = ['#1a73e8','#0F766E','#B45309','#0E7490','#15803d','#5B21B6','#0369A1','#B91C1C']
   return palette[Math.abs(h) % palette.length]
 }
 
@@ -488,8 +488,8 @@ function WinRateGauge({ won, lost }) {
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <defs>
           <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#0A2540"/>
-            <stop offset="100%" stopColor="#1E54B7"/>
+            <stop offset="0%" stopColor="#1a73e8"/>
+            <stop offset="100%" stopColor="#1a73e8"/>
           </linearGradient>
         </defs>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#E5E7EB" strokeWidth="8"/>
@@ -561,7 +561,7 @@ function MonthlyTrend({ data, mode }) {
   const line = (key) => data.map((d, i) => `${i===0?'M':'L'} ${x(i)} ${y(d[key])}`).join(' ')
   const area = (key) => `${line(key)} L ${x(data.length-1)} ${P.t + innerH} L ${x(0)} ${P.t + innerH} Z`
   const series = [
-    { key: 'created', color: '#1E54B7', label: 'Created' },
+    { key: 'created', color: '#1a73e8', label: 'Created' },
     { key: 'won',     color: '#10B981', label: 'Won' },
     { key: 'lost',    color: '#94A3B8', label: 'Lost' },
   ]

@@ -350,6 +350,7 @@ export default function FCOrderDetail() {
   const [postingComment, setPostingComment] = useState(false)
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
+  const [activeTab, setActiveTab] = useState(null)  // null → resolves to action/overview in render
   const [confirm, setConfirm]   = useState(null)
 
   const [showDeliveryForm, setShowDeliveryForm] = useState(false)
@@ -663,6 +664,8 @@ export default function FCOrderDetail() {
   const pipelineIdx  = fcPipelineIdx(batchStatus)
   const withAccounts = !isSample && WITH_ACCOUNTS.includes(batchStatus)
   const isDelivered  = batchStatus === 'dispatched_fc'
+  const hasAction    = !isCancelled && !isDelivered && !withAccounts
+  const tab          = activeTab || 'overview'
   const subtotal     = (order.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
   const grandTotal   = subtotal + (order.freight || 0)
   const activeDC     = activeBatch?.dc_number || order.dc_number  // prefer batch, fall back to legacy
@@ -685,11 +688,11 @@ export default function FCOrderDetail() {
                     {isCancelled ? 'Cancelled' : isDelivered ? 'Delivered' : withAccounts ? 'With Accounts' : stageLabel(batchStatus)}
                   </span>
                 </div>
-                <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a4dab',color:'inherit'}}>{order.customer_name}</span></div>
+                <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a73e8',color:'inherit'}}>{order.customer_name}</span></div>
                 <div className="od-header-num">
                   <button
                     onClick={() => navigate('/orders/' + id)}
-                    style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',color:'#1a4dab',fontWeight:600,textDecoration:'underline'}}
+                    style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',color:'#1a73e8',fontWeight:600,textDecoration:'underline'}}
                   >
                     {order.order_number}
                   </button>
@@ -779,6 +782,18 @@ export default function FCOrderDetail() {
               </div>
             )}
 
+            {/* ── Tabs ── */}
+            <div className="od-tabs">
+              <button className={'od-tab'+(tab==='overview'?' on':'')} onClick={()=>setActiveTab('overview')}>Overview</button>
+              <button className={'od-tab'+(tab==='items'?' on':'')} onClick={()=>setActiveTab('items')}>Order Items<span className="od-tab-count">{(order.order_items||[]).length}</span></button>
+              <button className={'od-tab'+(tab==='dc'?' on':'')} onClick={()=>setActiveTab('dc')}>Delivery Challan{allBatches.length>0 && <span className="od-tab-count">{allBatches.length}</span>}</button>
+            </div>
+
+            <div className="od-tab-content">
+
+              {/* Overview panel */}
+              <div className="od-tabpanel" hidden={tab!=='overview'}>
+
             {/* DC / Invoice reference card */}
             <div className="od-card">
               <div className="od-card-header"><div className="od-card-title">Document References</div></div>
@@ -850,7 +865,7 @@ export default function FCOrderDetail() {
               <div className="od-card-header"><div className="od-card-title">Order Information</div></div>
               <div className="od-card-body">
                 <div className="od-detail-grid">
-                  <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a4dab',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
+                  <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a73e8',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
                   <div className="od-detail-field"><label>Customer ID</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{custCode || '—'}</div></div>
                   <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                   <div className="od-detail-field"><label>PO / Reference No.</label><div className="val">{order.po_number || '—'}</div></div>
@@ -866,6 +881,11 @@ export default function FCOrderDetail() {
                 </div>
               </div>
             </div>
+
+              </div>{/* end Overview panel */}
+
+              {/* Order Items panel */}
+              <div className="od-tabpanel" hidden={tab!=='items'}>
 
             {/* Items */}
             <div className="od-card">
@@ -914,7 +934,11 @@ export default function FCOrderDetail() {
               </div>
             </div>
 
-            {/* Action card */}
+              </div>{/* end Order Items panel */}
+
+              {hasAction && (
+              <div className="od-tabpanel" hidden={tab!=='overview'}>
+            {/* Action card (shown within Overview) */}
             {!withAccounts && !isCancelled && (() => {
               // Always use activeBatch.status when a batch exists — order.status is not reliably updated during batch lifecycle
               const batchStatus = activeBatch != null
@@ -995,7 +1019,7 @@ export default function FCOrderDetail() {
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Goods issued. Generate the Sample Challan, then enter delivery details.</p>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                        <button style={{background:'#1a4dab',padding:'10px 16px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
+                        <button style={{background:'#1a73e8',padding:'10px 16px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
                           onClick={() => printDCChallan(order, activeBatch, activeDC, true, custCode)}>
                           <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:16,height:16}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                           Generate Sample Challan
@@ -1120,12 +1144,11 @@ export default function FCOrderDetail() {
               </div>
             )
           })()}
+              </div>
+              )}{/* end Action panel */}
 
-          </div>{/* end od-main */}
-
-          {/* RIGHT — sidebar */}
-          <div className="od-sidebar">
-
+              {/* Delivery Challan panel */}
+              <div className="od-tabpanel" hidden={tab!=='dc'}>
             {/* Delivery Challan card */}
             <div className="od-side-card" style={{padding:0,overflow:'hidden'}}>
               <div className="od-side-card-title" style={{padding:'14px 16px 0'}}>Delivery Challan</div>
@@ -1173,7 +1196,7 @@ export default function FCOrderDetail() {
                       </div>
                       {isTempDC && <div style={{fontSize:10,color:'#92400e',fontWeight:600}}>Temp — confirms at Goods Issue</div>}
                       <div className="od-batch-secondary">
-                        {inv && <span style={{color: inv.startsWith('Temp/') ? '#92400e' : '#1a4dab'}}>{inv}</span>}
+                        {inv && <span style={{color: inv.startsWith('Temp/') ? '#92400e' : '#1a73e8'}}>{inv}</span>}
                         {eway && <span style={{color:'#0e7490'}}>E-Way: {eway}</span>}
                       </div>
                       {(activeBatch?.delivered_at) && (
@@ -1204,7 +1227,13 @@ export default function FCOrderDetail() {
                 })()}
               </div>
             </div>
+              </div>{/* end Delivery Challan panel */}
 
+            </div>{/* end od-tab-content */}
+          </div>{/* end od-main */}
+
+          {/* RIGHT — sidebar (Activity, fixed on all tabs) */}
+          <div className="od-sidebar">
             {/* Activity */}
             <div className="od-side-card od-activity-card">
               <div className="od-side-card-title">Activity & Notes</div>

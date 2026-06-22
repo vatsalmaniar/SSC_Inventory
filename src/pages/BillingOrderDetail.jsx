@@ -568,11 +568,11 @@ const mentionSuggestions = mentionQuery !== null
                     {isCancelled ? 'Cancelled' : isWaitingFC ? 'Waiting for FC' : isCreditOverride ? 'On Hold' : 'Billing'}
                   </span>
                 </div>
-                <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a4dab',color:'inherit'}}>{order.customer_name}</span></div>
+                <div className="od-header-title"><span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a73e8',color:'inherit'}}>{order.customer_name}</span></div>
                 <div className="od-header-num" style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'center'}}>
                   <button
                     onClick={() => navigate('/orders/' + id)}
-                    style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',color:'#1a4dab',fontWeight:600,textDecoration:'underline'}}
+                    style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit',color:'#1a73e8',fontWeight:600,textDecoration:'underline'}}
                   >
                     {order.order_number}
                   </button>
@@ -688,7 +688,7 @@ const mentionSuggestions = mentionQuery !== null
                       {order.po_number || '—'}
                       {order.po_document_url && (
                         <a href={order.po_document_url} target="_blank" rel="noreferrer"
-                          style={{marginLeft:8,fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                          style={{marginLeft:8,fontSize:11,color:'#1a73e8',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
                           <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                           View PO
                         </a>
@@ -724,7 +724,7 @@ const mentionSuggestions = mentionQuery !== null
               <div className="od-card-header"><div className="od-card-title">Order Information</div></div>
               <div className="od-card-body">
                 <div className="od-detail-grid">
-                  <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a4dab',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
+                  <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a73e8',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
                   <div className="od-detail-field"><label>Customer ID</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{custCode || '—'}</div></div>
                   <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                   <div className="od-detail-field"><label>PO / Reference No.</label><div className="val">{order.po_number || '—'}</div></div>
@@ -1008,7 +1008,7 @@ const mentionSuggestions = mentionQuery !== null
                       <button
                         disabled={!creditChoice || saving}
                         onClick={() => creditChoice === 'override' ? handleCreditCheckYes() : handleCreditCheckClear()}
-                        style={{padding:'10px 20px',borderRadius:10,border:'none',background:!creditChoice?'var(--gray-200)':'#1a4dab',color:!creditChoice?'var(--gray-400)':'white',fontWeight:600,fontSize:13,cursor:!creditChoice?'default':'pointer',fontFamily:'var(--font)'}}>
+                        style={{padding:'10px 20px',borderRadius:10,border:'none',background:!creditChoice?'var(--gray-200)':'#1a73e8',color:!creditChoice?'var(--gray-400)':'white',fontWeight:600,fontSize:13,cursor:!creditChoice?'default':'pointer',fontFamily:'var(--font)'}}>
                         {saving ? 'Saving...' : 'Credit Check'}
                       </button>
                     </div>
@@ -1018,7 +1018,7 @@ const mentionSuggestions = mentionQuery !== null
                   {(batchStatus === 'credit_check' || (batchStatus === 'goods_issued' && earlyCleared)) && !showGIConfirm && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Post the Goods Issue entry in the system.</p>
-                      <button className="od-mark-complete-btn" style={{background:'#1a4dab',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
+                      <button className="od-mark-complete-btn" style={{background:'#1a73e8',padding:'10px 20px',borderRadius:10,border:'none',color:'white',fontFamily:'var(--font)',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}
                         onClick={() => setShowGIConfirm(true)}>
                         <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{width:16,height:16}}><polyline points="20 6 9 17 4 12"/></svg>
                         Post Goods Issue
@@ -1027,7 +1027,7 @@ const mentionSuggestions = mentionQuery !== null
                   )}
                   {(batchStatus === 'credit_check' || (batchStatus === 'goods_issued' && earlyCleared)) && showGIConfirm && (
                     <div style={{background:'#e8f2fc',border:'1px solid #c2d9f5',borderRadius:10,padding:16}}>
-                      <p style={{fontSize:13,color:'#1a4dab',fontWeight:600,marginBottom:4}}>Confirm Goods Issue Posted?</p>
+                      <p style={{fontSize:13,color:'#1a73e8',fontWeight:600,marginBottom:4}}>Confirm Goods Issue Posted?</p>
                       <p style={{fontSize:12,color:'var(--gray-500)',marginBottom:14}}>Invoice number will be entered from Tally when uploading the PDF.</p>
                       <div style={{display:'flex',gap:8}}>
                         <button className="od-btn od-btn-approve" disabled={saving} onClick={advanceGIPosted}>{saving?'Saving...':'Confirm'}</button>
@@ -1166,14 +1166,14 @@ const mentionSuggestions = mentionQuery !== null
                       <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
                         {activeEwayPdfUrl && (
                           <a href={activeEwayPdfUrl} target="_blank" rel="noreferrer"
-                            style={{fontSize:12,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                            style={{fontSize:12,color:'#1a73e8',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
                             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View E-Way PDF
                           </a>
                         )}
                         {activeEInvoicePdfUrl && (
                           <a href={activeEInvoicePdfUrl} target="_blank" rel="noreferrer"
-                            style={{fontSize:12,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                            style={{fontSize:12,color:'#1a73e8',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
                             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View e-Invoice PDF
                           </a>

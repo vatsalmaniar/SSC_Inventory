@@ -116,6 +116,8 @@ export default function OrderDetail() {
   const [user, setUser]             = useState({ name: '', avatar: '', role: '' })
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
+  const [activeTab, setActiveTab]   = useState('overview')  // overview | items | deliveries | activities | payment | po
+  const [itemFilter, setItemFilter] = useState('all')       // all | disp | pend  (Order Items table)
   const [showCancel, setShowCancel] = useState(false)
   const [cancelMode, setCancelMode] = useState('choice')   // 'choice' | 'full' | 'partial'
   const [cancelLines, setCancelLines] = useState([])       // line picker state for partial mode
@@ -999,7 +1001,7 @@ if (match) {
                     {isPending ? 'Pending Approval' : isCancelled ? 'Cancelled' : order?.status === 'dispatched_fc' ? 'Delivered' : isInFCFlow ? 'Delivery In Progress' : (hasAnyDispatched && hasAnyPending) ? 'Partially Dispatched' : 'Active'}
                   </span>
                 </div>
-                <div className="od-header-title">{editMode ? editData.customer_name || order.customer_name : <span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted #1a4dab',color:'inherit'}}>{order.customer_name}</span>}</div>
+                <div className="od-header-title">{editMode ? editData.customer_name || order.customer_name : <span onClick={goToCustomer} style={{cursor:'pointer',borderBottom:'1px dotted var(--blue-700)',color:'inherit'}}>{order.customer_name}</span>}</div>
                 <div className="od-header-num">{order.order_number} · {fmt(order.order_date)}</div>
               </div>
             </div>
@@ -1074,11 +1076,8 @@ if (match) {
           )}
         </div>
 
-        {/* ── Two-column layout ── */}
-        <div className="od-layout">
-
-          {/* ── LEFT ── */}
-          <div className="od-main">
+        {/* ── Banners (always visible, above tabs) ── */}
+        <div className="od-banners">
 
             {isPending && !isOps && (
               <div className="od-pending-banner">
@@ -1154,6 +1153,25 @@ if (match) {
                 </div>
               </div>
             )}
+        </div>
+
+        {/* ── Two-column: tabbed content (left) + fixed Activity (right) ── */}
+        <div className="od-layout">
+          <div className="od-main">
+
+        {/* ── Tabs ── */}
+        <div className="od-tabs">
+          <button className={'od-tab' + (activeTab==='overview'?' on':'')} onClick={()=>setActiveTab('overview')}>Overview</button>
+          <button className={'od-tab' + (activeTab==='items'?' on':'')} onClick={()=>setActiveTab('items')}>Order Items<span className="od-tab-count">{(order.order_items||[]).length}</span></button>
+          <button className={'od-tab' + (activeTab==='deliveries'?' on':'')} onClick={()=>setActiveTab('deliveries')}>Deliveries{batches.length>0 && <span className="od-tab-count">{batches.length}</span>}</button>
+          {payments && <button className={'od-tab' + (activeTab==='payment'?' on':'')} onClick={()=>setActiveTab('payment')}>Payment &amp; Receivables</button>}
+          {order.order_type === 'CO' && <button className={'od-tab' + (activeTab==='po'?' on':'')} onClick={()=>setActiveTab('po')}>Purchase Order{linkedPOs.length>0 && <span className="od-tab-count">{linkedPOs.length}</span>}</button>}
+        </div>
+
+        <div className="od-tab-content">
+
+          {/* Overview panel */}
+          <div className="od-tabpanel" hidden={activeTab!=='overview'}>
 
             {/* Order Info */}
             <div className="od-card">
@@ -1235,7 +1253,7 @@ if (match) {
                 ) : (
                   <>
                   <div className="od-detail-grid">
-                    <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'#1a4dab',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
+                    <div className="od-detail-field"><label>Customer Name</label><div className="val"><span onClick={goToCustomer} style={{color:'var(--blue-700)',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>{order.customer_name}</span></div></div>
                     <div className="od-detail-field"><label>Customer ID</label><div className="val" style={{fontFamily:'var(--mono)',fontWeight:600}}>{custCode || '—'}</div></div>
                     <div className="od-detail-field"><label>GST Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{order.customer_gst || '—'}</div></div>
                     <div className="od-detail-field"><label>Account Owner</label><div className="val"><OwnerChip name={order.account_owner || order.engineer_name} /></div></div>
@@ -1246,7 +1264,7 @@ if (match) {
                         {order.po_number || '—'}
                         {order.po_document_url && (
                           <a href={order.po_document_url} target="_blank" rel="noreferrer"
-                            style={{marginLeft:10,fontSize:11,color:'#1a4dab',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
+                            style={{marginLeft:10,fontSize:11,color:'var(--blue-700)',fontWeight:600,display:'inline-flex',alignItems:'center',gap:4,textDecoration:'none'}}>
                             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View PO
                           </a>
@@ -1277,9 +1295,60 @@ if (match) {
               </div>
             </div>
 
+            {/* Order Items — plain list as ordered (no dispatch/delivery status) */}
+            <div className="od-card">
+              <div className="od-card-header"><div className="od-card-title">Order Items ({(order.order_items||[]).length})</div></div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="od-items-table">
+                  <thead>
+                    <tr>
+                      <th style={{ paddingLeft: 20 }}>#</th>
+                      <th>Item Code</th>
+                      <th style={{ textAlign: 'center' }}>Qty</th>
+                      <th>LP Price</th>
+                      <th>Disc %</th>
+                      <th>Unit Price</th>
+                      <th>Delivery Date</th>
+                      <th>Cust. Ref No</th>
+                      <th className="right" style={{ paddingRight: 20 }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(order.order_items || []).map(item => (
+                      <tr key={item.id}>
+                        <td style={{ paddingLeft: 20, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
+                        <td className="mono">
+                          <span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{item.item_code}</span>
+                          {item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>{item.qty}</td>
+                        <td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
+                        <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td>
+                        <td>₹{item.unit_price_after_disc}</td>
+                        <td style={{ fontSize: 12 }}>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.customer_ref_no || '—'}</td>
+                        <td className="right" style={{ paddingRight: 20 }}>₹{(item.total_price || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="od-totals">
+                <div className="od-totals-inner">
+                  <div className="od-totals-row"><span>Subtotal</span><span>₹{subtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+                  <div className="od-totals-row"><span>Freight</span><span>₹{(order.freight||0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+                  <div className="od-totals-row grand"><span>Grand Total</span><span>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+                </div>
+              </div>
+            </div>
+
+          </div>{/* end Overview panel */}
+
+          {/* PO panel */}
+          <div className="od-tabpanel" hidden={activeTab!=='po'}>
             {/* Linked PO for CO orders */}
             {order.order_type === 'CO' && (
-              <div className="od-card" style={{marginTop:16}}>
+              <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">
                     <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:16,height:16,marginRight:6,verticalAlign:'middle'}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
@@ -1301,7 +1370,7 @@ if (match) {
                         return (
                           <div key={po.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12,padding:'10px 12px',border:'1px solid var(--gray-100)',borderRadius:8,background:'white'}}>
                             <div style={{flex:1,minWidth:180}}>
-                              <div style={{fontFamily:'var(--mono)',fontWeight:700,fontSize:13,color:'#1a4dab',cursor:'pointer'}} onClick={() => navigate('/procurement/po/' + po.id)}>
+                              <div style={{fontFamily:'var(--mono)',fontWeight:700,fontSize:13,color:'var(--blue-700)',cursor:'pointer'}} onClick={() => navigate('/procurement/po/' + po.id)}>
                                 {po.po_number}
                               </div>
                               <div style={{fontSize:12,color:'var(--gray-500)',marginTop:2}}>
@@ -1309,7 +1378,7 @@ if (match) {
                                 {po.total_amount ? <span style={{marginLeft:8,color:'var(--gray-400)'}}>· ₹{Number(po.total_amount).toLocaleString('en-IN',{maximumFractionDigits:0})}</span> : ''}
                               </div>
                               {poEarliestDelivery[po.id] && (
-                                <div style={{fontSize:11.5,color:'#1d4ed8',marginTop:4,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
+                                <div style={{fontSize:11.5,color:'var(--blue-700)',marginTop:4,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
                                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                                   Expected delivery: {fmt(poEarliestDelivery[po.id])}
                                 </div>
@@ -1340,6 +1409,10 @@ if (match) {
               </div>
             )}
 
+          </div>{/* end PO panel */}
+
+          {/* Order Items panel */}
+          <div className="od-tabpanel" hidden={activeTab!=='items'}>
             {/* Products */}
             <div className="od-card">
               <div className="od-card-header">
@@ -1420,10 +1493,84 @@ if (match) {
                   </div>
                 </div>
               ) : showDispatchCols ? (
-                // ── DUAL TILE VIEW: separate pending and dispatched ──
+                // ── UNIFIED ITEMS TABLE (filter: All / Delivered / Pending) ──
                 <>
+                  {(() => {
+                    const rows = (order.order_items || []).map(item => {
+                      const dispQty    = item.dispatched_qty || 0
+                      const cancQty    = item.cancelled_qty || 0
+                      const pendingQty = Math.max(0, item.qty - dispQty - cancQty)
+                      const terminal   = (item.line_status || 'active') !== 'active'
+                      const itemBatch  = batches.find(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))
+                      const status     = terminal ? 'cancelled' : (dispQty > 0 && pendingQty === 0) ? 'done' : (dispQty > 0) ? 'partial' : 'pending'
+                      return { item, dispQty, cancQty, pendingQty, terminal, itemBatch, status }
+                    })
+                    const shown = rows.filter(r => itemFilter === 'all' ? true : itemFilter === 'disp' ? r.dispQty > 0 : r.pendingQty > 0)
+                    const unitsTotal = rows.reduce((s, r) => s + r.item.qty, 0)
+                    const dispValue  = rows.reduce((s, r) => s + (r.item.unit_price_after_disc || 0) * r.dispQty, 0)
+                    return (
+                      <>
+                        <div className="od-seg-filter">
+                          <button className={itemFilter==='all'?'on':''} onClick={()=>setItemFilter('all')}>All</button>
+                          <button className={itemFilter==='disp'?'on':''} onClick={()=>setItemFilter('disp')}>Delivered</button>
+                          <button className={itemFilter==='pend'?'on':''} onClick={()=>setItemFilter('pend')}>Pending</button>
+                        </div>
+                        <div style={{ overflowX: 'auto' }}>
+                          <table className="od-items-table">
+                            <thead>
+                              <tr>
+                                <th style={{ paddingLeft: 16 }}>#</th>
+                                <th>Item Code</th>
+                                <th>Delivery Date</th>
+                                <th>Dispatched On</th>
+                                <th style={{ textAlign: 'center' }}>Total Qty</th>
+                                <th style={{ textAlign: 'center' }}>Dispatched</th>
+                                <th style={{ textAlign: 'center' }}>Pending</th>
+                                <th>Unit Price</th>
+                                <th className="right">Total</th>
+                                <th className="right" style={{ paddingRight: 16 }}>Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {shown.map(({ item, dispQty, pendingQty, terminal, itemBatch, status }) => (
+                                <tr key={item.id} style={terminal ? { background: '#fffbfb' } : undefined}>
+                                  <td style={{ paddingLeft: 16, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no}</td>
+                                  <td className="mono">
+                                    <span onClick={() => goToItem(item.item_code)} style={{ cursor: 'pointer', textDecoration: terminal ? 'line-through' : 'underline', textDecorationStyle: terminal ? 'solid' : 'dotted', textUnderlineOffset: 3, color: terminal ? '#dc2626' : 'inherit' }}>{item.item_code}</span>
+                                    {item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>}
+                                  </td>
+                                  <td style={{ fontSize: 12 }}>{item.dispatch_date ? fmt(item.dispatch_date) : '—'}</td>
+                                  <td style={{ fontSize: 12, color: itemBatch?.delivered_at ? '#166534' : 'var(--gray-400)', fontWeight: itemBatch?.delivered_at ? 600 : 400 }}>{itemBatch?.delivered_at ? fmt(itemBatch.delivered_at) : '—'}</td>
+                                  <td style={{ textAlign: 'center' }}>{item.qty}</td>
+                                  <td style={{ textAlign: 'center', color: dispQty > 0 ? '#166534' : 'var(--gray-400)', fontWeight: 600 }}>{dispQty || '—'}</td>
+                                  <td style={{ textAlign: 'center', color: pendingQty > 0 ? '#c2410c' : 'var(--gray-400)', fontWeight: 600 }}>{pendingQty || '—'}</td>
+                                  <td>₹{item.unit_price_after_disc}</td>
+                                  <td className="right">₹{((item.unit_price_after_disc || 0) * item.qty).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                                  <td className="right" style={{ paddingRight: 16 }}>
+                                    {status === 'done'      && <span className="od-sf-pill done">✓ Done</span>}
+                                    {status === 'partial'   && <span className="od-sf-pill partial">Partial</span>}
+                                    {status === 'pending'   && <span className="od-sf-pill pend">Pending</span>}
+                                    {status === 'cancelled' && <span className="od-sf-pill canc">{item.line_status === 'short_closed' ? 'Short Closed' : 'Cancelled'}</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                              {shown.length === 0 && (
+                                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 20, color: 'var(--gray-400)', fontSize: 12 }}>No {itemFilter === 'disp' ? 'delivered' : 'pending'} items.</td></tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="od-uni-foot">
+                          <span className="tf-label">{shown.length} of {rows.length} items · {unitsTotal} units</span>
+                          {dispValue > 0 && <span className="tf-a">Dispatched ₹{dispValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                        </div>
+                      </>
+                    )
+                  })()}
+
+                  {/* legacy tiles — hidden, kept until the unified table is approved */}
                   {/* Tile 1: Pending items */}
-                  {(hasAnyPending || !batches.some(b => b.status === 'dispatched_fc')) && (
+                  {false && (
                     <div className="od-dispatch-tile od-dispatch-tile-pending">
                       <div className="od-dispatch-tile-header">
                         <span className="od-dispatch-tile-label">
@@ -1481,7 +1628,7 @@ if (match) {
                   )}
 
                   {/* Tile 2: Dispatched record */}
-                  {batches.some(b => b.status === 'dispatched_fc') && (
+                  {false && (
                     <div className="od-dispatch-tile od-dispatch-tile-dispatched">
                       <div className="od-dispatch-tile-header">
                         <span className="od-dispatch-tile-label">
@@ -1533,7 +1680,7 @@ if (match) {
                   )}
 
                   {/* Tile 3: Cancelled items — separate so it doesn't muddy pending/shipped totals */}
-                  {hasAnyCancelled && (
+                  {false && (
                     <div className="od-dispatch-tile" style={{ borderColor: '#fecaca', background: '#fffbfb' }}>
                       <div className="od-dispatch-tile-header">
                         <span className="od-dispatch-tile-label" style={{ color: '#dc2626' }}>
@@ -1701,13 +1848,10 @@ if (match) {
                 </>
               )}
             </div>
+          </div>{/* end Order Items panel */}
 
-          </div>
-
-          {/* ── RIGHT ── */}
-          <div className="od-sidebar">
-
-            {/* Receivables — top of sidebar, above all other tiles */}
+          {/* Payment & Receivables panel */}
+          <div className="od-tabpanel" hidden={activeTab!=='payment'}>
             {payments && (
               <div className="od-side-card" style={{ borderColor: (payments.overdue_inr || 0) > 0 ? '#fecaca' : 'var(--gray-100)' }}>
                 <div className="od-side-card-title" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -1733,6 +1877,11 @@ if (match) {
               </div>
             )}
 
+          </div>{/* end Payment panel */}
+
+          {/* Deliveries panel */}
+          <div className="od-tabpanel" hidden={activeTab!=='deliveries'}>
+            {batches.length === 0 && <div className="od-empty">No dispatch batches yet.</div>}
             {/* Dispatch Batches */}
             {batches.length > 0 && (
               <div className="od-side-card" style={{padding:0,overflow:'hidden'}}>
@@ -1750,7 +1899,7 @@ if (match) {
                     const pdfs = [
                       hasDC && { label: 'DC', icon: 'print', color: '#166534', action: () => printDCChallan(order, b, bDC, order.order_type === 'SAMPLE', custCode), isBtn: true },
                       b.pi_pdf_url && { label: 'PI', icon: 'doc', color: '#7e22ce', href: b.pi_pdf_url },
-                      b.invoice_pdf_url && { label: 'Invoice', icon: 'doc', color: '#1a4dab', href: b.invoice_pdf_url },
+                      b.invoice_pdf_url && { label: 'Invoice', icon: 'doc', color: '#1a73e8', href: b.invoice_pdf_url },
                       b.eway_pdf_url && { label: 'E-Way', icon: 'doc', color: '#0e7490', href: b.eway_pdf_url },
                       b.einvoice_pdf_url && { label: 'E-Inv', icon: 'doc', color: '#b45309', href: b.einvoice_pdf_url },
                     ].filter(Boolean)
@@ -1829,6 +1978,13 @@ if (match) {
               </div>
             )}
 
+          </div>{/* end Deliveries panel */}
+
+        </div>{/* end od-tab-content */}
+          </div>{/* end od-main */}
+
+          {/* ── Fixed Activity sidebar (shown on all tabs) ── */}
+          <div className="od-sidebar">
             {/* Activity + Comments — Vertical Timeline */}
             <div className="od-side-card od-activity-card">
               <div className="od-side-card-title">Activity & Notes</div>
@@ -1968,9 +2124,8 @@ if (match) {
                 </button>
               </div>
             </div>
-
-          </div>
-        </div>
+          </div>{/* end od-sidebar */}
+        </div>{/* end od-layout */}
       </div>
 
       {/* ── Cancel Modal ── */}
@@ -2083,7 +2238,7 @@ if (match) {
                                     onChange={e => setCancelLines(prev => prev.map((p,j) => j===i ? { ...p, checked: e.target.checked, cancel_qty: e.target.checked ? String(p.pending) : '' } : p))}
                                     style={{ width: 15, height: 15, cursor: closed ? 'not-allowed' : 'pointer', accentColor: '#dc2626' }} />
                                 </td>
-                                <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12.5, fontWeight: 600, color: '#1E54B7' }}>
+                                <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12.5, fontWeight: 600, color: '#1a73e8' }}>
                                   {l.item_code}
                                   {l.line_status !== 'active' && (
                                     <div style={{ fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 2 }}>
@@ -2102,7 +2257,7 @@ if (match) {
                                     <input type="number" min="0" max={l.pending} value={l.cancel_qty}
                                       onChange={e => setCancelLines(prev => prev.map((p,j) => j===i ? { ...p, cancel_qty: e.target.value } : p))}
                                       disabled={!l.checked}
-                                      style={{ width: 70, border: '1px solid #E8EBF0', borderRadius: 6, padding: '5px 8px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 13, outline: 'none', background: l.checked ? 'white' : '#F6F7F9' }} />
+                                      style={{ width: 70, border: '1px solid #E8EBF0', borderRadius: 6, padding: '5px 8px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 13, outline: 'none', background: l.checked ? 'white' : '#f8f9fa' }} />
                                   )}
                                 </td>
                               </tr>
@@ -2229,7 +2384,7 @@ if (match) {
                 <div style={{ display: 'flex', gap: 8 }}>
                   {['Kaveri', 'Godawari'].map(c => (
                     <button key={c} onClick={() => setFcCenter(c)}
-                      style={{ flex: 1, padding: '11px 0', borderRadius: 9, border: '1px solid ' + (fcCenter === c ? '#0A2540' : '#E8EBF0'), background: fcCenter === c ? '#0A2540' : 'white', color: fcCenter === c ? 'white' : '#0B1B30', fontFamily: 'Geist, sans-serif', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all .15s' }}>
+                      style={{ flex: 1, padding: '11px 0', borderRadius: 9, border: '1px solid ' + (fcCenter === c ? '#1a73e8' : '#E8EBF0'), background: fcCenter === c ? '#1a73e8' : 'white', color: fcCenter === c ? 'white' : '#0B1B30', fontFamily: 'Geist, sans-serif', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all .15s' }}>
                       {c}
                     </button>
                   ))}
@@ -2290,7 +2445,7 @@ if (match) {
                   <div style={{ display: 'flex', gap: 8 }}>
                     {['Kaveri','Godawari'].map(c => (
                       <button key={c} onClick={() => setFcCenter(c)}
-                        style={{ flex: 1, padding: '10px 0', borderRadius: 9, border: '1px solid ' + (fcCenter === c ? '#0A2540' : '#E8EBF0'), background: fcCenter === c ? '#0A2540' : 'white', color: fcCenter === c ? 'white' : '#0B1B30', fontFamily: 'Geist, sans-serif', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                        style={{ flex: 1, padding: '10px 0', borderRadius: 9, border: '1px solid ' + (fcCenter === c ? '#1a73e8' : '#E8EBF0'), background: fcCenter === c ? '#1a73e8' : 'white', color: fcCenter === c ? 'white' : '#0B1B30', fontFamily: 'Geist, sans-serif', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                         {c}
                       </button>
                     ))}
@@ -2321,9 +2476,9 @@ if (match) {
                           <td style={{ padding: '10px' }}>
                             <input type="checkbox" checked={item.checked}
                               onChange={e => setPartialItems(prev => prev.map((p,j) => j===i ? {...p, checked: e.target.checked} : p))}
-                              style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#0A2540' }} disabled={remaining <= 0} />
+                              style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#1a73e8' }} disabled={remaining <= 0} />
                           </td>
-                          <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12.5, fontWeight: 600, color: '#1E54B7' }}>{item.item_code}</td>
+                          <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12.5, fontWeight: 600, color: '#1a73e8' }}>{item.item_code}</td>
                           <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace' }}>{item.qty}</td>
                           <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', color: item.dispatched_qty > 0 ? '#10B981' : '#94A3B8' }}>{item.dispatched_qty || 0}</td>
                           <td style={{ padding: '10px', textAlign: 'center' }}>
@@ -2333,7 +2488,7 @@ if (match) {
                               <input type="number" min="0" max={remaining} value={item.dispatchQty}
                                 onChange={e => setPartialItems(prev => prev.map((p,j) => j===i ? {...p, dispatchQty: e.target.value} : p))}
                                 disabled={!item.checked}
-                                style={{ width: 70, border: '1px solid #E8EBF0', borderRadius: 6, padding: '5px 8px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 13, outline: 'none', background: item.checked ? 'white' : '#F6F7F9' }} />
+                                style={{ width: 70, border: '1px solid #E8EBF0', borderRadius: 6, padding: '5px 8px', textAlign: 'center', fontFamily: 'Geist Mono, monospace', fontSize: 13, outline: 'none', background: item.checked ? 'white' : '#f8f9fa' }} />
                             )}
                           </td>
                         </tr>

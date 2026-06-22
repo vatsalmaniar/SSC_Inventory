@@ -12,7 +12,7 @@ const CUSTOMER_TYPES = ['OEM','Panel Builder','End User','Trader']
 const STATUSES = ['Active','Dormant','Blacklisted']
 const STATUS_COLORS = { Active:'#22C55E', Dormant:'#F59E0B', Blacklisted:'#EF4444' }
 
-const _OC = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const _OC = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
 function initials(name) { return (name||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?' }
 

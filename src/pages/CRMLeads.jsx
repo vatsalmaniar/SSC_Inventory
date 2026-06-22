@@ -8,10 +8,10 @@ import '../styles/crm-redesign.css'
 const SOURCES = ['Call','Visit','WhatsApp','Referral','Exhibition','Other']
 const SCENARIOS = ['NEW_CUST_NEW_PROD','OLD_CUST_NEW_PROD','NEW_CUST_OLD_PROD','DORMANT_REVIVAL']
 const STATUSES = ['New','Contacted','Converted','Not a Fit']
-const STATUS_COLORS = { New:'#1E54B7', Contacted:'#F59E0B', Converted:'#22C55E', 'Not a Fit':'#EF4444' }
+const STATUS_COLORS = { New:'#1a73e8', Contacted:'#F59E0B', Converted:'#22C55E', 'Not a Fit':'#EF4444' }
 const SCENARIO_LABELS = { NEW_CUST_NEW_PROD:'New Cust · New Prod', OLD_CUST_NEW_PROD:'Old Cust · New Prod', NEW_CUST_OLD_PROD:'New Cust · Old Prod', DORMANT_REVIVAL:'Dormant Revival' }
 
-const _OC = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const _OC = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
 function initials(name) { return (name||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?' }
 

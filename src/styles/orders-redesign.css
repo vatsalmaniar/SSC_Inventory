@@ -1,11 +1,11 @@
 /* SSC Orders dashboard redesign — scoped under .orders-app */
 
 .orders-app {
-  --ssc-deep: #0A2540;
+  --ssc-deep: #1a73e8;
   --ssc-mid: #163E68;
   --ssc-cyan: #3DD9D6;
-  --ssc-blue: #1E54B7;
-  --o-bg: #F6F7F9;
+  --ssc-blue: #1a73e8;
+  --o-bg: #f8f9fa;
   --o-bg-2: #FBFBFD;
   --o-surface: #FFFFFF;
   --o-line: #E8EBF0;
@@ -47,7 +47,7 @@
 /* Buttons */
 .orders-app .btn-primary, .orders-app .btn-ghost { display: inline-flex; align-items: center; gap: 7px; border-radius: 9px; padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
 .orders-app .btn-primary { background: var(--ssc-deep); color: #fff; border-color: var(--ssc-deep); font-weight: 500; }
-.orders-app .btn-primary:hover { background: #143055; }
+.orders-app .btn-primary:hover { background: #174ea6; }
 .orders-app .btn-ghost { background: var(--o-surface); color: var(--o-ink); border-color: var(--o-line); }
 .orders-app .btn-ghost:hover { background: var(--o-bg-2); }
 
@@ -65,7 +65,7 @@
 .orders-app .kpi-tile:hover { border-color: var(--o-muted-2); }
 .orders-app .kpi-tile.accent-amber { border-left: 3px solid #B45309; }
 .orders-app .kpi-hero { color: #fff; border: 0; }
-.orders-app .kpi-hero.tone-deep   { background: linear-gradient(135deg, #0A2540 0%, #163E68 55%, #1E54B7 100%); }
+.orders-app .kpi-hero.tone-deep   { background: linear-gradient(135deg, #1a73e8 0%, #163E68 55%, #1a73e8 100%); }
 .orders-app .kpi-hero.tone-forest { background: linear-gradient(135deg, #064E3B 0%, #065F46 55%, #10B981 100%); }
 .orders-app .kpi-hero.tone-teal   { background: linear-gradient(135deg, #134E4A 0%, #0F766E 55%, #14B8A6 100%); }
 .orders-app .kpi-hero:hover { border: 0; }
@@ -161,7 +161,7 @@
 .orders-app .scl-item { display: inline-flex; align-items: center; gap: 8px; background: transparent; border: 0; font: inherit; font-size: 12px; color: var(--o-ink); cursor: pointer; padding: 4px 0; }
 .orders-app .scl-item.off { opacity: 0.35; }
 .orders-app .scl-swatch { display: inline-block; width: 18px; height: 3px; border-radius: 2px; }
-.orders-app .scl-ordered  { background: #1E54B7; }
+.orders-app .scl-ordered  { background: #1a73e8; }
 .orders-app .scl-delivered { background: repeating-linear-gradient(to right, #10B981 0 6px, transparent 6px 10px); }
 .orders-app .stock-chart { display: block; width: 100%; height: 320px; cursor: crosshair; }
 .orders-app .sc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--o-line); border: 1px solid var(--o-line); border-radius: 10px; overflow: hidden; margin-top: 14px; }

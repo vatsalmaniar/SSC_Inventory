@@ -165,10 +165,10 @@ function ScoreLadder({ def, rows, maxPts }) {
         {[0,0.25,0.5,0.75,1].map(p => (
           <line key={p} x1="24" x2={W-24} y1={y(p*maxPts)} y2={y(p*maxPts)} stroke="#EEF1F5"/>
         ))}
-        <path d={path} stroke={'#0A2540'} strokeWidth="2" fill="none" strokeLinejoin="round"/>
+        <path d={path} stroke={'#1a73e8'} strokeWidth="2" fill="none" strokeLinejoin="round"/>
         {sorted.map((t, i) => (
           <g key={i}>
-            <circle cx={x(Number(t.min ?? t.value)||0)} cy={y(t.points||0)} r="5" fill="#fff" stroke={'#0A2540'} strokeWidth="2.5"/>
+            <circle cx={x(Number(t.min ?? t.value)||0)} cy={y(t.points||0)} r="5" fill="#fff" stroke={'#1a73e8'} strokeWidth="2.5"/>
             <text x={x(Number(t.min ?? t.value)||0)} y={y(t.points||0) - 10} fontSize="10" textAnchor="middle" fontFamily="Geist Mono, monospace" fill="#475569">{t.points||0}pt</text>
           </g>
         ))}
@@ -323,7 +323,7 @@ function HeroProductsTab({ onSaved }) {
             {seriesList.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <button onClick={add} disabled={monthRows.length >= 5 || !pickCategory}
-            style={{ padding: '9px 14px', background: (monthRows.length >= 5 || !pickCategory) ? '#E8EBF0' : '#0A2540', color: (monthRows.length >= 5 || !pickCategory) ? '#94A3B8' : '#FFF', border: 0, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: (monthRows.length >= 5 || !pickCategory) ? 'default' : 'pointer' }}>
+            style={{ padding: '9px 14px', background: (monthRows.length >= 5 || !pickCategory) ? '#E8EBF0' : '#1a73e8', color: (monthRows.length >= 5 || !pickCategory) ? '#94A3B8' : '#FFF', border: 0, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: (monthRows.length >= 5 || !pickCategory) ? 'default' : 'pointer' }}>
             Add
           </button>
         </div>
@@ -436,7 +436,7 @@ function EmployeesTab({ teams, onSaved }) {
       </div>
 
       {showNew && (
-        <div style={{ background: '#FBFBFD', border: '1px solid #0A2540', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+        <div style={{ background: '#FBFBFD', border: '1px solid #1a73e8', borderRadius: 10, padding: 14, marginBottom: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: '#0B1B30' }}>New Assignment</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 140px 110px', gap: 10 }}>
             <select value={newProfileId} onChange={e => setNewProfileId(e.target.value)} style={inp}>
@@ -501,7 +501,7 @@ function EmployeesTab({ teams, onSaved }) {
                   <td style={{ ...td, textAlign: 'right' }}>
                     {isEditing ? (
                       <>
-                        <button onClick={() => saveEdit(a.id)} style={{ padding: '5px 10px', background: '#0A2540', color: '#FFF', border: 0, borderRadius: 5, fontSize: 12, fontWeight: 600, cursor: 'pointer', marginRight: 6 }}>Save</button>
+                        <button onClick={() => saveEdit(a.id)} style={{ padding: '5px 10px', background: '#1a73e8', color: '#FFF', border: 0, borderRadius: 5, fontSize: 12, fontWeight: 600, cursor: 'pointer', marginRight: 6 }}>Save</button>
                         <button onClick={() => setEditingId(null)} style={{ padding: '5px 10px', background: '#FFF', border: '1.5px solid #E8EBF0', borderRadius: 5, fontSize: 12, cursor: 'pointer' }}>Cancel</button>
                       </>
                     ) : (
@@ -584,7 +584,7 @@ function DefinitionsTab({ teams, defsByTeam, krasByTeam, onSaved }) {
       </div>
 
       {(showNew || editingId) && (
-        <div style={{ background: '#FBFBFD', border: '1px solid #0A2540', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+        <div style={{ background: '#FBFBFD', border: '1px solid #1a73e8', borderRadius: 10, padding: 14, marginBottom: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: '#0B1B30' }}>{editingId ? 'Edit KPI' : 'New KPI'}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px', gap: 10, marginBottom: 10 }}>
             <div>
@@ -640,7 +640,7 @@ function DefinitionsTab({ teams, defsByTeam, krasByTeam, onSaved }) {
                   {fetchers.derived.map(k => <option key={k} value={k}>{k}</option>)}
                 </select>
               ) : (
-                <input disabled value="(not used for manual)" style={{ ...inp, background: '#F6F7F9', color: '#94A3B8' }}/>
+                <input disabled value="(not used for manual)" style={{ ...inp, background: '#f8f9fa', color: '#94A3B8' }}/>
               )}
             </div>
           </div>
@@ -738,7 +738,7 @@ function KrasTab({ teams, krasByTeam, onSaved }) {
       </div>
 
       {(showNew || editingId) && (
-        <div style={{ background: '#FBFBFD', border: '1px solid #0A2540', borderRadius: 10, padding: 14, marginBottom: 14, display: 'grid', gridTemplateColumns: '90px 1fr 110px 90px auto', gap: 10, alignItems: 'end' }}>
+        <div style={{ background: '#FBFBFD', border: '1px solid #1a73e8', borderRadius: 10, padding: 14, marginBottom: 14, display: 'grid', gridTemplateColumns: '90px 1fr 110px 90px auto', gap: 10, alignItems: 'end' }}>
           <div><label style={lblSt}>Code</label><input value={draft.code} onChange={e => setDraft(d => ({ ...d, code: e.target.value.toUpperCase() }))} style={inp} placeholder="C / O / Q"/></div>
           <div><label style={lblSt}>Name</label><input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} style={inp} placeholder="Collection / Quality"/></div>
           <div><label style={lblSt}>Color</label><input type="color" value={draft.color} onChange={e => setDraft(d => ({ ...d, color: e.target.value }))} style={{ ...inp, padding: 2, height: 38, cursor: 'pointer' }}/></div>

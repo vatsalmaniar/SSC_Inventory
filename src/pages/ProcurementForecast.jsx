@@ -237,8 +237,8 @@ function StockChart({ items, brand, cfg, totalStats }) {
       >
         <defs>
           <linearGradient id="stockFill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#1E54B7" stopOpacity="0.22"/>
-            <stop offset="100%" stopColor="#1E54B7" stopOpacity="0"/>
+            <stop offset="0%" stopColor="#1a73e8" stopOpacity="0.22"/>
+            <stop offset="100%" stopColor="#1a73e8" stopOpacity="0"/>
           </linearGradient>
         </defs>
 
@@ -255,14 +255,14 @@ function StockChart({ items, brand, cfg, totalStats }) {
         {showLines.stock && (
           <>
             <path d={stockArea} fill="url(#stockFill)"/>
-            <path d={stockPath} stroke="#1E54B7" strokeWidth="2.4" fill="none" strokeLinejoin="round"/>
+            <path d={stockPath} stroke="#1a73e8" strokeWidth="2.4" fill="none" strokeLinejoin="round"/>
           </>
         )}
 
         {hoverIdx !== null && hover && (
           <g>
             <line x1={x(hoverIdx)} x2={x(hoverIdx)} y1={P.t} y2={P.t + innerH} stroke="#94A3B8" strokeDasharray="2 3" strokeWidth="1"/>
-            {showLines.stock && <circle cx={x(hoverIdx)} cy={y(hover.stock)} r="5" fill="#fff" stroke="#1E54B7" strokeWidth="2.5"/>}
+            {showLines.stock && <circle cx={x(hoverIdx)} cy={y(hover.stock)} r="5" fill="#fff" stroke="#1a73e8" strokeWidth="2.5"/>}
             {showLines.min && <circle cx={x(hoverIdx)} cy={y(hover.minQty)} r="3.5" fill="#fff" stroke="#EF4444" strokeWidth="2"/>}
             {showLines.po && <circle cx={x(hoverIdx)} cy={y(hover.poQty)} r="3.5" fill="#fff" stroke="#94A3B8" strokeWidth="2"/>}
           </g>
@@ -281,7 +281,7 @@ function StockChart({ items, brand, cfg, totalStats }) {
           const codeStr = (hover.code || '').length > 28 ? hover.code.slice(0, 26) + '…' : (hover.code || '')
           return (
             <g transform={`translate(${tipX}, ${P.t + 8})`}>
-              <rect width="220" height="156" rx="10" fill="#0A2540"/>
+              <rect width="220" height="156" rx="10" fill="#1a73e8"/>
               <text x="14" y="22" fontSize="10" fill="#3DD9D6" fontFamily="Geist Mono, monospace" letterSpacing="0.06em">{hover.label}</text>
               <text x="14" y="40" fontSize="11.5" fill="#fff" fontWeight="600">{codeStr}</text>
               <line x1="14" x2="206" y1="50" y2="50" stroke="rgba(255,255,255,0.1)"/>
@@ -593,7 +593,7 @@ function LeadTimeDrawer({ open, onClose, brand, cfg, onSaved }) {
           </button>
         </div>
         <div className="drawer-body">
-          <SliderField label="Supplier Lead Time" value={lead} max={120} onChange={setLead} color="#1E54B7"/>
+          <SliderField label="Supplier Lead Time" value={lead} max={120} onChange={setLead} color="#1a73e8"/>
           <SliderField label="Transportation Time" value={transit} max={30} onChange={setTransit} color="#7C3AED"/>
           <SliderField label="Order Processing Time" value={proc} max={14} onChange={setProc} color="#0F766E"/>
           <SliderField label="Inventory Buffer" value={inv} max={120} onChange={setInv} color="#3DD9D6"/>
@@ -601,13 +601,13 @@ function LeadTimeDrawer({ open, onClose, brand, cfg, onSaved }) {
           <div className="calc-card">
             <div className="calc-head mono">CALCULATED LEVELS</div>
             <div className="calc-bar">
-              <div className="cb-seg" style={{flex: lead || 0.001, background: '#1E54B7'}}/>
+              <div className="cb-seg" style={{flex: lead || 0.001, background: '#1a73e8'}}/>
               <div className="cb-seg" style={{flex: transit || 0.001, background: '#7C3AED'}}/>
               <div className="cb-seg" style={{flex: proc || 0.001, background: '#0F766E'}}/>
               <div className="cb-seg cb-buffer" style={{flex: inv || 0.001, background: '#3DD9D6'}}/>
             </div>
             <div className="calc-legend">
-              <div className="cl-item"><span style={{background:'#1E54B7'}}/>Lead Time</div>
+              <div className="cl-item"><span style={{background:'#1a73e8'}}/>Lead Time</div>
               <div className="cl-item"><span style={{background:'#7C3AED'}}/>Transit</div>
               <div className="cl-item"><span style={{background:'#0F766E'}}/>Processing</div>
               <div className="cl-item"><span style={{background:'#3DD9D6'}}/>Inventory Buffer ({inv}d)</div>

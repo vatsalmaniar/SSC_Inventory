@@ -27,7 +27,7 @@ const APPS = [
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg> },
   { key:'people', label:'People', desc:'KRA / KPI & team', path:'/people/kpi', roles:['sales','ops','admin','management','accounts','fc_kaveri','fc_godawari'], color:{ bg:'#ecfeff', icon:'#0e7490' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> },
-  { key:'upload', label:'Upload', desc:'Sync inventory data', path:'/uploads', roles:['admin','accounts'], color:{ bg:'#e8f2fc', icon:'#1a4dab' },
+  { key:'upload', label:'Upload', desc:'Sync inventory data', path:'/uploads', roles:['admin','accounts'], color:{ bg:'#e8f2fc', icon:'#1a73e8' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> },
   { key:'users', label:'Users', desc:'Manage users & emails', path:'/admin/users', roles:['admin'], color:{ bg:'#f1f5f9', icon:'#475569' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 15a6 6 0 00-6 6h12a6 6 0 00-6-6z"/><circle cx="12" cy="8" r="4"/></svg> },

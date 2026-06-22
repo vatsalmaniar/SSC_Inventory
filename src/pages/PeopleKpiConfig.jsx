@@ -41,7 +41,7 @@ export default function PeopleKpiConfig() {
         <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Page not found</div>
         <div style={{ fontSize: 14, color: '#5B6878', marginBottom: 24 }}>This page doesn't exist or you don't have access.</div>
-        <button onClick={() => navigate('/people/kpi')} style={{ padding: '10px 18px', background: '#0A2540', color: 'white', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={() => navigate('/people/kpi')} style={{ padding: '10px 18px', background: '#1a73e8', color: 'white', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
           Back to KRA / KPI
         </button>
       </div>

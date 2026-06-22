@@ -370,7 +370,7 @@ export default function NewLeadModal({ onClose, onCreated, prefillCompanyId, cur
             Cancel
           </button>
           <button onClick={save} disabled={saving || !form.opportunity_name.trim() || (!form.company_id && !accountSearch.trim())}
-            style={{padding:'10px 20px',border:'none',borderRadius:8,background: isExisting ? '#1a4dab' : '#1e3a5f',color:'white',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'var(--font)',
+            style={{padding:'10px 20px',border:'none',borderRadius:8,background: isExisting ? '#1a73e8' : '#1e3a5f',color:'white',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'var(--font)',
               opacity:(!form.opportunity_name.trim()||(!form.company_id&&!accountSearch.trim()))?0.4:1}}>
             {saving ? 'Creating…' : isExisting ? 'Create Opportunity' : 'Create Lead'}
           </button>

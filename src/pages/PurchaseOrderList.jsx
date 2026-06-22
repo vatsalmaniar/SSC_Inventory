@@ -6,7 +6,7 @@ import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
-const REP_PALETTE = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const REP_PALETTE = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return REP_PALETTE[Math.abs(h)%REP_PALETTE.length] }
 function initials(name) { return (name||'').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?' }
 
@@ -17,7 +17,7 @@ const PO_STATUS_LABELS = {
   closed:'Closed', cancelled:'Cancelled',
 }
 const PO_STATUS_COLORS = {
-  draft:'#94A3B8', pending_approval:'#F59E0B', approved:'#1E54B7', placed:'#0EA5E9',
+  draft:'#94A3B8', pending_approval:'#F59E0B', approved:'#1a73e8', placed:'#0EA5E9',
   acknowledged:'#0F766E', delivery_confirmation:'#D97706',
   partially_received:'#D97706', material_received:'#22C55E', closed:'#047857', cancelled:'#EF4444',
 }

@@ -6,7 +6,7 @@ import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
 const STATUS_LABELS = { draft:'Draft', dispatched:'In Transit', received:'Received', cancelled:'Cancelled' }
-const STATUS_COLORS = { draft:'#94A3B8', dispatched:'#1E54B7', received:'#22C55E', cancelled:'#EF4444' }
+const STATUS_COLORS = { draft:'#94A3B8', dispatched:'#1a73e8', received:'#22C55E', cancelled:'#EF4444' }
 
 const FILTERS = [
   { key:'all', label:'All' },

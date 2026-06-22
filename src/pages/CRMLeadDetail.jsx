@@ -34,7 +34,7 @@ function actLabel(a) {
 }
 
 const STATUS_STYLE = {
-  New:         { background:'#e8f2fc', color:'#1a4dab' },
+  New:         { background:'#e8f2fc', color:'#1a73e8' },
   Contacted:   { background:'#fff7ed', color:'#c2410c' },
   Converted:   { background:'#f0fdf4', color:'#15803d' },
   'Not a Fit': { background:'#fef2f2', color:'#dc2626' },
@@ -556,7 +556,7 @@ export default function CRMLeadDetail() {
                   <div className="od-detail-field"><label>Principal</label><div className="val">{lead.crm_principals?.name || '—'}</div></div>
                   <div className="od-detail-field"><label>Rep</label><div className="val">{lead.profiles?.name || '—'}</div></div>
                   {quoteTotal > 0 && (
-                    <div className="od-detail-field"><label>Quote Value</label><div className="val od-side-val-big" style={{ color:'#1a4dab' }}>{fmtINR(quoteTotal)}</div></div>
+                    <div className="od-detail-field"><label>Quote Value</label><div className="val od-side-val-big" style={{ color:'#1a73e8' }}>{fmtINR(quoteTotal)}</div></div>
                   )}
                 </div>
               </div>
@@ -566,14 +566,14 @@ export default function CRMLeadDetail() {
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
                   <div className="od-side-card-title" style={{ margin:0 }}>Contacts ({leadContacts.length})</div>
                   <button onClick={() => setShowContactModal(true)}
-                    style={{ fontSize:11, fontWeight:700, color:'#1a4dab', background:'#eff6ff', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'var(--font)' }}>
+                    style={{ fontSize:11, fontWeight:700, color:'#1a73e8', background:'#eff6ff', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'var(--font)' }}>
                     + Add
                   </button>
                 </div>
                 {leadContacts.length === 0 ? (
                   <div style={{ fontSize:12, color:'var(--gray-400)', textAlign:'center', padding:'10px 0' }}>
                     No contacts yet.<br/>
-                    <button onClick={() => setShowContactModal(true)} style={{ marginTop:6, fontSize:12, fontWeight:600, color:'#1a4dab', background:'none', border:'none', cursor:'pointer', fontFamily:'var(--font)' }}>+ Add Contact</button>
+                    <button onClick={() => setShowContactModal(true)} style={{ marginTop:6, fontSize:12, fontWeight:600, color:'#1a73e8', background:'none', border:'none', cursor:'pointer', fontFamily:'var(--font)' }}>+ Add Contact</button>
                   </div>
                 ) : (
                   <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -585,7 +585,7 @@ export default function CRMLeadDetail() {
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:13, fontWeight:700, color:'var(--gray-900)' }}>{c.name}</div>
                           {c.designation && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{c.designation}</div>}
-                          {c.phone && <a href={'tel:' + c.phone} style={{ display:'block', fontSize:12, color:'#1a4dab', marginTop:3, textDecoration:'none', fontWeight:500 }}>{c.phone}</a>}
+                          {c.phone && <a href={'tel:' + c.phone} style={{ display:'block', fontSize:12, color:'#1a73e8', marginTop:3, textDecoration:'none', fontWeight:500 }}>{c.phone}</a>}
                           {c.email && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{c.email}</div>}
                         </div>
                       </div>
@@ -621,9 +621,9 @@ export default function CRMLeadDetail() {
                   <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
                     {['Call','Visit','Email','Sample'].map(k => (
                       <button key={k} onClick={() => setActType(k)} style={{ fontSize:11, fontWeight:600, padding:'4px 9px', borderRadius:6, border:'1px solid', cursor:'pointer', fontFamily:'var(--font)',
-                        background: actType===k ? '#0e2d6a' : 'white',
+                        background: actType===k ? '#1a73e8' : 'white',
                         color: actType===k ? 'white' : 'var(--gray-600)',
-                        borderColor: actType===k ? '#0e2d6a' : 'var(--gray-200)',
+                        borderColor: actType===k ? '#1a73e8' : 'var(--gray-200)',
                       }}>{k}</button>
                     ))}
                   </div>
@@ -632,7 +632,7 @@ export default function CRMLeadDetail() {
                       {VISIT_TYPES.map(vt => (
                         <button key={vt} onClick={() => setActVisitType(vt)} style={{ fontSize:11, fontWeight:600, padding:'3px 7px', borderRadius:6, border:'1px solid', cursor:'pointer', fontFamily:'var(--font)',
                           background: actVisitType===vt ? '#e8f2fc' : 'white',
-                          color: actVisitType===vt ? '#1a4dab' : 'var(--gray-500)',
+                          color: actVisitType===vt ? '#1a73e8' : 'var(--gray-500)',
                           borderColor: actVisitType===vt ? '#c2d9f5' : 'var(--gray-200)',
                         }}>{vt}</button>
                       ))}

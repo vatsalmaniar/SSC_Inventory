@@ -7,7 +7,7 @@ import { toast } from '../lib/toast'
 
 const TARGET_TYPES = ['REVENUE','VISITS','NEW_LEADS','CONVERSIONS']
 const TARGET_LABELS = { REVENUE:'Revenue (INR)', VISITS:'Field Visits', NEW_LEADS:'New Leads', CONVERSIONS:'Conversions' }
-const TARGET_COLORS = { REVENUE:'#1E54B7', VISITS:'#0F766E', NEW_LEADS:'#0EA5E9', CONVERSIONS:'#22C55E' }
+const TARGET_COLORS = { REVENUE:'#1a73e8', VISITS:'#0F766E', NEW_LEADS:'#0EA5E9', CONVERSIONS:'#22C55E' }
 
 function getPeriods() {
   const periods = []
@@ -32,7 +32,7 @@ function pct(achieved, target) {
   return Math.min(100, Math.round((achieved / target) * 100))
 }
 
-const _OC = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+const _OC = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
 function initials(name) { return (name||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?' }
 

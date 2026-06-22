@@ -266,15 +266,15 @@ body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff
 .mono{font-family:'Geist Mono',monospace}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #0f172a}
 .co-name{font-size:16px;font-weight:700;margin-bottom:2px}.co-sub{font-size:11px;color:#64748b;margin-bottom:6px}.co-addr{font-size:10px;color:#475569;line-height:1.6}
-.doc-title{font-size:24px;font-weight:700;text-align:right;letter-spacing:-0.5px;color:#1a4dab}
-.doc-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;padding:3px 10px;border-radius:4px;background:#eff6ff;color:#1a4dab;margin-bottom:6px}
+.doc-title{font-size:24px;font-weight:700;text-align:right;letter-spacing:-0.5px;color:#1a73e8}
+.doc-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;padding:3px 10px;border-radius:4px;background:#eff6ff;color:#1a73e8;margin-bottom:6px}
 .vendor-block{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;padding:16px 20px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0}
 .vendor-name{font-size:18px;font-weight:700;margin-bottom:4px}.vendor-code{font-size:11px;color:#64748b;font-family:'Geist Mono',monospace;margin-bottom:8px}
 .field-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:3px}
 .field-val{font-size:12px;font-weight:500;margin-bottom:10px}
 .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:28px}
 .stat{background:#fff;padding:12px 16px}.stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:4px}
-.stat-val{font-size:16px;font-weight:700;color:#0f172a}.stat-val.blue{color:#1a4dab}
+.stat-val{font-size:16px;font-weight:700;color:#0f172a}.stat-val.blue{color:#1a73e8}
 .section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0f172a;margin-bottom:12px;margin-top:28px;padding-bottom:6px;border-bottom:2px solid #e2e8f0}
 .items-table{width:100%;border-collapse:collapse;font-size:11px}
 .items-table thead tr{border-bottom:1px solid #e2e8f0;background:#f8fafc}
@@ -494,7 +494,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                               <label>GST Certificate</label>
                               <div className="val">
                                 {vendor.gst_cert_url
-                                  ? <a href={vendor.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                  ? <a href={vendor.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a73e8', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
                                       <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                       View PDF
                                     </a>
@@ -505,7 +505,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                               <div className="c360-field">
                                 <label>MSME Certificate</label>
                                 <div className="val">
-                                  <a href={vendor.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                  <a href={vendor.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a73e8', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
                                     <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                     View PDF
                                   </a>
@@ -531,11 +531,11 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                             <Field label="POC Name" val={vendor.poc_name} />
                             <div className="c360-field">
                               <label>POC Phone</label>
-                              <div className="val">{vendor.poc_phone ? <a href={'tel:'+vendor.poc_phone} style={{ color:'#1a4dab', textDecoration:'none' }}><PhoneDisplay value={vendor.poc_phone}/></a> : '—'}</div>
+                              <div className="val">{vendor.poc_phone ? <a href={'tel:'+vendor.poc_phone} style={{ color:'#1a73e8', textDecoration:'none' }}><PhoneDisplay value={vendor.poc_phone}/></a> : '—'}</div>
                             </div>
                             <div className="c360-field" style={{ gridColumn:'span 2' }}>
                               <label>POC Email</label>
-                              <div className="val">{vendor.poc_email ? <a href={'mailto:'+vendor.poc_email} style={{ color:'#1a4dab', textDecoration:'none' }}>{vendor.poc_email}</a> : '—'}</div>
+                              <div className="val">{vendor.poc_email ? <a href={'mailto:'+vendor.poc_email} style={{ color:'#1a73e8', textDecoration:'none' }}>{vendor.poc_email}</a> : '—'}</div>
                             </div>
                           </div>
 
@@ -544,11 +544,11 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                             <Field label="Director Name" val={vendor.director_name} />
                             <div className="c360-field">
                               <label>Director Phone</label>
-                              <div className="val">{vendor.director_no ? <a href={'tel:'+vendor.director_no} style={{ color:'#1a4dab', textDecoration:'none' }}><PhoneDisplay value={vendor.director_no}/></a> : '—'}</div>
+                              <div className="val">{vendor.director_no ? <a href={'tel:'+vendor.director_no} style={{ color:'#1a73e8', textDecoration:'none' }}><PhoneDisplay value={vendor.director_no}/></a> : '—'}</div>
                             </div>
                             <div className="c360-field" style={{ gridColumn:'span 2' }}>
                               <label>Director Email</label>
-                              <div className="val">{vendor.director_email ? <a href={'mailto:'+vendor.director_email} style={{ color:'#1a4dab', textDecoration:'none' }}>{vendor.director_email}</a> : '—'}</div>
+                              <div className="val">{vendor.director_email ? <a href={'mailto:'+vendor.director_email} style={{ color:'#1a73e8', textDecoration:'none' }}>{vendor.director_email}</a> : '—'}</div>
                             </div>
                           </div>
 
@@ -600,7 +600,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                             <div>
                               <div style={{ fontSize:14, fontWeight:700, color:'var(--gray-900)' }}>{name}</div>
                               {title && <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:2 }}>{title}</div>}
-                              {phone && <a href={'tel:'+phone} style={{ display:'block', fontSize:13, color:'#1a4dab', marginTop:6, fontWeight:600, textDecoration:'none' }}>{phone}</a>}
+                              {phone && <a href={'tel:'+phone} style={{ display:'block', fontSize:13, color:'#1a73e8', marginTop:6, fontWeight:600, textDecoration:'none' }}>{phone}</a>}
                               {email && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>{email}</div>}
                             </div>
                           </div>
@@ -646,7 +646,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                           <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>GST Certificate</div>
                           <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
                             {vendor.gst_cert_url
-                              ? <a href={vendor.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                              ? <a href={vendor.gst_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a73e8', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
                                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                   View current
                                 </a>
@@ -666,7 +666,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                           <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>MSME Certificate</div>
                           <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
                             {vendor.msme_cert_url
-                              ? <a href={vendor.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a4dab', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                              ? <a href={vendor.msme_cert_url} target="_blank" rel="noopener noreferrer" style={{ color:'#1a73e8', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
                                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                   View current
                                 </a>
@@ -740,7 +740,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                     <tbody>
                       {pos.map(p => (
                         <tr key={p.id} onClick={() => navigate('/procurement/po/'+p.id)} style={{ cursor:'pointer' }}>
-                          <td className="mono" style={{ color:'#1a4dab', fontWeight:700 }}>{p.po_number}</td>
+                          <td className="mono" style={{ color:'#1a73e8', fontWeight:700 }}>{p.po_number}</td>
                           <td style={{ fontSize:12, color:'var(--gray-500)' }}>{p.order_number||'—'}</td>
                           <td>
                             <span className={'od-status-badge '+poStatusClass(p.status)} style={{ fontSize:10 }}>{poStatusLabel(p.status)}</span>
@@ -779,7 +779,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                     <tbody>
                       {grns.map(g => (
                         <tr key={g.id} onClick={() => navigate('/fc/grn/'+g.id)} style={{ cursor:'pointer' }}>
-                          <td className="mono" style={{ color:'#1a4dab', fontWeight:700 }}>{g.grn_number}</td>
+                          <td className="mono" style={{ color:'#1a73e8', fontWeight:700 }}>{g.grn_number}</td>
                           <td style={{ fontSize:12 }}>{g.grn_type?.replace(/_/g,' ')||'—'}</td>
                           <td>
                             <span className={'od-status-badge '+(g.status==='confirmed'?'active':'pending')} style={{ fontSize:10 }}>{g.status}</span>
@@ -812,9 +812,9 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
             <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:10 }}>
               <div style={{ fontSize:12, color:'#64748b', marginBottom:4 }}>Select sections to include:</div>
               {[['pos','Purchase Orders'],['grns','GRNs']].map(([key,label]) => (
-                <label key={key} style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', padding:'10px 14px', borderRadius:8, border:'1px solid', borderColor: pdfInclude[key] ? '#1a4dab' : '#e2e8f0', background: pdfInclude[key] ? '#eff6ff' : '#f8fafc' }}>
-                  <input type="checkbox" checked={pdfInclude[key]} onChange={e => setPdfInclude(p => ({ ...p, [key]: e.target.checked }))} style={{ accentColor:'#1a4dab', width:15, height:15 }} />
-                  <span style={{ fontSize:13, fontWeight:600, color: pdfInclude[key] ? '#1a4dab' : '#475569' }}>{label}</span>
+                <label key={key} style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', padding:'10px 14px', borderRadius:8, border:'1px solid', borderColor: pdfInclude[key] ? '#1a73e8' : '#e2e8f0', background: pdfInclude[key] ? '#eff6ff' : '#f8fafc' }}>
+                  <input type="checkbox" checked={pdfInclude[key]} onChange={e => setPdfInclude(p => ({ ...p, [key]: e.target.checked }))} style={{ accentColor:'#1a73e8', width:15, height:15 }} />
+                  <span style={{ fontSize:13, fontWeight:600, color: pdfInclude[key] ? '#1a73e8' : '#475569' }}>{label}</span>
                 </label>
               ))}
             </div>
@@ -892,7 +892,7 @@ function SideRow({ label, val, accent }) {
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
       <span style={{ fontSize:12, color:'var(--gray-500)' }}>{label}</span>
-      <span style={{ fontSize:13, fontWeight:700, color: accent ? '#1a4dab' : 'var(--gray-900)' }}>{val}</span>
+      <span style={{ fontSize:13, fontWeight:700, color: accent ? '#1a73e8' : 'var(--gray-900)' }}>{val}</span>
     </div>
   )
 }

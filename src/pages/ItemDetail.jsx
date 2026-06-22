@@ -181,7 +181,7 @@ export default function ItemDetail() {
           {/* Hero */}
           <div className="c360-hero" style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-              <div className="c360-hero-avatar" style={{ background: '#1a4dab', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="c360-hero-avatar" style={{ background: '#1a73e8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg fill="none" stroke="white" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width: 26, height: 26 }}>
                   <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
                   <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
@@ -206,7 +206,7 @@ export default function ItemDetail() {
             {/* KPI tiles */}
             <div className="c360-stats" style={{ marginTop: 16 }}>
               {[
-                { label: 'Total Orders',     val: kpi.totalOrders,     color: '#1a4dab' },
+                { label: 'Total Orders',     val: kpi.totalOrders,     color: '#1a73e8' },
                 { label: 'Pending Orders',   val: kpi.pendingOrders,   color: '#92400e' },
                 { label: 'Delivered Orders', val: kpi.deliveredOrders, color: '#166534' },
                 { label: 'Total POs',        val: kpi.totalPos,        color: '#5b21b6' },
@@ -291,7 +291,7 @@ export default function ItemDetail() {
                   <tbody>
                     {orders.map(r => (
                       <tr key={r.id} onClick={() => navigate('/orders/' + r.orders?.id)} style={{ cursor: 'pointer' }}>
-                        <td><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#1a4dab' }}>{r.orders?.order_number || '—'}</span></td>
+                        <td><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#1a73e8' }}>{r.orders?.order_number || '—'}</span></td>
                         <td style={{ fontSize: 13 }}>{r.orders?.customer_name || '—'}</td>
                         <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{fmt(r.orders?.order_date)}</td>
                         <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.qty ?? '—'}</td>

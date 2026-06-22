@@ -19,7 +19,7 @@ const PO_STATUS_LABELS = {
   closed:'Closed', cancelled:'Cancelled',
 }
 const PO_STATUS_COLORS = {
-  draft:'#94A3B8', pending_approval:'#F59E0B', approved:'#1E54B7', placed:'#0EA5E9',
+  draft:'#94A3B8', pending_approval:'#F59E0B', approved:'#1a73e8', placed:'#0EA5E9',
   acknowledged:'#0F766E', partially_received:'#D97706', material_received:'#22C55E',
   closed:'#047857', cancelled:'#EF4444',
 }
@@ -143,7 +143,7 @@ export default function ProcurementDashboard() {
                     <div className="o-empty">No vendor activity yet</div>
                   ) : vendorAgg.map((v, i) => {
                     const seed = v.name; let h = 0; for (let j = 0; j < seed.length; j++) h = (h * 31 + seed.charCodeAt(j)) & 0xffffffff
-                    const palette = ['#1E54B7','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
+                    const palette = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
                     const color = palette[Math.abs(h) % palette.length]
                     return (
                       <div key={v.name} className="rp-row" onClick={() => navigate('/procurement/po')}>
@@ -235,9 +235,9 @@ export default function ProcurementDashboard() {
                 items={pendingAppr.slice(0, 8)} emptyText="No POs pending approval"
                 renderItem={(o) => ({ left: o.po_number, leftColor: '#B45309', sub: o.vendor_name || '—', right: fmtCr(o.total_amount), status: 'pending_approval' })}
                 onClick={(o) => navigate('/procurement/po/' + o.id)}/>
-              <ListCard title="CO Orders Need PO" eyebrow="Awaiting coverage" badge={`${coOrders.length} orders`} badgeColor="#1E54B7"
+              <ListCard title="CO Orders Need PO" eyebrow="Awaiting coverage" badge={`${coOrders.length} orders`} badgeColor="#1a73e8"
                 items={coOrders.slice(0, 8)} emptyText="All CO orders fully covered"
-                renderItem={(o) => ({ left: o.order_number, leftColor: '#1E54B7', sub: o.customer_name, right: `${o._coveredItems}/${o._totalItems}`, status: 'placed', label: 'covered' })}
+                renderItem={(o) => ({ left: o.order_number, leftColor: '#1a73e8', sub: o.customer_name, right: `${o._coveredItems}/${o._totalItems}`, status: 'placed', label: 'covered' })}
                 onClick={(o) => navigate('/procurement/po/new?order_id=' + o.id)}/>
               <ListCard title="Placed · Awaiting Delivery" eyebrow="Vendor · In transit" badge={`${placedPos.length} POs`} badgeColor="#0F766E"
                 items={placedPos.slice(0, 8)} emptyText="No POs awaiting delivery"
