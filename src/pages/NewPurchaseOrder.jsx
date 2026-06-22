@@ -7,6 +7,7 @@ import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
+import { fetchActivePoCoveredItemIds, lineNeedsProcurement } from '../lib/coverage'
 
 const FC_ADDRESSES = {
   Kaveri: 'SSC Control Pvt Ltd, 17(A) Ashwamegh Warehouse, Behind New Ujala Hotel, Sarkhej Bavla Highway, Sarkhej, Ahmedabad, Gujarat 382210',
@@ -15,23 +16,6 @@ const FC_ADDRESSES = {
 
 function emptyItem() {
   return { item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', from_stock: false, co_id: null, co_number: '' }
-}
-
-// Coverage is looked up by po_items.order_item_id directly — not via the PO
-// header's order_id — so a covering PO line is found no matter which CO the
-// PO header points to (required once one PO can club multiple COs).
-// Cancelled POs do NOT count as coverage (their items need procuring again).
-// Chunked: >~150 UUIDs in one .in() exceeds PostgREST's 8 KB URL cap.
-async function fetchCoveredItemIds(itemIds) {
-  const covered = new Set()
-  for (let i = 0; i < itemIds.length; i += 150) {
-    const { data } = await sb.from('po_items')
-      .select('order_item_id, purchase_orders!inner(status)')
-      .in('order_item_id', itemIds.slice(i, i + 150))
-      .neq('purchase_orders.status', 'cancelled')
-    for (const r of (data || [])) covered.add(r.order_item_id)
-  }
-  return covered
 }
 
 export default function NewPurchaseOrder() {
@@ -103,26 +87,25 @@ export default function NewPurchaseOrder() {
     // Test Mode (admin): search test COs so dummy orders can be walked
     // end-to-end without touching live data
     const { data: matches } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(id,line_status,procurement_source)')
+      .select('id,order_number,customer_name,order_items(id,qty,cancelled_qty,dispatched_qty,line_status,procurement_source)')
       .eq('order_type', 'CO')
       .eq('is_test', isTest)
-      .in('status', ['inv_check', 'inventory_check', 'dispatch', 'pending', 'confirmed'])
+      // Any non-cancelled CO is searchable; whether it has lines left to procure
+      // is decided per-line by the shared helper — so a partly-dispatched CO is
+      // still clubbable for its remaining lines.
+      .neq('status', 'cancelled')
       .or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`)
       .order('created_at', { ascending: false })
       .limit(20)
     if (!matches?.length) return []
 
-    // Check item-level coverage — show COs that still have uncovered items
-    // A line is covered if it has a po_items row OR procurement_source = 'stock'
+    // Show only COs that still have at least one line needing a PO (shared helper)
     const allItemIds = matches.flatMap(o => (o.order_items || []).map(oi => oi.id))
-    const coveredByPo = await fetchCoveredItemIds(allItemIds)
+    const coveredByPo = await fetchActivePoCoveredItemIds(allItemIds)
 
     return matches.filter(o => {
       if (coOrders.some(c => c.id === o.id)) return false // already on this PO
-      const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
-      if (!activeItems.length) return false
-      const uncovered = activeItems.filter(oi => !coveredByPo.has(oi.id) && oi.procurement_source !== 'stock')
-      return uncovered.length > 0
+      return (o.order_items || []).some(oi => lineNeedsProcurement(oi, coveredByPo))
     })
   }
 
@@ -135,17 +118,17 @@ export default function NewPurchaseOrder() {
   async function addCO(coId) {
     if (coOrders.some(c => c.id === coId)) { toast('This CO is already on the PO'); return }
     const { data: order } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(id,item_code,description,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty,procurement_source)')
+      .select('id,order_number,customer_name,order_items(id,item_code,description,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty,dispatched_qty,procurement_source)')
       .eq('id', coId).single()
     if (!order) return
 
-    // Find which CO items already have POs (item-level coverage)
-    const coveredByPo = await fetchCoveredItemIds((order.order_items || []).map(oi => oi.id))
+    // Find which CO items already have POs (active POs only — shared helper)
+    const coveredByPo = await fetchActivePoCoveredItemIds((order.order_items || []).map(oi => oi.id))
 
     // Only active (non-cancelled, non-short-closed) lines are candidates for procurement
     const allItems = (order.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
-    // Covered = has a PO line OR already flagged as procurement_source='stock'
-    const uncovered = allItems.filter(oi => !coveredByPo.has(oi.id) && oi.procurement_source !== 'stock')
+    // Uncovered = still needs a PO (not stock, not already dispatched, no active PO)
+    const uncovered = allItems.filter(oi => lineNeedsProcurement(oi, coveredByPo))
     const coveredCount = allItems.length - uncovered.length
 
     // Fetch item types (CI / SI) from the items master for the pre-fill rows.

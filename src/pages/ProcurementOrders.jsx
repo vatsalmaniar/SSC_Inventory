@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmtShort, FY_START } from '../lib/fmt'
+import { lineIsHandled } from '../lib/coverage'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -41,12 +42,14 @@ export default function ProcurementOrders() {
 
     const [coDataRes, orphanPosRes] = await Promise.all([
       sb.from('orders')
-        .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status,procurement_source)')
+        .select('id,order_number,customer_name,status,created_at,order_items(id,qty,total_price,unit_price_after_disc,cancelled_qty,dispatched_qty,line_status,procurement_source)')
         .eq('is_test', testMode).eq('order_type', 'CO')
-        // Procurement-relevant stages only. Late-stage orders (dispatched etc.)
-        // are out of procurement scope — without this filter, the cancelled-PO
-        // coverage fix would resurface ~70 old fulfilled COs as "uncovered".
-        .in('status', ['inv_check', 'inventory_check', 'dispatch', 'cancelled'])
+        // Pull every non-pending CO; whether a line still needs a PO is decided
+        // per LINE by the shared coverage helper (active + not stock + not yet
+        // dispatched + no active PO), NOT by the order's header status. A
+        // partly-dispatched CO keeps showing its unprocured lines; a fully
+        // handled one drops out because every line is handled.
+        .neq('status', 'pending')
         .gte('created_at', FY_START)
         .order('created_at', { ascending: false }),
       sb.from('purchase_orders').select('id,order_id,status').in('status', ORPHAN_PO_STATUSES).eq('is_test', testMode),
@@ -89,7 +92,7 @@ export default function ProcurementOrders() {
       const missingIds = candidateIds.filter(cid => !existingIds.has(cid))
       if (missingIds.length) {
         const { data: extraCos } = await sb.from('orders')
-          .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,unit_price_after_disc,cancelled_qty,line_status,procurement_source)')
+          .select('id,order_number,customer_name,status,created_at,order_items(id,qty,total_price,unit_price_after_disc,cancelled_qty,dispatched_qty,line_status,procurement_source)')
           .in('id', missingIds).eq('status', 'cancelled').eq('is_test', testMode)
         if (extraCos?.length) coOrders = [...coOrders, ...extraCos]
       }
@@ -126,8 +129,9 @@ export default function ProcurementOrders() {
         // Only count active (non-cancelled / non-short-closed) lines for coverage
         const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
         const total = activeItems.length
-        // A line is covered if it has a PO line OR was closed from stock
-        const covered = activeItems.filter(oi => coveredSet.has(oi.id) || oi.procurement_source === 'stock').length
+        // "Handled" = covered by an active PO, from stock, OR already dispatched.
+        // Shared helper is the single definition (see lib/coverage.js).
+        const covered = activeItems.filter(oi => lineIsHandled(oi, coveredSet)).length
         const stockClosed = activeItems.filter(oi => oi.procurement_source === 'stock').length
         const linkedPosList = posByCo[o.id] || []
         const orphanPOs = linkedPosList.filter(p => ORPHAN_PO_STATUSES.includes(p.status))

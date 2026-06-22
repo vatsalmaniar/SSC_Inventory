@@ -9,6 +9,7 @@ import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
+import { lineNeedsProcurement } from '../lib/coverage'
 
 
 const ORDER_MODULE_STAGES = [
@@ -299,10 +300,11 @@ export default function OrderDetail() {
   const pipelineIdx      = ORDER_PIPELINE_KEYS.indexOf(effectiveStatus)
   const canAdvance       = isOps && !isCancelled && !isInFCFlow && pipelineIdx >= 0 && pipelineIdx < ORDER_PIPELINE_KEYS.length - 1
   const hasAnyDispatched = (order?.order_items || []).some(i => (i.dispatched_qty || 0) > 0)
-  // For CO: every active line is covered (PO line linked OR procurement_source='stock') ⇒ hide Add PO button
+  // For CO: hide Add PO once no active line still needs procurement — covered by
+  // an active PO, from stock, OR already dispatched (shared helper, lib/coverage.js)
   const _coActiveLines = order?.order_type === 'CO' ? (order?.order_items || []).filter(i => (i.line_status || 'active') === 'active') : []
   const allCoLinesCovered = order?.order_type === 'CO' && _coActiveLines.length > 0 &&
-    _coActiveLines.every(i => i.procurement_source === 'stock' || poCoveredItemIds.has(i.id))
+    _coActiveLines.every(i => !lineNeedsProcurement(i, poCoveredItemIds))
   // hasAnyPending: under the new model, "pending" is anything not yet GI-posted (and not cancelled)
   const hasAnyPending    = (order?.order_items || []).some(i => (i.qty || 0) > ((i.posted_qty || 0) + (i.cancelled_qty || 0)))
   // hasUndispatched: anything not yet reserved in a delivery batch (and not cancelled).

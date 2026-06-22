@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
+import { fetchActivePoCoveredItemIds, lineIsHandled } from '../lib/coverage'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -54,36 +55,21 @@ export default function ProcurementDashboard() {
     setPendingInward(inwardCountRes.count || 0)
 
     const { data: coData } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,order_items(id,total_price,procurement_source,line_status)')
+      .select('id,order_number,customer_name,status,order_items(id,qty,total_price,cancelled_qty,dispatched_qty,procurement_source,line_status)')
       .eq('is_test', false).eq('order_type', 'CO')
-      .in('status', ['inv_check','inventory_check','dispatch'])
+      // Per-line coverage decides pending, not order status (see lib/coverage.js).
+      .neq('status', 'pending')
       .gte('created_at', FY_START)
       .order('created_at', { ascending: false })
     let coList = coData || []
     if (coList.length) {
-      // Chunk .in() so the URL doesn't exceed PostgREST's ~8 KB cap and get truncated
-      async function chunkedFetch(builderFn, ids, chunkSize = 150) {
-        const all = []
-        for (let i = 0; i < ids.length; i += chunkSize) {
-          const { data } = await builderFn(ids.slice(i, i + chunkSize))
-          if (data?.length) all.push(...data)
-        }
-        return all
-      }
-      // Coverage by po_items.order_item_id directly — not via the PO header's
-      // order_id — so lines on a PO clubbing multiple COs still count.
-      // Cancelled POs do NOT count (their items need procuring again).
+      // Coverage by po_items.order_item_id (active POs only) — shared helper.
       const allItemIds = coList.flatMap(o => (o.order_items || []).map(oi => oi.id))
-      const poItems = await chunkedFetch(
-        (slice) => sb.from('po_items').select('order_item_id, purchase_orders!inner(status)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
-        allItemIds
-      )
-      const coveredSet = new Set(poItems.map(pi => pi.order_item_id))
+      const coveredSet = await fetchActivePoCoveredItemIds(allItemIds)
       coList = coList.map(o => {
-        // Only count active lines; covered = PO line OR procurement_source='stock'
         const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
         const total = activeItems.length
-        const covered = activeItems.filter(oi => coveredSet.has(oi.id) || oi.procurement_source === 'stock').length
+        const covered = activeItems.filter(oi => lineIsHandled(oi, coveredSet)).length
         return { ...o, _totalItems: total, _coveredItems: covered }
       }).filter(o => o._totalItems > 0 && o._coveredItems < o._totalItems)
     }
