@@ -42,7 +42,7 @@ export default function ProcurementOrders() {
 
     const [coDataRes, orphanPosRes] = await Promise.all([
       sb.from('orders')
-        .select('id,order_number,customer_name,status,created_at,order_items(id,qty,total_price,unit_price_after_disc,cancelled_qty,dispatched_qty,line_status,procurement_source)')
+        .select('id,order_number,customer_name,status,created_at,order_items(id,qty,total_price,unit_price_after_disc,cancelled_qty,dispatched_qty,stock_qty,line_status,procurement_source)')
         .eq('is_test', testMode).eq('order_type', 'CO')
         // Pull every non-pending CO; whether a line still needs a PO is decided
         // per LINE by the shared coverage helper (active + not stock + not yet
@@ -92,7 +92,7 @@ export default function ProcurementOrders() {
       const missingIds = candidateIds.filter(cid => !existingIds.has(cid))
       if (missingIds.length) {
         const { data: extraCos } = await sb.from('orders')
-          .select('id,order_number,customer_name,status,created_at,order_items(id,qty,total_price,unit_price_after_disc,cancelled_qty,dispatched_qty,line_status,procurement_source)')
+          .select('id,order_number,customer_name,status,created_at,order_items(id,qty,total_price,unit_price_after_disc,cancelled_qty,dispatched_qty,stock_qty,line_status,procurement_source)')
           .in('id', missingIds).eq('status', 'cancelled').eq('is_test', testMode)
         if (extraCos?.length) coOrders = [...coOrders, ...extraCos]
       }
@@ -120,10 +120,12 @@ export default function ProcurementOrders() {
       // Cancelled POs do NOT count (their items need procuring again).
       const allItemIds = coOrders.flatMap(o => (o.order_items || []).map(oi => oi.id))
       const poItems = await chunkedFetch(
-        (slice) => sb.from('po_items').select('order_item_id, po_id, purchase_orders!inner(status)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
+        (slice) => sb.from('po_items').select('order_item_id, qty, po_id, purchase_orders!inner(status)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
         allItemIds
       )
-      const coveredSet = new Set(poItems.map(pi => pi.order_item_id))
+      // Map of order_item_id -> covered qty (quantity-precise, shared helper).
+      const coveredSet = new Map()
+      for (const pi of poItems) coveredSet.set(pi.order_item_id, (coveredSet.get(pi.order_item_id) || 0) + (Number(pi.qty) || 0))
       for (const pi of poItems) addPo(oiToCo[pi.order_item_id], pi.po_id, pi.purchase_orders?.status)
       coOrders = coOrders.map(o => {
         // Only count active (non-cancelled / non-short-closed) lines for coverage

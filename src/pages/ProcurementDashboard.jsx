@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
-import { fetchActivePoCoveredItemIds, lineIsHandled } from '../lib/coverage'
+import { fetchActivePoCoveredQty, lineIsHandled } from '../lib/coverage'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -55,7 +55,7 @@ export default function ProcurementDashboard() {
     setPendingInward(inwardCountRes.count || 0)
 
     const { data: coData } = await sb.from('orders')
-      .select('id,order_number,customer_name,status,order_items(id,qty,total_price,cancelled_qty,dispatched_qty,procurement_source,line_status)')
+      .select('id,order_number,customer_name,status,order_items(id,qty,total_price,cancelled_qty,dispatched_qty,stock_qty,procurement_source,line_status)')
       .eq('is_test', false).eq('order_type', 'CO')
       // Per-line coverage decides pending, not order status (see lib/coverage.js).
       .neq('status', 'pending')
@@ -65,7 +65,7 @@ export default function ProcurementDashboard() {
     if (coList.length) {
       // Coverage by po_items.order_item_id (active POs only) — shared helper.
       const allItemIds = coList.flatMap(o => (o.order_items || []).map(oi => oi.id))
-      const coveredSet = await fetchActivePoCoveredItemIds(allItemIds)
+      const coveredSet = await fetchActivePoCoveredQty(allItemIds)
       coList = coList.map(o => {
         const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
         const total = activeItems.length

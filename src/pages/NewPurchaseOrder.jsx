@@ -7,7 +7,7 @@ import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
-import { fetchActivePoCoveredItemIds, lineNeedsProcurement } from '../lib/coverage'
+import { fetchActivePoCoveredQty, lineNeedsProcurement, lineToProcureQty } from '../lib/coverage'
 
 const FC_ADDRESSES = {
   Kaveri: 'SSC Control Pvt Ltd, 17(A) Ashwamegh Warehouse, Behind New Ujala Hotel, Sarkhej Bavla Highway, Sarkhej, Ahmedabad, Gujarat 382210',
@@ -15,7 +15,7 @@ const FC_ADDRESSES = {
 }
 
 function emptyItem() {
-  return { item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', from_stock: false, co_id: null, co_number: '' }
+  return { item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', stock_qty: '0', co_remaining: 0, co_id: null, co_number: '' }
 }
 
 export default function NewPurchaseOrder() {
@@ -87,7 +87,7 @@ export default function NewPurchaseOrder() {
     // Test Mode (admin): search test COs so dummy orders can be walked
     // end-to-end without touching live data
     const { data: matches } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(id,qty,cancelled_qty,dispatched_qty,line_status,procurement_source)')
+      .select('id,order_number,customer_name,order_items(id,qty,cancelled_qty,dispatched_qty,stock_qty,line_status,procurement_source)')
       .eq('order_type', 'CO')
       .eq('is_test', isTest)
       // Any non-cancelled CO is searchable; whether it has lines left to procure
@@ -101,7 +101,7 @@ export default function NewPurchaseOrder() {
 
     // Show only COs that still have at least one line needing a PO (shared helper)
     const allItemIds = matches.flatMap(o => (o.order_items || []).map(oi => oi.id))
-    const coveredByPo = await fetchActivePoCoveredItemIds(allItemIds)
+    const coveredByPo = await fetchActivePoCoveredQty(allItemIds)
 
     return matches.filter(o => {
       if (coOrders.some(c => c.id === o.id)) return false // already on this PO
@@ -123,7 +123,7 @@ export default function NewPurchaseOrder() {
     if (!order) return
 
     // Find which CO items already have POs (active POs only — shared helper)
-    const coveredByPo = await fetchActivePoCoveredItemIds((order.order_items || []).map(oi => oi.id))
+    const coveredByPo = await fetchActivePoCoveredQty((order.order_items || []).map(oi => oi.id))
 
     // Only active (non-cancelled, non-short-closed) lines are candidates for procurement
     const allItems = (order.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
@@ -157,21 +157,28 @@ export default function NewPurchaseOrder() {
       return
     }
 
-    const prefilled = uncovered.map(oi => ({
-      order_item_id: oi.id,
-      co_id: order.id,
-      co_number: order.order_number,
-      item_code: oi.item_code || '',
-      description: oi.description || '',
-      qty: String(oi.qty || ''),
-      lp_unit_price: String(oi.lp_unit_price || ''),
-      discount_pct: String(oi.discount_pct || '0'),
-      unit_price_after_disc: String(oi.unit_price_after_disc || ''),
-      total_price: String(oi.total_price || ''),
-      delivery_date: oi.dispatch_date || '',
-      item_type: typeByCode.get(oi.item_code) || '',
-      from_stock: false,
-    }))
+    const prefilled = uncovered.map(oi => {
+      // PO qty defaults to what's still left to procure (quantity-precise),
+      // not the full ordered qty — a line may be partly covered/dispatched.
+      const remaining = lineToProcureQty(oi, coveredByPo)
+      const unit = Number(oi.unit_price_after_disc) || 0
+      return {
+        order_item_id: oi.id,
+        co_id: order.id,
+        co_number: order.order_number,
+        item_code: oi.item_code || '',
+        description: oi.description || '',
+        qty: String(remaining || ''),
+        co_remaining: remaining,
+        stock_qty: '0',
+        lp_unit_price: String(oi.lp_unit_price || ''),
+        discount_pct: String(oi.discount_pct || '0'),
+        unit_price_after_disc: String(oi.unit_price_after_disc || ''),
+        total_price: String(unit && remaining ? (unit * remaining).toFixed(2) : ''),
+        delivery_date: oi.dispatch_date || '',
+        item_type: typeByCode.get(oi.item_code) || '',
+      }
+    })
     // First CO replaces the blank starter rows; further COs append below
     setItems(prev => {
       const kept = prev.filter(it => it.item_code.trim() || it.co_id)
@@ -269,9 +276,17 @@ export default function NewPurchaseOrder() {
       const next = [...prev]
       next[idx] = { ...next[idx], [field]: value }
       const item = next[idx]
-      const lp   = parseFloat(item.lp_unit_price) || 0
-      const disc = parseFloat(item.discount_pct)  || 0
-      const qty  = parseFloat(item.qty)            || 0
+      // Partial-stock link: when the buyer enters "from stock" qty on a CO line,
+      // the PO qty auto-reduces to the remainder (ordered − stock). Clamped to
+      // the line's remaining-to-procure so the two can't exceed what's needed.
+      if (field === 'stock_qty' && item.co_remaining > 0) {
+        const sq = Math.max(0, Math.min(parseFloat(value) || 0, item.co_remaining))
+        next[idx].stock_qty = String(sq)
+        next[idx].qty = String(item.co_remaining - sq)
+      }
+      const lp   = parseFloat(next[idx].lp_unit_price) || 0
+      const disc = parseFloat(next[idx].discount_pct)  || 0
+      const qty  = parseFloat(next[idx].qty)            || 0
       const unit = lp * (1 - disc / 100)
       next[idx].unit_price_after_disc = unit ? unit.toFixed(2) : ''
       next[idx].total_price = (unit && qty) ? (unit * qty).toFixed(2) : ''
@@ -281,31 +296,44 @@ export default function NewPurchaseOrder() {
 
   function addRow()       { setItems(prev => [...prev, emptyItem()]) }
   function removeRow(idx) { setItems(prev => prev.filter((_, i) => i !== idx)) }
-  function toggleFromStock(idx) {
-    setItems(prev => prev.map((it, i) => i === idx ? { ...it, from_stock: !it.from_stock } : it))
-  }
 
   const filledItems = items.filter(i => i.item_code.trim())
-  const poLines     = filledItems.filter(i => !i.from_stock)
-  const stockLines  = filledItems.filter(i => i.from_stock && i.order_item_id)
+  // A row goes on the PO when its PO qty > 0; it allocates stock when stock_qty > 0.
+  // A single CO line can do both (e.g. 6 from stock + 4 on PO).
+  const poLines     = filledItems.filter(i => (parseFloat(i.qty) || 0) > 0)
+  const stockLines  = filledItems.filter(i => i.order_item_id && (parseFloat(i.stock_qty) || 0) > 0)
   const grandTotal  = poLines.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0)
   const isCO        = poType === 'CO'
   const closeOnly   = isCO && poLines.length === 0 && stockLines.length > 0
+
+  // Persist stock allocation per CO line. Sets order_items.stock_qty; also sets
+  // procurement_source='stock' ONLY when stock fully covers the line (so legacy
+  // "From Stock · No PO" displays still work). Partial lines stay 'po'. Returns
+  // the first error, or null.
+  async function applyStockAllocs(allocs) {
+    for (const s of allocs) {
+      const sq = parseFloat(s.stock_qty) || 0
+      const full = sq >= (s.co_remaining || 0)
+      const patch = full ? { stock_qty: sq, procurement_source: 'stock' } : { stock_qty: sq }
+      const { error } = await sb.from('order_items').update(patch).eq('id', s.order_item_id)
+      if (error) return error
+    }
+    return null
+  }
 
   async function submitPO(submitForApproval) {
     if (submitGuard.current) return
     if (isCO && !coOrders.length) { toast('Please select a Custom Order (SSC CO No.)'); return }
     if (!filledItems.length){ toast('Add at least one line item'); return }
 
-    // Close-as-Stock path: every filled line is "From Stock", no PO created
+    // Close-as-Stock path: every filled line is fully From Stock, no PO created
     if (closeOnly) {
       submitGuard.current = true
       setSubmitting(true)
       try {
-        const ids = stockLines.map(s => s.order_item_id)
-        const { error } = await sb.from('order_items').update({ procurement_source: 'stock' }).in('id', ids)
-        if (error) { toast(friendlyError(error, 'Failed to mark items as stock')); submitGuard.current = false; setSubmitting(false); return }
-        toast(`${ids.length} item${ids.length>1?'s':''} closed from stock — no PO needed`, 'success')
+        const err = await applyStockAllocs(stockLines)
+        if (err) { toast(friendlyError(err, 'Failed to mark items as stock')); submitGuard.current = false; setSubmitting(false); return }
+        toast(`${stockLines.length} item${stockLines.length>1?'s':''} closed from stock — no PO needed`, 'success')
         navigate('/procurement/orders')
         return
       } catch (err) {
@@ -416,22 +444,21 @@ export default function NewPurchaseOrder() {
         submitGuard.current = false; setSubmitting(false); return
       }
 
-      // Flag any SI lines the user toggled "From Stock". If this fails, also roll back
-      // the PO so the user can retry from a clean state — otherwise the PO would exist
-      // but the same SI lines would keep appearing in the procurement queue.
+      // Record stock allocations (whole-line OR partial e.g. 6-of-10 from stock).
+      // If this fails, roll back the PO so the user retries from a clean state —
+      // otherwise the same lines would keep showing as needing procurement.
       if (stockLines.length) {
-        const stockIds = stockLines.map(s => s.order_item_id)
-        const { error: stockErr } = await sb.from('order_items').update({ procurement_source: 'stock' }).in('id', stockIds)
+        const stockErr = await applyStockAllocs(stockLines)
         if (stockErr) {
           await sb.from('po_items').delete().eq('po_id', po.id)
           await sb.from('purchase_orders').delete().eq('id', po.id)
-          toast(friendlyError(stockErr, 'Could not mark items as stock — rolled back. Please try again.'))
+          toast(friendlyError(stockErr, 'Could not record stock allocation — rolled back. Please try again.'))
           submitGuard.current = false; setSubmitting(false); return
         }
       }
 
       toast(stockLines.length
-        ? `PO created with ${poLines.length} item${poLines.length>1?'s':''}, ${stockLines.length} closed from stock`
+        ? `PO created with ${poLines.length} line${poLines.length>1?'s':''}, ${stockLines.length} with stock allocation`
         : 'Purchase Order created — PO number will be assigned on approval', 'success')
       navigate('/procurement/po/' + po.id)
     } catch (err) {
@@ -716,7 +743,7 @@ export default function NewPurchaseOrder() {
                   <th className="col-unit">Unit Price (₹)</th>
                   <th className="col-total">Total (₹)</th>
                   <th className="col-date">Delivery Date <span className="req">*</span></th>
-                  {isCO && <th className="col-stock" title="Close this line from stock — skip the PO">From Stock</th>}
+                  {isCO && <th className="col-stock" title="How many of this line come from existing stock — the rest goes on the PO">From Stock Qty</th>}
                   <th className="col-del"></th>
                 </tr>
               </thead>
@@ -724,7 +751,11 @@ export default function NewPurchaseOrder() {
                 {items.map((item, idx) => {
                   const isSI    = item.item_type === 'SI'
                   const isCI    = item.item_type === 'CI'
-                  const stocked = !!item.from_stock
+                  const stockQty = parseFloat(item.stock_qty) || 0
+                  const poQty    = parseFloat(item.qty) || 0
+                  // "stocked" = fully from stock (no PO portion) → grey + lock PO inputs.
+                  // A split line (stock + PO) keeps its PO inputs editable.
+                  const stocked = isCO && stockQty > 0 && poQty === 0
                   const rowStyle = stocked ? { opacity: 0.55, background: 'var(--gray-50)' } : {}
                   return (
                   <Fragment key={idx}>
@@ -784,10 +815,14 @@ export default function NewPurchaseOrder() {
                     {isCO && (
                       <td className="col-stock" style={{ textAlign:'center' }}>
                         {item.order_item_id ? (
-                          <label style={{ display:'inline-flex', alignItems:'center', gap:4, cursor:'pointer', fontSize:11, fontWeight:600, color: stocked ? '#166534' : 'var(--gray-500)' }}>
-                            <input type="checkbox" checked={stocked} onChange={() => toggleFromStock(idx)} style={{ accentColor:'#166534', width:14, height:14 }} />
-                            {stocked ? 'Stock' : ''}
-                          </label>
+                          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:1 }}>
+                            <input type="number" value={item.stock_qty} onChange={e => updateItem(idx, 'stock_qty', e.target.value)}
+                              min="0" max={item.co_remaining || undefined} placeholder="0"
+                              title={`Up to ${item.co_remaining} from stock`}
+                              style={{ width:56, textAlign:'center', accentColor:'#166534',
+                                ...(stockQty > 0 ? { borderColor:'#86efac', background:'#f0fdf4', color:'#166534', fontWeight:600 } : {}) }} />
+                            {item.co_remaining > 0 && <span style={{ fontSize:9, color:'var(--gray-400)' }}>of {item.co_remaining}</span>}
+                          </div>
                         ) : (
                           <span style={{ fontSize:10, color:'var(--gray-400)' }}>—</span>
                         )}
