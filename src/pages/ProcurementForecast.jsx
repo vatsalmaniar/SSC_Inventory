@@ -751,16 +751,18 @@ export default function ProcurementForecast() {
     const endDate   = QM[2] + '-' + lastDayOf(QM[2])
 
     // System sales = qty actually DELIVERED (FC clicked delivered → status='dispatched_fc' + delivered_at).
-    // Source of truth: order_dispatches.dispatched_items per batch, grouped by delivered_at month.
-    // (Replaced earlier reliance on order_items.dispatched_qty which fired at delivery_created — too early.)
-    const [deliveredBatchesRes, manualSalesRes, invRes, manualStockRes] = await Promise.all([
-      sb.from('order_dispatches')
-        .select('delivered_at, dispatched_items, orders!inner(is_test)')
-        .eq('status', 'dispatched_fc')
-        .eq('orders.is_test', false)
-        .not('delivered_at', 'is', null)
-        .gte('delivered_at', startDate + 'T00:00:00')
-        .lte('delivered_at', endDate + 'T23:59:59'),
+    // Aggregated SERVER-SIDE via forecast_delivered_qty RPC (sum per item per month).
+    // The old client-side approach pulled every dispatch batch for the quarter and
+    // summed in JS — but PostgREST caps selects at 1000 rows, so once a quarter had
+    // >1000 batches the extras were silently dropped and system-sales under-counted
+    // (e.g. a 1377-qty item showed 9). The RPC sums in Postgres and returns only the
+    // brand's item rows, so the cap can't bite. See [[thousand-row-cap]].
+    const [deliveredRes, manualSalesRes, invRes, manualStockRes] = await Promise.all([
+      sb.rpc('forecast_delivered_qty', {
+        p_start: startDate + 'T00:00:00',
+        p_end:   endDate + 'T23:59:59',
+        p_item_codes: itemCodes,
+      }),
       sb.from('procurement_forecast_sales').select('item_code, month, manual_qty').in('item_code', itemCodes).in('month', QM),
       sb.from('inventory').select('product_code, quantity, location').in('product_code', itemCodes),
       sb.from('procurement_forecast_stock').select('item_code, manual_qty').in('item_code', itemCodes),
@@ -768,16 +770,8 @@ export default function ProcurementForecast() {
 
     const sMap = {}
     items.forEach(i => { sMap[i.item_code] = {}; QM.forEach(m => { sMap[i.item_code][m] = { sys: 0, manual: null } }) })
-    const itemCodeSet = new Set(itemCodes)
-    ;(deliveredBatchesRes.data || []).forEach(batch => {
-      const month = batch.delivered_at?.slice(0, 7)
-      if (!month || !QM.includes(month)) return
-      ;(batch.dispatched_items || []).forEach(di => {
-        const code = di?.item_code
-        const qty  = parseFloat(di?.qty) || 0
-        if (!itemCodeSet.has(code) || sMap[code]?.[month] === undefined) return
-        sMap[code][month].sys += qty
-      })
+    ;(deliveredRes.data || []).forEach(row => {
+      if (sMap[row.item_code]?.[row.month] !== undefined) sMap[row.item_code][row.month].sys = parseFloat(row.qty) || 0
     })
     ;(manualSalesRes.data || []).forEach(row => {
       if (sMap[row.item_code]?.[row.month] !== undefined) sMap[row.item_code][row.month].manual = row.manual_qty
