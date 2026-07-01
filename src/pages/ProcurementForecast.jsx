@@ -9,22 +9,42 @@ import '../styles/procurement-forecast.css'
 const MONTH_NAMES = { '01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec' }
 const DELIVERED_STATUSES = ['dispatched_fc', 'goods_issued', 'invoice_generated', 'closed']
 
-function getPrevQuarter() {
-  const now = new Date()
-  const m = now.getMonth() + 1
-  const y = now.getFullYear()
-  let months, label
-  if (m >= 4 && m <= 6) {
-    months = [`${y}-01`, `${y}-02`, `${y}-03`]; label = `Q4 FY${String(y-1).slice(-2)}-${String(y).slice(-2)}`
-  } else if (m >= 7 && m <= 9) {
-    months = [`${y}-04`, `${y}-05`, `${y}-06`]; label = `Q1 FY${String(y).slice(-2)}-${String(y+1).slice(-2)}`
-  } else if (m >= 10 && m <= 12) {
-    months = [`${y}-07`, `${y}-08`, `${y}-09`]; label = `Q2 FY${String(y).slice(-2)}-${String(y+1).slice(-2)}`
-  } else {
-    months = [`${y-1}-10`, `${y-1}-11`, `${y-1}-12`]; label = `Q3 FY${String(y-1).slice(-2)}-${String(y).slice(-2)}`
-  }
+// A single Indian-FY quarter as { months:['YYYY-MM'x3], label:'Qn FYaa-bb' }.
+// q: 0=Q1(Apr-Jun) 1=Q2(Jul-Sep) 2=Q3(Oct-Dec) 3=Q4(Jan-Mar, calendar year+1).
+// fyStart = the calendar year the fiscal year begins (2026 => FY26-27).
+function quarterDef(fyStart, q) {
+  const specs = [
+    { mm: ['04','05','06'], yr: fyStart },
+    { mm: ['07','08','09'], yr: fyStart },
+    { mm: ['10','11','12'], yr: fyStart },
+    { mm: ['01','02','03'], yr: fyStart + 1 },
+  ][q]
+  const months = specs.mm.map(m => `${specs.yr}-${m}`)
+  const label = `Q${q + 1} FY${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`
   return { months, label }
 }
+
+// The last `count` COMPLETED quarters, newest first (index 0 = previous quarter).
+function quarterList(count = 8) {
+  const now = new Date()
+  const cm = now.getMonth() + 1, cy = now.getFullYear()
+  let fyStart, q
+  if (cm >= 4 && cm <= 6)       { fyStart = cy;     q = 0 }
+  else if (cm >= 7 && cm <= 9)  { fyStart = cy;     q = 1 }
+  else if (cm >= 10 && cm <= 12){ fyStart = cy;     q = 2 }
+  else                          { fyStart = cy - 1; q = 3 }
+  // Step back to the previous (completed) quarter, then walk backwards.
+  let py = fyStart, pq = q - 1
+  if (pq < 0) { pq = 3; py -= 1 }
+  const out = []
+  for (let i = 0; i < count; i++) {
+    out.push(quarterDef(py, pq))
+    pq -= 1; if (pq < 0) { pq = 3; py -= 1 }
+  }
+  return out
+}
+
+function getPrevQuarter() { return quarterList(1)[0] }
 
 function lastDayOf(yyyyMM) {
   const [y, m] = yyyyMM.split('-').map(Number)
@@ -655,7 +675,9 @@ function SliderField({ label, value, max, onChange, color }) {
 // =================== Root Page ===================
 export default function ProcurementForecast() {
   const navigate = useNavigate()
-  const { months: QM, label: QLabel } = getPrevQuarter()
+  const QUARTERS = quarterList(8)
+  const [quarter, setQuarter] = useState(QUARTERS[0])
+  const QM = quarter.months, QLabel = quarter.label
 
   const [userName, setUserName]     = useState('')
   const [brands, setBrands]         = useState([])
@@ -683,6 +705,8 @@ export default function ProcurementForecast() {
   const brandConfig = selectedBrand ? allConfigs[selectedBrand] : null
 
   useEffect(() => { init() }, [])
+  // Re-pull the selected brand's data whenever the analysis quarter changes.
+  useEffect(() => { if (selectedBrand) selectBrand(selectedBrand) }, [quarter.label])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -918,7 +942,13 @@ export default function ProcurementForecast() {
           <div className="page-meta">
             <div className="meta-pill">
               <span className="meta-label">Quarter</span>
-              <span className="meta-val">{QLabel}</span>
+              <select
+                value={quarter.label}
+                onChange={e => { const q = QUARTERS.find(x => x.label === e.target.value); if (q) setQuarter(q) }}
+                style={{ border:'none', background:'transparent', fontWeight:700, fontSize:13, color:'var(--pf-ink, #0B1B30)', cursor:'pointer', outline:'none', fontFamily:'inherit', padding:'0 2px' }}
+                title="Select the quarter to analyse (based on last quarter's delivered sales)">
+                {QUARTERS.map(q => <option key={q.label} value={q.label}>{q.label}</option>)}
+              </select>
             </div>
             <div className="meta-pill live">
               <span className="meta-dot"/> Live

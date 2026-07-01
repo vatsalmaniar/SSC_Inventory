@@ -132,6 +132,9 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
         delivery_address:     FC_ADDRESSES[fulfilmentCenter] || null,
         notes:                notes.trim() || null,
         ssc_notes:            sscNotes.trim() || null,
+        // Stamp the analysis quarter on the PO Reference so it's visible on the
+        // PO detail/print which quarter's forecast this order was based on.
+        reference:            qLabel ? `Forecast · ${qLabel}` : null,
         purchase_requisition: purchaseRequisition.trim() || null,
         total_amount:         grandTotal,
         payment_terms:        vendorPaymentTerms || null,
