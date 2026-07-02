@@ -113,13 +113,23 @@ const FILTERS = [
 ]
 
 const TIMELINES = [
-  { key: 'all',    label: 'All Time' },
-  { key: 'today',  label: 'Today' },
-  { key: 'week',   label: 'This Week' },
-  { key: 'month',  label: 'This Month' },
-  { key: 'year',   label: 'This Year' },
-  { key: 'custom', label: 'Custom' },
+  { key: 'all',       label: 'All Time' },
+  { key: 'today',     label: 'Today' },
+  { key: 'week',      label: 'This Week' },
+  { key: 'lastweek',  label: 'Last Week' },
+  { key: 'month',     label: 'This Month' },
+  { key: 'lastmonth', label: 'Last Month' },
+  { key: 'year',      label: 'This Year' },
+  { key: 'custom',    label: 'Custom' },
 ]
+
+// Cancellation date: header cancelled_at (full-order cancel + backfill,
+// sql/orders_cancelled_at.sql), else latest line-level cancelled_at (RPC)
+function cancelledOn(o) {
+  if (o.cancelled_at) return o.cancelled_at
+  const dates = (o.order_items || []).map(i => i.cancelled_at).filter(Boolean).sort()
+  return dates.length ? dates[dates.length - 1] : null
+}
 
 function inTimeline(o, t, customFrom, customTo, dateMode) {
   let dateStr
@@ -131,6 +141,9 @@ function inTimeline(o, t, customFrom, customTo, dateMode) {
     const dates = (o.order_items || []).map(i => i.dispatch_date).filter(Boolean).sort()
     dateStr = dates[0] || null
     if (!dateStr) return false
+  } else if (dateMode === 'cancelled') {
+    // Old cancellations (before cancelled_at existed) fall back to order date so they never disappear
+    dateStr = cancelledOn(o) || o.order_date || o.created_at
   } else {
     dateStr = o.order_date || o.created_at
   }
@@ -138,8 +151,14 @@ function inTimeline(o, t, customFrom, customTo, dateMode) {
   const now = new Date(); now.setHours(0,0,0,0)
   if (t === 'all') return true
   if (t === 'today') return d.getTime() === now.getTime()
-  if (t === 'week') { const start = new Date(now); start.setDate(now.getDate() - now.getDay()); return d >= start }
+  if (t === 'week' || t === 'lastweek') {
+    const start = new Date(now); start.setDate(now.getDate() - ((now.getDay() + 6) % 7)) // Monday
+    if (t === 'week') return d >= start
+    const prev = new Date(start); prev.setDate(start.getDate() - 7)
+    return d >= prev && d < start
+  }
   if (t === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  if (t === 'lastmonth') { const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1); return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth() }
   if (t === 'year')  return d.getFullYear() === now.getFullYear()
   if (t === 'custom') {
     if (customFrom) { const f = new Date(customFrom); f.setHours(0,0,0,0); if (d < f) return false }
@@ -159,7 +178,7 @@ export default function OrdersList() {
   const [timeline, setTimeline] = useState(location.state?.timeline || 'all')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
-  const [dateMode, setDateMode] = useState(location.state?.dateMode || 'order')
+  const [dateMode, setDateMode] = useState(location.state?.dateMode || (location.state?.filter === 'cancelled' ? 'cancelled' : 'order'))
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [showTest, setShowTest] = useState(false)
@@ -184,7 +203,7 @@ export default function OrdersList() {
     // with .range() and a stable created_at+id sort.
     const { data, error, truncated } = await fetchAll((from, to) => {
       let q = sb.from('orders')
-        .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,order_items(id,sr_no,item_code,qty,dispatched_qty,posted_qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,customer_ref_no,cancelled_qty,line_status),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
+        .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,cancelled_at,order_items(id,sr_no,item_code,qty,dispatched_qty,posted_qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,customer_ref_no,cancelled_qty,line_status,cancelled_at),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
         .gte('created_at', FY_START).eq('is_test', testMode)
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
@@ -195,6 +214,14 @@ export default function OrdersList() {
     if (truncated) console.warn('OrdersList: order list hit the fetch ceiling — consider server-side pagination.')
     setOrders(data || [])
     setLoading(false)
+  }
+
+  function selectFilter(key) {
+    setFilter(key)
+    setPage(1)
+    // Cancelled chip → timeline filters on cancellation date; leaving it reverts to order date
+    if (key === 'cancelled') setDateMode('cancelled')
+    else if (dateMode === 'cancelled') setDateMode('order')
   }
 
   function matchFilter(o, f) {
@@ -423,8 +450,8 @@ export default function OrdersList() {
           <KpiTile variant="hero" tone="deep" label={activeFilterLabel} value={filtered.length} sub="matching orders" chart="line"/>
           <KpiTile variant="hero" tone="forest" label="Total Value" value={fmtCr(sumTotal)} sub="filtered total" chart="bars"/>
           <KpiTile variant="hero" tone="teal" label="Pending Value" value={fmtCr(sumPending)} sub="awaiting delivery" chart="bars"/>
-          <KpiTile label="Pending Approval" value={counts.approval || 0} sub="awaiting approval" accent={(counts.approval || 0) > 0 ? 'amber' : null} onClick={() => { setFilter('approval'); setPage(1) }}/>
-          <KpiTile label="Partially Shipped" value={counts.partial || 0} sub="partial deliveries" onClick={() => { setFilter('partial'); setPage(1) }}/>
+          <KpiTile label="Pending Approval" value={counts.approval || 0} sub="awaiting approval" accent={(counts.approval || 0) > 0 ? 'amber' : null} onClick={() => selectFilter('approval')}/>
+          <KpiTile label="Partially Shipped" value={counts.partial || 0} sub="partial deliveries" onClick={() => selectFilter('partial')}/>
         </div>
 
         {/* Timeline + date mode */}
@@ -458,13 +485,16 @@ export default function OrdersList() {
             <button className={dateMode === 'order' ? 'on' : ''} onClick={() => { setDateMode('order'); setPage(1) }}>Order Date</button>
             <button className={dateMode === 'delivery' ? 'on' : ''} onClick={() => { setDateMode('delivery'); setPage(1) }}>Delivery Date</button>
             <button className={dateMode === 'delivered_at' ? 'on' : ''} onClick={() => { setDateMode('delivered_at'); setPage(1) }}>Delivered On</button>
+            {filter === 'cancelled' && (
+              <button className={dateMode === 'cancelled' ? 'on' : ''} onClick={() => { setDateMode('cancelled'); setPage(1) }}>Cancelled On</button>
+            )}
           </div>
         </div>
 
         {/* Filter chips */}
         <div className="o-filter-row">
           {FILTERS.map(({ key, label, tone }) => (
-            <button key={key} className={`o-chip ${filter === key ? 'on' : ''} ${tone || ''}`} onClick={() => { setFilter(key); setPage(1) }}>
+            <button key={key} className={`o-chip ${filter === key ? 'on' : ''} ${tone || ''}`} onClick={() => selectFilter(key)}>
               {label}
               {counts[key] > 0 && <span className="o-chip-n">{counts[key]}</span>}
             </button>
@@ -480,7 +510,7 @@ export default function OrdersList() {
               <div>Order #</div>
               <div>Customer</div>
               <div>Order Date</div>
-              <div>{['dispatched','partial'].includes(filter) ? 'Delivered On' : 'Delivery Date'}</div>
+              <div>{filter === 'cancelled' ? 'Cancelled On' : ['dispatched','partial'].includes(filter) ? 'Delivered On' : 'Delivery Date'}</div>
               <div>Owner</div>
               <div className="ol-numgroup">
                 <div className="num num-label" style={{ textAlign:'right' }}>Items</div>
@@ -516,7 +546,11 @@ export default function OrdersList() {
                       <div className="ol-cell ol-cust" title={o.customer_name}>{o.customer_name}</div>
                       <div className="ol-cell ol-date">{fmt(o.order_date)}</div>
                       <div className="ol-cell">
-                        {latestDeliveredAt ? (
+                        {filter === 'cancelled' ? (
+                          cancelledOn(o)
+                            ? <div className="ol-date" style={{ color: '#B91C1C' }}>{fmt(cancelledOn(o))}</div>
+                            : <span style={{color:'var(--o-muted-2)'}}>—</span>
+                        ) : latestDeliveredAt ? (
                           <div className="ol-date delivered">{fmt(latestDeliveredAt)}</div>
                         ) : deliveryDate ? (
                           <>

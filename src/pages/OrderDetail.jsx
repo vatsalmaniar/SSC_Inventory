@@ -865,7 +865,7 @@ if (match) {
     cancelGuardRef.current = true
     setSaving(true)
     const logMsg = `Order cancelled — Initiated by: ${initiator} | Reason: ${cancelReason.trim()}`
-    const { error: hdrErr } = await sb.from('orders').update({ status: 'cancelled', cancelled_reason: cancelReason.trim(), updated_at: new Date().toISOString() }).eq('id', id)
+    const { error: hdrErr } = await sb.from('orders').update({ status: 'cancelled', cancelled_reason: cancelReason.trim(), cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id)
     if (hdrErr) { toast(friendlyError(hdrErr, 'Cancellation failed')); cancelGuardRef.current = false; setSaving(false); return }
     await sb.from('order_comments').insert({
       order_id: id, author_name: user.name, message: logMsg, tagged_users: [], is_activity: true, is_cancellation: true
