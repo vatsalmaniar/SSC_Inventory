@@ -242,6 +242,11 @@ function buildSecurityAlert(adminName: string, userName: string, userEmail: stri
 async function handleNotification(sb: any, r: any) {
   if (!r.email_type) return new Response('no email_type, skipped')
 
+  // Bell-only notification types — never email (user policy: no email spam for
+  // recurring operational nudges; unknown types otherwise fall through to send)
+  const IN_APP_ONLY = ['sample_return_overdue', 'grn_credit_note']
+  if (IN_APP_ONLY.includes(r.email_type)) return new Response('in-app only, skipped')
+
   const { data: profile } = await sb.from('profiles').select('username,email,name').eq('id', r.user_id).single()
   if (!profile?.username) return new Response('no profile')
   const email = profile.email || (profile.username + '@ssccontrol.com')

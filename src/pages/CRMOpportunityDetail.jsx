@@ -160,6 +160,7 @@ export default function CRMOpportunityDetail() {
   const [convertLowValueReason, setConvertLowValueReason] = useState('')
   const [convertPoFile, setConvertPoFile] = useState(null)
   const [convertPoFileName, setConvertPoFileName] = useState('')
+  const [sampleReturnable, setSampleReturnable] = useState(true) // 30-day return tracking applies when true
 
   function handleConvertPoFile(e) {
     const f = e.target.files?.[0]
@@ -346,6 +347,7 @@ export default function CRMOpportunityDetail() {
     setSampleNotes('Ref: ' + (opp.opportunity_name || opp.product_notes || ''))
     setSamplePoNumber('')
     setSampleReceivedVia('Visit')
+    setSampleReturnable(true)
     setShowSampleModal(true)
   }
 
@@ -497,6 +499,7 @@ export default function CRMOpportunityDetail() {
       credit_terms:      sampleCustomer.credit_terms || '',
       account_owner:     sampleCustomer.account_owner || '',
       notes:             sampleNotes.trim(),
+      sample_returnable: sampleReturnable,
       submitted_by_name: user.name,
       created_by:        session.user.id,
       is_test:           false,
@@ -2465,6 +2468,20 @@ export default function CRMOpportunityDetail() {
                     <div className="no-field">
                       <label>Notes (for Ops team)</label>
                       <input value={sampleNotes} onChange={e => setSampleNotes(e.target.value)} placeholder="Opportunity reference, instructions…" />
+                    </div>
+                  </div>
+                  <div className="no-row full" style={{ marginTop: 4 }}>
+                    <div className="no-field">
+                      <label>Returnable Sample?</label>
+                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <button type="button" onClick={() => setSampleReturnable(v => !v)}
+                          style={{ position:'relative', width:46, height:26, borderRadius:13, border:'none', cursor:'pointer', background: sampleReturnable ? '#16a34a' : 'var(--gray-300)', transition:'background .15s', padding:0, flexShrink:0 }}>
+                          <span style={{ position:'absolute', top:3, left: sampleReturnable ? 23 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s', boxShadow:'0 1px 3px rgba(0,0,0,0.25)' }}/>
+                        </button>
+                        <span style={{ fontSize:13, fontWeight:600, color: sampleReturnable ? '#16a34a' : 'var(--gray-500)' }}>
+                          {sampleReturnable ? 'Yes — must come back in 30 days (tracked)' : 'No — given free, no return tracking'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>

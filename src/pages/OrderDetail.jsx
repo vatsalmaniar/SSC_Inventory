@@ -1175,6 +1175,11 @@ if (match) {
           {/* Overview panel */}
           <div className="od-tabpanel" hidden={activeTab!=='overview'}>
 
+            {/* Sample Return tracking — 30-day policy, extensions, 60-day cap */}
+            {order.order_type === 'SAMPLE' && (
+              <SampleReturnCard order={order} userRole={user.role} userName={user.name} onChanged={loadOrder} />
+            )}
+
             {/* Order Info */}
             <div className="od-card">
               <div className="od-card-header"><div className="od-card-title">Order Information</div></div>
@@ -2516,5 +2521,151 @@ if (match) {
 
     </div>
     </Layout>
+  )
+}
+
+// ── Sample Return tracking card (SAMPLE orders) ──
+// Policy: sample back in 30 days from delivery; extensions need reason + next
+// date; 2nd extension max +15 days; hard stop 60 days from delivery. Rules are
+// enforced server-side by the add_sample_extension RPC — this card is the UI.
+// Non-returnable samples are exempt (flag on the order).
+function SampleReturnCard({ order, userRole, userName, onChanged }) {
+  const [returnGrn, setReturnGrn] = useState(null)
+  const [deliveredAt, setDeliveredAt] = useState(null)
+  const [extensions, setExtensions] = useState([])
+  const [extDate, setExtDate] = useState('')
+  const [extReason, setExtReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => { load() }, [order.id])
+
+  async function load() {
+    const [grnRes, delivRes, extRes] = await Promise.all([
+      sb.from('grn').select('id,grn_number,received_at').eq('order_id', order.id).eq('grn_type', 'sample_return').order('created_at').limit(1).maybeSingle(),
+      sb.from('order_dispatches').select('delivered_at').eq('order_id', order.id).not('delivered_at', 'is', null).order('delivered_at', { ascending: false }).limit(1).maybeSingle(),
+      sb.from('sample_extensions').select('*').eq('order_id', order.id).order('created_at'),
+    ])
+    setReturnGrn(grnRes.data || null)
+    setDeliveredAt(delivRes.data?.delivered_at || null)
+    setExtensions(extRes.data || [])
+    setLoaded(true)
+  }
+
+  async function addExtension() {
+    if (!extDate) { toast('Select the next expected return date'); return }
+    if (!extReason.trim()) { toast('Reason is mandatory for an extension'); return }
+    setSaving(true)
+    const { data, error } = await sb.rpc('add_sample_extension', { p_order_id: order.id, p_until: extDate, p_reason: extReason.trim() })
+    if (error) { toast(friendlyError(error, 'Extension failed')); setSaving(false); return }
+    if (!data?.ok) { toast(data?.error || 'Extension not allowed', 'error'); setSaving(false); return }
+    try {
+      await sb.from('order_comments').insert({ order_id: order.id, author_name: userName, message: `Sample return extended to ${fmt(extDate)} (extension ${data.extension_no}/2) — ${extReason.trim()}`, is_activity: true })
+    } catch (_) {}
+    toast(`Extension ${data.extension_no}/2 recorded — until ${fmt(extDate)}`, 'success')
+    setExtDate(''); setExtReason(''); setSaving(false)
+    await load()
+  }
+
+  async function toggleReturnable(v) {
+    if (!window.confirm(v ? 'Mark this sample as RETURNABLE? Return tracking (30-day policy) will apply.' : 'Mark this sample as NON-RETURNABLE? Return tracking stops for this order.')) return
+    const { error } = await sb.from('orders').update({ sample_returnable: v }).eq('id', order.id)
+    if (error) { toast(friendlyError(error)); return }
+    try { await sb.from('order_comments').insert({ order_id: order.id, author_name: userName, message: `Sample marked ${v ? 'returnable — 30-day tracking on' : 'non-returnable — return tracking off'}`, is_activity: true }) } catch (_) {}
+    toast(v ? 'Marked returnable' : 'Marked non-returnable', 'success')
+    onChanged && onChanged()
+  }
+
+  if (!loaded) return null
+  const canManageFlag = ['admin', 'management'].includes(userRole)
+  const canExtend = ['sales', 'ops', 'admin', 'management'].includes(userRole)
+
+  // Non-returnable: tracking off
+  if (order.sample_returnable === false) {
+    return (
+      <div className="od-card" style={{ borderColor: 'var(--gray-200)' }}>
+        <div className="od-card-header">
+          <div className="od-card-title">Sample Return</div>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)', background: 'var(--gray-100)', padding: '2px 10px', borderRadius: 12 }}>NON-RETURNABLE</span>
+        </div>
+        <div className="od-card-body" style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--gray-500)' }}>
+          This sample is not expected back — the 30-day return tracking is off.
+          {canManageFlag && <button className="od-btn" style={{ marginLeft: 'auto' }} onClick={() => toggleReturnable(true)}>Mark Returnable</button>}
+        </div>
+      </div>
+    )
+  }
+
+  // Returned: cycle closed
+  if (returnGrn) {
+    return (
+      <div className="od-card" style={{ borderColor: '#bbf7d0', background: '#f0fdf4' }}>
+        <div className="od-card-header">
+          <div className="od-card-title">Sample Return</div>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', padding: '2px 10px', borderRadius: 12 }}>RETURNED</span>
+        </div>
+        <div className="od-card-body" style={{ fontSize: 12, color: '#15803d' }}>
+          Material returned via <span onClick={() => window.open('/fc/grn/' + returnGrn.id, '_self')} style={{ fontFamily: 'var(--mono)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>{returnGrn.grn_number}</span>
+          {returnGrn.received_at ? ` on ${fmt(returnGrn.received_at)}` : ''}
+        </div>
+      </div>
+    )
+  }
+
+  const base = deliveredAt ? new Date(deliveredAt) : new Date(order.order_date)
+  const daysOut = Math.floor((Date.now() - base.getTime()) / 86400000)
+  const lastExt = extensions.length ? extensions[extensions.length - 1].extended_until : null
+  const dueDate = lastExt ? new Date(lastExt) : new Date(base.getTime() + 30 * 86400000)
+  const hardCap = new Date(base.getTime() + 60 * 86400000)
+  const overdue = Date.now() > dueDate.getTime()
+  const capped = Date.now() > hardCap.getTime() || extensions.length >= 2
+  const tone = capped && overdue ? { b: '#fecaca', bg: '#fef2f2', c: '#b91c1c', label: '60-DAY LIMIT — MUST RETURN' }
+    : overdue ? { b: '#fde68a', bg: '#fffbeb', c: '#b45309', label: 'OVERDUE — EXTEND OR RETURN' }
+    : { b: 'var(--gray-200)', bg: 'white', c: 'var(--gray-600)', label: 'OUT ON SAMPLE' }
+
+  return (
+    <div className="od-card" style={{ borderColor: tone.b, background: tone.bg }}>
+      <div className="od-card-header">
+        <div className="od-card-title">Sample Return</div>
+        <span style={{ fontSize: 11, fontWeight: 700, color: tone.c, padding: '2px 10px', borderRadius: 12, border: `1px solid ${tone.b}` }}>{tone.label}</span>
+      </div>
+      <div className="od-card-body">
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 12, color: 'var(--gray-600)', marginBottom: extensions.length || !capped ? 12 : 0 }}>
+          <span><b style={{ color: tone.c }}>{daysOut}</b> days since {deliveredAt ? 'delivery' : 'order'}</span>
+          <span>Return due: <b>{fmt(dueDate.toISOString())}</b></span>
+          <span>Extensions used: <b>{extensions.length}/2</b></span>
+          <span>Hard limit: <b>{fmt(hardCap.toISOString())}</b> (60 days)</span>
+          {canManageFlag && <button className="od-btn" style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 10px' }} onClick={() => toggleReturnable(false)}>Mark Non-Returnable</button>}
+        </div>
+        {extensions.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+            {extensions.map((ex, i) => (
+              <div key={ex.id} style={{ fontSize: 11, color: 'var(--gray-500)', background: 'white', border: '1px solid var(--gray-100)', borderRadius: 6, padding: '6px 10px' }}>
+                <b>Extension {i + 1}:</b> until {fmt(ex.extended_until)} — {ex.reason} <span style={{ color: 'var(--gray-400)' }}>({ex.created_by_name || '—'}, {fmt(ex.created_at)})</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {capped ? (
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c' }}>
+            No further extensions possible — record the Sample Return GRN (FC → GRN → Sample Return).
+          </div>
+        ) : canExtend && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="no-field" style={{ minWidth: 160 }}>
+              <label style={{ fontSize: 11, color: 'var(--gray-500)' }}>Next expected return date <span className="req">*</span></label>
+              <input type="date" value={extDate} onChange={e => setExtDate(e.target.value)} />
+            </div>
+            <div className="no-field" style={{ flex: 1, minWidth: 220 }}>
+              <label style={{ fontSize: 11, color: 'var(--gray-500)' }}>Reason for extension <span className="req">*</span></label>
+              <input value={extReason} onChange={e => setExtReason(e.target.value)} placeholder="Why is the sample staying longer with the customer?" />
+            </div>
+            <button className="od-btn od-btn-approve" onClick={addExtension} disabled={saving} style={{ marginBottom: 2 }}>
+              {saving ? 'Saving…' : `Add Extension (${extensions.length + 1}/2)`}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
