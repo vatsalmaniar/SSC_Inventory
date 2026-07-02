@@ -247,6 +247,8 @@
 .orders-app .o-search input { border: 0; background: transparent; outline: none; font: inherit; font-size: 12.5px; flex: 1; color: var(--o-ink); }
 .orders-app .o-search-clear { background: transparent; border: 0; cursor: pointer; color: var(--o-muted-2); padding: 0; }
 .orders-app .o-search-clear:hover { color: var(--o-ink); }
+.orders-app .o-owner-select { background: var(--o-bg-2); border: 1px solid var(--o-line); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12px; font-weight: 500; color: var(--o-ink); cursor: pointer; max-width: 180px; }
+.orders-app .o-owner-select:focus { outline: none; border-color: var(--ssc-deep); background: var(--o-surface); }
 
 /* Filter dropdowns */
 .orders-app .filt-select { background: var(--o-bg-2); border: 1px solid var(--o-line); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 12.5px; color: var(--o-ink); cursor: pointer; min-width: 130px; outline: none; }

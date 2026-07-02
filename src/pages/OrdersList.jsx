@@ -180,6 +180,7 @@ export default function OrdersList() {
   const [customTo, setCustomTo] = useState('')
   const [dateMode, setDateMode] = useState(location.state?.dateMode || (location.state?.filter === 'cancelled' ? 'cancelled' : 'order'))
   const [search, setSearch] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState('all')
   const [page, setPage] = useState(1)
   const [showTest, setShowTest] = useState(false)
   const PAGE_SIZE = 50
@@ -236,7 +237,10 @@ export default function OrdersList() {
     return false
   }
 
-  const timelineOrders = orders.filter(o => inTimeline(o, timeline, customFrom, customTo, dateMode))
+  const owners = [...new Set(orders.map(o => o.account_owner || o.engineer_name).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  const timelineOrders = orders
+    .filter(o => inTimeline(o, timeline, customFrom, customTo, dateMode))
+    .filter(o => ownerFilter === 'all' || (o.account_owner || o.engineer_name) === ownerFilter)
   const counts = FILTERS.reduce((acc, { key }) => { acc[key] = timelineOrders.filter(o => matchFilter(o, key)).length; return acc }, {})
 
   const q = search.trim().toLowerCase()
@@ -481,6 +485,12 @@ export default function OrdersList() {
               </button>
             )}
           </div>
+          {['admin', 'management'].includes(user.role) && (
+            <select className="o-owner-select" value={ownerFilter} onChange={e => { setOwnerFilter(e.target.value); setPage(1) }}>
+              <option value="all">All Owners</option>
+              {owners.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          )}
           <div className="o-datemode">
             <button className={dateMode === 'order' ? 'on' : ''} onClick={() => { setDateMode('order'); setPage(1) }}>Order Date</button>
             <button className={dateMode === 'delivery' ? 'on' : ''} onClick={() => { setDateMode('delivery'); setPage(1) }}>Delivery Date</button>
