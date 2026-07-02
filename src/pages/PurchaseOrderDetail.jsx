@@ -965,14 +965,21 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
   // ── Stage 5: Delivery Confirmation — per-item date updates ──
   async function handleDeliveryConfirmation() {
-    // Pre-populate per-item delivery dates from current items
-    setDeliveryItemDates(items.map(i => ({
-      id: i.id,
-      item_code: i.item_code,
-      qty: i.qty,
-      original_date: i.delivery_date || '',
-      new_date: i.delivery_date || '',
-    })))
+    // Pre-populate per-item delivery dates. After a partial GRN, only lines
+    // still awaiting material are datable — fully received lines are done.
+    const pendingOnly = po.status === 'partially_received'
+    const rows = items
+      .filter(i => !pendingOnly || (Number(i.received_qty) || 0) < (Number(i.qty) || 0))
+      .map(i => ({
+        id: i.id,
+        item_code: i.item_code,
+        qty: i.qty,
+        received: Number(i.received_qty) || 0,
+        original_date: i.delivery_date || '',
+        new_date: i.delivery_date || '',
+      }))
+    if (!rows.length) { toast('All lines on this PO are fully received — nothing pending to date'); return }
+    setDeliveryItemDates(rows)
     setDeliveryReason('')
     setShowDeliveryModal(true)
   }
@@ -1317,10 +1324,10 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               )
             })}
           </div>
-          {po.status === 'delivery_confirmation' && !editMode && (
+          {['delivery_confirmation', 'partially_received'].includes(po.status) && !editMode && (
             <button className="od-mark-complete-btn" style={{ background:'#475569' }} onClick={handleDeliveryConfirmation}>
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-              Update Dates
+              {po.status === 'partially_received' ? 'Update Pending Dates' : 'Update Dates'}
             </button>
           )}
           {currentAction && (
@@ -2100,7 +2107,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div>
               <div className="od-drawer-eyebrow">PO · {po?.po_number || ''}</div>
               <div className="od-drawer-title">Update Delivery Dates</div>
-              <div className="od-drawer-sub">Update expected delivery dates per item. All changes will be logged.</div>
+              <div className="od-drawer-sub">{po?.status === 'partially_received' ? 'Only lines with pending material are shown — dates apply to the balance still to be delivered.' : 'Update expected delivery dates per item. All changes will be logged.'}</div>
             </div>
             <button className="od-drawer-close" onClick={() => setShowDeliveryModal(false)} aria-label="Close">
               <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4 L12 12 M12 4 L4 12"/></svg>
@@ -2121,7 +2128,11 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                   {deliveryItemDates.map((item, idx) => (
                     <tr key={item.id} style={{ borderBottom: '1px solid #EEF1F5' }}>
                       <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12, fontWeight: 600, color: '#1a73e8' }}>{item.item_code}</td>
-                      <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace' }}>{item.qty}</td>
+                      <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace' }}>
+                        {item.received > 0
+                          ? <span title={`${item.received} of ${item.qty} already received`}>{(Number(item.qty) || 0) - item.received}<span style={{ color:'#94a3b8', fontSize:10 }}> pending of {item.qty}</span></span>
+                          : item.qty}
+                      </td>
                       <td style={{ padding: '10px', textAlign: 'center', color: '#5B6878', fontSize: 11 }}>{item.original_date ? fmtShort(item.original_date) : '—'}</td>
                       <td style={{ padding: '10px', textAlign: 'center' }}>
                         <input type="date" value={item.new_date || ''} onChange={e => {
