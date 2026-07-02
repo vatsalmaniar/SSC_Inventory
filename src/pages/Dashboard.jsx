@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START, FY_LABEL, fmtMoneyShort } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
+import { ordersTotalValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import '../styles/dashboard.css'
 
@@ -42,7 +43,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [m, setM] = useState({
     crmOpenValue: 0, crmOpenCount: 0,
-    ordersActive: 0, ordersPending: 0,
+    ordersActive: 0, ordersPending: 0, ordersValue: 0,
     fcAction: 0, fcDelivered: 0,
     procOpenPOs: 0, procOpenPOValue: 0, procPendingAppr: 0,
     billingAction: 0, billingOverrides: 0,
@@ -68,7 +69,13 @@ export default function Dashboard() {
 
     queries.push(sb.from('crm_opportunities').select('estimated_value_inr,stage').not('stage','in','(WON,LOST,ON_HOLD)'))
     // Page past the 1000-row cap so order counts reflect all 1400+ FY orders.
-    queries.push(fetchAll((from, to) => sb.from('orders').select('status').gte('created_at', FY_START).eq('is_test', false).order('id').range(from, to)))
+    // Items fetched for Total Sales (canonical ordersTotalValue); sales users
+    // are scoped to their own orders, same as the /orders headline.
+    queries.push(fetchAll((from, to) => {
+      let q = sb.from('orders').select('status,order_items(total_price,unit_price_after_disc,lp_unit_price,cancelled_qty)').gte('created_at', FY_START).eq('is_test', false).order('id')
+      if (role === 'sales') q = q.eq('created_by', session.user.id)
+      return q.range(from, to)
+    }))
     if (isAdmin) {
       queries.push(sb.from('purchase_orders').select('status,total_amount').eq('is_test', false).gte('created_at', FY_START))
       queries.push(sb.from('inventory').select('quantity'))
@@ -89,6 +96,7 @@ export default function Dashboard() {
       crmOpenValue: crmOpen.reduce((s, o) => s + (o.estimated_value_inr || 0), 0),
       crmOpenCount: crmOpen.length,
       ordersActive: orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length,
+      ordersValue: ordersTotalValue(orders),
       ordersPending: orders.filter(o => o.status === 'pending').length,
       fcAction: orders.filter(o => FC_ACTION_STATUSES.includes(o.status)).length,
       fcDelivered: orders.filter(o => o.status === 'dispatched_fc').length,
@@ -125,7 +133,7 @@ export default function Dashboard() {
   }
   if (role(['all'])) {
     moduleKpis.push({
-      key:'orders', tone:'forest', label:'Orders · Active', value: m.ordersActive, sub: m.ordersPending > 0 ? `${m.ordersPending} pending approval` : 'in pipeline',
+      key:'orders', tone:'forest', label:'Orders · Total Sales', value: fmtMoneyShort(m.ordersValue), sub: m.ordersPending > 0 ? `${m.ordersActive} active · ${m.ordersPending} pending approval` : `${m.ordersActive} active orders`,
       path:'/orders', icon:'cart'
     })
   }
