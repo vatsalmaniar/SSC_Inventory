@@ -251,7 +251,9 @@ export default function PurchaseOrderDetail() {
   async function undoStockFlagFromPO(orderItemId, itemCode) {
     if (!['ops','admin','management'].includes(userRole)) { toast('Ops / admin / management only'); return }
     if (!window.confirm(`Untick "From Stock" for ${itemCode}? It will return to the procurement queue on ${po.order_number} and need a PO.`)) return
-    const { error } = await sb.from('order_items').update({ procurement_source: 'po' }).eq('id', orderItemId)
+    // Reset stock_qty too — leaving it >0 keeps the line counted as stock-sourced
+    // in coverage, so the undo would never bring it back to the queue.
+    const { error } = await sb.from('order_items').update({ procurement_source: 'po', stock_qty: 0 }).eq('id', orderItemId)
     if (error) { toast('Failed to untick: ' + error.message); return }
     await logActivity(`Reverted "From Stock" on ${itemCode} (CO ${po.order_number}) — now needs PO`)
     toast(`${itemCode} unticked — now needs PO on ${po.order_number}`, 'success')

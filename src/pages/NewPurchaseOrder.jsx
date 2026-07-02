@@ -171,6 +171,9 @@ export default function NewPurchaseOrder() {
         qty: String(remaining || ''),
         co_remaining: remaining,
         stock_qty: '0',
+        _line_qty: oi.qty,
+        _cancelled: oi.cancelled_qty || 0,
+        _dispatched: oi.dispatched_qty || 0,
         lp_unit_price: String(oi.lp_unit_price || ''),
         discount_pct: String(oi.discount_pct || '0'),
         unit_price_after_disc: String(oi.unit_price_after_disc || ''),
@@ -307,14 +310,24 @@ export default function NewPurchaseOrder() {
   const closeOnly   = isCO && poLines.length === 0 && stockLines.length > 0
 
   // Persist stock allocation per CO line. Sets order_items.stock_qty; also sets
-  // procurement_source='stock' ONLY when stock fully covers the line (so legacy
-  // "From Stock · No PO" displays still work). Partial lines stay 'po'. Returns
-  // the first error, or null.
+  // procurement_source='stock' ONLY when stock fully covers the remaining qty
+  // (so legacy "From Stock · No PO" displays still work). Partial stays 'po'.
+  //
+  // Units ALREADY DISPATCHED count as stock-sourced too: they shipped with no
+  // PO behind them, so they came from stock. Without adding them, the coverage
+  // floor (which assumes stock and dispatched units may overlap) treats the
+  // dispatched portion of a partly-shipped line as unsourced and the line can
+  // NEVER be closed from stock (CO0693/CO0564, 2026-07-02). Capped at
+  // qty − cancelled so it can't overstate. Returns the first error, or null.
   async function applyStockAllocs(allocs) {
     for (const s of allocs) {
       const sq = parseFloat(s.stock_qty) || 0
       const full = sq >= (s.co_remaining || 0)
-      const patch = full ? { stock_qty: sq, procurement_source: 'stock' } : { stock_qty: sq }
+      const lineQty     = parseFloat(s._line_qty) || 0
+      const cancelled   = parseFloat(s._cancelled) || 0
+      const dispatched  = parseFloat(s._dispatched) || 0
+      const stored = Math.min(sq + dispatched, Math.max(0, lineQty - cancelled))
+      const patch = full ? { stock_qty: stored, procurement_source: 'stock' } : { stock_qty: stored }
       const { error } = await sb.from('order_items').update(patch).eq('id', s.order_item_id)
       if (error) return error
     }

@@ -517,7 +517,9 @@ export default function OrderDetail() {
   async function undoStockFlag(itemId) {
     if (!isOps) { toast('Ops/admin only'); return }
     if (!window.confirm('Undo "From Stock" for this line? It will move back into the procurement queue and you will need to place a PO for it.')) return
-    const { error } = await sb.from('order_items').update({ procurement_source: 'po' }).eq('id', itemId)
+    // Reset stock_qty too — leaving it >0 keeps the line counted as stock-sourced
+    // in coverage, so the undo would never bring it back to the queue.
+    const { error } = await sb.from('order_items').update({ procurement_source: 'po', stock_qty: 0 }).eq('id', itemId)
     if (error) { toast('Failed to undo: ' + error.message); return }
     toast('Line moved back to procurement queue', 'success')
     loadOrder(true)
