@@ -242,6 +242,44 @@ export default function NewGRN() {
     const isPOInward = grnType === 'po_inward'
     const isSample = grnType === 'sample_return'
 
+    // ── Material Return Policy gates (returns & rejections only) ──
+    if (!isPOInward) {
+      // Only admin / ops / management may record returns & rejections (not FC)
+      if (!['admin', 'ops', 'management'].includes(userRole)) {
+        toast('Returns & rejections can only be entered by admin, ops or management', 'error'); return
+      }
+      // Writing the issue is mandatory
+      if (!notes.trim()) {
+        toast('Please describe the issue / reason — mandatory for returns & rejections', 'error'); return
+      }
+      // CI zero-acceptance: customised items can be REJECTED (product failure)
+      // but never RETURNED
+      if (grnType !== 'customer_rejection') {
+        const retItems = (isSample ? srItems : soItems).filter(i => parseFloat(i.return_qty) > 0)
+        const codes = [...new Set(retItems.map(i => i.item_code).filter(Boolean))]
+        // Parallel .eq() — item codes with quotes/parens break .in() list parsing
+        const results = await Promise.all(codes.map(c => sb.from('items').select('item_code,type').eq('item_code', c).maybeSingle()))
+        const ciCodes = results.filter(r => r.data?.type === 'CI').map(r => r.data.item_code)
+        if (ciCodes.length) {
+          toast(`Zero acceptance on customised (CI) items — return not allowed for: ${ciCodes.join(', ')}. Use Customer Rejection only for product failure.`, 'error'); return
+        }
+      }
+      // SI returns accepted up to 7 days from delivery. Admin/management can
+      // override (reason captured via the mandatory issue note); others blocked.
+      if (grnType === 'cancellation_return' && selectedSO) {
+        const { data: lastDeliv } = await sb.from('order_dispatches')
+          .select('delivered_at').eq('order_id', selectedSO.id).eq('status', 'dispatched_fc')
+          .not('delivered_at', 'is', null).order('delivered_at', { ascending: false }).limit(1).maybeSingle()
+        const days = lastDeliv?.delivered_at ? Math.floor((Date.now() - new Date(lastDeliv.delivered_at).getTime()) / 86400000) : null
+        if (days !== null && days > 7) {
+          if (!['admin', 'management'].includes(userRole)) {
+            toast(`Return window closed — delivered ${days} days ago (policy: up to 7 days). Needs admin/management.`, 'error'); return
+          }
+          if (!window.confirm(`Policy: returns are accepted up to 7 days from delivery.\n\nThis order was delivered ${days} days ago. Proceed as management override?`)) return
+        }
+      }
+    }
+
     if (isPOInward) {
       if (!vendorName) { toast('Please select a vendor'); return }
       const validItems = items.filter(i => i.item_code && i._poId && parseFloat(i.received_qty) > 0)
@@ -366,7 +404,9 @@ export default function NewGRN() {
             <div className="no-field">
               <label>GRN Type <span className="req">*</span></label>
               <select value={grnType} onChange={e => changeType(e.target.value)}>
-                {GRN_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                {/* Returns & rejections are admin/ops/management only — FC sees PO Inward */}
+                {(['fc_kaveri', 'fc_godawari'].includes(userRole) ? GRN_TYPES.filter(t => t.key === 'po_inward') : GRN_TYPES)
+                  .map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
               </select>
               {isSample && (
                 <div style={{marginTop:6,padding:'8px 12px',background:'#faf5ff',border:'1px solid #e9d5ff',borderRadius:8,fontSize:12,color:'#7e22ce'}}>
@@ -690,8 +730,10 @@ export default function NewGRN() {
           </div>
           <div className="no-row">
             <div className="no-field" style={{ flex: 1 }}>
-              <label>Notes</label>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes about this receipt..." rows={3} style={{ resize: 'vertical' }} />
+              <label>{grnType === 'po_inward' ? 'Notes' : <>Issue / Reason <span className="req">*</span></>}</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder={grnType === 'po_inward' ? 'Any notes about this receipt...' : 'Describe the issue — why is the material being returned / rejected? (mandatory)'}
+                rows={3} style={{ resize: 'vertical' }} />
             </div>
           </div>
         </div>

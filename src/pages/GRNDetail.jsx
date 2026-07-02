@@ -64,6 +64,38 @@ export default function GRNDetail() {
   const [userRole, setUserRole] = useState('')
   const [userName, setUserName] = useState('')
 
+  // Credit / Dr note upload (returns & rejections — prepared in Tally)
+  const [cnNumber, setCnNumber] = useState('')
+  const [cnFileName, setCnFileName] = useState('')
+  const [cnUploading, setCnUploading] = useState(false)
+
+  async function uploadCreditNote(e) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    if (!cnNumber.trim()) { toast('Enter the credit/Dr note number first (from Tally)'); e.target.value = ''; return }
+    if (f.size > 200 * 1024) { toast('File is too large. Maximum file size allowed: 200 KB'); e.target.value = ''; return }
+    setCnUploading(true); setCnFileName(f.name)
+    try {
+      const ext = f.name.split('.').pop()
+      const path = `grn-credit-notes/${Date.now()}.${ext}`
+      const { error: upErr } = await sb.storage.from('po-documents').upload(path, f)
+      if (upErr) { toast(friendlyError(upErr, 'Upload failed. Please try again.')); setCnUploading(false); return }
+      const { data: { publicUrl } } = sb.storage.from('po-documents').getPublicUrl(path)
+      const { error } = await sb.from('grn').update({
+        credit_note_number: cnNumber.trim(),
+        credit_note_url: publicUrl,
+        credit_note_uploaded_by: userName,
+        credit_note_uploaded_at: new Date().toISOString(),
+      }).eq('id', id)
+      if (error) { toast(friendlyError(error, 'Failed to save credit note. Please try again.')); setCnUploading(false); return }
+      toast('Credit note uploaded — accounting step closed', 'success')
+      setCnUploading(false); setCnNumber(''); setCnFileName('')
+      await loadGRN()
+    } catch (err) {
+      toast(friendlyError(err)); setCnUploading(false)
+    }
+  }
+
   // Edit mode (admin/management can correct QC counts before confirming)
   const [editMode, setEditMode]         = useState(false)
   const [editItems, setEditItems]       = useState([])
@@ -251,6 +283,28 @@ export default function GRNDetail() {
       // Non-PO GRNs (returns/rejections) — just confirm status
       const { error } = await sb.from('grn').update({ status: 'confirmed' }).eq('id', id)
       if (error) { toast(friendlyError(error)); setSaving(false); return }
+
+      // Material Return Policy: accounting lives in Tally — trigger the
+      // credit/Dr-note step. Notify accounts + admin + management; the GRN
+      // shows "Credit note pending" until the Tally document is uploaded here.
+      try {
+        const { data: targets } = await sb.from('profiles').select('id,name,role')
+        const { data: { session } } = await sb.auth.getSession()
+        const rows = (targets || [])
+          .filter(p => ['accounts', 'admin', 'management'].includes(p.role) && p.id !== session?.user?.id)
+          .map(p => ({
+            user_name: p.name, user_id: p.id,
+            message: `${grn.grn_number} (${GRN_TYPE_LABELS[grn.grn_type] || grn.grn_type}) confirmed — prepare Credit/Dr note in Tally and upload it on the GRN`,
+            order_id: grn.order_id || null,
+            order_number: grn.grn_number,
+            from_name: userName,
+            email_type: 'grn_credit_note',
+          }))
+        if (rows.length) {
+          const { error: notifErr } = await sb.from('notifications').insert(rows)
+          if (notifErr) console.error('credit-note notify failed:', notifErr)
+        }
+      } catch (e) { console.error('credit-note notify:', e) }
     }
 
     toast('GRN confirmed', 'success')
@@ -584,6 +638,41 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                       {grn.invoice_date && <div className="od-detail-field"><label>Invoice Date</label><div className="val">{fmt(grn.invoice_date)}</div></div>}
                       {grn.invoice_amount && <div className="od-detail-field"><label>Invoice Amount</label><div className="val" style={{fontWeight:700}}>{fmtINR(grn.invoice_amount)}</div></div>}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Credit / Dr Note (Tally) — returns & rejections only. Accounting
+                  is done in Tally; the system tracks that the note was made and
+                  stores the uploaded document against the GRN. */}
+              {grn.grn_type !== 'po_inward' && ['confirmed','invoice_matched','inward_posted'].includes(grn.status) && (
+                <div className="od-card" style={!grn.credit_note_url ? { borderColor:'#fde68a', background:'#fffbeb' } : {}}>
+                  <div className="od-card-header">
+                    <div className="od-card-title">Credit / Dr Note (Tally)</div>
+                    {!grn.credit_note_url && <span style={{ fontSize:11, fontWeight:700, color:'#b45309', background:'#fef3c7', border:'1px solid #fde68a', padding:'2px 10px', borderRadius:12 }}>PENDING</span>}
+                  </div>
+                  <div className="od-card-body">
+                    {grn.credit_note_url ? (
+                      <div className="od-detail-grid">
+                        <div className="od-detail-field"><label>Note Number</label><div className="val" style={{ fontFamily:'var(--mono)', fontWeight:600 }}>{grn.credit_note_number || '—'}</div></div>
+                        <div className="od-detail-field"><label>Document</label><div className="val"><a href={grn.credit_note_url} target="_blank" rel="noreferrer" style={{ color:'#1a4dab', fontWeight:600 }}>View Credit Note</a></div></div>
+                        <div className="od-detail-field"><label>Uploaded By</label><div className="val">{grn.credit_note_uploaded_by || '—'}{grn.credit_note_uploaded_at ? ` · ${fmt(grn.credit_note_uploaded_at)}` : ''}</div></div>
+                      </div>
+                    ) : ['accounts','admin','ops','management'].includes(userRole) ? (
+                      <div style={{ display:'flex', gap:10, alignItems:'flex-end', flexWrap:'wrap' }}>
+                        <div className="no-field" style={{ minWidth:200 }}>
+                          <label style={{ fontSize:11, color:'var(--gray-500)' }}>Credit / Dr Note Number <span className="req">*</span></label>
+                          <input value={cnNumber} onChange={e => setCnNumber(e.target.value)} placeholder="e.g. CN/1234/26-27 (from Tally)" />
+                        </div>
+                        <label className="od-btn" style={{ cursor:'pointer', margin:0 }}>
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={uploadCreditNote} style={{ display:'none' }} disabled={cnUploading} />
+                          {cnUploading ? 'Uploading…' : (cnFileName || 'Choose file + Upload')}
+                        </label>
+                        <div style={{ fontSize:11, color:'#92400e', flexBasis:'100%' }}>Prepare the credit/Dr note in Tally, then upload it here to close this GRN's accounting step. Max 200 KB.</div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize:12, color:'#92400e' }}>Awaiting credit/Dr note from accounts (prepared in Tally, uploaded here).</div>
+                    )}
                   </div>
                 </div>
               )}
