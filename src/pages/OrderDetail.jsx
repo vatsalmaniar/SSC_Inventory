@@ -1276,6 +1276,9 @@ if (match) {
                     <div className="od-detail-field"><label>Received Via</label><div className="val">{order.received_via || '—'}</div></div>
                     <div className="od-detail-field"><label>Fulfilment Centre</label><div className="val">{order.fulfilment_center || '—'}</div></div>
                     <div className="od-detail-field"><label>Freight</label><div className="val">₹{(order.freight || 0).toLocaleString('en-IN')}</div></div>
+                    <div className="od-detail-field"><label>Partial Deliveries</label><div className="val">{order.partial_deliveries_allowed
+                      ? <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:'#166534',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:100,padding:'2px 10px'}}><span style={{width:6,height:6,borderRadius:'50%',background:'#16a34a'}}/>Allowed</span>
+                      : <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:'var(--gray-500)',background:'var(--gray-100)',border:'1px solid var(--gray-200)',borderRadius:100,padding:'2px 10px'}}>Full delivery only</span>}</div></div>
                     {order.notes && <div className="od-detail-field" style={{ gridColumn: '1/-1' }}><label>Notes</label><div className="val od-notes-val">{order.notes}</div></div>}
                     {order.low_value_reason && (
                       <div className="od-detail-field" style={{ gridColumn: '1/-1' }}>
