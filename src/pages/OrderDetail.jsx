@@ -2537,6 +2537,8 @@ function SampleReturnCard({ order, userRole, userName, onChanged }) {
   const [extReason, setExtReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [flagFormOpen, setFlagFormOpen] = useState(false)
+  const [flagReason, setFlagReason] = useState('')
 
   useEffect(() => { load() }, [order.id])
 
@@ -2567,13 +2569,30 @@ function SampleReturnCard({ order, userRole, userName, onChanged }) {
     await load()
   }
 
-  async function toggleReturnable(v) {
-    if (!window.confirm(v ? 'Mark this sample as RETURNABLE? Return tracking (30-day policy) will apply.' : 'Mark this sample as NON-RETURNABLE? Return tracking stops for this order.')) return
+  // Changing the flag stops/starts return tracking — the "why" is mandatory
+  // and goes on record in the order's activity feed.
+  async function confirmToggleReturnable(v) {
+    if (!flagReason.trim()) { toast('Please write the reason — mandatory', 'error'); return }
     const { error } = await sb.from('orders').update({ sample_returnable: v }).eq('id', order.id)
     if (error) { toast(friendlyError(error)); return }
-    try { await sb.from('order_comments').insert({ order_id: order.id, author_name: userName, message: `Sample marked ${v ? 'returnable — 30-day tracking on' : 'non-returnable — return tracking off'}`, is_activity: true }) } catch (_) {}
-    toast(v ? 'Marked returnable' : 'Marked non-returnable', 'success')
+    try { await sb.from('order_comments').insert({ order_id: order.id, author_name: userName, message: `Sample marked ${v ? 'RETURNABLE — 30-day return tracking ON' : 'NON-RETURNABLE — return tracking OFF'}. Reason: ${flagReason.trim()}`, is_activity: true }) } catch (_) {}
+    toast(v ? 'Marked returnable — tracking on' : 'Marked non-returnable — tracking off', 'success')
+    setFlagFormOpen(false); setFlagReason('')
     onChanged && onChanged()
+  }
+
+  function flagReasonForm(toReturnable) {
+    return (
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 10, background: 'white', border: '1px solid var(--gray-200)', borderRadius: 8, padding: '10px 12px', width: '100%' }}>
+        <div className="no-field" style={{ flex: 1, minWidth: 220 }}>
+          <label style={{ fontSize: 11, color: 'var(--gray-500)' }}>Reason for marking {toReturnable ? 'returnable' : 'non-returnable'} <span className="req">*</span></label>
+          <input value={flagReason} onChange={e => setFlagReason(e.target.value)} autoFocus
+            placeholder={toReturnable ? 'Why should this sample now be tracked for return?' : 'Why is this sample not coming back? (e.g. given free, consumed in trials)'} />
+        </div>
+        <button className="od-btn" onClick={() => { setFlagFormOpen(false); setFlagReason('') }}>Cancel</button>
+        <button className="od-btn od-btn-approve" onClick={() => confirmToggleReturnable(toReturnable)}>Confirm</button>
+      </div>
+    )
   }
 
   if (!loaded) return null
@@ -2588,9 +2607,12 @@ function SampleReturnCard({ order, userRole, userName, onChanged }) {
           <div className="od-card-title">Sample Return</div>
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)', background: 'var(--gray-100)', padding: '2px 10px', borderRadius: 12 }}>NON-RETURNABLE</span>
         </div>
-        <div className="od-card-body" style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--gray-500)' }}>
-          This sample is not expected back — the 30-day return tracking is off.
-          {canManageFlag && <button className="od-btn" style={{ marginLeft: 'auto' }} onClick={() => toggleReturnable(true)}>Mark Returnable</button>}
+        <div className="od-card-body">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--gray-500)' }}>
+            This sample is not expected back — the 30-day return tracking is off.
+            {canManageFlag && !flagFormOpen && <button className="od-btn" style={{ marginLeft: 'auto' }} onClick={() => setFlagFormOpen(true)}>Mark Returnable</button>}
+          </div>
+          {flagFormOpen && flagReasonForm(true)}
         </div>
       </div>
     )
@@ -2635,8 +2657,9 @@ function SampleReturnCard({ order, userRole, userName, onChanged }) {
           <span>Return due: <b>{fmt(dueDate.toISOString())}</b></span>
           <span>Extensions used: <b>{extensions.length}/2</b></span>
           <span>Hard limit: <b>{fmt(hardCap.toISOString())}</b> (60 days)</span>
-          {canManageFlag && <button className="od-btn" style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 10px' }} onClick={() => toggleReturnable(false)}>Mark Non-Returnable</button>}
+          {canManageFlag && !flagFormOpen && <button className="od-btn" style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 10px' }} onClick={() => setFlagFormOpen(true)}>Mark Non-Returnable</button>}
         </div>
+        {flagFormOpen && flagReasonForm(false)}
         {extensions.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
             {extensions.map((ex, i) => (
