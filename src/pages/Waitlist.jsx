@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
-import * as XLSX from 'xlsx'
+import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import '../styles/orders-redesign.css'
 
 const DEAD_STATUSES = ['cancelled', 'dispatched_fc', 'closed']
@@ -211,39 +211,91 @@ export default function Waitlist() {
     await load(user.role, user.id)
   }
 
-  function downloadSheet() {
-    if (tab === 'overdue') {
-      const rows = overdueFiltered.map(({ o, od, auto }) => ({
-        'Order': o.order_number, 'Customer': o.customer_name, 'Owner': ownerName(o),
-        'Order Date': fmt(o.order_date), 'Due Date': fmt(od.due), 'Days Overdue': od.days,
-        'Auto Flags': auto.map(f => f.label).join(', '),
-        'Held By': o.hold_party === 'sales' ? `Sales (${o.hold_set_by})` : o.hold_party === 'customer' ? 'Customer' : '',
-        'Reason': o.hold_reason || '', 'Flagged On': o.hold_set_at ? fmt(o.hold_set_at) : '',
-      }))
-      const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'Order': 'Nothing overdue' }])
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Waiting for Clearance')
-      XLSX.writeFile(wb, `SSC_Waiting_for_Clearance_${today}.xlsx`)
-      return
-    }
-    const rows = []
-    for (const g of groups) {
-      g.rows.forEach((r, idx) => {
-        const consumedBefore = g.rows.slice(0, idx).reduce((s, x) => s + x.remaining, 0)
-        const canGet = Math.max(0, Math.min(r.remaining, g.available - consumedBefore))
-        rows.push({
-          'Item Code': g.item_code, 'In Stock': g.available, 'Total Needed': g.totalWaiting,
-          'Priority': idx + 1, 'Order': r.order_number, 'Customer': r.customer_name,
-          'Units Needed': r.remaining,
-          'Can Fulfil Now': canGet >= r.remaining ? 'Yes (full)' : canGet > 0 ? `${canGet} units` : 'No — wait',
-          'Days Waiting': daysSince(r.order_date), 'On Hold': r.on_hold ? 'YES' : '',
+  async function downloadSheet() {
+    let ExcelJS
+    try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
+    try {
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'SSC ERP'; wb.created = new Date()
+      if (tab === 'overdue') {
+        if (!overdueFiltered.length) { alert('Nothing overdue to export.'); return }
+        const ws = wb.addWorksheet('Waiting for Clearance', { views: [{ state: 'frozen', ySplit: 1 }] })
+        ws.columns = [
+          { header: 'Order', key: 'order', width: 22 },
+          { header: 'Customer', key: 'customer', width: 32 },
+          { header: 'Owner', key: 'owner', width: 18 },
+          { header: 'Order Date', key: 'od', width: 12 },
+          { header: 'Due Date', key: 'due', width: 12 },
+          { header: 'Days Overdue', key: 'days', width: 13 },
+          { header: 'Auto Flags', key: 'auto', width: 26 },
+          { header: 'Held By', key: 'held', width: 22 },
+          { header: 'Reason', key: 'reason', width: 28 },
+          { header: 'Flagged On', key: 'fon', width: 12 },
+        ]
+        overdueFiltered.forEach(({ o, od, auto }) => {
+          const row = ws.addRow({
+            order: o.order_number, customer: o.customer_name, owner: ownerName(o),
+            od: fmt(o.order_date), due: fmt(od.due), days: od.days,
+            auto: auto.map(f => f.label).join(', '),
+            held: o.hold_party === 'sales' ? `Sales (${o.hold_set_by})` : o.hold_party === 'customer' ? 'Customer' : '',
+            reason: o.hold_reason || '', fon: o.hold_set_at ? fmt(o.hold_set_at) : '',
+          })
+          const d = row.getCell('days')
+          d.font = { bold: true, color: { argb: od.days > 7 ? 'FFB91C1C' : 'FFB45309' } }
+          d.alignment = { horizontal: 'center' }
+          if (o.hold_party) {
+            const h = row.getCell('held')
+            const st = o.hold_party === 'sales' ? { bg: 'FFEFF6FF', fg: 'FF1E40AF' } : { bg: 'FFEEF2FF', fg: 'FF3730A3' }
+            h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: st.bg } }
+            h.font = { bold: true, color: { argb: st.fg } }
+          } else if (auto.length === 0) {
+            const h = row.getCell('held')
+            h.value = 'NEEDS FLAG'
+            h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
+            h.font = { bold: true, color: { argb: 'FFB45309' } }
+          }
         })
-      })
-    }
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'Item Code': 'Nothing waiting' }])
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Out of Stock')
-    XLSX.writeFile(wb, `SSC_Out_of_Stock_${today}.xlsx`)
+        xlsFinish(ws, 10)
+        await xlsDownload(wb, `SSC_Waiting_for_Clearance_${today}.xlsx`)
+        return
+      }
+      if (!groups.length) { alert('Nothing waiting on stock to export.'); return }
+      const ws = wb.addWorksheet('Out of Stock', { views: [{ state: 'frozen', ySplit: 1 }] })
+      ws.columns = [
+        { header: 'Item Code', key: 'item', width: 26 },
+        { header: 'In Stock', key: 'stock', width: 9 },
+        { header: 'Total Needed', key: 'needed', width: 12 },
+        { header: 'Priority', key: 'prio', width: 8 },
+        { header: 'Order', key: 'order', width: 22 },
+        { header: 'Customer', key: 'customer', width: 32 },
+        { header: 'Units Needed', key: 'units', width: 12 },
+        { header: 'Can Fulfil Now', key: 'fulfil', width: 14 },
+        { header: 'Days Waiting', key: 'days', width: 12 },
+        { header: 'On Hold', key: 'hold', width: 9 },
+      ]
+      for (const g of groups) {
+        g.rows.forEach((r, idx) => {
+          const consumedBefore = g.rows.slice(0, idx).reduce((s, x) => s + x.remaining, 0)
+          const canGet = Math.max(0, Math.min(r.remaining, g.available - consumedBefore))
+          const row = ws.addRow({
+            item: g.item_code, stock: g.available, needed: g.totalWaiting,
+            prio: idx + 1, order: r.order_number, customer: r.customer_name,
+            units: r.remaining,
+            fulfil: canGet >= r.remaining ? 'Yes (full)' : canGet > 0 ? `${canGet} units` : 'No — wait',
+            days: daysSince(r.order_date), hold: r.on_hold ? 'YES' : '',
+          })
+          const f = row.getCell('fulfil')
+          f.font = { bold: true, color: { argb: canGet >= r.remaining ? 'FF166534' : canGet > 0 ? 'FFB45309' : 'FF64748B' } }
+          if (r.on_hold) {
+            const h = row.getCell('hold')
+            h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } }
+            h.font = { bold: true, color: { argb: 'FFB91C1C' } }
+          }
+        })
+      }
+      xlsFinish(ws, 10)
+      await xlsDownload(wb, `SSC_Out_of_Stock_${today}.xlsx`)
+    } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
   }
 
   const chipDefs = [

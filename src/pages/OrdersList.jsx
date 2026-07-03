@@ -4,8 +4,8 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import { orderNetValue, ordersTotalValue } from '../lib/orderValue'
+import { xlsStatusStyle, xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
-import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
 const REP_PALETTE = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
@@ -261,25 +261,48 @@ export default function OrdersList() {
     : TIMELINES.find(t => t.key === timeline)?.label || ''
   const fileName = `SSC_Orders_${activeFilterLabel}_${timelineLabel}_${new Date().toISOString().slice(0,10)}`
 
-  function downloadSummary() {
-    const rows = filtered.map(o => {
-      const partial = isPartiallyDispatched(o)
-      return {
-        'Order #': o.order_number,
-        'Customer': o.customer_name,
-        'Order Date': fmt(o.order_date),
-        'Account Owner': o.engineer_name || '',
-        'PO Number': o.po_number || '',
-        'Items': (o.order_items || []).length,
-        'Value (₹)': totalValue(o),
-        'Pending (₹)': pendingValue(o),
-        'Status': statusLabel(pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status),
-      }
-    })
-    const ws = XLSX.utils.json_to_sheet(rows)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Orders')
-    XLSX.writeFile(wb, fileName + '_Summary.xlsx')
+  async function downloadSummary() {
+    if (!filtered.length) { alert('No orders to export. Adjust filters and try again.'); return }
+    let ExcelJS
+    try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
+    try {
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'SSC ERP'; wb.created = new Date()
+      const ws = wb.addWorksheet('Orders Summary', { views: [{ state: 'frozen', ySplit: 1 }] })
+      ws.columns = [
+        { header: 'Order #', key: 'order_number', width: 22 },
+        { header: 'Customer', key: 'customer', width: 32 },
+        { header: 'Order Date', key: 'order_date', width: 12 },
+        { header: 'Account Owner', key: 'owner', width: 18 },
+        { header: 'PO Number', key: 'po', width: 16 },
+        { header: 'Items', key: 'items', width: 7 },
+        { header: 'Value (₹)', key: 'value', width: 14, style: { numFmt: '₹#,##,##0.00' } },
+        { header: 'Pending (₹)', key: 'pending', width: 14, style: { numFmt: '₹#,##,##0.00' } },
+        { header: 'Status', key: 'status', width: 18 },
+      ]
+      filtered.forEach(o => {
+        const psKey = pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status
+        const sStyle = xlsStatusStyle(psKey)
+        const pv = pendingValue(o)
+        const row = ws.addRow({
+          order_number: o.order_number, customer: o.customer_name, order_date: fmt(o.order_date),
+          owner: o.engineer_name || o.account_owner || '', po: o.po_number || '',
+          items: (o.order_items || []).length, value: totalValue(o), pending: pv,
+          status: statusLabel(psKey),
+        })
+        const sCell = row.getCell('status')
+        sCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sStyle.bg } }
+        sCell.font = { bold: true, color: { argb: sStyle.fg } }
+        sCell.alignment = { horizontal: 'center', vertical: 'middle' }
+        if (pv > 0) {
+          const pc = row.getCell('pending')
+          pc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
+          pc.font = { bold: true, color: { argb: 'FF92400E' } }
+        }
+      })
+      xlsFinish(ws, 9)
+      await xlsDownload(wb, fileName + '_Summary.xlsx')
+    } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
   }
 
   async function downloadDetailed() {
@@ -313,28 +336,13 @@ export default function OrdersList() {
       { header: 'Status', key: 'status', width: 18 },
     ]
     ws.columns = cols
-    const statusStyle = (s) => {
-      switch (s) {
-        case 'pending': case 'pending_approval': return { bg: 'FFFEF9C3', fg: 'FF854D0E' }
-        case 'partial_dispatch': return { bg: 'FFFFF7ED', fg: 'FFC2410C' }
-        case 'inv_check': case 'inventory_check': case 'dispatch': return { bg: 'FFDBEAFE', fg: 'FF1E40AF' }
-        case 'delivery_created': return { bg: 'FFDCFCE7', fg: 'FF166534' }
-        case 'picking': case 'packing': return { bg: 'FFE0E7FF', fg: 'FF3730A3' }
-        case 'goods_issued': case 'credit_check': case 'goods_issue_posted':
-        case 'invoice_generated': case 'pending_billing': return { bg: 'FFFEF3C7', fg: 'FF92400E' }
-        case 'delivery_ready': case 'eway_pending': case 'eway_generated': return { bg: 'FFD1FAE5', fg: 'FF065F46' }
-        case 'dispatched_fc': return { bg: 'FFBBF7D0', fg: 'FF14532D' }
-        case 'cancelled': return { bg: 'FFFEE2E2', fg: 'FFB91C1C' }
-        default: return { bg: 'FFF1F5F9', fg: 'FF334155' }
-      }
-    }
     let rowCounter = 0
     filtered.forEach(o => {
       const items = o.order_items || []
       const dispatches = o.order_dispatches || []
       const deliveredAt = dispatches.find(d => d.delivered_at)?.delivered_at
       const psKey = pillStatus(o) === 'partial' ? 'partial_dispatch' : o.status
-      const sStyle = statusStyle(psKey)
+      const sStyle = xlsStatusStyle(psKey)
       const baseRow = {
         order_date: o.order_date ? fmt(o.order_date) : '',
         order_number: o.order_number,
@@ -380,33 +388,8 @@ export default function OrdersList() {
         })
       }
     })
-    const header = ws.getRow(1)
-    header.height = 24
-    header.eachCell(cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A2540' } }
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
-      cell.alignment = { vertical: 'middle', horizontal: 'left' }
-      cell.border = { bottom: { style: 'thin', color: { argb: 'FF143055' } } }
-    })
-    const lastRow = ws.rowCount
-    for (let r = 2; r <= lastRow; r++) {
-      const row = ws.getRow(r)
-      row.eachCell({ includeEmpty: true }, cell => {
-        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } }
-      })
-      if (r % 2 === 0) {
-        row.eachCell({ includeEmpty: true }, cell => {
-          const isTinted = cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor?.argb !== 'FFFFFFFF'
-          if (!isTinted) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
-        })
-      }
-    }
-    ws.autoFilter = { from: { row:1, column:1 }, to: { row:1, column: cols.length } }
-    const buf = await wb.xlsx.writeBuffer()
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = fileName + '_Detailed.xlsx'
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    xlsFinish(ws, cols.length)
+    await xlsDownload(wb, fileName + '_Detailed.xlsx')
     } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
   }
 
