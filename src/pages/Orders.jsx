@@ -192,6 +192,7 @@ export default function Orders() {
   const fyOrdered = monthlyData.reduce((s,m) => s + m.ordered, 0)
   const fyDelivered = monthlyData.reduce((s,m) => s + m.delivered, 0)
   const fillRate = fyOrdered > 0 ? Math.round((fyDelivered / fyOrdered) * 100) : 0
+  const fyCancelled = orders.filter(o => o.status === 'cancelled').length
 
   const greeting = (() => {
     const h = new Date().getHours()
@@ -276,7 +277,7 @@ export default function Orders() {
                     </div>
                     <span className="trend-pill mono">{fyOrdered} placed</span>
                   </div>
-                  <DispatchGauge ordered={fyOrdered} delivered={fyDelivered}/>
+                  <DispatchGauge ordered={fyOrdered} delivered={fyDelivered} cancelled={fyCancelled}/>
                 </div>
 
                 <div className="card anal-card">
@@ -470,7 +471,7 @@ function KpiChart({ kind }) {
   return null
 }
 
-function DispatchGauge({ ordered, delivered }) {
+function DispatchGauge({ ordered, delivered, cancelled = 0 }) {
   const pct = ordered > 0 ? Math.round((delivered / ordered) * 100) : 0
   const size = 140, r = size/2 - 12, c = 2 * Math.PI * r, dash = (pct/100) * c
   return (
@@ -500,7 +501,8 @@ function DispatchGauge({ ordered, delivered }) {
         </div>
         <div className="gs-row gs-total">
           <span className="gs-label">Pending</span>
-          <span className="gs-val">{Math.max(0, ordered - delivered)}</span>
+          {/* cancelled orders are not pending — they will never deliver */}
+          <span className="gs-val">{Math.max(0, ordered - delivered - cancelled)}</span>
         </div>
       </div>
     </div>
