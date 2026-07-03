@@ -150,6 +150,7 @@ export default function OrderDetail() {
   // FIFO jump warning (an older order is ahead in line for an item being dispatched)
   const [showJumpWarn, setShowJumpWarn]           = useState(false)
   const [jumpRows, setJumpRows]                   = useState([])
+  const [jumpFlagged, setJumpFlagged]             = useState([]) // pre-flagged in Waiting for Clearance — informational only
   const [jumpType, setJumpType]                   = useState('full') // which dispatch to run after confirm
   const [jumpReason, setJumpReason]               = useState('')
   const [jumpNote, setJumpNote]                   = useState('')
@@ -590,7 +591,7 @@ export default function OrderDetail() {
     const codes = [...new Set(itemCodes.filter(Boolean))]
     if (!codes.length || !order?.order_date) return []
     const { data } = await sb.from('order_items')
-      .select('item_code,qty,dispatched_qty,cancelled_qty,order_id,orders!inner(id,order_number,customer_name,order_date,status,is_test,partial_deliveries_allowed,credit_override)')
+      .select('item_code,qty,dispatched_qty,cancelled_qty,order_id,orders!inner(id,order_number,customer_name,order_date,status,is_test,partial_deliveries_allowed,credit_override,hold_party,hold_reason,hold_set_by,hold_set_at)')
       .in('item_code', codes)
       .eq('stock_status', 'out_of_stock')
       .lt('orders.order_date', order.order_date)
@@ -614,7 +615,7 @@ export default function OrderDetail() {
     for (const c of candidates) {
       if (unshippable.has(c.order_id) || seen.has(c.order_id)) continue
       seen.add(c.order_id)
-      rows.push({ order_id: c.orders.id, order_number: c.orders.order_number, customer_name: c.orders.customer_name, order_date: c.orders.order_date, item_code: c.item_code })
+      rows.push({ order_id: c.orders.id, order_number: c.orders.order_number, customer_name: c.orders.customer_name, order_date: c.orders.order_date, item_code: c.item_code, hold_party: c.orders.hold_party, hold_reason: c.orders.hold_reason, hold_set_by: c.orders.hold_set_by, hold_set_at: c.orders.hold_set_at })
     }
     return rows.sort((a, b) => (a.order_date || '').localeCompare(b.order_date || ''))
   }
@@ -639,7 +640,7 @@ export default function OrderDetail() {
       await logActivity(reasonLine)
     }
     const t = jumpType
-    setShowJumpWarn(false); setJumpReason(''); setJumpNote(''); setJumpRows([])
+    setShowJumpWarn(false); setJumpReason(''); setJumpNote(''); setJumpRows([]); setJumpFlagged([])
     jumpSubmitGuard.current = false
     if (t === 'full') await fullyDispatch(true, logSkip); else await confirmPartialItems(true, logSkip)
   }
@@ -651,7 +652,10 @@ export default function OrderDetail() {
     if (!skipJumpCheck) {
       const codes = (order.order_items || []).filter(i => (i.qty - (i.dispatched_qty || 0) - (i.cancelled_qty || 0)) > 0).map(i => i.item_code)
       const olders = await findOlderWaiting(codes)
-      if (olders.length) { setJumpRows(olders); setJumpType('full'); setJumpReason(''); setJumpNote(''); setShowJumpWarn(true); return }
+      // Orders flagged in Waiting for Clearance are legitimately parked — their
+      // reason is already on record, so only unflagged older orders block dispatch.
+      const unflagged = olders.filter(r => !r.hold_party)
+      if (unflagged.length) { setJumpRows(unflagged); setJumpFlagged(olders.filter(r => r.hold_party)); setJumpType('full'); setJumpReason(''); setJumpNote(''); setShowJumpWarn(true); return }
     }
     setSaving(true)
     // Batch JSON must mirror the increments — remaining qty only, cancelled and
@@ -719,7 +723,8 @@ export default function OrderDetail() {
     setShowPartialModal(false)
     if (!skipJumpCheck) {
       const olders = await findOlderWaiting(selected.map(i => i.item_code))
-      if (olders.length) { setJumpRows(olders); setJumpType('partial'); setJumpReason(''); setJumpNote(''); setShowJumpWarn(true); return }
+      const unflagged = olders.filter(r => !r.hold_party)
+      if (unflagged.length) { setJumpRows(unflagged); setJumpFlagged(olders.filter(r => r.hold_party)); setJumpType('partial'); setJumpReason(''); setJumpNote(''); setShowJumpWarn(true); return }
     }
     setSaving(true)
     const increments = selected.map(item => ({ order_item_id: item.id, qty: parseFloat(item.dispatchQty) }))
@@ -2351,6 +2356,19 @@ if (match) {
                   </div>
                 ))}
               </div>
+              {jumpFlagged.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gray-500)', marginBottom: 5 }}>Already flagged in Waiting for Clearance — no action needed:</div>
+                  <div style={{ border: '1px dashed var(--gray-200)', borderRadius: 10, overflow: 'hidden', background: 'var(--gray-50)' }}>
+                    {jumpFlagged.map((r, i) => (
+                      <div key={r.order_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 12px', borderBottom: i < jumpFlagged.length - 1 ? '1px solid var(--gray-100)' : 'none', fontSize: 12, color: 'var(--gray-500)' }}>
+                        <span><span style={{ fontFamily: 'Geist Mono, monospace' }}>{r.order_number}</span> · {r.customer_name}</span>
+                        <span style={{ whiteSpace: 'nowrap' }}>Held by {r.hold_party === 'sales' ? `Sales (${r.hold_set_by})` : 'Customer'} — {r.hold_reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-600)', display: 'block', marginBottom: 6 }}>Reason for dispatching this order first <span style={{ color: '#dc2626' }}>*</span></label>
               <select value={jumpReason} onChange={e => setJumpReason(e.target.value)}
                 style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--gray-200)', fontFamily: 'var(--font)', fontSize: 13, marginBottom: 10 }}>
