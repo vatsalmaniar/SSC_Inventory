@@ -43,6 +43,31 @@ export function fmtDateTime(d) {
   return dt.getDate()+' '+MO[dt.getMonth()]+' '+dt.getFullYear()+' '+(h<10?'0':'')+h+':'+(m<10?'0':'')+m
 }
 
+// ── Generic timeline bucket for a single date (Monday-start weeks) ──
+// Shared by list-page time filters (orders, field visits, …).
+export function dateInTimeline(dateStr, t, customFrom, customTo) {
+  if (t === 'all') return true
+  if (!dateStr) return false
+  const d = new Date(dateStr); d.setHours(0, 0, 0, 0)
+  const now = new Date(); now.setHours(0, 0, 0, 0)
+  if (t === 'today') return d.getTime() === now.getTime()
+  if (t === 'week' || t === 'lastweek') {
+    const start = new Date(now); start.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+    if (t === 'week') return d >= start
+    const prev = new Date(start); prev.setDate(start.getDate() - 7)
+    return d >= prev && d < start
+  }
+  if (t === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  if (t === 'lastmonth') { const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1); return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth() }
+  if (t === 'year') return d.getFullYear() === now.getFullYear()
+  if (t === 'custom') {
+    if (customFrom) { const f = new Date(customFrom); f.setHours(0, 0, 0, 0); if (d < f) return false }
+    if (customTo) { const t2 = new Date(customTo); t2.setHours(0, 0, 0, 0); if (d > t2) return false }
+    return true
+  }
+  return true
+}
+
 // ── Delivery-date sanity — ONE rule shared by New Order, CRM convert, Order edit ──
 // Blocks the typo class found 2026-07-03 (years 0026 / 20026 / 2025, delivery
 // before order): a delivery date must be a real YYYY-MM-DD between the order

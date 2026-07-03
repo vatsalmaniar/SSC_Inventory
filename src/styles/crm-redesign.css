@@ -237,6 +237,23 @@
 .crm-app .opps-search input { border: 0; background: transparent; outline: none; font: inherit; font-size: 12.5px; flex: 1; color: var(--c-ink); }
 .crm-app .filt-select { background: var(--c-bg-2); border: 1px solid var(--c-line); border-radius: 7px; padding: 6px 9px; font: inherit; font-size: 12px; color: var(--c-ink); cursor: pointer; min-width: 120px; }
 .crm-app .filt-select:hover { border-color: var(--c-muted-2); }
+/* Timeline + count chips (Field Visits — mirrors the orders module filters) */
+.crm-app .c-timeline { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.crm-app .c-timeline button { background: var(--c-bg-2); border: 1px solid var(--c-line); border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 12px; color: var(--c-muted); cursor: pointer; font-weight: 500; }
+.crm-app .c-timeline button.on { background: var(--ssc-deep); color: #fff; border-color: var(--ssc-deep); }
+.crm-app .c-timeline-custom { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--c-muted); }
+.crm-app .c-timeline-custom input { border: 1px solid var(--c-line); border-radius: 7px; padding: 5px 8px; font: inherit; font-size: 12px; color: var(--c-ink); }
+.crm-app .c-chip { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--c-line); border-radius: 100px; padding: 6px 12px; font: inherit; font-size: 12px; color: var(--c-muted); cursor: pointer; }
+.crm-app .c-chip:hover { border-color: var(--c-muted-2); color: var(--c-ink); }
+.crm-app .c-chip.on { background: var(--ssc-deep); color: #fff; border-color: var(--ssc-deep); }
+.crm-app .c-chip-n { font-family: var(--mono, monospace); font-size: 10.5px; opacity: 0.85; }
+/* Numbered pagination — same look as the orders list footer */
+.crm-app .c-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 20px; font-size: 12px; color: var(--c-muted); border-top: 1px solid var(--c-line); background: var(--c-bg-2); }
+.crm-app .c-pages { display: flex; gap: 4px; align-items: center; }
+.crm-app .c-page-btn { background: #fff; border: 1px solid var(--c-line); border-radius: 7px; padding: 5px 10px; font: inherit; font-size: 12px; color: var(--c-muted); cursor: pointer; }
+.crm-app .c-page-btn:hover:not(:disabled) { color: var(--c-ink); border-color: var(--c-muted-2); }
+.crm-app .c-page-btn.on { background: var(--ssc-deep); color: #fff; border-color: var(--ssc-deep); }
+.crm-app .c-page-btn:disabled { opacity: 0.45; cursor: default; }
 .crm-app .opps-clear { background: transparent; border: 0; color: var(--c-bad); font: inherit; font-size: 12px; cursor: pointer; padding: 4px 10px; border-radius: 6px; }
 .crm-app .opps-clear:hover { background: rgba(239,68,68,0.05); }
 

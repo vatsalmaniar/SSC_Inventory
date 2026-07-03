@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import { fmtNum } from '../lib/fmt'
+import { fmtNum, dateInTimeline } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import { SSC_OFFICES, geocodeAddress, haversineKm } from '../lib/geo'
 import MiniMap from '../components/MiniMap'
 import Layout from '../components/Layout'
@@ -66,6 +67,12 @@ export default function CRMFieldVisits() {
   const [search, setSearch]         = useState('')
   const [filterRep, setFilterRep]   = useState('')
   const [viewScope, setViewScope]   = useState('mine')
+  const [timeline, setTimeline]     = useState('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo]     = useState('')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [page, setPage]             = useState(1)
+  const PAGE_SIZE = 50
   const [form, setForm]             = useState(emptyForm())
   const [companyOpps, setCompanyOpps] = useState([])
   const [loadingOpps, setLoadingOpps] = useState(false)
@@ -82,17 +89,26 @@ export default function CRMFieldVisits() {
     setUser({ name: profile?.name||'', role: profile?.role||'sales', id: session.user.id })
     if (!['sales','admin','management','demo'].includes(profile?.role)) { navigate('/not-authorized?from=CRM'); return }
 
-    const [visitsRes, repsRes, principalsRes] = await Promise.all([
-      sb.from('crm_field_visits')
-        .select('*, profiles(name), crm_principals(name), crm_opportunities(id,opportunity_name,product_notes,stage)')
-        .order('visit_date', { ascending: false }),
+    const [, repsRes, principalsRes] = await Promise.all([
+      loadVisits(),
       sb.from('profiles').select('id,name').in('role',['sales','admin','management']),
       sb.from('crm_principals').select('*').order('name'),
     ])
-    setVisits(visitsRes.data || [])
     setReps(repsRes.data || [])
     setPrincipals(principalsRes.data || [])
     setLoading(false)
+  }
+
+  // Page past PostgREST's 1000-row cap — same fetchAll pattern as the orders list.
+  async function loadVisits() {
+    const { data, error } = await fetchAll((from, to) =>
+      sb.from('crm_field_visits')
+        .select('*, profiles(name), crm_principals(name), crm_opportunities(id,opportunity_name,product_notes,stage)')
+        .order('visit_date', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to))
+    if (error) console.error('Visits load error:', error)
+    setVisits(data || [])
   }
 
   // Server-side customer search (matches NewLead pattern). Called per keystroke,
@@ -211,10 +227,7 @@ export default function CRMFieldVisits() {
       })
     }
 
-    const { data: fresh } = await sb.from('crm_field_visits')
-      .select('*, profiles(name), crm_principals(name), crm_opportunities(id,opportunity_name,product_notes,stage)')
-      .order('visit_date', { ascending: false })
-    setVisits(fresh || [])
+    await loadVisits()
     setForm(emptyForm())
     setCompanyOpps([])
     toast(editingId ? 'Visit updated' : 'Field visit logged', 'success')
@@ -306,15 +319,24 @@ export default function CRMFieldVisits() {
 
   const isManager = ['admin','management'].includes(user.role)
   const q = search.trim().toLowerCase()
-  const filtered = visits
+  // Scope + timeline + rep + search first — visit-type chips show counts on this base
+  const scoped = visits
     .filter(v => {
       const isMine = v.rep_id === user.id || (v.ssc_team_members || []).includes(user.id)
       if (viewScope === 'mine') return isMine
       if (viewScope === 'team') return !isMine
       return true
     })
+    .filter(v => dateInTimeline(v.visit_date, timeline, customFrom, customTo))
     .filter(v => !q || (v.company_freetext||'').toLowerCase().includes(q) || (v.purpose||'').toLowerCase().includes(q))
     .filter(v => !filterRep || v.rep_id === filterRep || (v.ssc_team_members || []).includes(filterRep))
+  const typeCounts = VISIT_TYPES.reduce((acc, t) => { acc[t] = scoped.filter(v => v.visit_type === t).length; return acc }, {})
+  const filtered = scoped.filter(v => typeFilter === 'all' || v.visit_type === typeFilter)
+  const totalKm = Math.round(filtered.reduce((s, v) => s + (v.distance_km || 0), 0))
+  // Standard 50-per-page client-side pagination (same as CRM opportunities list)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   const toggleTeamMember = (repId) => {
     setForm(p => ({
@@ -335,7 +357,8 @@ export default function CRMFieldVisits() {
           <div>
             <h1 className="page-title">Field Visits</h1>
             <div className="opps-summary">
-              <span><b>{filtered.length}</b> visits</span>
+              <span><b>{filtered.length}</b> visit{filtered.length === 1 ? '' : 's'}</span>
+              {totalKm > 0 && (<><span className="o-sep"> · </span><span><b>{totalKm.toLocaleString('en-IN')}</b> km travelled</span></>)}
             </div>
           </div>
           <div className="page-meta">
@@ -348,26 +371,63 @@ export default function CRMFieldVisits() {
 
         <div className="opps-bar">
           <div className="view-toggle">
-            <button className={viewScope==='mine' ? 'on' : ''} onClick={() => setViewScope('mine')}>My View</button>
-            <button className={viewScope==='team' ? 'on' : ''} onClick={() => setViewScope('team')}>Team</button>
-            <button className={viewScope==='all' ? 'on' : ''} onClick={() => setViewScope('all')}>All</button>
+            <button className={viewScope==='mine' ? 'on' : ''} onClick={() => { setViewScope('mine'); setPage(1) }}>My View</button>
+            <button className={viewScope==='team' ? 'on' : ''} onClick={() => { setViewScope('team'); setPage(1) }}>Team</button>
+            <button className={viewScope==='all' ? 'on' : ''} onClick={() => { setViewScope('all'); setPage(1) }}>All</button>
           </div>
+        </div>
+
+        {/* Timeline — same options as the orders module, filtering on visit date */}
+        <div className="c-timeline">
+          {[
+            { key: 'all',       label: 'All Time' },
+            { key: 'today',     label: 'Today' },
+            { key: 'week',      label: 'This Week' },
+            { key: 'lastweek',  label: 'Last Week' },
+            { key: 'month',     label: 'This Month' },
+            { key: 'lastmonth', label: 'Last Month' },
+            { key: 'year',      label: 'This Year' },
+            { key: 'custom',    label: 'Custom' },
+          ].map(({ key, label }) => (
+            <button key={key} className={timeline === key ? 'on' : ''} onClick={() => { setTimeline(key); setPage(1) }}>{label}</button>
+          ))}
+          {timeline === 'custom' && (
+            <div className="c-timeline-custom">
+              <span>From</span>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}/>
+              <span>To</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0,10)}/>
+              {(customFrom || customTo) && <button className="opps-clear" onClick={() => { setCustomFrom(''); setCustomTo('') }}>Clear</button>}
+            </div>
+          )}
         </div>
 
         <div className="opps-filters">
           <div className="opps-search">
             <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
-            <input placeholder="Search company, purpose…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input placeholder="Search company, purpose…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
           </div>
           {isManager && (
-            <select className="filt-select" value={filterRep} onChange={e => setFilterRep(e.target.value)}>
+            <select className="filt-select" value={filterRep} onChange={e => { setFilterRep(e.target.value); setPage(1) }}>
               <option value="">All Reps</option>
               {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           )}
-          {(search || filterRep) && (
-            <button className="opps-clear" onClick={() => { setSearch(''); setFilterRep('') }}>Clear</button>
+          {(search || filterRep || typeFilter !== 'all' || timeline !== 'all') && (
+            <button className="opps-clear" onClick={() => { setSearch(''); setFilterRep(''); setTypeFilter('all'); setTimeline('all'); setCustomFrom(''); setCustomTo('') }}>Clear</button>
           )}
+        </div>
+
+        {/* Visit-type chips with counts — mirrors the orders status chips */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+          <button className={`c-chip ${typeFilter === 'all' ? 'on' : ''}`} onClick={() => { setTypeFilter('all'); setPage(1) }}>
+            All{scoped.length > 0 && <span className="c-chip-n">{scoped.length}</span>}
+          </button>
+          {VISIT_TYPES.map(t => (
+            <button key={t} className={`c-chip ${typeFilter === t ? 'on' : ''}`} onClick={() => { setTypeFilter(t); setPage(1) }}>
+              {VISIT_TYPE_LABELS[t]}{typeCounts[t] > 0 && <span className="c-chip-n">{typeCounts[t]}</span>}
+            </button>
+          ))}
         </div>
 
         {loading ? (
@@ -385,7 +445,7 @@ export default function CRMFieldVisits() {
               <div>Rep</div>
             </div>
             <div className="dl-table">
-              {filtered.map(v => {
+              {paginated.map(v => {
                 const oppName = v.crm_opportunities?.opportunity_name || v.crm_opportunities?.product_notes
                 const typeColor = v.visit_type==='SOLO' ? '#475569' : v.visit_type==='JOINT_PRINCIPAL' ? '#1a73e8' : '#0F766E'
                 return (
@@ -431,6 +491,22 @@ export default function CRMFieldVisits() {
                 )
               })}
             </div>
+            {filtered.length > 0 && (
+              <div className="c-foot">
+                <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+                <div className="c-pages">
+                  <button className="c-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                    const show = totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                    const ellipsis = !show && Math.abs(p - safePage) === 2
+                    if (show) return <button key={p} className={`c-page-btn ${p === safePage ? 'on' : ''}`} onClick={() => setPage(p)}>{p}</button>
+                    if (ellipsis) return <span key={'e' + p} style={{ padding: '5px 4px', color: 'var(--c-muted-2)' }}>…</span>
+                    return null
+                  })}
+                  <button className="c-page-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>Next ›</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
