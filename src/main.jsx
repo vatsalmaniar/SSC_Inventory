@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/global.css'
 import './styles/theme.css'
+import './styles/drawer.css'
 import App from './App.jsx'
 
 // Apply saved theme on load (before React renders, prevents flash)

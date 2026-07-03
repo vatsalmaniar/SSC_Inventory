@@ -535,18 +535,8 @@ html:not([data-theme="dark"]) .od-page {
 .od-btn-danger:hover { background: #fff1f2; }
 
 /* ── Cancel / popup modals ── */
-/* Right-side drawer (slides in from right) — used by dispatch / partial dispatch */
-.od-drawer-scrim { position: fixed; inset: 0; background: rgba(11,27,48,0.45); z-index: 200; display: flex; justify-content: flex-end; backdrop-filter: blur(2px); animation: fadeIn 0.15s ease; font-family: 'Geist', sans-serif; }
-.od-drawer { width: min(560px, 95vw); height: 100vh; background: #FFF; display: flex; flex-direction: column; box-shadow: 0 12px 32px -8px rgba(11,27,48,0.18); animation: od-drawer-in 0.22s ease; overflow: hidden; color: #0B1B30; }
-@keyframes od-drawer-in { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-.od-drawer-head { display: flex; justify-content: space-between; padding: 22px 28px 16px; border-bottom: 1px solid #E8EBF0; flex-shrink: 0; }
-.od-drawer-eyebrow { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6878; }
-.od-drawer-title { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; color: #0B1B30; }
-.od-drawer-sub { font-size: 13px; color: #5B6878; margin-top: 4px; }
-.od-drawer-close { background: transparent; border: 1px solid #E8EBF0; border-radius: 9px; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
-.od-drawer-close:hover { background: #f8f9fa; }
-.od-drawer-body { flex: 1; overflow-y: auto; padding: 20px 28px; }
-.od-drawer-foot { padding: 14px 28px; border-top: 1px solid #E8EBF0; background: #FBFBFD; display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0; }
+/* Right-side drawer (.od-drawer-*) moved to styles/drawer.css — imported
+   globally in main.jsx so every module (orders, CRM, waitlist) always has it. */
 
 .od-cancel-overlay { position: fixed; inset: 0; background: rgba(11,27,48,0.45); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.15s ease; backdrop-filter: blur(2px); font-family: 'Geist', sans-serif; }
 .od-cancel-modal   { background: white; border-radius: 14px; width: 100%; max-width: 400px; padding: 22px 24px; box-shadow: 0 12px 32px -8px rgba(11,27,48,0.18), 0 4px 12px rgba(11,27,48,0.06); animation: slideUp 0.2s ease; color: #0B1B30; }
