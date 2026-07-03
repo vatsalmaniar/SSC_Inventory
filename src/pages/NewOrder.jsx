@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { deliveryDateIssue, deliveryDateMax, orderDateIssue } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
@@ -167,10 +168,13 @@ export default function NewOrder() {
     if (!dispatchAddr.trim())   { toast('Dispatch address is required'); return }
     if (effectiveOrderType !== 'SAMPLE' && !poNumber.trim()) { toast('PO / Reference Number is required'); return }
     if (!validItems.length)     { toast('Add at least one item'); return }
+    const odIssue = orderDateIssue(orderDate)
+    if (odIssue) { toast(`Order Date ${odIssue}`); return }
     for (const item of validItems) {
       if (!item.qty)             { toast(`Qty is required for item: ${item.item_code}`); return }
       if (!item.lp_unit_price)   { toast(`LP Price is required for item: ${item.item_code}`); return }
-      if (!item.dispatch_date)   { toast(`Dispatch Date is required for item: ${item.item_code}`); return }
+      const dateIssue = deliveryDateIssue(item.dispatch_date, orderDate)
+      if (dateIssue) { toast(`Dispatch Date ${dateIssue} — item: ${item.item_code}`); return }
     }
 
     // Low-value order check
@@ -363,7 +367,7 @@ export default function NewOrder() {
           <div className="no-row three">
             <div className="no-field">
               <label>Order Date <span className="req">*</span></label>
-              <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} />
+              <input type="date" value={orderDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setOrderDate(e.target.value)} />
             </div>
             <div className="no-field">
               <label>Order Type <span className="req">*</span></label>
@@ -492,7 +496,7 @@ export default function NewOrder() {
                       <input readOnly value={item.total_price} placeholder="—" className="calc-field total-field" />
                     </td>
                     <td className="col-date">
-                      <input type="date" value={item.dispatch_date} onChange={e => updateItem(idx, 'dispatch_date', e.target.value)} />
+                      <input type="date" value={item.dispatch_date} min={orderDate} max={deliveryDateMax(orderDate)} onChange={e => updateItem(idx, 'dispatch_date', e.target.value)} />
                     </td>
                     <td className="col-ref">
                       <input value={item.customer_ref_no} onChange={e => updateItem(idx, 'customer_ref_no', e.target.value)} placeholder="Optional" />

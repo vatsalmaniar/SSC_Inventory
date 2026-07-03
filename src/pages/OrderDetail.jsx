@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
-import { fmt, fmtTs, esc } from '../lib/fmt'
+import { fmt, fmtTs, esc, deliveryDateIssue, deliveryDateMax } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
@@ -397,6 +397,10 @@ export default function OrderDetail() {
       toast('Customer name and at least one item are required.')
       setSaving(false); return
     }
+    for (const item of validItems) {
+      const dateIssue = deliveryDateIssue(item.dispatch_date, editData.order_date)
+      if (dateIssue) { toast(`Dispatch Date ${dateIssue} — item: ${item.item_code}`); setSaving(false); return }
+    }
     const { error: hdrErr } = await sb.from('orders').update({
       customer_name: editData.customer_name.trim(), customer_gst: editData.customer_gst.trim(),
       dispatch_address: editData.dispatch_address.trim(), po_number: editData.po_number.trim(),
@@ -436,6 +440,10 @@ export default function OrderDetail() {
     if (!editData.customer_name.trim() || !validItems.length) {
       toast('Customer name and at least one item are required.')
       setSaving(false); return
+    }
+    for (const item of validItems) {
+      const dateIssue = deliveryDateIssue(item.dispatch_date, editData.order_date)
+      if (dateIssue) { toast(`Dispatch Date ${dateIssue} — item: ${item.item_code}`); setSaving(false); return }
     }
     const { error: hdrErr } = await sb.from('orders').update({
       customer_name: editData.customer_name.trim(), customer_gst: editData.customer_gst.trim(),
@@ -1467,7 +1475,7 @@ if (match) {
                             <td className="col-disc"><input type="number" value={item.discount_pct} onChange={e => updateEditItem(idx, 'discount_pct', e.target.value)} placeholder="0" /></td>
                             <td className="col-unit"><input readOnly value={item.unit_price_after_disc} placeholder="—" className="calc-field" /></td>
                             <td className="col-total"><input readOnly value={item.total_price} placeholder="—" className="calc-field total-field" /></td>
-                            <td className="col-date"><input type="date" value={item.dispatch_date} onChange={e => updateEditItem(idx, 'dispatch_date', e.target.value)} /></td>
+                            <td className="col-date"><input type="date" value={item.dispatch_date} min={editData.order_date} max={deliveryDateMax(editData.order_date)} onChange={e => updateEditItem(idx, 'dispatch_date', e.target.value)} /></td>
                             <td className="col-ref"><input value={item.customer_ref_no || ''} onChange={e => updateEditItem(idx, 'customer_ref_no', e.target.value)} placeholder="Optional" /></td>
                             <td className="col-del">{editItems.length > 1 && (
                               <button className="del-row-btn" onClick={() => setEditItems(p => p.filter((_,i) => i !== idx))}>

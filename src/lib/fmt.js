@@ -43,6 +43,40 @@ export function fmtDateTime(d) {
   return dt.getDate()+' '+MO[dt.getMonth()]+' '+dt.getFullYear()+' '+(h<10?'0':'')+h+':'+(m<10?'0':'')+m
 }
 
+// ── Delivery-date sanity — ONE rule shared by New Order, CRM convert, Order edit ──
+// Blocks the typo class found 2026-07-03 (years 0026 / 20026 / 2025, delivery
+// before order): a delivery date must be a real YYYY-MM-DD between the order
+// date and order date + 2 years. Returns a message fragment, or null if OK.
+export function deliveryDateIssue(dispatchDate, orderDate) {
+  if (!dispatchDate) return 'is required'
+  // 4-digit year enforced — HTML date inputs happily emit "0026-…" or "20026-…"
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dispatchDate)) return `(${dispatchDate}) is not a valid date — check the year`
+  const base = orderDate && /^\d{4}-\d{2}-\d{2}$/.test(orderDate) ? orderDate : new Date().toISOString().slice(0, 10)
+  if (dispatchDate < base) return `(${fmt(dispatchDate)}) cannot be before the order date (${fmt(base)})`
+  const max = (parseInt(base.slice(0, 4)) + 2) + base.slice(4)
+  if (dispatchDate > max) return `(${fmt(dispatchDate)}) is more than 2 years after the order date — check the year`
+  return null
+}
+
+// Order-date sanity — new orders are punched with today's or a future date
+// (user rule 2026-07-03: no backdating), capped at +1 year to block year typos.
+// allowPast is for editing existing orders, whose dates are legitimately old.
+export function orderDateIssue(orderDate, { allowPast = false } = {}) {
+  if (!orderDate) return 'is required'
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(orderDate)) return `(${orderDate}) is not a valid date — check the year`
+  const today = new Date().toISOString().slice(0, 10)
+  if (!allowPast && orderDate < today) return `(${fmt(orderDate)}) cannot be in the past — use today's or a future date`
+  const max = (parseInt(today.slice(0, 4)) + 1) + today.slice(4)
+  if (orderDate > max) return `(${fmt(orderDate)}) is more than 1 year ahead — check the year`
+  return null
+}
+
+// max attribute for delivery-date inputs (order date + 2 years)
+export function deliveryDateMax(orderDate) {
+  const base = orderDate && /^\d{4}-\d{2}-\d{2}$/.test(orderDate) ? orderDate : new Date().toISOString().slice(0, 10)
+  return (parseInt(base.slice(0, 4)) + 2) + base.slice(4)
+}
+
 // HTML-escape for safe injection into document.write / innerHTML templates
 export function esc(str) {
   if (!str && str !== 0) return ''

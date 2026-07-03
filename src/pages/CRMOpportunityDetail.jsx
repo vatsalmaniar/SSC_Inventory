@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import { friendlyError } from '../lib/errorMsg'
 
 import { toast } from '../lib/toast'
-import { fmt, fmtNum, fmtTs, esc } from '../lib/fmt'
+import { fmt, fmtNum, fmtTs, esc, deliveryDateIssue, deliveryDateMax, orderDateIssue } from '../lib/fmt'
 import Layout from '../components/Layout'
 import NewCustomerModal from './NewCustomerModal'
 import Typeahead from '../components/Typeahead'
@@ -402,10 +402,13 @@ export default function CRMOpportunityDetail() {
     if (!sampleDispatchAddr.trim()) { toast('Dispatch address is required'); return }
     if (!samplePoNumber.trim()) { toast('PO / Reference Number is required'); return }
     if (!validItems.length) { toast('Add at least one item'); return }
+    const odIssue = orderDateIssue(sampleOrderDate)
+    if (odIssue) { toast(`Order Date ${odIssue}`); return }
     for (const item of validItems) {
       if (!item.qty) { toast('Qty required for: ' + item.item_code); return }
       if (!item.lp_unit_price) { toast('LP Price required for: ' + item.item_code); return }
-      if (!item.dispatch_date) { toast('Dispatch date required for: ' + item.item_code); return }
+      const dateIssue = deliveryDateIssue(item.dispatch_date, sampleOrderDate)
+      if (dateIssue) { toast(`Dispatch date ${dateIssue} — item: ${item.item_code}`); return }
     }
     // Low-value order check — same rule as the New Order form
     const convTotal = validItems.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0) + (parseFloat(sampleFreight) || 0)
@@ -480,9 +483,12 @@ export default function CRMOpportunityDetail() {
     { const block = customerOrderBlock(sampleCustomer); if (block) { toast(block); return } }
     if (!sampleDispatchAddr.trim()) { toast('Dispatch address is required'); return }
     if (!validItems.length) { toast('Add at least one item code'); return }
+    const odIssue = orderDateIssue(sampleOrderDate)
+    if (odIssue) { toast(`Order Date ${odIssue}`); return }
     for (const item of validItems) {
       if (!item.qty) { toast('Qty required for: ' + item.item_code); return }
-      if (!item.dispatch_date) { toast('Dispatch date required for: ' + item.item_code); return }
+      const dateIssue = deliveryDateIssue(item.dispatch_date, sampleOrderDate)
+      if (dateIssue) { toast(`Dispatch date ${dateIssue} — item: ${item.item_code}`); return }
     }
     setSubmittingSample(true)
     const { data: { session } } = await sb.auth.getSession()
@@ -2207,7 +2213,7 @@ export default function CRMOpportunityDetail() {
                   <div className="no-row three">
                     <div className="no-field">
                       <label>Order Date <span className="req">*</span></label>
-                      <input type="date" value={sampleOrderDate} onChange={e => setSampleOrderDate(e.target.value)} />
+                      <input type="date" value={sampleOrderDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setSampleOrderDate(e.target.value)} />
                     </div>
                     <div className="no-field">
                       <label>Order Type <span className="req">*</span></label>
@@ -2300,7 +2306,7 @@ export default function CRMOpportunityDetail() {
                             <td className="col-disc"><input type="number" value={row.discount_pct} onChange={e => updateSampleItem(idx,'discount_pct',e.target.value)} placeholder="0" min="0" max="100" /></td>
                             <td className="col-unit"><input readOnly value={row.unit_price_after_disc} placeholder="—" className="calc-field" /></td>
                             <td className="col-total"><input readOnly value={row.total_price} placeholder="—" className="calc-field total-field" /></td>
-                            <td className="col-date"><input type="date" value={row.dispatch_date} onChange={e => updateSampleItem(idx,'dispatch_date',e.target.value)} /></td>
+                            <td className="col-date"><input type="date" value={row.dispatch_date} min={sampleOrderDate} max={deliveryDateMax(sampleOrderDate)} onChange={e => updateSampleItem(idx,'dispatch_date',e.target.value)} /></td>
                             <td className="col-ref"><input value={row.customer_ref_no} onChange={e => updateSampleItem(idx,'customer_ref_no',e.target.value)} placeholder="Optional" /></td>
                             <td className="col-del">
                               {sampleItems.length > 1 && (
@@ -2447,7 +2453,7 @@ export default function CRMOpportunityDetail() {
                   <div className="no-row three">
                     <div className="no-field">
                       <label>Order Date <span className="req">*</span></label>
-                      <input type="date" value={sampleOrderDate} onChange={e => setSampleOrderDate(e.target.value)} />
+                      <input type="date" value={sampleOrderDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setSampleOrderDate(e.target.value)} />
                     </div>
                     <div className="no-field">
                       <label>Order Type</label>
@@ -2527,7 +2533,7 @@ export default function CRMOpportunityDetail() {
                             <td className="col-disc"><input type="number" value={row.discount_pct} onChange={e => updateSampleItem(idx,'discount_pct',e.target.value)} placeholder="0" min="0" max="100" /></td>
                             <td className="col-unit"><input readOnly value={row.unit_price_after_disc} placeholder="—" className="calc-field" /></td>
                             <td className="col-total"><input readOnly value={row.total_price} placeholder="—" className="calc-field total-field" /></td>
-                            <td className="col-date"><input type="date" value={row.dispatch_date} onChange={e => updateSampleItem(idx,'dispatch_date',e.target.value)} /></td>
+                            <td className="col-date"><input type="date" value={row.dispatch_date} min={sampleOrderDate} max={deliveryDateMax(sampleOrderDate)} onChange={e => updateSampleItem(idx,'dispatch_date',e.target.value)} /></td>
                             <td className="col-ref"><input value={row.customer_ref_no} onChange={e => updateSampleItem(idx,'customer_ref_no',e.target.value)} placeholder="Optional" /></td>
                             <td className="col-del">
                               {sampleItems.length > 1 && (
