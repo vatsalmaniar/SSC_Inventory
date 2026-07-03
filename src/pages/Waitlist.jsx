@@ -11,9 +11,11 @@ const DEAD_STATUSES = ['cancelled', 'dispatched_fc', 'closed']
 const FLAG_ROLES = ['ops', 'admin', 'management']
 
 // Reason whitelists — must mirror orders_hold_reason_check in sql/waiting_for_clearance.sql
+// 'Other' removed from UI 2026-07-03 (user request) but kept in the DB CHECK —
+// 7 flags were already saved with it before removal; they stay valid until re-flagged.
 const REASONS = {
-  sales:    ['Payment follow-up', 'Customer confirmation pending', 'Order change expected', 'PO/price issue', 'Other'],
-  customer: ['Project not ready', 'Machines not ready', 'Other'],
+  sales:    ['Payment follow-up', 'Customer confirmation pending', 'Order change expected', 'PO/price issue'],
+  customer: ['Project not ready', 'Machines not ready'],
 }
 
 function ownerName(o) { return o.account_owner || o.engineer_name || '' }
