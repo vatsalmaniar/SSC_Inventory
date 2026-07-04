@@ -151,7 +151,14 @@ export default function BillingOrderDetail() {
       sb.from('order_dispatches').select('*').eq('order_id', id).order('batch_no', { ascending: true }),
       sb.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: true }),
     ])
-    if (data?.order_type === 'SAMPLE') { navigate('/billing'); return }
+    // Samples are kept out of Billing EXCEPT the E-Way step: a sample > ₹50k
+    // routes to Accounts for the e-way bill. Allow it open only when the batch
+    // being viewed is at delivery_ready. MUST MATCH SAMPLE_BILLING_STAGES in
+    // BillingList.jsx.
+    if (data?.order_type === 'SAMPLE') {
+      const b = dispatchId ? (allB || []).find(x => x.id === dispatchId) : (allB || [])[(allB || []).length - 1]
+      if (b?.status !== 'delivery_ready') { navigate('/billing'); return }
+    }
     setCreditChoice(null)
     setInvoicePdfFile(null); setInvoicePdfError('')
     setEwayPdfFile(null);   setEwayPdfError('')

@@ -8,6 +8,11 @@ import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
 const BILLING_BATCH_STATUSES = ['delivery_created','pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
+// Samples are normally kept out of Billing (never invoiced), EXCEPT the E-Way
+// Bill step: a sample > ₹50k routes to Accounts for the e-way. So a sample batch
+// is billing-visible ONLY at delivery_ready. MUST MATCH the guard in
+// BillingOrderDetail.jsx (sample redirect exception).
+const SAMPLE_BILLING_STAGES = ['delivery_ready']
 
 const STATUS_LABELS = {
   delivery_created:'Credit Check',
@@ -70,7 +75,6 @@ export default function BillingList() {
         .select('id, order_id, batch_no, dc_number, invoice_number, status, fulfilment_center, dispatched_items, credit_override, credit_checked, credit_checked_at, created_at, orders!inner(id, order_number, customer_name, order_type, order_date, status, is_test, credit_terms, freight, engineer_name, account_owner, order_items(id, item_code, qty, dispatched_qty, total_price, unit_price_after_disc, cancelled_qty, line_status))')
         .in('status', BILLING_BATCH_STATUSES)
         .eq('orders.is_test', testMode)
-        .neq('orders.order_type', 'SAMPLE')
         .gte('created_at', FY_START)
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
@@ -78,7 +82,11 @@ export default function BillingList() {
     )
     if (error) console.error('BillingList load error:', error)
     if (truncated) console.warn('BillingList: batch list hit the fetch ceiling — consider server-side pagination.')
-    setBatches(data || [])
+    // Samples stay out of Billing EXCEPT at the E-Way step (delivery_ready) —
+    // a sample > ₹50k needs Accounts to generate the e-way before FC delivers.
+    const rows = (data || []).filter(b =>
+      b.orders?.order_type !== 'SAMPLE' || SAMPLE_BILLING_STAGES.includes(b.status))
+    setBatches(rows)
     setLoading(false)
   }
 
@@ -135,7 +143,8 @@ export default function BillingList() {
     return (b.dispatched_items || b.orders?.order_items || []).length
   }
 
-  const totalValue = filtered.reduce((s, b) => s + batchValue(b), 0)
+  // Sample value is not revenue — show the row, but keep it out of the billing total
+  const totalValue = filtered.reduce((s, b) => s + (b.orders?.order_type === 'SAMPLE' ? 0 : batchValue(b)), 0)
   const overrides  = filtered.filter(b => b.credit_override).length
 
   // Single-row filters — keeps semantic groupings + the few stages
