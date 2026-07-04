@@ -58,6 +58,7 @@ export default function GRNDetail() {
   const [grn, setGrn]           = useState(null)
   const [grnItems, setGrnItems] = useState([])
   const [linkedPos, setLinkedPos] = useState([])
+  const [orderInfo, setOrderInfo] = useState(null)  // source order (owner/customer) for returns
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
   const [activeTab, setActiveTab] = useState('overview')  // overview | items
@@ -148,6 +149,15 @@ export default function GRNDetail() {
       setLinkedPos(pos || [])
     } else {
       setLinkedPos([])
+    }
+    // Account owner of the source order (returns/rejections/samples) — for display
+    if (grnRes.data?.order_id) {
+      const { data: ord } = await sb.from('orders')
+        .select('order_number,customer_name,account_owner,engineer_name')
+        .eq('id', grnRes.data.order_id).maybeSingle()
+      setOrderInfo(ord || null)
+    } else {
+      setOrderInfo(null)
     }
     setLoading(false)
   }
@@ -285,9 +295,11 @@ export default function GRNDetail() {
       if (error) { toast(friendlyError(error)); setSaving(false); return }
 
       // Material Return Policy: accounting lives in Tally — trigger the
-      // credit/Dr-note step. Notify accounts + admin + management; the GRN
-      // shows "Credit note pending" until the Tally document is uploaded here.
-      try {
+      // credit/Dr-note step. Rejections & cancellation returns ONLY: a sample
+      // return is loaned material coming back, no sale → nothing to credit.
+      // Notify accounts + admin + management; the GRN shows "Credit note
+      // pending" until the Tally document is uploaded here.
+      if (['customer_rejection', 'cancellation_return'].includes(grn.grn_type)) try {
         const { data: targets } = await sb.from('profiles').select('id,name,role')
         const { data: { session } } = await sb.auth.getSession()
         const rows = (targets || [])
@@ -605,8 +617,14 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                       <div className="od-detail-field">
                         <label>Linked Order</label>
                         <div className="val">
-                          <span onClick={() => navigate('/orders/' + grn.order_id)} style={{ color:'#2563eb', cursor:'pointer', fontFamily:'var(--mono)' }}>View Order →</span>
+                          <span onClick={() => navigate('/orders/' + grn.order_id)} style={{ color:'#2563eb', cursor:'pointer', fontFamily:'var(--mono)' }}>{orderInfo?.order_number || 'View Order'} →</span>
                         </div>
+                      </div>
+                    )}
+                    {(orderInfo?.account_owner || orderInfo?.engineer_name) && (
+                      <div className="od-detail-field">
+                        <label>Account Owner</label>
+                        <div className="val">{orderInfo.account_owner || orderInfo.engineer_name}</div>
                       </div>
                     )}
                   </div>
@@ -645,7 +663,7 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
               {/* Credit / Dr Note (Tally) — returns & rejections only. Accounting
                   is done in Tally; the system tracks that the note was made and
                   stores the uploaded document against the GRN. */}
-              {grn.grn_type !== 'po_inward' && ['confirmed','invoice_matched','inward_posted'].includes(grn.status) && (
+              {['customer_rejection','cancellation_return'].includes(grn.grn_type) && ['confirmed','invoice_matched','inward_posted'].includes(grn.status) && (
                 <div className="od-card" style={!grn.credit_note_url ? { borderColor:'#fde68a', background:'#fffbeb' } : {}}>
                   <div className="od-card-header">
                     <div className="od-card-title">Credit / Dr Note (Tally)</div>

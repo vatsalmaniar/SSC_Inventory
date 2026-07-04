@@ -51,6 +51,15 @@ export default function NewGRN() {
   // Rejection / Cancellation
   const [soText, setSoText]         = useState('')
   const [selectedSO, setSelectedSO] = useState(null)
+  const [srcDelivered, setSrcDelivered] = useState(null) // null=unchecked, true/false — is the picked return order delivered?
+
+  // A return is only valid on a delivered order — check at selection time so the
+  // user sees it immediately (backstopped by the hard gate in handleSave).
+  async function checkDelivered(orderId) {
+    const { data } = await sb.from('order_dispatches').select('id')
+      .eq('order_id', orderId).eq('status', 'dispatched_fc').not('delivered_at', 'is', null).limit(1).maybeSingle()
+    return !!data
+  }
   const [soItems, setSoItems]       = useState([])
 
   useEffect(() => { init() }, [])
@@ -100,7 +109,7 @@ export default function NewGRN() {
 
   function changeType(key) {
     setGrnType(key)
-    setSelectedSR(null); setSelectedSO(null)
+    setSelectedSR(null); setSelectedSO(null); setSrcDelivered(null)
     setSrText(''); setSoText('')
     setSrItems([]); setSoItems([])
     setItems([emptyItem()])
@@ -212,6 +221,7 @@ export default function NewGRN() {
 
   async function loadSRItems(order) {
     setSelectedSR(order)
+    setSrcDelivered(null); checkDelivered(order.id).then(setSrcDelivered)
     setSrText(order.order_number)
     const { data } = await sb.from('order_items').select('id,item_code,qty').eq('order_id', order.id)
     setSrItems((data || []).map(i => ({ ...i, return_qty: String(i.qty) })))
@@ -228,6 +238,7 @@ export default function NewGRN() {
 
   async function loadSOItems(order) {
     setSelectedSO(order)
+    setSrcDelivered(null); checkDelivered(order.id).then(setSrcDelivered)
     setSoText(order.order_number)
     const { data } = await sb.from('order_items').select('id,item_code,qty').eq('order_id', order.id)
     setSoItems((data || []).map(i => ({ ...i, return_qty: String(i.qty) })))
@@ -251,6 +262,21 @@ export default function NewGRN() {
       // Writing the issue is mandatory
       if (!notes.trim()) {
         toast('Please describe the issue / reason — mandatory for returns & rejections', 'error'); return
+      }
+      // ── Delivery gate ── A return/rejection is only valid for goods that were
+      // actually DELIVERED — you cannot receive back what never went out. This
+      // is a physical fact, not a policy window, so it's a HARD block (no
+      // override) and covers all three types: cancellation, rejection, sample.
+      // (Closes the loophole where an undelivered order had delivered_at=null and
+      // slipped past the 7-day check, and rejections/samples had no check at all.)
+      const srcOrder = isSample ? selectedSR : selectedSO
+      if (srcOrder) {
+        const { data: deliv } = await sb.from('order_dispatches')
+          .select('id').eq('order_id', srcOrder.id).eq('status', 'dispatched_fc')
+          .not('delivered_at', 'is', null).limit(1).maybeSingle()
+        if (!deliv) {
+          toast('Cannot accept this return — the order has not been delivered yet. Only delivered goods can be returned.', 'error'); return
+        }
       }
       // CI zero-acceptance applies to CANCELLATION RETURNS only (customer
       // returning purchased goods). Rejections accept CI (product failure),
@@ -480,7 +506,7 @@ export default function NewGRN() {
                 <label>Sample Order (SSC/SR) <span className="req">*</span></label>
                 <Typeahead
                   value={srText}
-                  onChange={v => { setSrText(v); if (!v.trim()) { setSelectedSR(null); setSrItems([]) } }}
+                  onChange={v => { setSrText(v); if (!v.trim()) { setSelectedSR(null); setSrItems([]); setSrcDelivered(null) } }}
                   onSelect={o => loadSRItems(o)}
                   placeholder="Search SSC/SR number or customer..."
                   fetchFn={fetchSROrders}
@@ -493,6 +519,11 @@ export default function NewGRN() {
                   )}
                 />
                 {selectedSR && <div style={{ fontSize: 12, color: 'var(--gray-600)', marginTop: 6 }}>Customer: <strong>{selectedSR.customer_name}</strong></div>}
+                {selectedSR && srcDelivered === false && (
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '7px 10px', marginTop: 6 }}>
+                    ⚠ {selectedSR.order_number} has not been delivered — a return cannot be recorded against it.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -504,7 +535,7 @@ export default function NewGRN() {
                 <label>Order Number <span className="req">*</span></label>
                 <Typeahead
                   value={soText}
-                  onChange={v => { setSoText(v); if (!v.trim()) { setSelectedSO(null); setSoItems([]) } }}
+                  onChange={v => { setSoText(v); if (!v.trim()) { setSelectedSO(null); setSoItems([]); setSrcDelivered(null) } }}
                   onSelect={o => loadSOItems(o)}
                   strictSelect
                   placeholder="Search order number or customer..."
@@ -517,6 +548,11 @@ export default function NewGRN() {
                   )}
                 />
                 {selectedSO && <div style={{ fontSize: 12, color: 'var(--gray-600)', marginTop: 6 }}>Customer: <strong>{selectedSO.customer_name}</strong> · Status: {selectedSO.status}</div>}
+                {selectedSO && srcDelivered === false && (
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '7px 10px', marginTop: 6 }}>
+                    ⚠ {selectedSO.order_number} has not been delivered — a return cannot be recorded against it.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -745,7 +781,7 @@ export default function NewGRN() {
           <div className="no-totals-row" style={{ justifyContent: 'flex-end' }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="no-cancel-btn" onClick={() => navigate('/fc/grn')}>Cancel</button>
-              <button className="no-submit-btn" onClick={handleSave} disabled={saving}>
+              <button className="no-submit-btn" onClick={handleSave} disabled={saving || (grnType !== 'po_inward' && srcDelivered === false)}>
                 {saving ? 'Saving...' : 'Create GRN'}
               </button>
             </div>
