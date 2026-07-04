@@ -25,7 +25,9 @@ export function orderNetValue(order) {
   return (order.order_items || []).reduce((s, i) => s + lineNetValue(i), 0)
 }
 
-// Sum across a list of orders (cancelled ones already count as 0).
+// Sum across a list of orders = REVENUE. Cancelled orders already count as 0;
+// SAMPLE orders are excluded too (a sample is not a sale — no revenue). Callers
+// summing revenue must fetch order_type for this to apply.
 export function ordersTotalValue(orders) {
-  return (orders || []).reduce((s, o) => s + orderNetValue(o), 0)
+  return (orders || []).reduce((s, o) => s + (o?.order_type === 'SAMPLE' ? 0 : orderNetValue(o)), 0)
 }

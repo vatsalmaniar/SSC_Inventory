@@ -72,7 +72,7 @@ export default function Dashboard() {
     // Items fetched for Total Sales (canonical ordersTotalValue); sales users
     // are scoped to their own orders, same as the /orders headline.
     queries.push(fetchAll((from, to) => {
-      let q = sb.from('orders').select('status,order_items(total_price,unit_price_after_disc,lp_unit_price,cancelled_qty)').gte('created_at', FY_START).eq('is_test', false).order('id')
+      let q = sb.from('orders').select('status,order_type,order_items(total_price,unit_price_after_disc,lp_unit_price,cancelled_qty)').gte('created_at', FY_START).eq('is_test', false).order('id')
       if (role === 'sales') q = q.eq('created_by', session.user.id)
       return q.range(from, to)
     }))

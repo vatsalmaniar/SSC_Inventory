@@ -131,6 +131,7 @@ export default function Orders() {
   // freight (shared with /orders/list so the two headline numbers agree).
   const totalValue = ordersTotalValue(orders)
   const dispatchedValue = orders.reduce((s, o) => {
+    if (o.order_type === 'SAMPLE') return s  // samples aren't revenue
     const delivered = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc')
     const v = delivered.reduce((bs, b) => bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)
     if (v > 0) return s + v
@@ -141,11 +142,13 @@ export default function Orders() {
   const activeOrders = orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length
   const todayDispatched = orders.filter(o => (o.order_dispatches || []).some(b => b.created_at?.slice(0,10) === today))
   const todayDispatchValue = todayDispatched.reduce((s, o) => {
+    if (o.order_type === 'SAMPLE') return s
     const td = (o.order_dispatches || []).filter(b => b.created_at?.slice(0,10) === today)
     return s + td.reduce((bs, b) => bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)
   }, 0)
   const todayDelivered = orders.filter(o => (o.order_dispatches || []).some(b => b.delivered_at?.slice(0,10) === today))
   const todayDeliveredValue = todayDelivered.reduce((s, o) => {
+    if (o.order_type === 'SAMPLE') return s
     const td = (o.order_dispatches || []).filter(b => b.delivered_at?.slice(0,10) === today)
     return s + td.reduce((bs, b) => bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)
   }, 0)
@@ -170,7 +173,7 @@ export default function Orders() {
     return {
       id: r.id, name: r.name,
       count: own.length,
-      value: own.reduce((s,o) => s + (o.order_items || []).reduce((a,i) => a + (i.total_price || 0), 0), 0),
+      value: own.reduce((s,o) => s + (o.order_type === 'SAMPLE' ? 0 : (o.order_items || []).reduce((a,i) => a + (i.total_price || 0), 0)), 0),
       color: repColor(r.id),
     }
   }).filter(r => r.count > 0).sort((a,b) => b.value - a.value)
@@ -178,7 +181,7 @@ export default function Orders() {
 
   // Top customers
   const customerAgg = Object.values(orders.reduce((m, o) => {
-    const val = (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0)
+    const val = o.order_type === 'SAMPLE' ? 0 : (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0)
     if (!m[o.customer_name]) m[o.customer_name] = { name: o.customer_name, value: 0, count: 0, last: o.created_at, delivered: 0 }
     m[o.customer_name].value += val
     m[o.customer_name].count++
