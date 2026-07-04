@@ -252,10 +252,12 @@ export default function NewGRN() {
       if (!notes.trim()) {
         toast('Please describe the issue / reason — mandatory for returns & rejections', 'error'); return
       }
-      // CI zero-acceptance: customised items can be REJECTED (product failure)
-      // but never RETURNED
-      if (grnType !== 'customer_rejection') {
-        const retItems = (isSample ? srItems : soItems).filter(i => parseFloat(i.return_qty) > 0)
+      // CI zero-acceptance applies to CANCELLATION RETURNS only (customer
+      // returning purchased goods). Rejections accept CI (product failure),
+      // and SAMPLE returns accept CI too — a loaned CI sample must come back;
+      // the 30-day sample tracking depends on it.
+      if (grnType === 'cancellation_return') {
+        const retItems = soItems.filter(i => parseFloat(i.return_qty) > 0)
         const codes = [...new Set(retItems.map(i => i.item_code).filter(Boolean))]
         // Parallel .eq() — item codes with quotes/parens break .in() list parsing
         const results = await Promise.all(codes.map(c => sb.from('items').select('item_code,type').eq('item_code', c).maybeSingle()))
