@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmt, FY_START } from '../lib/fmt'
+import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
@@ -36,14 +37,7 @@ const FILTERS = [
   { key:'closed', label:'Closed' },
   { key:'cancelled', label:'Cancelled', tone:'danger' },
 ]
-const TIMELINES = [
-  { key:'all', label:'All Time' },
-  { key:'today', label:'Today' },
-  { key:'week', label:'This Week' },
-  { key:'month', label:'This Month' },
-  { key:'year', label:'This Year' },
-  { key:'custom', label:'Custom' },
-]
+const TIMELINES = TIMELINE_OPTIONS
 
 function matchFilter(po, f) {
   if (f === 'all') return true
@@ -60,26 +54,15 @@ function matchFilter(po, f) {
 }
 
 function inTimeline(po, t, customFrom, customTo, dateMode) {
-  let dateStr
   if (dateMode === 'expected') {
-    dateStr = po.expected_delivery || null
-    if (!dateStr) return false
-  } else {
-    dateStr = po.po_date || po.created_at
+    if (!po.expected_delivery) return t === 'all'
+    return dateInTimeline(po.expected_delivery, t, customFrom, customTo)
   }
-  const d = new Date(dateStr); d.setHours(0,0,0,0)
-  const now = new Date(); now.setHours(0,0,0,0)
-  if (t === 'all') return true
-  if (t === 'today') return d.getTime() === now.getTime()
-  if (t === 'week') { const start = new Date(now); start.setDate(now.getDate() - now.getDay()); return d >= start }
-  if (t === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-  if (t === 'year') return d.getFullYear() === now.getFullYear()
-  if (t === 'custom') {
-    if (customFrom) { const f = new Date(customFrom); f.setHours(0,0,0,0); if (d < f) return false }
-    if (customTo) { const t2 = new Date(customTo); t2.setHours(0,0,0,0); if (d > t2) return false }
-    return true
+  if (dateMode === 'cancelled') {
+    // Old cancellations without a stamp fall back to PO date so they never disappear
+    return dateInTimeline(po.cancelled_at || po.po_date || po.created_at, t, customFrom, customTo)
   }
-  return true
+  return dateInTimeline(po.po_date || po.created_at, t, customFrom, customTo)
 }
 
 function fmtCr(val) {
@@ -99,7 +82,15 @@ export default function PurchaseOrderList() {
   const [timeline, setTimeline] = useState(location.state?.timeline || 'all')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
-  const [dateMode, setDateMode] = useState('po')
+  const [dateMode, setDateMode] = useState(location.state?.filter === 'cancelled' ? 'cancelled' : 'po')
+
+  function selectFilter(key) {
+    setFilter(key)
+    setPage(1)
+    // Cancelled chip → timeline filters on cancellation date; leaving reverts to PO date
+    if (key === 'cancelled') setDateMode('cancelled')
+    else if (dateMode === 'cancelled') setDateMode('po')
+  }
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [showTest, setShowTest] = useState(false)
@@ -119,10 +110,14 @@ export default function PurchaseOrderList() {
 
   async function loadPos(testMode = false) {
     setLoading(true)
-    const { data } = await sb.from('purchase_orders')
-      .select('id,po_number,status,total_amount,vendor_name,vendor_id,order_number,fulfilment_center,submitted_by_name,created_at,po_date,expected_delivery,received_at,po_items(id,sr_no,item_code,qty,received_qty,unit_price,unit_price_after_disc,lp_unit_price,total_price,delivery_date)')
+    // Page past PostgREST's 1000-row cap (same fetchAll pattern as OrdersList)
+    const { data, error } = await fetchAll((from, to) => sb.from('purchase_orders')
+      .select('id,po_number,status,total_amount,vendor_name,vendor_id,order_number,fulfilment_center,submitted_by_name,created_at,po_date,expected_delivery,received_at,cancelled_at,po_items(id,sr_no,item_code,qty,received_qty,unit_price,unit_price_after_disc,lp_unit_price,total_price,delivery_date)')
       .gte('created_at', FY_START).eq('is_test', testMode)
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to))
+    if (error) console.error('PO list load error:', error)
     setPos(data || [])
     setLoading(false)
   }
@@ -317,9 +312,9 @@ export default function PurchaseOrderList() {
         <div className="kpi-row">
           <KpiTile variant="hero" tone="deep" label={activeFilterLabel} value={filtered.length} sub="matching POs" chart="line"/>
           <KpiTile variant="hero" tone="forest" label="Total Value" value={fmtCr(sumTotal)} sub="across filtered" chart="bars"/>
-          <KpiTile variant="hero" tone="teal" label="Open POs" value={counts.open || 0} sub="in progress" chart="bars" onClick={() => { setFilter('open'); setPage(1) }}/>
-          <KpiTile label="Pending Approval" value={counts.approval || 0} sub="awaiting approval" accent={(counts.approval || 0) > 0 ? 'amber' : null} onClick={() => { setFilter('approval'); setPage(1) }}/>
-          <KpiTile label="Delivery Pending" value={counts.delivery || 0} sub="awaiting delivery" onClick={() => { setFilter('delivery'); setPage(1) }}/>
+          <KpiTile variant="hero" tone="teal" label="Open POs" value={counts.open || 0} sub="in progress" chart="bars" onClick={() => selectFilter('open')}/>
+          <KpiTile label="Pending Approval" value={counts.approval || 0} sub="awaiting approval" accent={(counts.approval || 0) > 0 ? 'amber' : null} onClick={() => selectFilter('approval')}/>
+          <KpiTile label="Delivery Pending" value={counts.delivery || 0} sub="awaiting delivery" onClick={() => selectFilter('delivery')}/>
         </div>
 
         <div className="o-timeline">
@@ -350,12 +345,15 @@ export default function PurchaseOrderList() {
           <div className="o-datemode">
             <button className={dateMode === 'po' ? 'on' : ''} onClick={() => { setDateMode('po'); setPage(1) }}>PO Date</button>
             <button className={dateMode === 'expected' ? 'on' : ''} onClick={() => { setDateMode('expected'); setPage(1) }}>Expected Delivery</button>
+            {filter === 'cancelled' && (
+              <button className={dateMode === 'cancelled' ? 'on' : ''} onClick={() => { setDateMode('cancelled'); setPage(1) }}>Cancelled On</button>
+            )}
           </div>
         </div>
 
         <div className="o-filter-row">
           {FILTERS.map(({ key, label, tone }) => (
-            <button key={key} className={`o-chip ${filter === key ? 'on' : ''} ${tone || ''}`} onClick={() => { setFilter(key); setPage(1) }}>
+            <button key={key} className={`o-chip ${filter === key ? 'on' : ''} ${tone || ''}`} onClick={() => selectFilter(key)}>
               {label}
               {counts[key] > 0 && <span className="o-chip-n">{counts[key]}</span>}
             </button>
@@ -369,7 +367,7 @@ export default function PurchaseOrderList() {
             <div className="ol-row ol-head" style={{ gridTemplateColumns: '140px minmax(0, 1.4fr) 110px minmax(0, 1fr) auto 140px' }}>
               <div>PO #</div>
               <div>Vendor</div>
-              <div>PO Date</div>
+              <div>{filter === 'cancelled' ? 'Cancelled On' : 'PO Date'}</div>
               <div>Submitted By</div>
               <div className="ol-numgroup">
                 <div className="num num-label" style={{ textAlign:'right' }}>Items</div>
@@ -394,8 +392,17 @@ export default function PurchaseOrderList() {
                       </div>
                       <div className="ol-cell ol-cust" title={po.vendor_name}>{po.vendor_name || '—'}</div>
                       <div className="ol-cell">
-                        <div className="ol-date">{fmt(po.po_date)}</div>
-                        {po.expected_delivery && <div className="ol-date-sub">Exp: {fmt(po.expected_delivery)}</div>}
+                        {filter === 'cancelled' ? (
+                          <>
+                            <div className="ol-date" style={{ color: '#B91C1C' }}>{fmt(po.cancelled_at || po.po_date)}</div>
+                            <div className="ol-date-sub">PO: {fmt(po.po_date)}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="ol-date">{fmt(po.po_date)}</div>
+                            {po.expected_delivery && <div className="ol-date-sub">Exp: {fmt(po.expected_delivery)}</div>}
+                          </>
+                        )}
                       </div>
                       <div className="ol-cell">
                         {po.submitted_by_name ? (

@@ -1038,7 +1038,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   async function handleCancel() {
     if (!cancelReason.trim()) { toast('Please enter a cancellation reason'); return }
     setSaving(true)
-    await updateStatus('cancelled', { cancelled_reason: cancelReason.trim() })
+    await updateStatus('cancelled', { cancelled_reason: cancelReason.trim(), cancelled_at: new Date().toISOString() })
     setShowCancelModal(false); setCancelReason('')
   }
 
