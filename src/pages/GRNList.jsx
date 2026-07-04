@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmt, FY_START } from '../lib/fmt'
+import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
@@ -46,6 +47,9 @@ export default function GRNList() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [timeline, setTimeline] = useState('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 
@@ -63,7 +67,12 @@ export default function GRNList() {
 
   async function loadGrns() {
     setLoading(true)
-    const { data } = await sb.from('grn').select('*').eq('is_test', false).gte('created_at', FY_START).order('received_at', { ascending: false })
+    // Page past PostgREST's 1000-row cap
+    const { data, error } = await fetchAll((from, to) =>
+      sb.from('grn').select('*').eq('is_test', false).gte('created_at', FY_START)
+        .order('received_at', { ascending: false }).order('id', { ascending: false })
+        .range(from, to))
+    if (error) console.error('GRN list load error:', error)
     setGrns(data || [])
     setLoading(false)
   }
@@ -71,18 +80,20 @@ export default function GRNList() {
   function matchFilter(g, f) { return f === 'all' ? true : g.status === f }
   function matchType(g, t) { return t === 'all' ? true : g.grn_type === t }
 
-  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = grns.filter(g => matchFilter(g, key) && matchType(g, typeFilter)).length; return acc }, {})
+  // Timeline filters on the received date (business date of a GRN)
+  const timelineGrns = grns.filter(g => dateInTimeline(g.received_at || g.created_at, timeline, customFrom, customTo))
+  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = timelineGrns.filter(g => matchFilter(g, key) && matchType(g, typeFilter)).length; return acc }, {})
 
   const q = search.trim().toLowerCase()
-  const filtered = grns.filter(g => matchFilter(g, filter)).filter(g => matchType(g, typeFilter))
+  const filtered = timelineGrns.filter(g => matchFilter(g, filter)).filter(g => matchType(g, typeFilter))
     .filter(g => !q || g.grn_number?.toLowerCase().includes(q) || g.vendor_name?.toLowerCase().includes(q) || g.invoice_number?.toLowerCase().includes(q))
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
   const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
   const totalValue = filtered.reduce((s, g) => s + (g.total_amount || 0), 0)
-  const pendingCount = grns.filter(g => (g.status === 'draft' || g.status === 'checking') && matchType(g, typeFilter)).length
-  const confirmedCount = grns.filter(g => g.status === 'confirmed' && matchType(g, typeFilter)).length
+  const pendingCount = timelineGrns.filter(g => (g.status === 'draft' || g.status === 'checking') && matchType(g, typeFilter)).length
+  const confirmedCount = timelineGrns.filter(g => g.status === 'confirmed' && matchType(g, typeFilter)).length
 
   const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'GRNs'
   const typeLabel = TYPE_FILTERS.find(t => t.key === typeFilter)?.label || ''
@@ -278,6 +289,22 @@ export default function GRNList() {
           <KpiTile variant="hero" tone="teal" label="Confirmed" value={confirmedCount} sub="confirmed GRNs" chart="bars" onClick={() => { setFilter('confirmed'); setPage(1) }}/>
           <KpiTile label="Pending" value={pendingCount} sub="created + checking" accent={pendingCount > 0 ? 'amber' : null} onClick={() => { setFilter('checking'); setPage(1) }}/>
           <KpiTile label="Posted" value={counts.inward_posted || 0} sub="inward posted" onClick={() => { setFilter('inward_posted'); setPage(1) }}/>
+        </div>
+
+        {/* Timeline — filters on received date */}
+        <div className="o-timeline">
+          {TIMELINE_OPTIONS.map(({ key, label }) => (
+            <button key={key} className={timeline === key ? 'on' : ''} onClick={() => { setTimeline(key); setPage(1) }}>{label}</button>
+          ))}
+          {timeline === 'custom' && (
+            <div className="o-timeline-custom">
+              <span>From</span>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}/>
+              <span>To</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0,10)}/>
+              {(customFrom || customTo) && <button className="o-search-clear" onClick={() => { setCustomFrom(''); setCustomTo('') }} style={{ marginLeft: 6, fontSize: 11, color: 'var(--o-bad)' }}>Clear</button>}
+            </div>
+          )}
         </div>
 
         <div className="o-toolbar">

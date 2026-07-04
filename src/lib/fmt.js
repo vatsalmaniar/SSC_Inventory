@@ -43,6 +43,18 @@ export function fmtDateTime(d) {
   return dt.getDate()+' '+MO[dt.getMonth()]+' '+dt.getFullYear()+' '+(h<10?'0':'')+h+':'+(m<10?'0':'')+m
 }
 
+// Standard timeline chip set — pair with dateInTimeline below
+export const TIMELINE_OPTIONS = [
+  { key: 'all',       label: 'All Time' },
+  { key: 'today',     label: 'Today' },
+  { key: 'week',      label: 'This Week' },
+  { key: 'lastweek',  label: 'Last Week' },
+  { key: 'month',     label: 'This Month' },
+  { key: 'lastmonth', label: 'Last Month' },
+  { key: 'year',      label: 'This Year' },
+  { key: 'custom',    label: 'Custom' },
+]
+
 // ── Generic timeline bucket for a single date (Monday-start weeks) ──
 // Shared by list-page time filters (orders, field visits, …).
 export function dateInTimeline(dateStr, t, customFrom, customTo) {

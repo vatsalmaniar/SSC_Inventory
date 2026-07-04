@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
+import { fmt, FY_START, FY_LABEL, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
@@ -38,6 +38,9 @@ export default function FCModule() {
   const [search, setSearch] = useState('')
   const [showTest, setShowTest] = useState(false)
   const [page, setPage] = useState(1)
+  const [timeline, setTimeline] = useState('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
 
   useEffect(() => { init() }, [])
   useEffect(() => { setPage(1) }, [filter, search])
@@ -87,20 +90,22 @@ export default function FCModule() {
     return s === filter
   }
 
+  // Timeline filters on batch created date
+  const timelineBatches = batches.filter(b => dateInTimeline(b.created_at, timeline, customFrom, customTo))
   const counts = {
-    everything:        batches.length,
-    action:            batches.filter(b => actionStatuses.includes(effStatus(b))).length,
-    waiting:           batches.filter(b => waitStatuses.includes(effStatus(b))).length,
-    all:               batches.filter(b => actionStatuses.includes(effStatus(b)) || waitStatuses.includes(effStatus(b))).length,
-    delivery_created:  batches.filter(b => effStatus(b) === 'delivery_created').length,
-    picking:           batches.filter(b => effStatus(b) === 'picking').length,
-    packing:           batches.filter(b => effStatus(b) === 'packing').length,
-    invoice_generated: batches.filter(b => effStatus(b) === 'invoice_generated').length,
-    eway_generated:    batches.filter(b => effStatus(b) === 'eway_generated').length,
-    dispatched_fc:     batches.filter(b => effStatus(b) === 'dispatched_fc').length,
+    everything:        timelineBatches.length,
+    action:            timelineBatches.filter(b => actionStatuses.includes(effStatus(b))).length,
+    waiting:           timelineBatches.filter(b => waitStatuses.includes(effStatus(b))).length,
+    all:               timelineBatches.filter(b => actionStatuses.includes(effStatus(b)) || waitStatuses.includes(effStatus(b))).length,
+    delivery_created:  timelineBatches.filter(b => effStatus(b) === 'delivery_created').length,
+    picking:           timelineBatches.filter(b => effStatus(b) === 'picking').length,
+    packing:           timelineBatches.filter(b => effStatus(b) === 'packing').length,
+    invoice_generated: timelineBatches.filter(b => effStatus(b) === 'invoice_generated').length,
+    eway_generated:    timelineBatches.filter(b => effStatus(b) === 'eway_generated').length,
+    dispatched_fc:     timelineBatches.filter(b => effStatus(b) === 'dispatched_fc').length,
   }
   const q = search.trim().toLowerCase()
-  const filtered = batches.filter(matchFilter).filter(b =>
+  const filtered = timelineBatches.filter(matchFilter).filter(b =>
     !q || b.orders?.customer_name?.toLowerCase().includes(q) ||
     b.orders?.order_number?.toLowerCase().includes(q) ||
     b.dc_number?.toLowerCase().includes(q)
@@ -300,10 +305,26 @@ export default function FCModule() {
           <KpiTile label="This Filter" value={filtered.length} sub="matching batches"/>
         </div>
 
+        {/* Timeline — filters on batch created date */}
+        <div className="o-timeline">
+          {TIMELINE_OPTIONS.map(({ key, label }) => (
+            <button key={key} className={timeline === key ? 'on' : ''} onClick={() => { setTimeline(key); setPage(1) }}>{label}</button>
+          ))}
+          {timeline === 'custom' && (
+            <div className="o-timeline-custom">
+              <span>From</span>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}/>
+              <span>To</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0,10)}/>
+              {(customFrom || customTo) && <button className="o-search-clear" onClick={() => { setCustomFrom(''); setCustomTo('') }} style={{ marginLeft: 6, fontSize: 11, color: 'var(--o-bad)' }}>Clear</button>}
+            </div>
+          )}
+        </div>
+
         <div className="o-toolbar">
           <div className="o-search">
             <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
-            <input placeholder="Search DC, order, customer…" value={search} onChange={e => setSearch(e.target.value)}/>
+            <input placeholder="Search DC, order, customer…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}/>
             {search && (
               <button className="o-search-clear" onClick={() => setSearch('')}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

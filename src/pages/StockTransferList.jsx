@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmt, FY_START } from '../lib/fmt'
+import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -26,6 +27,9 @@ export default function StockTransferList() {
   const [search, setSearch] = useState('')
   const [testMode, setTestMode] = useState(false)
   const [page, setPage] = useState(1)
+  const [timeline, setTimeline] = useState('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
 
   useEffect(() => { init() }, [])
 
@@ -41,18 +45,24 @@ export default function StockTransferList() {
 
   async function loadTransfers(test) {
     setLoading(true)
-    const { data } = await sb.from('stock_transfers')
+    // Page past PostgREST's 1000-row cap
+    const { data, error } = await fetchAll((from, to) => sb.from('stock_transfers')
       .select('*, stock_transfer_items(id)')
-      .eq('is_test', test).gte('created_at', FY_START).order('created_at', { ascending: false })
+      .eq('is_test', test).gte('created_at', FY_START)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(from, to))
+    if (error) console.error('Stock transfers load error:', error)
     setTransfers(data || [])
     setLoading(false)
   }
 
   function matchFilter(t, f) { return f === 'all' ? true : t.status === f }
-  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = transfers.filter(t => matchFilter(t, key)).length; return acc }, {})
+  // Timeline filters on transfer created date
+  const timelineTransfers = transfers.filter(t => dateInTimeline(t.created_at, timeline, customFrom, customTo))
+  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = timelineTransfers.filter(t => matchFilter(t, key)).length; return acc }, {})
 
   const q = search.trim().toLowerCase()
-  const filtered = transfers.filter(t => matchFilter(t, filter))
+  const filtered = timelineTransfers.filter(t => matchFilter(t, filter))
     .filter(t => !q || (t.transfer_number || '').toLowerCase().includes(q) || (t.source_fc || '').toLowerCase().includes(q) || (t.destination_fc || '').toLowerCase().includes(q))
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
@@ -96,6 +106,22 @@ export default function StockTransferList() {
           <KpiTile variant="hero" tone="teal" label="In Transit" value={counts.dispatched} sub="dispatched" chart="bars" onClick={() => setFilter('dispatched')}/>
           <KpiTile label="Draft" value={counts.draft} sub="not yet dispatched" accent={counts.draft > 0 ? 'amber' : null} onClick={() => setFilter('draft')}/>
           <KpiTile label="Cancelled" value={counts.cancelled} sub="cancelled" onClick={() => setFilter('cancelled')}/>
+        </div>
+
+        {/* Timeline — filters on transfer created date */}
+        <div className="o-timeline">
+          {TIMELINE_OPTIONS.map(({ key, label }) => (
+            <button key={key} className={timeline === key ? 'on' : ''} onClick={() => { setTimeline(key); setPage(1) }}>{label}</button>
+          ))}
+          {timeline === 'custom' && (
+            <div className="o-timeline-custom">
+              <span>From</span>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}/>
+              <span>To</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0,10)}/>
+              {(customFrom || customTo) && <button className="o-search-clear" onClick={() => { setCustomFrom(''); setCustomTo('') }} style={{ marginLeft: 6, fontSize: 11, color: 'var(--o-bad)' }}>Clear</button>}
+            </div>
+          )}
         </div>
 
         <div className="o-toolbar">
@@ -162,7 +188,13 @@ export default function StockTransferList() {
                 <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
                 <div className="ol-pages">
                   <button className="ol-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
-                  <span style={{ padding: '5px 10px', fontSize: 13, color: 'var(--o-muted)' }}>Page {safePage} of {totalPages}</span>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                    const show = totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                    const ellipsis = !show && Math.abs(p - safePage) === 2
+                    if (show) return <button key={p} className={`ol-page-btn ${p === safePage ? 'on' : ''}`} onClick={() => setPage(p)}>{p}</button>
+                    if (ellipsis) return <span key={'e' + p} style={{ padding: '5px 4px', color: 'var(--o-muted-2)' }}>…</span>
+                    return null
+                  })}
                   <button className="ol-page-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>Next ›</button>
                 </div>
               </div>

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmt, FY_START, FY_LABEL } from '../lib/fmt'
+import { fmt, FY_START, FY_LABEL, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
@@ -37,6 +38,9 @@ export default function PurchaseInvoiceList() {
   const [filter, setFilter] = useState('three_way_check')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [timeline, setTimeline] = useState('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
 
   useEffect(() => { init() }, [])
   useEffect(() => { setPage(1) }, [filter, search])
@@ -53,9 +57,13 @@ export default function PurchaseInvoiceList() {
 
   async function loadInvoices() {
     setLoading(true)
-    const { data } = await sb.from('purchase_invoices')
+    // Page past PostgREST's 1000-row cap
+    const { data, error } = await fetchAll((from, to) => sb.from('purchase_invoices')
       .select('id, invoice_number, vendor_name, invoice_date, invoice_amount, gst_amount, total_amount, status, po_id, grn_id, created_at')
-      .eq('is_test', false).gte('created_at', FY_START).order('created_at', { ascending: false })
+      .eq('is_test', false).gte('created_at', FY_START)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(from, to))
+    if (error) console.error('Purchase invoices load error:', error)
     setInvoices(data || [])
     setLoading(false)
   }
@@ -69,14 +77,16 @@ export default function PurchaseInvoiceList() {
     return s === filter
   }
 
+  // Timeline filters on the vendor's invoice date (business date; falls back to created)
+  const timelineInvoices = invoices.filter(i => dateInTimeline(i.invoice_date || i.created_at, timeline, customFrom, customTo))
   const counts = {
-    three_way_check: invoices.filter(i => (i.status || 'three_way_check') === 'three_way_check').length,
-    invoice_pending: invoices.filter(i => i.status === 'invoice_pending').length,
-    inward_complete: invoices.filter(i => i.status === 'inward_complete').length,
-    all: invoices.length,
+    three_way_check: timelineInvoices.filter(i => (i.status || 'three_way_check') === 'three_way_check').length,
+    invoice_pending: timelineInvoices.filter(i => i.status === 'invoice_pending').length,
+    inward_complete: timelineInvoices.filter(i => i.status === 'inward_complete').length,
+    all: timelineInvoices.length,
   }
   const q = search.trim().toLowerCase()
-  const filtered = invoices.filter(matchFilter).filter(inv =>
+  const filtered = timelineInvoices.filter(matchFilter).filter(inv =>
     !q || (inv.invoice_number || '').toLowerCase().includes(q) || (inv.vendor_name || '').toLowerCase().includes(q)
   )
   const totalAmount = filtered.reduce((s, i) => s + (i.total_amount || 0), 0)
@@ -230,10 +240,26 @@ export default function PurchaseInvoiceList() {
           <KpiTile label="Total Invoices" value={counts.all} sub={FY_LABEL} onClick={() => setFilter('all')}/>
         </div>
 
+        {/* Timeline — filters on vendor invoice date */}
+        <div className="o-timeline">
+          {TIMELINE_OPTIONS.map(({ key, label }) => (
+            <button key={key} className={timeline === key ? 'on' : ''} onClick={() => { setTimeline(key); setPage(1) }}>{label}</button>
+          ))}
+          {timeline === 'custom' && (
+            <div className="o-timeline-custom">
+              <span>From</span>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}/>
+              <span>To</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0,10)}/>
+              {(customFrom || customTo) && <button className="o-search-clear" onClick={() => { setCustomFrom(''); setCustomTo('') }} style={{ marginLeft: 6, fontSize: 11, color: 'var(--o-bad)' }}>Clear</button>}
+            </div>
+          )}
+        </div>
+
         <div className="o-toolbar">
           <div className="o-search">
             <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
-            <input placeholder="Search invoice number, vendor…" value={search} onChange={e => setSearch(e.target.value)}/>
+            <input placeholder="Search invoice number, vendor…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}/>
             {search && (
               <button className="o-search-clear" onClick={() => setSearch('')}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:12,height:12}}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

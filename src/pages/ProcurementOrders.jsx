@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmtShort, FY_START } from '../lib/fmt'
+import { fmtShort, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { lineIsHandled } from '../lib/coverage'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
@@ -26,6 +26,9 @@ export default function ProcurementOrders() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [tab, setTab] = useState('pending')
+  const [timeline, setTimeline] = useState('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [testMode, setTestMode] = useState(false)
   const PAGE_SIZE = 50
@@ -145,11 +148,13 @@ export default function ProcurementOrders() {
     setLoading(false)
   }
 
-  const pendingOrders = orders.filter(o => {
+  // Timeline filters on created date (order_date isn't fetched on this worklist)
+  const timelineOrders = orders.filter(o => dateInTimeline(o.created_at, timeline, customFrom, customTo))
+  const pendingOrders = timelineOrders.filter(o => {
     if (o.status === 'cancelled') return !o._hasPostApprovalPO
     return o._coveredItems < o._totalItems
   })
-  const orphanOrders = orders.filter(o => o.status === 'cancelled' && (o._orphanPOs?.length > 0))
+  const orphanOrders = timelineOrders.filter(o => o.status === 'cancelled' && (o._orphanPOs?.length > 0))
 
   const visible = tab === 'orphan' ? orphanOrders : pendingOrders
   const q = search.trim().toLowerCase()
@@ -187,8 +192,24 @@ export default function ProcurementOrders() {
           <KpiTile variant="hero" tone="deep" label="Pending Coverage" value={pendingOrders.length} sub={`${totalUncovered} items`} chart="bars" onClick={() => setTab('pending')}/>
           <KpiTile variant="hero" tone="forest" label="Total CO Value" value={fmtCr(totalValue)} sub="across pending COs" chart="line"/>
           <KpiTile variant="hero" tone="teal" label="Orphan POs" value={orphanOrders.length} sub="post-approval · CO cancelled" chart="bars" onClick={() => setTab('orphan')}/>
-          <KpiTile label="Fully Covered" value={orders.filter(o => o.status !== 'cancelled' && o._coveredItems >= o._totalItems).length} sub="all items linked"/>
-          <KpiTile label="Cancelled COs" value={orders.filter(o => o.status === 'cancelled').length} sub="this FY"/>
+          <KpiTile label="Fully Covered" value={timelineOrders.filter(o => o.status !== 'cancelled' && o._coveredItems >= o._totalItems).length} sub="all items linked"/>
+          <KpiTile label="Cancelled COs" value={timelineOrders.filter(o => o.status === 'cancelled').length} sub="this FY"/>
+        </div>
+
+        {/* Timeline — filters on CO created date */}
+        <div className="o-timeline">
+          {TIMELINE_OPTIONS.map(({ key, label }) => (
+            <button key={key} className={timeline === key ? 'on' : ''} onClick={() => { setTimeline(key); setPage(1) }}>{label}</button>
+          ))}
+          {timeline === 'custom' && (
+            <div className="o-timeline-custom">
+              <span>From</span>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}/>
+              <span>To</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0,10)}/>
+              {(customFrom || customTo) && <button className="o-search-clear" onClick={() => { setCustomFrom(''); setCustomTo('') }} style={{ marginLeft: 6, fontSize: 11, color: 'var(--o-bad)' }}>Clear</button>}
+            </div>
+          )}
         </div>
 
         <div className="o-toolbar">
