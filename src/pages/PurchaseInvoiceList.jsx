@@ -28,12 +28,16 @@ const FILTERS = [
   { key:'three_way_check',  label:'3-Way Check',     tone:'warn' },
   { key:'invoice_pending',  label:'Invoice Pending' },
   { key:'inward_complete',  label:'Inward Complete' },
+  { key:'credit_notes',     label:'Credit / Dr Notes', tone:'warn' },
 ]
+
+const CN_TYPE_LABELS = { customer_rejection: 'Customer Rejection', cancellation_return: 'Cancellation Return' }
 
 export default function PurchaseInvoiceList() {
   const navigate = useNavigate()
   const [userRole, setUserRole] = useState('')
   const [invoices, setInvoices] = useState([])
+  const [cnGrns, setCnGrns] = useState([])   // rejection/cancellation GRNs → Tally credit/Dr-note worklist
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('three_way_check')
   const [search, setSearch] = useState('')
@@ -65,6 +69,27 @@ export default function PurchaseInvoiceList() {
       .range(from, to))
     if (error) console.error('Purchase invoices load error:', error)
     setInvoices(data || [])
+
+    // Credit/Dr-note worklist: confirmed return/rejection GRNs. Accounting is in
+    // Tally — the note is prepared there and uploaded on the GRN; this list makes
+    // pending ones visible to accounts without visiting each GRN.
+    const { data: cn, error: cnErr } = await sb.from('grn')
+      .select('id, grn_number, grn_type, status, received_at, created_at, order_id, credit_note_number, credit_note_url, credit_note_uploaded_by, credit_note_uploaded_at')
+      .in('grn_type', ['customer_rejection', 'cancellation_return'])
+      .in('status', ['confirmed', 'invoice_matched', 'inward_posted'])
+      .eq('is_test', false)
+      .order('created_at', { ascending: false })
+      .limit(500)
+    if (cnErr) console.error('Credit-note GRNs load error:', cnErr)
+    const cnRows = cn || []
+    // Order/customer context (separate query — no FK embedding assumption)
+    const orderIds = [...new Set(cnRows.map(g => g.order_id).filter(Boolean))]
+    const orderMap = {}
+    for (let i = 0; i < orderIds.length; i += 150) {
+      const { data: ords } = await sb.from('orders').select('id, order_number, customer_name').in('id', orderIds.slice(i, i + 150))
+      for (const o of (ords || [])) orderMap[o.id] = o
+    }
+    setCnGrns(cnRows.map(g => ({ ...g, _order: orderMap[g.order_id] || null })))
     setLoading(false)
   }
 
@@ -84,11 +109,20 @@ export default function PurchaseInvoiceList() {
     invoice_pending: timelineInvoices.filter(i => i.status === 'invoice_pending').length,
     inward_complete: timelineInvoices.filter(i => i.status === 'inward_complete').length,
     all: timelineInvoices.length,
+    credit_notes: cnGrns.filter(g => !g.credit_note_url).length, // pending notes only
   }
   const q = search.trim().toLowerCase()
   const filtered = timelineInvoices.filter(matchFilter).filter(inv =>
     !q || (inv.invoice_number || '').toLowerCase().includes(q) || (inv.vendor_name || '').toLowerCase().includes(q)
   )
+  const isCnTab = filter === 'credit_notes'
+  const cnFiltered = cnGrns
+    .filter(g => dateInTimeline(g.received_at || g.created_at, timeline, customFrom, customTo))
+    .filter(g => !q
+      || (g.grn_number || '').toLowerCase().includes(q)
+      || (g._order?.order_number || '').toLowerCase().includes(q)
+      || (g._order?.customer_name || '').toLowerCase().includes(q)
+      || (g.credit_note_number || '').toLowerCase().includes(q))
   const totalAmount = filtered.reduce((s, i) => s + (i.total_amount || 0), 0)
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
@@ -218,7 +252,7 @@ export default function PurchaseInvoiceList() {
             </div>
           </div>
           <div className="page-meta">
-            <div className="o-dl-group">
+            <div className="o-dl-group" style={isCnTab ? { display: 'none' } : undefined}>
               <button className="o-dl-btn" onClick={downloadSummary} title="Summary Excel">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Summary
@@ -282,6 +316,49 @@ export default function PurchaseInvoiceList() {
 
         {loading ? (
           <div className="o-loading">Loading invoices…</div>
+        ) : isCnTab ? (
+          <div className="ol-wrap">
+            <div className="ol-row ol-head" style={{ gridTemplateColumns: '190px 150px minmax(0, 1.3fr) 130px 110px 180px' }}>
+              <div>GRN #</div>
+              <div>Type</div>
+              <div>Customer</div>
+              <div>Order #</div>
+              <div>Received</div>
+              <div>Credit / Dr Note</div>
+            </div>
+            {cnFiltered.length === 0 ? (
+              <div className="ol-empty">
+                <div className="ol-empty-title">No return / rejection GRNs</div>
+                <div style={{ fontSize: 13, color: 'var(--o-muted)' }}>Credit &amp; Dr notes for returns and rejections will appear here after GRN confirmation.</div>
+              </div>
+            ) : (
+              <div className="ol-table">
+                {cnFiltered.map(g => (
+                  <div key={g.id} className="ol-row ol-data" style={{ gridTemplateColumns: '190px 150px minmax(0, 1.3fr) 130px 110px 180px' }} onClick={() => navigate('/fc/grn/' + g.id)}>
+                    <div className="ol-cell"><div className="ol-num" style={{ color: 'var(--ssc-blue)' }}>{g.grn_number}</div></div>
+                    <div className="ol-cell">
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: g.grn_type === 'customer_rejection' ? '#fef2f2' : '#fff7ed', color: g.grn_type === 'customer_rejection' ? '#b91c1c' : '#c2410c' }}>
+                        {CN_TYPE_LABELS[g.grn_type] || g.grn_type}
+                      </span>
+                    </div>
+                    <div className="ol-cell ol-cust" title={g._order?.customer_name}>{g._order?.customer_name || '—'}</div>
+                    <div className="ol-cell"><span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{g._order?.order_number || '—'}</span></div>
+                    <div className="ol-cell ol-date">{fmt(g.received_at || g.created_at)}</div>
+                    <div className="ol-cell">
+                      {g.credit_note_url ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: '#166534' }}>
+                          <span style={{ background: '#dcfce7', padding: '2px 8px', borderRadius: 10 }}>✓ {g.credit_note_number || 'Uploaded'}</span>
+                          <a href={g.credit_note_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#1a4dab' }}>View</a>
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a', padding: '2px 10px', borderRadius: 10 }}>PENDING — make in Tally &amp; upload</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="ol-wrap">
             <div className="ol-row ol-head" style={{ gridTemplateColumns: '180px minmax(0, 1.4fr) 110px 110px 110px 110px 140px' }}>
