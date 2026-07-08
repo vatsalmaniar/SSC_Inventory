@@ -177,8 +177,9 @@ export default function NewOrder() {
       if (dateIssue) { toast(`Dispatch Date ${dateIssue} — item: ${item.item_code}`); return }
     }
 
-    // Low-value order check
-    if (grandTotal < 8000) {
+    // Low-value order check — SO/CO only. Samples are inherently low/zero value,
+    // so no reason is required (matches the CRM sample path, which never gates it).
+    if (effectiveOrderType !== 'SAMPLE' && grandTotal < 8000) {
       const words = lowValueReason.trim().split(/\s+/).filter(Boolean)
       if (words.length < 7) {
         toast('Order value is below ₹8,000. Please provide a reason (minimum 7 words).', 'error')
@@ -221,7 +222,7 @@ export default function NewOrder() {
       submitted_by_name: user.name,
       created_by:        session.user.id,
       is_test:           isTest,
-      low_value_reason:  grandTotal < 8000 ? lowValueReason.trim() : null,
+      low_value_reason:  (effectiveOrderType !== 'SAMPLE' && grandTotal < 8000) ? lowValueReason.trim() : null,
     }).select().single()
 
     if (error) { toast(friendlyError(error)); submitGuard.current = false; setSubmitting(false); return }
@@ -588,8 +589,8 @@ export default function NewOrder() {
           </div>
         </div>
 
-        {/* ── Low value warning ── */}
-        {grandTotal > 0 && grandTotal < 8000 && (
+        {/* ── Low value warning ── SO/CO only, not samples ── */}
+        {orderType !== 'SAMPLE' && grandTotal > 0 && grandTotal < 8000 && (
           <div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:10,padding:'14px 16px',margin:'0 0 12px'}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
               <svg fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24" style={{width:16,height:16,flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
