@@ -70,8 +70,10 @@ const NAV_ITEMS = [
     roles: ['sales', 'ops', 'admin', 'management', 'accounts', 'fc_kaveri', 'fc_godawari'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
     sub: [
-      { key: 'people-kpi',    label: 'KRA / KPI', path: '/people/kpi' },
-      { key: 'people-config', label: 'Config',    path: '/people/kpi/config', roles: ['admin','management'] },
+      { key: 'people-kpi',        label: 'KRA / KPI',     path: '/people/kpi' },
+      { key: 'people-config',     label: 'Config',        path: '/people/kpi/config', roles: ['admin','management'] },
+      { key: 'people-expenses',   label: 'Expenses',      path: '/people/expenses' },
+      { key: 'people-exp-config', label: 'Expense Config', path: '/people/expenses/config', roles: ['admin','management'] },
     ],
   },
   {
@@ -457,7 +459,12 @@ export default function Layout({ children, pageTitle, pageKey }) {
                 {isExpanded && !sidebarCollapsed && (
                   <div style={{ display:'flex', flexDirection:'column', gap:1, paddingLeft:20, marginTop:2, marginBottom:4 }}>
                     {item.sub.filter(sub => !sub.roles || sub.roles.includes(user.role)).map(sub => {
-                      const subActive = location.pathname === sub.path || (sub.path !== item.path && location.pathname.startsWith(sub.path))
+                      // Longest matching sub-path wins, so /people/expenses/config
+                      // highlights only "Expense Config" — not "Expenses" as well.
+                      const best = item.sub
+                        .filter(s => location.pathname === s.path || location.pathname.startsWith(s.path + '/'))
+                        .sort((a, b) => b.path.length - a.path.length)[0]
+                      const subActive = !!best && best.path === sub.path
                       return (
                         <button
                           key={sub.key}
