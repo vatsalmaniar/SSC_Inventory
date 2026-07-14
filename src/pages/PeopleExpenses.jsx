@@ -22,6 +22,10 @@ const I = {
   clock: <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
   check: <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>,
   clip:  <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width: 12, height: 12 }}><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>,
+  bill:  <svg fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8M8 17h5" /></svg>,
+  review:<svg fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>,
+  rupee: <svg fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M6 3h12M6 8h12M6 13h5a5 5 0 000-10" /><path d="M6 13l8 8" /></svg>,
+  trash: <svg fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>,
 }
 
 function StatusChip({ status, txn }) {
@@ -203,19 +207,66 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
   )
 }
 
-/* ══ Review — drawer. Approve AND Reject both live in here, so the list
-      row stays clean (one "Review" button instead of a wall of buttons). ══ */
-function ReviewDrawer({ row, level, bills, onClose, onDone }) {
+/* Bill previews — receipts are photos, so show them, don't list filenames. */
+function BillGrid({ bills }) {
+  const [urls, setUrls] = useState({})
+  useEffect(() => {
+    let alive = true
+    const paths = (bills || []).map(b => b.file_path)
+    if (!paths.length) return
+    sb.storage.from('expense-bills').createSignedUrls(paths, 3600).then(({ data }) => {
+      if (!alive || !data) return
+      const m = {}; data.forEach(d => { if (d.signedUrl) m[d.path] = d.signedUrl }); setUrls(m)
+    })
+    return () => { alive = false }
+  }, [bills])
+
+  if (!(bills || []).length) return <div className="exp-cfg-ph">No bill attached.</div>
+  return (
+    <div className="exp-bill-grid">
+      {bills.map((b, i) => {
+        const url = urls[b.file_path]
+        const isImg = !/pdf$/i.test(b.mime_type || b.filename || '')
+        return (
+          <button key={b.id} className="exp-bill-thumb" title={b.filename}
+            onClick={() => url && window.open(url, '_blank')} disabled={!url}>
+            {isImg && url
+              ? <img src={url} alt={b.filename || `Bill ${i + 1}`} />
+              : <div className="exp-bill-file">
+                  <svg fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
+                  </svg>
+                  <span>PDF</span>
+                </div>}
+            <span className="exp-bill-cap">Bill {i + 1}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ══ One drawer for everything: detail + bills, with the footer action that
+      applies to this row (approve/reject, pay, delete). Rows are clickable,
+      so the table itself stays free of buttons. ══════════════════════════ */
+function ExpenseDrawer({ row, me, canApprove, canPay, onClose, onDone, onDelete }) {
   const [approvedAmount, setApprovedAmount] = useState(String(row.amount))
   const [note, setNote] = useState('')
+  const [txn, setTxn] = useState('')
   const [saving, setSaving] = useState(false)
   const guard = useRef(false)
-  const isFinal = level === 'l2'
 
-  async function go(decision) {
+  const isL1 = row.status === 'pending' && canApprove && row.profile_id !== me.id
+  const isL2 = row.status === 'mgmt_approved' && me.role === 'admin' && row.profile_id !== me.id
+  const canReview = isL1 || isL2
+  const canPayThis = row.status === 'approved' && canPay
+  const canDelete = row.profile_id === me.id && row.status === 'pending'
+  const m = EX.statusMeta(row.status)
+
+  async function review(decision) {
     if (guard.current) return
     if (decision === 'reject' && !note.trim()) { toast('A reason is required to reject.', 'error'); return }
-    if (decision === 'approve' && isFinal) {
+    if (decision === 'approve' && isL2) {
       const a = Number(approvedAmount)
       if (isNaN(a) || a < 0 || a > row.amount) { toast('Approved amount must be between 0 and the bill amount.', 'error'); return }
     }
@@ -223,74 +274,17 @@ function ReviewDrawer({ row, level, bills, onClose, onDone }) {
     try {
       const { error } = await sb.rpc('expense_review', {
         p_id: row.id, p_decision: decision,
-        p_approved_amount: decision === 'approve' && isFinal ? Number(approvedAmount) : null,
+        p_approved_amount: decision === 'approve' && isL2 ? Number(approvedAmount) : null,
         p_note: note.trim() || null,
       })
       if (error) throw error
-      toast(decision === 'reject' ? 'Expense rejected.'
-        : isFinal ? 'Expense approved.' : 'Passed to Admin for final approval.', 'success')
+      toast(decision === 'reject' ? 'Expense rejected.' : isL2 ? 'Expense approved.' : 'Sent to Admin for sign-off.', 'success')
       onDone()
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { guard.current = false; setSaving(false) }
   }
 
-  return (
-    <div className="od-drawer-scrim" onClick={onClose}>
-      <div className="od-drawer" style={{ width: 'min(480px,95vw)' }} onClick={e => e.stopPropagation()}>
-        <div className="od-drawer-head">
-          <div>
-            <div className="od-drawer-eyebrow">{isFinal ? 'Final approval · Admin' : 'Approval · Management'}</div>
-            <div className="od-drawer-title">Review expense</div>
-            <div className="od-drawer-sub">{isFinal ? 'Approving pays out the approved amount.' : 'Approving sends it to Admin for sign-off.'}</div>
-          </div>
-          <button className="od-drawer-close" onClick={onClose}>×</button>
-        </div>
-        <div className="od-drawer-body">
-          <div className="exp-modal-ctx" style={{ marginBottom: 15 }}>
-            {row._person} · {row._cat}{row.vendor ? ` · ${row.vendor}` : ''} · <b>{fmtMoney(row.amount)}</b> · {fmt(row.expense_date)}
-          </div>
-          {(bills || []).length > 0 && (
-            <div className="exp-field" style={{ marginBottom: 15 }}>
-              <label className="exp-label">Bills</label>
-              <div className="exp-bills">
-                {bills.map((b, i) => (
-                  <button key={b.id} className="exp-bill" onClick={() => b.open(b.file_path)} title={b.filename}>{I.clip}{b.filename || `Bill ${i + 1}`}</button>
-                ))}
-              </div>
-            </div>
-          )}
-          {isFinal && (
-            <div className="exp-field" style={{ marginBottom: 15 }}>
-              <label className="exp-label">Approved amount ₹</label>
-              <input className="exp-input" type="number" min="0" max={row.amount} value={approvedAmount} onChange={e => setApprovedAmount(e.target.value)} />
-              <div className="exp-err" style={{ color: '#94A3B8' }}>Defaults to the bill amount — lower it to part-approve.</div>
-            </div>
-          )}
-          <div className="exp-field">
-            <label className="exp-label">Note <span className="hint">required to reject</span></label>
-            <textarea className="exp-textarea" rows={3} value={note} onChange={e => setNote(e.target.value)} placeholder="Reason / remarks" />
-          </div>
-        </div>
-        <div className="od-drawer-foot" style={{ justifyContent: 'space-between' }}>
-          <button className="od-btn od-btn-danger" onClick={() => go('reject')} disabled={saving}>Reject</button>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="od-btn" onClick={onClose}>Cancel</button>
-            <button className="od-btn od-btn-approve" onClick={() => go('approve')} disabled={saving}>
-              {saving ? '…' : isFinal ? 'Approve & pay out' : 'Approve'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ══ Pay Now — drawer ═════════════════════════════════════════════ */
-function PayDrawer({ row, onClose, onDone }) {
-  const [txn, setTxn] = useState('')
-  const [saving, setSaving] = useState(false)
-  const guard = useRef(false)
-  async function go() {
+  async function payNow() {
     if (guard.current) return
     if (!txn.trim()) { toast('Enter the transaction number.', 'error'); return }
     guard.current = true; setSaving(true)
@@ -301,26 +295,87 @@ function PayDrawer({ row, onClose, onDone }) {
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { guard.current = false; setSaving(false) }
   }
+
   return (
     <div className="od-drawer-scrim" onClick={onClose}>
-      <div className="od-drawer" style={{ width: 'min(420px,95vw)' }} onClick={e => e.stopPropagation()}>
+      <div className="od-drawer" style={{ width: 'min(480px,95vw)' }} onClick={e => e.stopPropagation()}>
         <div className="od-drawer-head">
           <div>
-            <div className="od-drawer-eyebrow">Reimbursement</div>
-            <div className="od-drawer-title">Pay Now</div>
+            <div className="od-drawer-eyebrow">
+              {canReview ? (isL2 ? 'Final approval · Admin' : 'Approval · Management') : canPayThis ? 'Reimbursement' : 'Expense'}
+            </div>
+            <div className="od-drawer-title">{row._cat}</div>
+            <div className="od-drawer-sub">{row._person} · {fmt(row.expense_date)}</div>
           </div>
           <button className="od-drawer-close" onClick={onClose}>×</button>
         </div>
+
         <div className="od-drawer-body">
-          <div className="exp-modal-ctx" style={{ marginBottom: 15 }}>{row._person} · paying <b>{fmtMoney(row.approved_amount ?? row.amount)}</b></div>
-          <div className="exp-field">
-            <label className="exp-label">Transaction No.<span className="req">*</span></label>
-            <input className="exp-input" value={txn} onChange={e => setTxn(e.target.value)} placeholder="UTR / txn reference" autoFocus />
+          <div className="exp-rv-head">
+            <ExpenseIcon name={row._cat} color={row._catColor} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="exp-rv-cat">
+                {row.vendor && <span className="exp-vendor">{row.vendor}</span>}
+                {row._mileage && <span className="exp-flag">MILEAGE</span>}
+                <span className="exp-status" style={{ color: m.color, background: m.bg, border: `1px solid ${m.border}` }}>
+                  <span className="exp-status-dot" style={{ background: m.color }} />{m.label}
+                </span>
+              </div>
+              {row.payment_ref && <div className="exp-rv-person">Txn {row.payment_ref}</div>}
+            </div>
+            <div className="exp-rv-amt">{fmtMoney(row.approved_amount ?? row.amount)}</div>
           </div>
+
+          <dl className="exp-rv-dl">
+            <div><dt>Bill amount</dt><dd>{fmtMoney(row.amount)}</dd></div>
+            <div><dt>Paid via</dt><dd>{EX.PAYMENT_LABEL[row.payment_method] || row.payment_method}</dd></div>
+            {row.notes && <div className="wide"><dt>Notes</dt><dd>{row.notes}</dd></div>}
+            {row.review_note && <div className="wide"><dt>Review note</dt><dd>{row.review_note}</dd></div>}
+          </dl>
+
+          <div className="exp-field" style={{ marginTop: 18 }}>
+            <label className="exp-label">Bills <span className="hint">tap to open full size</span></label>
+            <BillGrid bills={row.expense_bills} />
+          </div>
+
+          {isL2 && (
+            <div className="exp-field" style={{ marginTop: 18 }}>
+              <label className="exp-label">Approved amount ₹</label>
+              <input className="exp-input" type="number" min="0" max={row.amount} value={approvedAmount}
+                onChange={e => setApprovedAmount(e.target.value)} />
+              <div className="exp-err" style={{ color: '#94A3B8' }}>Defaults to the bill amount — lower it to part-approve.</div>
+            </div>
+          )}
+          {canReview && (
+            <div className="exp-field" style={{ marginTop: 18 }}>
+              <label className="exp-label">Note <span className="hint">required to reject</span></label>
+              <textarea className="exp-textarea" rows={3} value={note} onChange={e => setNote(e.target.value)} placeholder="Reason / remarks" />
+            </div>
+          )}
+          {canPayThis && (
+            <div className="exp-field" style={{ marginTop: 18 }}>
+              <label className="exp-label">Transaction No.<span className="req">*</span></label>
+              <input className="exp-input" value={txn} onChange={e => setTxn(e.target.value)} placeholder="UTR / txn reference" autoFocus />
+            </div>
+          )}
         </div>
-        <div className="od-drawer-foot">
-          <button className="od-btn" onClick={onClose}>Cancel</button>
-          <button className="od-btn od-btn-pay" onClick={go} disabled={saving}>{saving ? '…' : 'Mark Reimbursed'}</button>
+
+        <div className="od-drawer-foot" style={{ justifyContent: canReview || canDelete ? 'space-between' : 'flex-end' }}>
+          {canReview && <button className="od-btn od-btn-danger" onClick={() => review('reject')} disabled={saving}>Reject</button>}
+          {!canReview && canDelete && <button className="od-btn od-btn-danger" onClick={onDelete} disabled={saving}>Delete</button>}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="od-btn" onClick={onClose}>Close</button>
+            {canReview && (
+              <button className="od-btn od-btn-approve" onClick={() => review('approve')} disabled={saving}>
+                {saving ? '…' : isL2 ? 'Approve & pay out' : 'Approve'}
+              </button>
+            )}
+            {canPayThis && (
+              <button className="od-btn od-btn-pay" onClick={payNow} disabled={saving}>
+                {saving ? '…' : `Pay ${fmtMoney(row.approved_amount ?? row.amount)}`}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -343,8 +398,7 @@ export default function PeopleExpenses() {
   const [fCat, setFCat] = useState('')
   const [page, setPage] = useState(0)
   const [showAdd, setShowAdd] = useState(false)
-  const [review, setReview] = useState(null)
-  const [pay, setPay] = useState(null)
+  const [openRow, setOpenRow] = useState(null)   // row-click opens one drawer
 
   const isPriv = me && EX.CAN_SEE_ALL.includes(me.role)
   const canApprove = me && EX.CAN_APPROVE.includes(me.role)
@@ -409,16 +463,32 @@ export default function PeopleExpenses() {
     return t
   }, [summary])
 
-  // Hero: team view for admin/mgmt/accounts, personal otherwise
-  const hero = isPriv
-    ? { label: 'Team spend this month', amount: totals.approved, pending: totals.pending, payable: totals.payable, reimbursed: totals.reimbursed }
-    : {
-      label: 'Your spend this month',
-      amount: Number(mySum?.mileage_approved || 0) + Number(mySum?.general_approved || 0),
-      pending: Number(mySum?.mileage_pending || 0) + Number(mySum?.general_pending || 0),
-      payable: Number(mySum?.payable || 0), reimbursed: Number(mySum?.reimbursed || 0),
-    }
-  const showBudget = !isPriv && mySum && Number(mySum.mileage_budget) > 0
+  // ── The card ────────────────────────────────────────────────────
+  // Pick a person (or All) and the card shows THAT selection's month:
+  // total expense, what's been spent, and the budget it sits against.
+  const N = v => Number(v || 0)
+  const cardFor = rows => rows.reduce((a, r) => ({
+    expense: a.expense + N(r.mileage_approved) + N(r.general_approved),   // approved = actually spent
+    pending: a.pending + N(r.mileage_pending) + N(r.general_pending),     // awaiting approval
+    budget: a.budget + N(r.mileage_budget),                              // mileage budget (sales only)
+    mileageSpent: a.mileageSpent + N(r.mileage_approved),
+    payable: a.payable + N(r.payable),
+    reimbursed: a.reimbursed + N(r.reimbursed),
+  }), { expense: 0, pending: 0, budget: 0, mileageSpent: 0, payable: 0, reimbursed: 0 })
+
+  const selSum = isPriv && fPerson ? summary.filter(s => s.profile_id === fPerson) : null
+  const card = isPriv
+    ? cardFor(selSum || summary)
+    : cardFor(mySum ? [mySum] : [])
+  const card_total = card.expense + card.pending          // total expense this month
+  // NOTE: this block runs on the very first render, BEFORE the `if (!me)` guard
+  // below — so every `me.*` read here must be optional-chained or it throws
+  // "Cannot read properties of null" and blanks the whole page.
+  const cardName = isPriv
+    ? (fPerson ? (profiles[fPerson]?.name || '—') : 'All people')
+    : (me?.name || '')
+  const cardLoc = isPriv ? (fPerson ? profiles[fPerson]?.location : null) : (me?.location || null)
+  const cardCount = filtered.length
 
   async function viewBill(path) {
     const { data, error } = await sb.storage.from('expense-bills').createSignedUrl(path, 3600)
@@ -483,25 +553,17 @@ export default function PeopleExpenses() {
     } catch (e) { toast('Failed to generate Excel: ' + (e.message || e), 'error'); console.error(e) }
   }
 
-  // One action per row. Approve/Reject both live inside the Review drawer,
-  // so the list never turns into a wall of buttons.
-  function actions(r) {
-    const a = []
-    if (r.status === 'pending' && canApprove) {
-      a.push(<button key="v" className="od-btn od-btn-primary" onClick={() => setReview({ row: r, level: 'l1' })}>Review</button>)
-    }
-    if (r.status === 'mgmt_approved' && me.role === 'admin') {
-      a.push(<button key="v" className="od-btn od-btn-primary" onClick={() => setReview({ row: r, level: 'l2' })}>Review</button>)
-    }
-    if (r.status === 'approved' && canPay) {
-      a.push(<button key="p" className="od-btn od-btn-pay" onClick={() => setPay(r)}>Pay Now</button>)
-    }
-    if (r.profile_id === me.id && r.status === 'pending') {
-      a.push(<button key="d" className="od-btn exp-icon-btn" title="Delete claim" onClick={() => delExpense(r)}>
-        <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
-      </button>)
-    }
-    return a
+  // Exactly one labelled button per row, and only when this user is the one
+  // who has to act. Everything else lives in the drawer (row is clickable).
+  function rowAction(r) {
+    const mine = r.profile_id === me.id
+    if (r.status === 'pending' && canApprove && !mine)
+      return <button className="exp-rowbtn approve" onClick={e => { e.stopPropagation(); setOpenRow(r) }}>Review</button>
+    if (r.status === 'mgmt_approved' && me.role === 'admin' && !mine)
+      return <button className="exp-rowbtn approve" onClick={e => { e.stopPropagation(); setOpenRow(r) }}>Approve</button>
+    if (r.status === 'approved' && canPay)
+      return <button className="exp-rowbtn pay" onClick={e => { e.stopPropagation(); setOpenRow(r) }}>Pay</button>
+    return <span className="exp-rowchev">›</span>
   }
 
   if (!me || loading) return <Layout pageKey="people"><div style={{ padding: 60, textAlign: 'center', color: '#94A3B8' }}>Loading…</div></Layout>
@@ -530,62 +592,85 @@ export default function PeopleExpenses() {
           </div>
         </div>
 
-        {/* ── Hero ── */}
-        <div className="exp-hero" style={{ marginBottom: 16 }}>
-          <div className="exp-hero-top">
+        {/* ── The card: total expense + spent vs budget for the selection ── */}
+        <div className="exp-card" style={{ marginBottom: 16 }}>
+          <div className="exp-card-top">
             <div>
-              <div className="exp-hero-label">{hero.label}</div>
-              <div className="exp-hero-amount">{fmtMoney(hero.amount)}</div>
-              <div className="exp-hero-sub">approved &amp; payable this month</div>
-            </div>
-            {!isPriv && me.location && <div className="exp-hero-loc">{me.location}</div>}
-            {isPriv && totals.over > 0 && <div className="exp-hero-loc">{totals.over} over mileage</div>}
-          </div>
-
-          <div className="exp-hero-split">
-            <div className="exp-hero-stat">
-              <div className="exp-hero-ico">{I.clock}</div>
-              <div><div className="exp-hero-stat-label">Pending</div><div className="exp-hero-stat-val">{fmtMoney(hero.pending)}</div></div>
-            </div>
-            <div className="exp-hero-stat">
-              <div className="exp-hero-ico">{I.up}</div>
-              <div><div className="exp-hero-stat-label">Payable</div><div className="exp-hero-stat-val">{fmtMoney(hero.payable)}</div></div>
-            </div>
-            <div className="exp-hero-stat">
-              <div className="exp-hero-ico">{I.check}</div>
-              <div><div className="exp-hero-stat-label">Reimbursed</div><div className="exp-hero-stat-val">{fmtMoney(hero.reimbursed)}</div></div>
-            </div>
-          </div>
-
-          {showBudget && (
-            <div className="exp-hero-budget">
-              <div className="exp-hero-bhead">
-                <span>Mileage budget</span>
-                <span>{fmtMoney(mySum.mileage_approved)} / {fmtMoney(mySum.mileage_budget)}</span>
+              <div className="exp-card-label">Total expense · {EX.monthOptions(12).find(m => m.value === month)?.label}</div>
+              <div className="exp-card-amount">{fmtMoney(card_total)}</div>
+              <div className="exp-card-sub">
+                {cardCount} {cardCount === 1 ? 'claim' : 'claims'}{cardLoc ? ` · ${cardLoc}` : ''}
               </div>
-              <div className="exp-hero-btrack">
-                <div className="exp-hero-bfill" style={{
-                  width: Math.min(100, EX.pctUsed(mySum.mileage_approved, mySum.mileage_budget)) + '%',
-                  background: EX.isOver(mySum.mileage_approved, mySum.mileage_budget) ? '#FCA5A5' : '#3DD9D6',
+            </div>
+
+            {isPriv ? (
+              <select className="exp-card-select" value={fPerson}
+                onChange={e => { setFPerson(e.target.value); setPage(0) }}>
+                <option value="">All people</option>
+                {summary.map(sm => (
+                  <option key={sm.profile_id} value={sm.profile_id}>{profiles[sm.profile_id]?.name || '—'}</option>
+                ))}
+              </select>
+            ) : (
+              cardLoc && <div className="exp-card-pill">{cardLoc}</div>
+            )}
+          </div>
+
+          {/* Expense vs Budget — the two numbers that drive the decision */}
+          <div className="exp-card-split">
+            <div className="exp-card-stat">
+              <div className="exp-card-ico"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg></div>
+              <div>
+                <div className="exp-card-stat-label">Expense</div>
+                <div className="exp-card-stat-val">{fmtMoney(card.expense)}</div>
+              </div>
+            </div>
+            <div className="exp-card-stat">
+              <div className="exp-card-ico"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7" /></svg></div>
+              <div>
+                <div className="exp-card-stat-label">Budget</div>
+                <div className="exp-card-stat-val">{card.budget > 0 ? fmtMoney(card.budget) : '—'}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Mileage budget consumption */}
+          {card.budget > 0 && (
+            <div className="exp-card-budget">
+              <div className="exp-card-btrack">
+                <div className="exp-card-bfill" style={{
+                  width: Math.min(100, EX.pctUsed(card.mileageSpent, card.budget)) + '%',
+                  background: EX.isOver(card.mileageSpent, card.budget) ? '#FCA5A5' : '#3DD9D6',
                 }} />
               </div>
-              <div className="exp-hero-bfoot">
-                <span>{EX.pctUsed(mySum.mileage_approved, mySum.mileage_budget)}% used</span>
-                <span>{EX.isOver(mySum.mileage_approved, mySum.mileage_budget)
-                  ? `${fmtMoney(-EX.remaining(mySum.mileage_budget, mySum.mileage_approved))} over`
-                  : `${fmtMoney(EX.remaining(mySum.mileage_budget, mySum.mileage_approved))} left`}</span>
+              <div className="exp-card-bfoot">
+                <span>Mileage {fmtMoney(card.mileageSpent)} / {fmtMoney(card.budget)}</span>
+                <span>{EX.isOver(card.mileageSpent, card.budget)
+                  ? `${fmtMoney(-EX.remaining(card.budget, card.mileageSpent))} over`
+                  : `${fmtMoney(EX.remaining(card.budget, card.mileageSpent))} left`}</span>
               </div>
             </div>
           )}
+
+          {/* Payment decision */}
+          <div className="exp-card-foot">
+            <div className="exp-card-foot-l">
+              <span className="exp-card-foot-label">Ready to pay</span>
+              <span className="exp-card-foot-val">{fmtMoney(card.payable)}</span>
+              {card.pending > 0 && <span className="exp-card-foot-mut">· {fmtMoney(card.pending)} awaiting approval</span>}
+              {card.reimbursed > 0 && <span className="exp-card-foot-mut">· {fmtMoney(card.reimbursed)} paid</span>}
+            </div>
+            {card.payable > 0 && canPay && (
+              <button className="exp-card-cta" onClick={() => { setFStatus('approved'); setPage(0) }}>
+                Pay {fmtMoney(card.payable)}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ── Filters ── */}
         {isPriv && (
           <div className="exp-filters">
-            <select className="exp-select" value={fPerson} onChange={e => { setFPerson(e.target.value); setPage(0) }}>
-              <option value="">All people</option>
-              {[...new Set(list.map(r => r.profile_id))].map(id => <option key={id} value={id}>{profiles[id]?.name || id}</option>)}
-            </select>
             <select className="exp-select" value={fStatus} onChange={e => { setFStatus(e.target.value); setPage(0) }}>
               <option value="">All statuses</option>
               {Object.keys(EX.STATUS_META).map(s => <option key={s} value={s}>{EX.STATUS_META[s].label}</option>)}
@@ -618,42 +703,51 @@ export default function PeopleExpenses() {
             </div>
           ) : (
             <>
-              <div className="exp-txns">
-                {paged.map(r => (
-                  <div key={r.id} className="exp-txn">
-                    <ExpenseIcon name={r._cat} color={r._catColor} />
-                    <div className="exp-txn-main">
-                      <div className="exp-txn-name">
-                        {r._cat}
-                        {r.vendor && <span className="exp-vendor">{r.vendor}</span>}
-                        {r._mileage && <span className="exp-flag">MILEAGE</span>}
-                      </div>
-                      <div className="exp-txn-sub">
-                        <span>{fmt(r.expense_date)}</span>
-                        {isPriv && <><span className="exp-txn-sep">·</span><span>{profiles[r.profile_id]?.name || '—'}</span></>}
-                        <span className="exp-txn-sep">·</span>
-                        <span>{EX.PAYMENT_LABEL[r.payment_method] || r.payment_method}</span>
-                        {(r.expense_bills || []).length > 0 && (
-                          <>
-                            <span className="exp-txn-sep">·</span>
-                            {(r.expense_bills || []).map((b, i) => (
-                              <button key={b.id} className="exp-bill" title={b.filename} onClick={() => viewBill(b.file_path)}>{I.clip}{i + 1}</button>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                      {r.status === 'rejected' && r.review_note && <div className="exp-note" title={r.review_note}>{r.review_note}</div>}
-                    </div>
-                    <div className="exp-txn-right">
-                      <div className={'exp-txn-amt' + (r.status === 'reimbursed' ? ' paid' : '')}>
-                        {fmtMoney(r.approved_amount ?? r.amount)}
-                        {r.approved_amount != null && Number(r.approved_amount) !== Number(r.amount) && <span className="exp-strike">{fmtMoney(r.amount)}</span>}
-                      </div>
-                      <StatusChip status={r.status} txn={r.payment_ref} />
-                    </div>
-                    <div className="exp-txn-acts">{actions(r)}</div>
-                  </div>
-                ))}
+              <div className="exp-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th />
+                      <th>Date</th>
+                      <th className="num">Amount</th>
+                      <th>Category</th>
+                      {isPriv && !fPerson && <th>Person</th>}
+                      <th>Paid via</th>
+                      <th>Bills</th>
+                      <th>Status</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paged.map(r => (
+                      <tr key={r.id} className="exp-row" onClick={() => setOpenRow(r)}>
+                        <td className="ico"><ExpenseIcon name={r._cat} color={r._catColor} small /></td>
+                        <td className="date">{fmt(r.expense_date)}</td>
+                        <td className="num">
+                          {fmtMoney(r.approved_amount ?? r.amount)}
+                          {r.approved_amount != null && Number(r.approved_amount) !== Number(r.amount) &&
+                            <span className="exp-strike">{fmtMoney(r.amount)}</span>}
+                        </td>
+                        <td>
+                          <span className="exp-cat-name">{r._cat}</span>
+                          {r.vendor && <span className="exp-vendor">{r.vendor}</span>}
+                          {r._mileage && <span className="exp-flag">MILEAGE</span>}
+                          {r.status === 'rejected' && r.review_note &&
+                            <div className="exp-note" title={r.review_note}>{r.review_note}</div>}
+                        </td>
+                        {isPriv && !fPerson && <td className="mut">{profiles[r.profile_id]?.name || '—'}</td>}
+                        <td className="mut">{EX.PAYMENT_LABEL[r.payment_method] || r.payment_method}</td>
+                        <td>
+                          {(r.expense_bills || []).length > 0
+                            ? <span className="exp-billcount">{I.clip}{(r.expense_bills || []).length}</span>
+                            : <span className="exp-dash">—</span>}
+                        </td>
+                        <td><StatusChip status={r.status} txn={r.payment_ref} /></td>
+                        <td className="act">{rowAction(r)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
               {totalPages > 1 && (
                 <div className="exp-pager">
@@ -668,10 +762,10 @@ export default function PeopleExpenses() {
       </div>
 
       {showAdd && <AddExpenseDrawer me={me} categories={categories} testMode={testMode} onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); load() }} />}
-      {review && <ReviewDrawer row={review.row} level={review.level}
-        bills={(review.row.expense_bills || []).map(b => ({ ...b, open: viewBill }))}
-        onClose={() => setReview(null)} onDone={() => { setReview(null); load() }} />}
-      {pay && <PayDrawer row={pay} onClose={() => setPay(null)} onDone={() => { setPay(null); load() }} />}
+      {openRow && <ExpenseDrawer row={openRow} me={me} canApprove={canApprove} canPay={canPay}
+        onClose={() => setOpenRow(null)}
+        onDone={() => { setOpenRow(null); load() }}
+        onDelete={() => { const r = openRow; setOpenRow(null); delExpense(r) }} />}
     </Layout>
   )
 }

@@ -1,3 +1,59 @@
+/* ── The card — credit-card style summary (SSC blue, not the ref's purple).
+      Big total, then Expense vs Budget, then the payment decision. ───────── */
+.kpi-app .exp-card {
+  background: linear-gradient(135deg, #2B7BF3 0%, #1a73e8 42%, #1B4E8F 100%);
+  border-radius: 18px; padding: 22px 24px; color: #fff; position: relative; overflow: hidden;
+  box-shadow: 0 10px 28px -12px rgba(26,115,232,0.55);
+}
+/* the soft rings on the reference card */
+.kpi-app .exp-card::before,
+.kpi-app .exp-card::after {
+  content: ''; position: absolute; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.10);
+  pointer-events: none;
+}
+.kpi-app .exp-card::before { width: 200px; height: 200px; right: -46px; bottom: -86px; }
+.kpi-app .exp-card::after  { width: 132px; height: 132px; right: 6px;   bottom: -52px; background: rgba(255,255,255,0.05); }
+
+.kpi-app .exp-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; position: relative; }
+.kpi-app .exp-card-label { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.75); }
+.kpi-app .exp-card-amount { font-size: 34px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; margin-top: 6px; }
+.kpi-app .exp-card-sub { font-size: 12px; color: rgba(255,255,255,0.72); margin-top: 4px; font-family: 'Geist Mono', monospace; }
+.kpi-app .exp-card-pill { display: inline-flex; align-items: center; background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.20); border-radius: 100px; padding: 5px 12px; font-size: 11.5px; font-family: 'Geist Mono', monospace; }
+.kpi-app .exp-card-select {
+  background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.22); color: #fff;
+  border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 12.5px; font-weight: 500;
+  cursor: pointer; outline: none; max-width: 190px;
+}
+.kpi-app .exp-card-select:hover { background: rgba(255,255,255,0.24); }
+.kpi-app .exp-card-select option { color: #0B1B30; background: #fff; }
+
+.kpi-app .exp-card-split { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 20px; position: relative; }
+.kpi-app .exp-card-stat { display: flex; align-items: center; gap: 10px; }
+.kpi-app .exp-card-ico { width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,0.20); display: grid; place-items: center; flex-shrink: 0; }
+.kpi-app .exp-card-ico svg { width: 13px; height: 13px; }
+.kpi-app .exp-card-stat-label { font-size: 12px; color: rgba(255,255,255,0.75); }
+.kpi-app .exp-card-stat-val { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; margin-top: 1px; }
+
+.kpi-app .exp-card-budget { margin-top: 18px; position: relative; }
+.kpi-app .exp-card-btrack { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.22); overflow: hidden; }
+.kpi-app .exp-card-bfill { height: 100%; border-radius: 3px; transition: width .4s; }
+.kpi-app .exp-card-bfoot { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; font-family: 'Geist Mono', monospace; font-size: 11px; color: rgba(255,255,255,0.75); }
+
+.kpi-app .exp-card-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.16); position: relative;
+}
+.kpi-app .exp-card-foot-l { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.kpi-app .exp-card-foot-label { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.75); }
+.kpi-app .exp-card-foot-val { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+.kpi-app .exp-card-foot-mut { font-family: 'Geist Mono', monospace; font-size: 11.5px; color: rgba(255,255,255,0.66); }
+.kpi-app .exp-card-cta {
+  display: inline-flex; align-items: center; gap: 6px; background: #fff; color: #1B4E8F;
+  border: 0; border-radius: 10px; padding: 9px 16px; font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: background .12s;
+}
+.kpi-app .exp-card-cta:hover { background: #EAF2FE; }
+
 /* SSC ERP — Expenses. Extends the KRA/KPI design system (scoped under .kpi-app,
    so it inherits --kink / --kmuted / --kline / --kradius / Geist tokens). */
 
@@ -146,6 +202,35 @@
 .kpi-app .exp-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px; border-top: 1px solid var(--kline-2); }
 .kpi-app .exp-pager-info { font-family: 'Geist Mono', monospace; font-size: 11.5px; color: var(--kmuted); }
 
+/* ── Review drawer: claim header, detail list, bill thumbnails ───── */
+.exp-rv-head { display: flex; align-items: center; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid #E8EBF0; }
+.exp-rv-cat { font-size: 15px; font-weight: 600; color: #0B1B30; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.exp-rv-person { font-size: 12.5px; color: #5B6878; margin-top: 3px; }
+.exp-rv-amt { font-family: 'Geist Mono', monospace; font-size: 20px; font-weight: 600; color: #0B1B30; white-space: nowrap; }
+
+.exp-rv-dl { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; margin: 16px 0 0; }
+.exp-rv-dl > div.wide { grid-column: 1 / -1; }
+.exp-rv-dl dt { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #5B6878; margin-bottom: 4px; }
+.exp-rv-dl dd { margin: 0; font-size: 13px; color: #0B1B30; }
+
+.exp-bill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.exp-bill-thumb {
+  position: relative; padding: 0; border: 1px solid #E8EBF0; border-radius: 10px; overflow: hidden;
+  background: #FBFBFD; cursor: pointer; aspect-ratio: 1 / 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; transition: all .12s;
+}
+.exp-bill-thumb:hover { border-color: #1a73e8; box-shadow: 0 4px 12px rgba(11,27,48,0.10); }
+.exp-bill-thumb:disabled { opacity: 0.5; cursor: default; }
+.exp-bill-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.exp-bill-file { display: grid; place-items: center; gap: 4px; color: #5B6878; }
+.exp-bill-file svg { width: 24px; height: 24px; }
+.exp-bill-file span { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; }
+.exp-bill-cap {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 6px;
+  background: rgba(11,27,48,0.62); color: #fff; font-family: 'Geist Mono', monospace;
+  font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase;
+}
+
 /* ── Popups are DRAWERS only (.od-drawer*, global via main.jsx).
       No bespoke modal shell lives here — just the context strip used
       inside a drawer body. ─────────────────────────────────────────── */
@@ -218,3 +303,54 @@
 .kpi-app .exp-cfg-prole { font-family: 'Geist Mono', monospace; font-size: 10.5px; color: var(--kmuted); text-transform: capitalize; }
 .kpi-app .exp-cfg-mini { font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--kmuted-2); margin-bottom: 3px; }
 .kpi-app .exp-cfg-inherit { font-family: 'Geist Mono', monospace; font-size: 10.5px; color: var(--kmuted-2); margin-top: 3px; }
+
+/* ── Claims table (reference layout: icon · date · amount · ref · status · actions) ── */
+.kpi-app .exp-table td.ico { width: 44px; padding-right: 0; }
+.kpi-app .exp-table td.mut { color: var(--kmuted); font-family: 'Geist Mono', monospace; font-size: 12px; }
+.kpi-app .exp-cat-name { font-weight: 500; }
+.kpi-app .exp-table td .exp-vendor,
+.kpi-app .exp-table td .exp-flag { margin-left: 7px; }
+.kpi-app .exp-table th:last-child, .kpi-app .exp-table td:last-child { text-align: right; }
+
+/* icon action buttons + tooltip */
+.kpi-app .exp-acts { display: inline-flex; gap: 6px; justify-content: flex-end; }
+.kpi-app .exp-act {
+  position: relative; width: 30px; height: 30px; display: grid; place-items: center;
+  border: 1px solid var(--kline); border-radius: 8px; background: var(--ksurface);
+  color: var(--kmuted); cursor: pointer; transition: all .12s; padding: 0;
+}
+.kpi-app .exp-act svg { width: 15px; height: 15px; }
+.kpi-app .exp-act:hover { color: var(--ssc-deep); border-color: var(--ssc-deep); background: rgba(26,115,232,0.06); }
+.kpi-app .exp-act.pay:hover { color: #6D28D9; border-color: #6D28D9; background: rgba(109,40,217,0.07); }
+.kpi-app .exp-act.danger:hover { color: #B91C1C; border-color: #fecdd3; background: #fff1f2; }
+/* tooltip on hover — mirrors the "Download invoice" bubble in the reference */
+.kpi-app .exp-act::after {
+  content: attr(title); position: absolute; bottom: calc(100% + 7px); right: 0;
+  background: #0B1B30; color: #fff; font-family: 'Geist', sans-serif; font-size: 11.5px; font-weight: 500;
+  padding: 6px 10px; border-radius: 7px; white-space: nowrap; opacity: 0; pointer-events: none;
+  transform: translateY(3px); transition: opacity .12s, transform .12s; z-index: 20;
+  box-shadow: 0 4px 12px rgba(11,27,48,0.18);
+}
+.kpi-app .exp-act:hover::after { opacity: 1; transform: translateY(0); }
+
+/* ── Clickable rows: the whole row opens the drawer, so the table carries
+      at most ONE labelled button. No icon-guessing. ────────────────────── */
+.kpi-app .exp-table tr.exp-row { cursor: pointer; }
+.kpi-app .exp-table tr.exp-row:hover { background: var(--kbg-2); }
+.kpi-app .exp-table tr.exp-row:hover .exp-rowchev { color: var(--kmuted); transform: translateX(2px); }
+.kpi-app .exp-table td.act { text-align: right; white-space: nowrap; width: 96px; }
+.kpi-app .exp-rowchev { color: var(--kline); font-size: 18px; line-height: 1; transition: all .12s; display: inline-block; }
+
+.kpi-app .exp-rowbtn {
+  border-radius: 8px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--kline); background: var(--ksurface); color: var(--kink);
+  white-space: nowrap; transition: all .12s;
+}
+.kpi-app .exp-rowbtn.approve { color: #047857; border-color: rgba(16,185,129,0.40); background: rgba(16,185,129,0.06); }
+.kpi-app .exp-rowbtn.approve:hover { background: #047857; border-color: #047857; color: #fff; }
+.kpi-app .exp-rowbtn.pay { color: #6D28D9; border-color: rgba(109,40,217,0.35); background: rgba(109,40,217,0.06); }
+.kpi-app .exp-rowbtn.pay:hover { background: #6D28D9; border-color: #6D28D9; color: #fff; }
+
+/* attachments: plain muted count, never a button */
+.kpi-app .exp-billcount { display: inline-flex; align-items: center; gap: 5px; color: var(--kmuted); font-family: 'Geist Mono', monospace; font-size: 12px; }
+.kpi-app .exp-billcount svg { width: 12px; height: 12px; }
