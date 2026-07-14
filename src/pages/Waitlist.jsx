@@ -60,6 +60,23 @@ function FlagChip({ kind, children, title }) {
   return <span title={title} style={{ fontSize: 10.5, fontWeight: 600, borderRadius: 6, padding: '2px 8px', whiteSpace: 'nowrap', ...CHIP_STYLES[kind] }}>{children}</span>
 }
 
+// Same status palette as OrdersList.jsx, kept local — used to tint the Excel export's Status column
+const ORDER_STATUS_COLORS = {
+  pending: '#F59E0B', inv_check: '#1a73e8', inventory_check: '#0EA5E9', dispatch: '#06B6D4',
+  partial: '#C2410C', partial_dispatch: '#C2410C', delivery_created: '#0F766E', picking: '#14B8A6',
+  packing: '#0D9488', pi_requested: '#B45309', pi_generated: '#92400E', pi_payment_pending: '#78350F',
+  goods_issued: '#D97706', pending_billing: '#EAB308', credit_check: '#65A30D', goods_issue_posted: '#16A34A',
+  invoice_generated: '#059669', delivery_ready: '#15803D', eway_pending: '#84CC16', eway_generated: '#22C55E',
+  dispatched_fc: '#047857', cancelled: '#EF4444',
+}
+const toArgb = (hex) => 'FF' + hex.replace('#', '').toUpperCase()
+function tintArgb(hex, whiteAmount = 0.85) {
+  const h = hex.replace('#', '')
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16))
+  const mix = (c) => Math.round(255 * whiteAmount + c * (1 - whiteAmount))
+  return 'FF' + [r, g, b].map(c => mix(c).toString(16).padStart(2, '0').toUpperCase()).join('')
+}
+
 export default function Waitlist() {
   const navigate = useNavigate()
   const [user, setUser] = useState({ name: '', role: '', id: '' })
@@ -70,6 +87,8 @@ export default function Waitlist() {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('overdue')
   const [flagFilter, setFlagFilter] = useState('all')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 50
   // flag drawer
   const [flagOrder, setFlagOrder] = useState(null)
   const [fParty, setFParty] = useState('')
@@ -165,6 +184,13 @@ export default function Waitlist() {
   })()
   const groupsFiltered = q ? groups.filter(g => g.item_code.toLowerCase().includes(q) || g.rows.some(r => r.customer_name?.toLowerCase().includes(q) || r.order_number?.toLowerCase().includes(q))) : groups
   const daysSince = (d) => d ? Math.max(0, Math.floor((new Date(today) - new Date(d)) / 86400000)) : 0
+
+  // Pagination — same 50-per-page pattern as OrdersList/GRNList. Each tab has its own row set.
+  const activeList = tab === 'overdue' ? overdueFiltered : groupsFiltered
+  const totalPages = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const overduePaginated = tab === 'overdue' ? overdueFiltered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE) : []
+  const groupsPaginated = tab === 'stock' ? groupsFiltered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE) : []
 
   // ── Flag drawer ──
   function openFlag(o) {
@@ -298,6 +324,82 @@ export default function Waitlist() {
     } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
   }
 
+  // Line-item level export for the Overdue tab — one row per pending item,
+  // with an explicit Flag (auto + manual hold combined) and Comment (hold_reason) column.
+  async function downloadDetailedOverdue() {
+    if (!overdueFiltered.length) { alert('Nothing overdue to export.'); return }
+    let ExcelJS
+    try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
+    try {
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'SSC ERP'; wb.created = new Date()
+      const ws = wb.addWorksheet('Waiting for Clearance - Detailed', { views: [{ state: 'frozen', ySplit: 1 }] })
+      ws.columns = [
+        { header: 'Sr No',        key: 'sr_no',   width: 6 },
+        { header: 'Order',        key: 'order',   width: 22 },
+        { header: 'Customer',     key: 'customer',width: 32 },
+        { header: 'Owner',        key: 'owner',   width: 18 },
+        { header: 'Order Date',   key: 'od',      width: 12 },
+        { header: 'Item Code',    key: 'item',    width: 22 },
+        { header: 'Ordered Qty',  key: 'qty',     width: 12 },
+        { header: 'Pending Qty',  key: 'pending', width: 12 },
+        { header: 'Due Date',     key: 'due',     width: 12 },
+        { header: 'Days Overdue', key: 'days',    width: 13 },
+        { header: 'Flag',         key: 'flag',    width: 32 },
+        { header: 'Comment',      key: 'comment', width: 32 },
+        { header: 'Flagged By',   key: 'held',    width: 20 },
+        { header: 'Flagged On',   key: 'fon',     width: 12 },
+        { header: 'Status',       key: 'status',  width: 16 },
+      ]
+
+      let sr = 0
+      overdueFiltered.forEach(({ o, od, auto }) => {
+        const manualFlag = o.hold_party === 'sales' ? `Sales Hold (${o.hold_set_by})` : o.hold_party === 'customer' ? 'Customer Hold' : ''
+        const flagLabel = [manualFlag, ...auto.map(f => f.label)].filter(Boolean).join(', ') || 'NEEDS FLAG'
+        const base = {
+          order: o.order_number, customer: o.customer_name, owner: ownerName(o),
+          od: fmt(o.order_date), due: fmt(od.due), days: od.days,
+          flag: flagLabel, comment: o.hold_reason || '',
+          held: o.hold_party === 'sales' ? o.hold_set_by : (o.hold_party === 'customer' ? 'Customer' : ''),
+          fon: o.hold_set_at ? fmt(o.hold_set_at) : '',
+          status: o.status,
+        }
+        const pushRow = (data) => {
+          sr += 1
+          const row = ws.addRow({ ...data, sr_no: sr })
+          const d = row.getCell('days')
+          d.font = { bold: true, color: { argb: data.days > 7 ? 'FFB91C1C' : 'FFB45309' } }
+          d.alignment = { horizontal: 'center' }
+
+          // Flag cell — colored by hold kind, same palette as the on-screen chips
+          const flagKind = o.hold_party === 'sales' ? 'sales' : o.hold_party === 'customer' ? 'customer' : (auto[0]?.key || 'none')
+          const flagStyle = CHIP_STYLES[flagKind] || CHIP_STYLES.none
+          const f = row.getCell('flag')
+          f.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(flagStyle.background) } }
+          f.font = { bold: true, color: { argb: toArgb(flagStyle.color) } }
+
+          // Status cell — tinted with the same palette OrdersList uses on-screen
+          const statusColor = ORDER_STATUS_COLORS[o.status] || '#94A3B8'
+          const s = row.getCell('status')
+          s.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: tintArgb(statusColor) } }
+          s.font = { bold: true, color: { argb: toArgb(statusColor) } }
+          s.alignment = { horizontal: 'center' }
+        }
+        const pendingItems = (o.order_items || []).filter(i => (i.qty - (i.posted_qty || 0) - (i.cancelled_qty || 0)) > 0)
+        if (pendingItems.length === 0) {
+          pushRow({ ...base, item: '', qty: '', pending: '' })
+        } else {
+          pendingItems.forEach(it => {
+            pushRow({ ...base, item: it.item_code, qty: it.qty, pending: (it.qty || 0) - (it.posted_qty || 0) - (it.cancelled_qty || 0) })
+          })
+        }
+      })
+
+      xlsFinish(ws, 10)
+      await xlsDownload(wb, `SSC_Waiting_for_Clearance_Detailed_${today}.xlsx`)
+    } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
+  }
+
   const chipDefs = [
     { key: 'all',      label: 'All',            n: overdue.length },
     { key: 'none',     label: 'Needs Flag',     n: counts.none, kind: 'none' },
@@ -334,30 +436,36 @@ export default function Waitlist() {
             </div>
           </div>
           <div className="page-meta">
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search item / customer / order…"
+            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search item / customer / order…"
               style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--o-line-2)', fontFamily: 'var(--font)', fontSize: 13, minWidth: 240 }} />
             <div className="o-dl-group">
-              <button className="o-dl-btn" onClick={downloadSheet} title="Download Excel">
+              <button className="o-dl-btn" onClick={downloadSheet} title="Summary Excel">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width: 14, height: 14 }}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                Download
+                Summary
               </button>
+              {tab === 'overdue' && (
+                <button className="o-dl-btn" onClick={downloadDetailedOverdue} title="Detailed Excel — line items, flag & comment">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width: 14, height: 14 }}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                  Detailed
+                </button>
+              )}
             </div>
           </div>
         </div>
 
         {/* Tabs */}
         <div className="o-datemode" style={{ display: 'inline-flex', marginBottom: 12 }}>
-          <button className={tab === 'overdue' ? 'on' : ''} onClick={() => setTab('overdue')}>Overdue Orders{overdue.length > 0 ? ` (${overdue.length})` : ''}</button>
-          <button className={tab === 'stock' ? 'on' : ''} onClick={() => setTab('stock')}>Out of Stock{groups.length > 0 ? ` (${groups.length})` : ''}</button>
+          <button className={tab === 'overdue' ? 'on' : ''} onClick={() => { setTab('overdue'); setPage(1) }}>Overdue Orders{overdue.length > 0 ? ` (${overdue.length})` : ''}</button>
+          <button className={tab === 'stock' ? 'on' : ''} onClick={() => { setTab('stock'); setPage(1) }}>Out of Stock{groups.length > 0 ? ` (${groups.length})` : ''}</button>
         </div>
 
         {loading ? (
-          <div className="o-empty">Loading…</div>
+          <div className="o-loading">Loading…</div>
         ) : tab === 'overdue' ? (
           <>
             <div className="o-filter-row" style={{ marginTop: 0, marginBottom: 12 }}>
               {chipDefs.map(c => (
-                <button key={c.key} className={`o-chip ${flagFilter === c.key ? 'on' : ''} ${c.key === 'none' ? 'warn' : ''}`} onClick={() => setFlagFilter(c.key)}>
+                <button key={c.key} className={`o-chip ${flagFilter === c.key ? 'on' : ''} ${c.key === 'none' ? 'warn' : ''}`} onClick={() => { setFlagFilter(c.key); setPage(1) }}>
                   {c.label}{c.n > 0 && <span className="o-chip-n">{c.n}</span>}
                 </button>
               ))}
@@ -366,8 +474,8 @@ export default function Waitlist() {
               <div className="o-empty" style={{ padding: 60 }}>{overdue.length === 0 ? 'Nothing past its delivery date 🎉' : 'No matches'}</div>
             ) : (
               <div style={{ border: '1px solid var(--o-line-2)', borderRadius: 12, overflow: 'hidden', background: 'var(--o-surface, #fff)' }}>
-                {overdueFiltered.map(({ o, od, auto }, idx) => (
-                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: idx < overdueFiltered.length - 1 ? '1px solid var(--o-line)' : 'none' }}>
+                {overduePaginated.map(({ o, od, auto }, idx) => (
+                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: idx < overduePaginated.length - 1 ? '1px solid var(--o-line)' : 'none' }}>
                     <div style={{ minWidth: 0, flex: 1, cursor: 'pointer' }} onClick={() => navigate('/orders/' + o.id)}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: 'Geist Mono, monospace', fontSize: 12.5, color: 'var(--ssc-blue)' }}>{o.order_number}</span>
@@ -397,13 +505,30 @@ export default function Waitlist() {
                 ))}
               </div>
             )}
+            {overdueFiltered.length > 0 && (
+              <div className="ol-foot">
+                <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, overdueFiltered.length)} of {overdueFiltered.length}</span>
+                <div className="ol-pages">
+                  <button className="ol-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                    const show = totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                    const ellipsis = !show && Math.abs(p - safePage) === 2
+                    if (show) return <button key={p} className={`ol-page-btn ${p === safePage ? 'on' : ''}`} onClick={() => setPage(p)}>{p}</button>
+                    if (ellipsis) return <span key={'e' + p} style={{ padding: '5px 4px', color: 'var(--o-muted-2)' }}>…</span>
+                    return null
+                  })}
+                  <button className="ol-page-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>Next ›</button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           groupsFiltered.length === 0 ? (
             <div className="o-empty" style={{ padding: 60 }}>{groups.length === 0 ? 'Nothing waiting on stock 🎉' : 'No matches'}</div>
           ) : (
+            <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {groupsFiltered.map(g => (
+              {groupsPaginated.map(g => (
                 <div key={g.item_code} style={{ border: '1px solid var(--o-line-2)', borderRadius: 12, overflow: 'hidden', background: 'var(--o-surface, #fff)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', background: 'var(--gray-50)', borderBottom: '1px solid var(--o-line-2)' }}>
                     <div style={{ fontFamily: 'Geist Mono, monospace', fontSize: 13.5, fontWeight: 700, color: 'var(--o-ink)' }}>{g.item_code}</div>
@@ -440,6 +565,23 @@ export default function Waitlist() {
                 </div>
               ))}
             </div>
+            {groupsFiltered.length > 0 && (
+              <div className="ol-foot">
+                <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, groupsFiltered.length)} of {groupsFiltered.length}</span>
+                <div className="ol-pages">
+                  <button className="ol-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                    const show = totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - safePage) <= 1
+                    const ellipsis = !show && Math.abs(p - safePage) === 2
+                    if (show) return <button key={p} className={`ol-page-btn ${p === safePage ? 'on' : ''}`} onClick={() => setPage(p)}>{p}</button>
+                    if (ellipsis) return <span key={'e' + p} style={{ padding: '5px 4px', color: 'var(--o-muted-2)' }}>…</span>
+                    return null
+                  })}
+                  <button className="ol-page-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>Next ›</button>
+                </div>
+              </div>
+            )}
+            </>
           )
         )}
 

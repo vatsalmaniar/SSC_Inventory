@@ -7,6 +7,18 @@ import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
+// A .in('col', ids) filter with hundreds of UUIDs builds a URL long enough to be
+// silently rejected — chunk the id list itself, not just the row range, and merge.
+// Chunks are fetched in parallel since each is an independent, unrelated request.
+async function fetchInChunks(ids, chunkSize, queryFn) {
+  const chunks = []
+  for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize))
+  const results = await Promise.all(chunks.map(chunk => fetchAll((from, to) => queryFn(chunk).range(from, to))))
+  const error = results.find(r => r.error)?.error || null
+  const data = results.flatMap(r => r.data || [])
+  return { data, error }
+}
+
 const REP_PALETTE = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return REP_PALETTE[Math.abs(h)%REP_PALETTE.length] }
 function initials(name) { return (name||'').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?' }
@@ -52,8 +64,13 @@ export default function GRNList() {
   const [customTo, setCustomTo] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [myYear, setMyYear] = useState(String(new Date().getFullYear()))
+  const [myMonth, setMyMonth] = useState('')
+  const [yearsLoaded, setYearsLoaded] = useState(new Set())
+  const [yearLoading, setYearLoading] = useState(false)
 
   useEffect(() => { init() }, [])
+  useEffect(() => { if (timeline === 'monthyear') ensureYearLoaded(myYear) }, [timeline, myYear])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -74,14 +91,45 @@ export default function GRNList() {
         .range(from, to))
     if (error) console.error('GRN list load error:', error)
     setGrns(data || [])
+    setYearsLoaded(new Set([new Date().getFullYear()])) // current FY's calendar year is already covered by the default load above
     setLoading(false)
+  }
+
+  // Month/Year filter can reach further back than the default current-FY load — fetch that year on demand and merge in
+  async function ensureYearLoaded(year) {
+    const y = Number(year)
+    if (yearsLoaded.has(y)) return
+    setYearLoading(true)
+    const { data, error } = await fetchAll((from, to) =>
+      sb.from('grn').select('*').eq('is_test', false)
+        .gte('created_at', `${y}-01-01`).lt('created_at', `${y + 1}-01-01`)
+        .order('received_at', { ascending: false }).order('id', { ascending: false })
+        .range(from, to))
+    if (error) console.error('GRN year load error:', error)
+    setGrns(prev => {
+      const ids = new Set(prev.map(g => g.id))
+      const merged = [...prev]
+      ;(data || []).forEach(g => { if (!ids.has(g.id)) merged.push(g) })
+      return merged
+    })
+    setYearsLoaded(prev => new Set(prev).add(y))
+    setYearLoading(false)
   }
 
   function matchFilter(g, f) { return f === 'all' ? true : g.status === f }
   function matchType(g, t) { return t === 'all' ? true : g.grn_type === t }
 
   // Timeline filters on the received date (business date of a GRN)
-  const timelineGrns = grns.filter(g => dateInTimeline(g.received_at || g.created_at, timeline, customFrom, customTo))
+  const timelineGrns = timeline === 'monthyear'
+    ? grns.filter(g => {
+        const d = g.received_at || g.created_at
+        if (!d) return false
+        const dt = new Date(d)
+        if (dt.getFullYear() !== Number(myYear)) return false
+        if (myMonth !== '' && dt.getMonth() !== Number(myMonth)) return false
+        return true
+      })
+    : grns.filter(g => dateInTimeline(g.received_at || g.created_at, timeline, customFrom, customTo))
   const counts = FILTERS.reduce((acc, { key }) => { acc[key] = timelineGrns.filter(g => matchFilter(g, key) && matchType(g, typeFilter)).length; return acc }, {})
 
   const q = search.trim().toLowerCase()
@@ -125,11 +173,41 @@ export default function GRNList() {
     let ExcelJS
     try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
 
-    // Fetch all grn_items for filtered GRNs in one query
+    // Fetch all grn_items for filtered GRNs — id list chunked (see fetchInChunks above),
+    // since a bulk .in() with hundreds of GRN ids builds a URL that gets silently rejected
     const grnIds = filtered.map(g => g.id)
-    const { data: allItems } = await sb.from('grn_items').select('*').in('grn_id', grnIds).order('id', { ascending: true })
+    const { data: allItems, error: itemsErr } = await fetchInChunks(grnIds, 150, (chunk) =>
+      sb.from('grn_items').select('*').in('grn_id', chunk).order('id', { ascending: true }))
+    if (itemsErr) { alert('Failed to load GRN items: ' + itemsErr.message); console.error('grn_items fetch error:', itemsErr); return }
     const itemsByGrn = {}
     ;(allItems || []).forEach(it => { (itemsByGrn[it.grn_id] = itemsByGrn[it.grn_id] || []).push(it) })
+
+    // Resolve linked PO numbers (per item, since one GRN can span multiple POs)
+    const poIds = [...new Set((allItems || []).map(it => it.po_id).filter(Boolean))]
+    const poById = {}
+    if (poIds.length) {
+      const { data: pos } = await fetchInChunks(poIds, 150, (chunk) =>
+        sb.from('purchase_orders').select('id,po_number').in('id', chunk))
+      ;(pos || []).forEach(p => { poById[p.id] = p.po_number })
+    }
+
+    // Resolve linked SO/order number + customer (return-type GRNs carry order_id on the GRN header)
+    const orderIds = [...new Set(filtered.map(g => g.order_id).filter(Boolean))]
+    const orderById = {}
+    if (orderIds.length) {
+      const { data: orders } = await fetchInChunks(orderIds, 150, (chunk) =>
+        sb.from('orders').select('id,order_number,customer_name').in('id', chunk))
+      ;(orders || []).forEach(o => { orderById[o.id] = o })
+    }
+
+    // Resolve item description (brand / category / subcategory) from item master — grn_items has no description field
+    const itemCodes = [...new Set((allItems || []).map(it => it.item_code).filter(Boolean))]
+    const itemMetaByCode = {}
+    if (itemCodes.length) {
+      const { data: itemsMaster } = await fetchInChunks(itemCodes, 150, (chunk) =>
+        sb.from('items').select('item_code,brand,category,subcategory').in('item_code', chunk))
+      ;(itemsMaster || []).forEach(m => { itemMetaByCode[m.item_code] = [m.brand, m.category, m.subcategory].filter(Boolean).join(' · ') })
+    }
 
     try {
       const wb = new ExcelJS.Workbook()
@@ -142,6 +220,8 @@ export default function GRNList() {
         { header: 'Type',           key: 'grn_type',        width: 16 },
         { header: 'Vendor / Source',key: 'vendor_name',     width: 30 },
         { header: 'PO Number',      key: 'po_number',       width: 22 },
+        { header: 'SO / Order #',   key: 'order_number',    width: 18 },
+        { header: 'Customer',       key: 'customer_name',   width: 26 },
         { header: 'Centre',         key: 'centre',          width: 12 },
         { header: 'Invoice #',      key: 'invoice_number',  width: 16 },
         { header: 'Invoice Date',   key: 'invoice_date',    width: 12 },
@@ -149,6 +229,7 @@ export default function GRNList() {
         { header: 'Description',    key: 'description',     width: 30 },
         { header: 'Expected Qty',   key: 'expected_qty',    width: 12 },
         { header: 'Received Qty',   key: 'received_qty',    width: 12 },
+        { header: 'Pending Qty',    key: 'pending_qty',     width: 12 },
         { header: 'Accepted Qty',   key: 'accepted_qty',    width: 12 },
         { header: 'Rejected Qty',   key: 'rejected_qty',    width: 12 },
         { header: 'Rejection Reason', key: 'rejection_reason', width: 24 },
@@ -172,12 +253,14 @@ export default function GRNList() {
       filtered.forEach(g => {
         const items = itemsByGrn[g.id] || []
         const sStyle = statusStyle(g.status)
+        const linkedOrder = g.order_id ? orderById[g.order_id] : null
         const baseRow = {
           grn_date:       g.received_at ? fmt(g.received_at) : (g.created_at ? fmt(g.created_at) : ''),
           grn_number:     g.grn_number || '',
           grn_type:       GRN_TYPE_LABELS[g.grn_type] || g.grn_type || '',
           vendor_name:    g.vendor_name || '',
-          po_number:      g.po_number || '',
+          order_number:   linkedOrder?.order_number || '',
+          customer_name:  linkedOrder?.customer_name || '',
           centre:         g.fulfilment_center || '',
           invoice_number: g.invoice_number || '',
           invoice_date:   g.invoice_date ? fmt(g.invoice_date) : '',
@@ -205,17 +288,22 @@ export default function GRNList() {
         }
         if (items.length === 0) {
           rowCounter += 1
-          pushRow({ ...baseRow, sr_no: rowCounter, item_code:'', description:'', expected_qty:'', received_qty:'', accepted_qty:'', rejected_qty:'', rejection_reason:'' })
+          pushRow({ ...baseRow, sr_no: rowCounter, po_number:'', item_code:'', description:'', expected_qty:'', received_qty:'', pending_qty:'', accepted_qty:'', rejected_qty:'', rejection_reason:'' })
         } else {
           items.forEach(it => {
             rowCounter += 1
+            const orderedQty = it.ordered_qty ?? ''
+            const receivedQty = it.received_qty ?? ''
+            const pendingQty = (typeof orderedQty === 'number' && typeof receivedQty === 'number') ? Math.max(orderedQty - receivedQty, 0) : ''
             pushRow({
               ...baseRow,
               sr_no: rowCounter,
+              po_number:         it.po_id ? (poById[it.po_id] || '') : (g.po_number || ''),
               item_code:        it.item_code || '',
-              description:      it.description || '',
-              expected_qty:     it.expected_qty ?? '',
-              received_qty:     it.received_qty ?? '',
+              description:      itemMetaByCode[it.item_code] || '',
+              expected_qty:     orderedQty,
+              received_qty:     receivedQty,
+              pending_qty:      pendingQty,
               accepted_qty:     it.accepted_qty ?? '',
               rejected_qty:     it.rejected_qty ?? '',
               rejection_reason: it.rejection_reason || '',
@@ -296,6 +384,7 @@ export default function GRNList() {
           {TIMELINE_OPTIONS.map(({ key, label }) => (
             <button key={key} className={timeline === key ? 'on' : ''} onClick={() => { setTimeline(key); setPage(1) }}>{label}</button>
           ))}
+          <button className={timeline === 'monthyear' ? 'on' : ''} onClick={() => { setTimeline('monthyear'); setPage(1) }}>Month / Year</button>
           {timeline === 'custom' && (
             <div className="o-timeline-custom">
               <span>From</span>
@@ -303,6 +392,24 @@ export default function GRNList() {
               <span>To</span>
               <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0,10)}/>
               {(customFrom || customTo) && <button className="o-search-clear" onClick={() => { setCustomFrom(''); setCustomTo('') }} style={{ marginLeft: 6, fontSize: 11, color: 'var(--o-bad)' }}>Clear</button>}
+            </div>
+          )}
+          {timeline === 'monthyear' && (
+            <div className="o-timeline-custom">
+              <span>Year</span>
+              <select value={myYear} onChange={e => { setMyYear(e.target.value); setPage(1) }}>
+                {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <span>Month</span>
+              <select value={myMonth} onChange={e => { setMyMonth(e.target.value); setPage(1) }}>
+                <option value="">All months</option>
+                {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                  <option key={i} value={i}>{m}</option>
+                ))}
+              </select>
+              {yearLoading && <span style={{ fontSize: 11, color: 'var(--o-muted)' }}>Loading {myYear}…</span>}
             </div>
           )}
         </div>

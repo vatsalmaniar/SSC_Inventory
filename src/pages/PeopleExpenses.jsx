@@ -417,6 +417,7 @@ export default function PeopleExpenses() {
 
   async function load() {
     setLoading(true); setPage(0)
+    setSummary([]); setRows([]) // avoid flashing the previous month's numbers under the new month label while the header/card stay visible
     try {
       const [cats, profs, sum] = await Promise.all([
         sb.from('expense_categories').select('*').eq('is_active', true).order('sort_order'),
@@ -566,7 +567,10 @@ export default function PeopleExpenses() {
     return <span className="exp-rowchev">›</span>
   }
 
-  if (!me || loading) return <Layout pageKey="people"><div style={{ padding: 60, textAlign: 'center', color: '#94A3B8' }}>Loading…</div></Layout>
+  // Only the initial profile fetch blanks the whole page — a subsequent data
+  // reload (switching month/test mode) keeps the header/card visible and only
+  // swaps the table body below, matching the Orders/GRN loading pattern.
+  if (!me) return <Layout pageKey="people"><div className="o-loading">Loading…</div></Layout>
 
   return (
     <Layout pageKey="people">
@@ -581,7 +585,7 @@ export default function PeopleExpenses() {
             <select className="exp-select" value={month} onChange={e => setMonth(e.target.value)}>
               {EX.monthOptions(12).map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
-            {me.role === 'admin' && (
+            {me?.role === 'admin' && (
               <label className={`o-test-toggle ${testMode ? 'on' : ''}`}>
                 <input type="checkbox" checked={testMode} onChange={e => setTestMode(e.target.checked)} style={{ accentColor: '#B45309', width: 13, height: 13 }} />
                 Test Mode
@@ -693,7 +697,9 @@ export default function PeopleExpenses() {
             </div>
           </div>
 
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="o-loading">Loading…</div>
+          ) : filtered.length === 0 ? (
             <div className="exp-empty">
               <svg fill="none" stroke="#CBD5E1" strokeWidth="1.5" viewBox="0 0 24 24" style={{ width: 34, height: 34 }}>
                 <rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" />

@@ -112,7 +112,7 @@ export default function PeopleExpensesConfig() {
       </div>
     </Layout>
   )
-  if (loading) return <Layout pageKey="people"><div style={{ padding: 60, textAlign: 'center', color: '#94A3B8' }}>Loading…</div></Layout>
+  if (loading) return <Layout pageKey="people"><div className="o-loading">Loading…</div></Layout>
 
   return (
     <Layout pageKey="people">

@@ -342,8 +342,9 @@ export default function PeopleKpi() {
     else setSelectedIds([id])
   }
 
-  if (loading) return <Layout pageKey="people"><div style={{ padding: 60, textAlign: 'center', color: '#94A3B8' }}>Loading…</div></Layout>
-
+  // Page head below (title, FY/period pills) doesn't depend on the fetch — user/teams/
+  // assignments all default to empty-safe values — so only page-body is gated by `loading`,
+  // matching the Orders/GRN pattern instead of blanking the whole page.
   return (
     <Layout pageKey="people">
       <div className={`kpi-app density-${tweaks.density} accent-${tweaks.accent}`}>
@@ -378,24 +379,28 @@ export default function PeopleKpi() {
         </div>
 
         {/* Body: team panel + dashboard */}
-        <div className="page-body">
-          <TeamPanel
-            list={employeeList} teams={teams} filter={filter} setFilter={setFilter}
-            query={query} setQuery={setQuery} selectedIds={selectedIds} onSelect={handleSelect}
-            monthIdx={monthIdx} showRanks={tweaks.showRanks}
-          />
-          <Dashboard
-            selectedEmps={selectedEmps} assignments={assignments} teams={teams}
-            months={months} monthIdx={monthIdx} setMonthIdx={setMonthIdx}
-            computeMonth={computeMonthForAssignment} ytdAvg={ytdAvg}
-            thresholdsByTeam={thresholdsByTeam} defsByTeam={defsByTeam} krasByTeam={krasByTeam}
-            allMonthlyData={allMonthlyData}
-            isAdmin={isAdmin} saving={saving} onSave={saveValue}
-            hasOwnAssignment={!!assignments.find(a => a.profile_id === user.id)}
-            userName={user.name}
-            onConfigOpen={(teamId) => { setCfgTeamId(teamId); setCfgOpen(true) }}
-          />
-        </div>
+        {loading ? (
+          <div className="o-loading">Loading…</div>
+        ) : (
+          <div className="page-body">
+            <TeamPanel
+              list={employeeList} teams={teams} filter={filter} setFilter={setFilter}
+              query={query} setQuery={setQuery} selectedIds={selectedIds} onSelect={handleSelect}
+              monthIdx={monthIdx} showRanks={tweaks.showRanks}
+            />
+            <Dashboard
+              selectedEmps={selectedEmps} assignments={assignments} teams={teams}
+              months={months} monthIdx={monthIdx} setMonthIdx={setMonthIdx}
+              computeMonth={computeMonthForAssignment} ytdAvg={ytdAvg}
+              thresholdsByTeam={thresholdsByTeam} defsByTeam={defsByTeam} krasByTeam={krasByTeam}
+              allMonthlyData={allMonthlyData}
+              isAdmin={isAdmin} saving={saving} onSave={saveValue}
+              hasOwnAssignment={!!assignments.find(a => a.profile_id === user.id)}
+              userName={user.name}
+              onConfigOpen={(teamId) => { setCfgTeamId(teamId); setCfgOpen(true) }}
+            />
+          </div>
+        )}
 
         {/* Tweaks FAB + Panel */}
         <button className="kpi-tweaks-fab" onClick={() => setTweaksOpen(o => !o)} aria-label="Tweaks">
