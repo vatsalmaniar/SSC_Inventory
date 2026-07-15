@@ -158,18 +158,46 @@ export default function NewCustomer() {
       return
     }
 
+    // Normalized values for dedup + insert. GST and PAN are case-insensitive
+    // per Indian tax spec — always store uppercase + trimmed. Otherwise pasting
+    // with a stray space or lowercase letter defeats every uniqueness check.
+    const normGst = form.gst.trim().toUpperCase()
+    const normPan = form.pan_card_no.trim().toUpperCase()
+    const normMsme = form.msme_no.trim().toUpperCase()
+    const normName = form.customer_name.trim()
+
     // GST uniqueness — with one exception: a GST may be reused only when EVERY
     // existing customer holding it is 'Converted' (legal-form change, e.g.
     // Pvt Ltd → Ltd). If any same-GST record is still Active/Dormant/Blacklisted,
     // block — that would fragment a live customer. (Use a list, not
     // .maybeSingle(), since reuse means multiple rows can share a GST.)
+    // Compare against trimmed DB value (`ilike` normalises legacy rows that
+    // may have leading/trailing whitespace or mixed case in `gst`).
     const { data: sameGst } = await sb.from('customers')
-      .select('id,customer_name,account_status').eq('gst', form.gst.trim())
-    const blocking = (sameGst || []).filter(c => c.account_status !== 'Converted')
-    if (blocking.length > 0) {
-      toast(`Customer with this GST already exists: ${blocking[0].customer_name}`)
+      .select('id,customer_name,account_status,gst')
+      .ilike('gst', `%${normGst}%`)
+    const blockingGst = (sameGst || []).filter(c => c.account_status !== 'Converted' && (c.gst || '').trim().toUpperCase() === normGst)
+    if (blockingGst.length > 0) {
+      toast(`Customer with this GST already exists: ${blockingGst[0].customer_name}`)
       setErrors({ gst: 'This GST is already registered to an active customer' })
       return
+    }
+
+    // Name-based soft warning — same name across different GSTs is legal
+    // (multi-entity groups, name collisions), but 99% of the time it's a
+    // duplicate created because the earlier one had a typo/whitespace GST
+    // that slipped past the dedup check. Warn with confirm so the operator
+    // can override when the collision is genuinely intentional.
+    const { data: sameName } = await sb.from('customers')
+      .select('customer_id,customer_name,gst,account_status')
+      .ilike('customer_name', normName)
+      .limit(5)
+    const nameHits = (sameName || []).filter(c => c.account_status !== 'Converted')
+    if (nameHits.length > 0) {
+      const list = nameHits.map(c => `• ${c.customer_id} — ${c.customer_name} (GST ${c.gst || 'none'})`).join('\n')
+      if (!window.confirm(`A customer with the same name already exists:\n\n${list}\n\nCreate anyway?`)) {
+        return
+      }
     }
 
     setSaving(true)
@@ -181,15 +209,15 @@ export default function NewCustomer() {
 
       const { data: inserted, error: insertErr } = await sb.from('customers').insert({
         customer_id:      finalCustId,
-        customer_name:    form.customer_name.trim(),
+        customer_name:    normName,
         customer_type:    form.customer_type || null,
         industry:         form.industry || null,
         year_established: form.year_established || null,
         premises:         form.premises || null,
         turnover:         form.turnover || null,
-        gst:              form.gst || null,
-        pan_card_no:      form.pan_card_no || null,
-        msme_no:          form.msme_no || null,
+        gst:              normGst || null,
+        pan_card_no:      normPan || null,
+        msme_no:          normMsme || null,
         billing_address:  form.billing_address || null,
         shipping_address: form.shipping_address || null,
         poc_name:         form.poc_name || null,

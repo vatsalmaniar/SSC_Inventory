@@ -864,7 +864,10 @@ export default function ProcurementForecast() {
     const { data: pendingRows } = await sb.from('po_items')
       .select('item_code, qty, received_qty, purchase_orders!inner(status)')
       .in('item_code', triggered.map(i => i.item_code))
-      .in('purchase_orders.status', ['draft','pending_approval','approved','placed','acknowledged','partially_received'])
+      // Exclude cancelled; count everything else (draft → material_received → closed).
+      // Closed POs are harmless — qty = received_qty so pending = 0.
+      // Deny-list beats allow-list: new future statuses automatically count as pending.
+      .neq('purchase_orders.status', 'cancelled')
     const pendingMap = {}
     ;(pendingRows || []).forEach(r => {
       const p = Math.max(0, (r.qty || 0) - (r.received_qty || 0))

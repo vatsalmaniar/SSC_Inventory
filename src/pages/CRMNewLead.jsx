@@ -128,7 +128,7 @@ export default function CRMNewLead() {
     if (!form.contact_email.trim()) { toast('Email is required'); return }
     // Check if GST already exists in customers — prevent duplicates
     if (!selectedCustomer) {
-      const { data: existing } = await sb.from('customers').select('id,customer_name').eq('gst', form.gstin.trim()).maybeSingle()
+      const { data: existing } = await sb.from('customers').select('id,customer_name').eq('gst', form.gstin.trim().toUpperCase()).maybeSingle()
       if (existing) {
         toast(`Customer with this GST already exists: ${existing.customer_name}. Please select from the list.`)
         return

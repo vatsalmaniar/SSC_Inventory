@@ -206,11 +206,16 @@ export default function CustomerDetail() {
     if (editData.poc_email && !isValidEmail(editData.poc_email)) { toast('Invalid POC email format'); return }
     if (editData.director_email && !isValidEmail(editData.director_email)) { toast('Invalid Director email format'); return }
     setSaving(true)
+    // Normalise tax IDs on save — GST and PAN are uppercase per Indian tax spec;
+    // stray whitespace/case defeats every dedup + join elsewhere in the app.
+    const normGst  = (editData.gst || '').trim().toUpperCase()
+    const normPan  = (editData.pan_card_no || '').trim().toUpperCase()
+    const normMsme = (editData.msme_no || '').trim().toUpperCase()
     const { error } = await sb.from('customers').update({
-      customer_name:    editData.customer_name,
-      gst:              editData.gst || null,
-      pan_card_no:      editData.pan_card_no || null,
-      msme_no:          editData.msme_no || null,
+      customer_name:    (editData.customer_name || '').trim(),
+      gst:              normGst || null,
+      pan_card_no:      normPan || null,
+      msme_no:          normMsme || null,
       billing_address:  editData.billing_address || null,
       shipping_address: editData.shipping_address || null,
       credit_terms:     editData.credit_terms || null,

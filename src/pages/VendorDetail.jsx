@@ -738,7 +738,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                       </tr>
                     </thead>
                     <tbody>
-                      {pos.map(p => (
+                      {pos.filter(p => p.status !== 'cancelled').map(p => (
                         <tr key={p.id} onClick={() => navigate('/procurement/po/'+p.id)} style={{ cursor:'pointer' }}>
                           <td className="mono" style={{ color:'#1a73e8', fontWeight:700 }}>{p.po_number}</td>
                           <td style={{ fontSize:12, color:'var(--gray-500)' }}>{p.order_number||'—'}</td>

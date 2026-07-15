@@ -397,6 +397,12 @@ export default function OrderDetail() {
       toast('Customer name and at least one item are required.')
       setSaving(false); return
     }
+    // Guard: order_type is locked once the order is approved (the number carries this
+    // prefix and cannot change without breaking DC/invoice/PO references).
+    if (!isPending && editData.order_type !== order.order_type) {
+      toast('Order Type cannot be changed after approval. To change type, cancel and create a new order.')
+      setSaving(false); return
+    }
     for (const item of validItems) {
       const dateIssue = deliveryDateIssue(item.dispatch_date, editData.order_date)
       if (dateIssue) { toast(`Dispatch Date ${dateIssue} — item: ${item.item_code}`); setSaving(false); return }
@@ -1211,8 +1217,14 @@ if (match) {
                     </div>
                     <div className="od-edit-row">
                       <div className="od-edit-field">
-                        <label>Order Type</label>
-                        <select value={editData.order_type} onChange={e => setEditData(p => ({ ...p, order_type: e.target.value }))}>
+                        <label>Order Type {!isPending && <span style={{color:'var(--gray-400)',fontWeight:400,fontSize:11}}>(locked after approval)</span>}</label>
+                        <select
+                          value={editData.order_type}
+                          disabled={!isPending}
+                          title={!isPending ? 'Order Type is locked after approval — the order number carries this prefix and cannot change. To change type, cancel this order and create a new one.' : ''}
+                          onChange={e => setEditData(p => ({ ...p, order_type: e.target.value }))}
+                          style={!isPending ? { background: 'var(--gray-50, #f9fafb)', color: 'var(--gray-500, #6b7280)', cursor: 'not-allowed' } : undefined}
+                        >
                           <option value="SO">Standard Order (SO)</option>
                           <option value="CO">Customised Order (CO)</option>
                           <option value="SAMPLE">Sample Request (SR)</option>

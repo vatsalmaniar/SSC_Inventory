@@ -315,9 +315,14 @@ export default function ItemDetail() {
           )}
 
           {/* ── PO History Tab ── */}
-          {tab === 'pos' && (
+          {tab === 'pos' && (() => {
+            // Hide cancelled POs from the PO tab display. Cancelled POs still
+            // exist in `pos` (needed for KPIs / totals elsewhere) — only the
+            // list rendering excludes them per user ask (see main PO list for cancelled).
+            const visiblePos = pos.filter(r => r.purchase_orders?.status !== 'cancelled')
+            return (
             <div className="c360-card">
-              {pos.length === 0 ? (
+              {visiblePos.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--gray-400)', fontSize: 13 }}>No purchase orders found for this item.</div>
               ) : (
                 <table className="od-items-table">
@@ -333,7 +338,7 @@ export default function ItemDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pos.map(r => (
+                    {visiblePos.map(r => (
                       <tr key={r.id} onClick={() => navigate('/procurement/po/' + r.purchase_orders?.id)} style={{ cursor: 'pointer' }}>
                         <td><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#5b21b6' }}>{r.purchase_orders?.po_number || '—'}</span></td>
                         <td style={{ fontSize: 13 }}>{r.purchase_orders?.vendor_name || '—'}</td>
@@ -347,16 +352,16 @@ export default function ItemDetail() {
                   </tbody>
                   <tfoot>
                     <tr style={{ borderTop: '2px solid var(--gray-200)', background: 'var(--gray-50)' }}>
-                      <td colSpan={3} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({pos.length} rows)</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{pos.reduce((s, r) => s + (r.qty || 0), 0)}</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{pos.reduce((s, r) => s + (r.received_qty || 0), 0)}</td>
+                      <td colSpan={3} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({visiblePos.length} rows)</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{visiblePos.reduce((s, r) => s + (r.qty || 0), 0)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{visiblePos.reduce((s, r) => s + (r.received_qty || 0), 0)}</td>
                       <td colSpan={2} />
                     </tr>
                   </tfoot>
                 </table>
               )}
             </div>
-          )}
+          )})()}
 
           {/* ── Internal Transfers Tab ── */}
           {tab === 'transfers' && (

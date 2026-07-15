@@ -38,6 +38,7 @@ export default function PurchaseInvoiceList() {
   const [userRole, setUserRole] = useState('')
   const [invoices, setInvoices] = useState([])
   const [cnGrns, setCnGrns] = useState([])   // rejection/cancellation GRNs → Tally credit/Dr-note worklist
+  const [grnNumById, setGrnNumById] = useState({}) // invoice grn_id → GRN number (GRN/Inv # column)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('three_way_check')
   const [search, setSearch] = useState('')
@@ -69,6 +70,16 @@ export default function PurchaseInvoiceList() {
       .range(from, to))
     if (error) console.error('Purchase invoices load error:', error)
     setInvoices(data || [])
+
+    // GRN numbers for the GRN/Inv # column (rows without a vendor invoice yet
+    // are identified by their GRN — same pattern as Dispatch Billing's DC/Inv)
+    const invGrnIds = [...new Set((data || []).map(i => i.grn_id).filter(Boolean))]
+    const gmap = {}
+    for (let i = 0; i < invGrnIds.length; i += 150) {
+      const { data: gs } = await sb.from('grn').select('id, grn_number').in('id', invGrnIds.slice(i, i + 150))
+      for (const g of (gs || [])) gmap[g.id] = g.grn_number
+    }
+    setGrnNumById(gmap)
 
     // Credit/Dr-note worklist: confirmed return/rejection GRNs. Accounting is in
     // Tally — the note is prepared there and uploaded on the GRN; this list makes
@@ -104,30 +115,39 @@ export default function PurchaseInvoiceList() {
 
   // Timeline filters on the vendor's invoice date (business date; falls back to created)
   const timelineInvoices = invoices.filter(i => dateInTimeline(i.invoice_date || i.created_at, timeline, customFrom, customTo))
+  const cnTimeline = cnGrns.filter(g => dateInTimeline(g.received_at || g.created_at, timeline, customFrom, customTo))
   const counts = {
     three_way_check: timelineInvoices.filter(i => (i.status || 'three_way_check') === 'three_way_check').length,
     invoice_pending: timelineInvoices.filter(i => i.status === 'invoice_pending').length,
     inward_complete: timelineInvoices.filter(i => i.status === 'inward_complete').length,
-    all: timelineInvoices.length,
+    all: timelineInvoices.length + cnTimeline.length, // All = invoices + credit/Dr notes
     credit_notes: cnGrns.filter(g => !g.credit_note_url).length, // pending notes only
   }
   const q = search.trim().toLowerCase()
   const filtered = timelineInvoices.filter(matchFilter).filter(inv =>
     !q || (inv.invoice_number || '').toLowerCase().includes(q) || (inv.vendor_name || '').toLowerCase().includes(q)
+      || (grnNumById[inv.grn_id] || '').toLowerCase().includes(q)
   )
   const isCnTab = filter === 'credit_notes'
-  const cnFiltered = cnGrns
-    .filter(g => dateInTimeline(g.received_at || g.created_at, timeline, customFrom, customTo))
+  const cnFiltered = cnTimeline
     .filter(g => !q
       || (g.grn_number || '').toLowerCase().includes(q)
       || (g._order?.order_number || '').toLowerCase().includes(q)
       || (g._order?.customer_name || '').toLowerCase().includes(q)
       || (g.credit_note_number || '').toLowerCase().includes(q))
+  // "All" mixes vendor invoices and credit/Dr-note GRNs, newest first;
+  // stage-specific chips stay invoices-only, the CN chip stays notes-only.
+  const listRows = filter === 'all'
+    ? [
+        ...filtered.map(inv => ({ _kind: 'inv', _date: inv.created_at, inv })),
+        ...cnFiltered.map(g => ({ _kind: 'cn', _date: g.received_at || g.created_at, g })),
+      ].sort((a, b) => (b._date || '').localeCompare(a._date || ''))
+    : filtered.map(inv => ({ _kind: 'inv', _date: inv.created_at, inv }))
   const totalAmount = filtered.reduce((s, i) => s + (i.total_amount || 0), 0)
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(listRows.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
-  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+  const paginated = listRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   const activeLabel = FILTERS.find(f => f.key === filter)?.label || 'Inward Billing'
   const fileName = `SSC_InwardBilling_${activeLabel.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}`
@@ -361,16 +381,16 @@ export default function PurchaseInvoiceList() {
           </div>
         ) : (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '180px minmax(0, 1.4fr) 110px 110px 110px 110px 140px' }}>
-              <div>Invoice #</div>
-              <div>Vendor</div>
-              <div>Invoice Date</div>
+            <div className="ol-row ol-head" style={{ gridTemplateColumns: '200px minmax(0, 1.4fr) 110px 110px 110px 110px 150px' }}>
+              <div>GRN / Inv #</div>
+              <div>Vendor / Customer</div>
+              <div>Date</div>
               <div className="num">Amount</div>
               <div className="num">GST</div>
               <div className="num">Total</div>
               <div className="num">Stage</div>
             </div>
-            {filtered.length === 0 ? (
+            {listRows.length === 0 ? (
               <div className="ol-empty">
                 <div className="ol-empty-title">No invoices here</div>
                 <div style={{ fontSize: 13, color: 'var(--o-muted)' }}>Nothing to show right now.</div>
@@ -378,20 +398,55 @@ export default function PurchaseInvoiceList() {
             ) : (
               <>
               <div className="ol-table">
-                {paginated.map(inv => {
+                {paginated.map(row => {
+                  if (row._kind === 'cn') {
+                    // Credit/Dr-note row (return / rejection GRN) mixed into "All"
+                    const g = row.g
+                    return (
+                      <div key={'cn-' + g.id} className="ol-row ol-data" style={{ gridTemplateColumns: '200px minmax(0, 1.4fr) 110px 110px 110px 110px 150px' }} onClick={() => navigate('/fc/grn/' + g.id)}>
+                        <div className="ol-cell">
+                          <div className="ol-num" style={{ color: 'var(--ssc-blue)' }}>
+                            {g.grn_number}
+                            <span className="ol-sample-tag" style={{ background: g.grn_type === 'customer_rejection' ? 'rgba(220,38,38,0.10)' : 'rgba(234,88,12,0.10)', color: g.grn_type === 'customer_rejection' ? '#b91c1c' : '#c2410c' }}>
+                              {g.grn_type === 'customer_rejection' ? 'Rejection' : 'Return'}
+                            </span>
+                          </div>
+                          <div className="ol-date-sub">{g._order?.order_number || ''}</div>
+                        </div>
+                        <div className="ol-cell ol-cust" title={g._order?.customer_name}>{g._order?.customer_name || '—'}</div>
+                        <div className="ol-cell ol-date">{fmt(g.received_at || g.created_at)}</div>
+                        <div className="ol-cell ol-val">—</div>
+                        <div className="ol-cell ol-pending">—</div>
+                        <div className="ol-cell ol-val">—</div>
+                        <div className="ol-cell ol-status-cell">
+                          <span className="ol-status-pill" style={{ '--stage-color': g.credit_note_url ? '#22C55E' : '#F59E0B' }}>
+                            <span className="ol-status-dot"/>
+                            {g.credit_note_url ? 'CN Uploaded' : 'Credit Note Pending'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  }
+                  const inv = row.inv
                   const stage = inv.status || 'three_way_check'
+                  const grnNo = grnNumById[inv.grn_id] || ''
                   return (
-                    <div key={inv.id} className="ol-row ol-data" style={{ gridTemplateColumns: '180px minmax(0, 1.4fr) 110px 110px 110px 110px 140px' }} onClick={() => navigate('/procurement/invoices/' + inv.id)}>
+                    <div key={inv.id} className="ol-row ol-data" style={{ gridTemplateColumns: '200px minmax(0, 1.4fr) 110px 110px 110px 110px 150px' }} onClick={() => navigate('/procurement/invoices/' + inv.id)}>
                       <div className="ol-cell">
                         {inv.invoice_number ? (
                           <div className="ol-num" style={{ color: stage === 'inward_complete' ? '#047857' : 'var(--ssc-blue)' }}>{inv.invoice_number}</div>
+                        ) : grnNo ? (
+                          <div className="ol-num" style={{ color: 'var(--ssc-blue)' }}>
+                            {grnNo}
+                            <span className="ol-sample-tag" style={{ background: 'rgba(245,158,11,0.12)', color: '#B45309' }}>GRN · No Inv</span>
+                          </div>
                         ) : (
                           <div className="ol-num" style={{ color: '#92400E' }}>
                             Pending
                             <span className="ol-sample-tag" style={{ background: 'rgba(245,158,11,0.12)', color: '#B45309' }}>No Inv</span>
                           </div>
                         )}
-                        <div className="ol-date-sub">{fmt(inv.created_at)}</div>
+                        <div className="ol-date-sub">{inv.invoice_number && grnNo ? `${grnNo} · ` : ''}{fmt(inv.created_at)}</div>
                       </div>
                       <div className="ol-cell ol-cust" title={inv.vendor_name}>{inv.vendor_name || '—'}</div>
                       <div className="ol-cell ol-date">{inv.invoice_date ? fmt(inv.invoice_date) : '—'}</div>
@@ -408,9 +463,9 @@ export default function PurchaseInvoiceList() {
                   )
                 })}
               </div>
-              {filtered.length > 0 && (
+              {listRows.length > 0 && (
                 <div className="ol-foot">
-                  <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+                  <span>Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, listRows.length)} of {listRows.length}</span>
                   <div className="ol-pages">
                     <button className="ol-page-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹ Prev</button>
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
