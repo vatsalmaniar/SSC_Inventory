@@ -3,6 +3,9 @@
 --
 -- Field/sales staff submit expense claims with bill copies.
 --   Management approves (L1) → Admin signs off (L2) → Accounts/Admin pays.
+--   ADMIN IS THE FINAL AUTHORITY and can short-circuit the whole thing:
+--   an admin approval approves outright from any stage, own claim included.
+--   There is deliberately no two-person rule — the control is the audit trail.
 -- Reimbursement is ALWAYS the bill amount that was approved — the budget is
 -- only a ceiling, never the payout.
 --
@@ -22,6 +25,7 @@
 --
 -- State machine:
 --   pending ─L1(mgmt)→ mgmt_approved ─L2(admin)→ approved ─pay→ reimbursed
+--      └────────────── admin approves (any stage) ──────────↗
 --      └──────────── rejected (either level, reason required) ─────────┘
 --             └── owner edits & resubmits → pending
 --
@@ -205,7 +209,13 @@ CREATE POLICY "hist_insert" ON public.expense_status_history FOR INSERT TO authe
 -- 5. RPCs (atomic, guarded)
 -- ═══════════════════════════════════════════════
 
--- 5a. Two-level review. Same person may not do both levels; nobody reviews their own.
+-- 5a. Review. ADMIN IS THE FINAL AUTHORITY: an admin approval approves the
+--     claim outright, from any stage, including their own claim. Management
+--     gives first-level sign-off only, and never on their own claim.
+--     There is deliberately NO two-person rule (it jammed claims at
+--     'mgmt_approved' forever, since Management cannot do the final step).
+--     The control is the AUDIT TRAIL: who approved, when, at which level,
+--     plus expense_status_history.
 CREATE OR REPLACE FUNCTION public.expense_review(
   p_id uuid, p_decision text, p_approved_amount numeric DEFAULT NULL, p_note text DEFAULT NULL)
 RETURNS public.expenses LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -215,7 +225,9 @@ BEGIN
   IF v_role NOT IN ('admin','management') THEN RAISE EXCEPTION 'Not authorised to review expenses'; END IF;
   SELECT * INTO e FROM public.expenses WHERE id = p_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Expense not found'; END IF;
-  IF e.profile_id = v_uid THEN RAISE EXCEPTION 'You cannot review your own expense'; END IF;
+  -- Admin may review their own; everyone else may not.
+  IF e.profile_id = v_uid AND v_role <> 'admin' THEN
+    RAISE EXCEPTION 'You cannot review your own expense'; END IF;
   v_from := e.status;
 
   IF p_decision = 'reject' THEN
@@ -226,20 +238,27 @@ BEGIN
     UPDATE public.expenses SET status='rejected', review_note=p_note, updated_at=now() WHERE id=p_id;
 
   ELSIF p_decision = 'approve' THEN
-    IF e.status = 'pending' THEN                          -- L1
-      v_to := 'mgmt_approved';
-      UPDATE public.expenses SET status='mgmt_approved', mgmt_reviewed_by=v_uid, mgmt_reviewed_at=now(), updated_at=now()
-        WHERE id=p_id;
-    ELSIF e.status = 'mgmt_approved' THEN                 -- L2 (admin only)
-      IF v_role <> 'admin' THEN RAISE EXCEPTION 'Final approval requires Admin'; END IF;
-      IF e.mgmt_reviewed_by = v_uid THEN RAISE EXCEPTION 'The same person cannot perform both approval levels'; END IF;
+    IF e.status NOT IN ('pending','mgmt_approved') THEN
+      RAISE EXCEPTION 'Claim is not awaiting approval (current: %)', e.status; END IF;
+
+    IF v_role = 'admin' THEN
+      -- final authority: approve outright, stamp L1 too if nobody had cleared it
       v_to := 'approved';
       UPDATE public.expenses
-         SET status='approved', reviewed_by=v_uid, reviewed_at=now(),
-             approved_amount=COALESCE(p_approved_amount, e.amount),   -- pay the BILL amount by default
+         SET status='approved',
+             mgmt_reviewed_by = COALESCE(e.mgmt_reviewed_by, v_uid),
+             mgmt_reviewed_at = COALESCE(e.mgmt_reviewed_at, now()),
+             reviewed_by = v_uid, reviewed_at = now(),
+             approved_amount = COALESCE(p_approved_amount, e.amount),
+             review_note = COALESCE(p_note, review_note), updated_at = now()
+       WHERE id = p_id;
+    ELSE
+      IF e.status = 'mgmt_approved' THEN RAISE EXCEPTION 'Final approval requires Admin'; END IF;
+      v_to := 'mgmt_approved';
+      UPDATE public.expenses
+         SET status='mgmt_approved', mgmt_reviewed_by=v_uid, mgmt_reviewed_at=now(),
              review_note=COALESCE(p_note, review_note), updated_at=now()
        WHERE id=p_id;
-    ELSE RAISE EXCEPTION 'Claim is not awaiting approval (current: %)', e.status;
     END IF;
   ELSE RAISE EXCEPTION 'Unknown decision: %', p_decision;
   END IF;

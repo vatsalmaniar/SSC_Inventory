@@ -256,8 +256,12 @@ function ExpenseDrawer({ row, me, canApprove, canPay, onClose, onDone, onDelete 
   const [saving, setSaving] = useState(false)
   const guard = useRef(false)
 
-  const isL1 = row.status === 'pending' && canApprove && row.profile_id !== me.id
-  const isL2 = row.status === 'mgmt_approved' && me.role === 'admin' && row.profile_id !== me.id
+  // Admin = final authority: approves outright from any stage, own claim
+  // included, and sets the approved amount. Management = first level only,
+  // and never on their own claim.
+  const awaiting = row.status === 'pending' || row.status === 'mgmt_approved'
+  const isL2 = me.role === 'admin' && awaiting
+  const isL1 = me.role === 'management' && row.status === 'pending' && row.profile_id !== me.id
   const canReview = isL1 || isL2
   const canPayThis = row.status === 'approved' && canPay
   const canDelete = row.profile_id === me.id && row.status === 'pending'
@@ -302,7 +306,7 @@ function ExpenseDrawer({ row, me, canApprove, canPay, onClose, onDone, onDelete 
         <div className="od-drawer-head">
           <div>
             <div className="od-drawer-eyebrow">
-              {canReview ? (isL2 ? 'Final approval · Admin' : 'Approval · Management') : canPayThis ? 'Reimbursement' : 'Expense'}
+              {canReview ? (isL2 ? 'Approval · Admin' : 'First approval · Management') : canPayThis ? 'Reimbursement' : 'Expense'}
             </div>
             <div className="od-drawer-title">{row._cat}</div>
             <div className="od-drawer-sub">{row._person} · {fmt(row.expense_date)}</div>
@@ -367,7 +371,7 @@ function ExpenseDrawer({ row, me, canApprove, canPay, onClose, onDone, onDelete 
             <button className="od-btn" onClick={onClose}>Close</button>
             {canReview && (
               <button className="od-btn od-btn-approve" onClick={() => review('approve')} disabled={saving}>
-                {saving ? '…' : isL2 ? 'Approve & pay out' : 'Approve'}
+                {saving ? '…' : isL2 ? 'Approve' : 'Approve (send to Admin)'}
               </button>
             )}
             {canPayThis && (
@@ -558,10 +562,12 @@ export default function PeopleExpenses() {
   // who has to act. Everything else lives in the drawer (row is clickable).
   function rowAction(r) {
     const mine = r.profile_id === me.id
-    if (r.status === 'pending' && canApprove && !mine)
-      return <button className="exp-rowbtn approve" onClick={e => { e.stopPropagation(); setOpenRow(r) }}>Review</button>
-    if (r.status === 'mgmt_approved' && me.role === 'admin' && !mine)
+    // Admin is the final authority: one click approves outright, at any stage,
+    // including their own claim. Management gives first-level sign-off only.
+    if (me.role === 'admin' && (r.status === 'pending' || r.status === 'mgmt_approved'))
       return <button className="exp-rowbtn approve" onClick={e => { e.stopPropagation(); setOpenRow(r) }}>Approve</button>
+    if (me.role === 'management' && r.status === 'pending' && !mine)
+      return <button className="exp-rowbtn approve" onClick={e => { e.stopPropagation(); setOpenRow(r) }}>Review</button>
     if (r.status === 'approved' && canPay)
       return <button className="exp-rowbtn pay" onClick={e => { e.stopPropagation(); setOpenRow(r) }}>Pay</button>
     return <span className="exp-rowchev">›</span>
