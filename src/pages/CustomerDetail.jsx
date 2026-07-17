@@ -380,9 +380,9 @@ body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff
 .cust-name{font-size:18px;font-weight:700;margin-bottom:4px}.cust-id{font-size:11px;color:#64748b;font-family:'Geist Mono',monospace;margin-bottom:8px}
 .field-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:3px}
 .field-val{font-size:12px;font-weight:500;margin-bottom:10px}
-.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:28px}
-.stat{background:#fff;padding:12px 16px}.stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:4px}
-.stat-val{font-size:16px;font-weight:700;color:#0f172a}.stat-val.green{color:#15803d}.stat-val.blue{color:#1a73e8}
+.stats-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:28px}
+.stat{background:#fff;padding:12px 14px}.stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:4px}
+.stat-val{font-size:15px;font-weight:700;color:#0f172a}.stat-val.green{color:#15803d}.stat-val.blue{color:#1a73e8}.stat-val.red{color:#dc2626}.stat-val.amber{color:#b45309}
 .section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0f172a;margin-bottom:12px;margin-top:28px;padding-bottom:6px;border-bottom:2px solid #e2e8f0}
 .order-block{margin-bottom:16px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
 .order-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
@@ -432,7 +432,10 @@ body{font-family:'Geist',sans-serif;font-size:12px;color:#0f172a;background:#fff
   <div class="stat"><div class="stat-label">Active Orders</div><div class="stat-val blue">${activeOrders.length}</div></div>
   <div class="stat"><div class="stat-label">Pending Value</div><div class="stat-val blue">₹${fmtMoney(totalPending)}</div></div>
   <div class="stat"><div class="stat-label">Lifetime Revenue</div><div class="stat-val green">₹${fmtMoney(totalRevenue)}</div></div>
+  <div class="stat"><div class="stat-label">Outstanding</div><div class="stat-val ${(payments?.outstanding_inr||0) > 0 ? 'amber' : ''}">₹${fmtMoney(payments?.outstanding_inr || 0)}</div></div>
+  <div class="stat"><div class="stat-label">Overdue</div><div class="stat-val ${(payments?.overdue_inr||0) > 0 ? 'red' : ''}">₹${fmtMoney(payments?.overdue_inr || 0)}</div></div>
 </div>
+${payments?.imported_at ? `<div style="font-size:10px;color:#94a3b8;text-align:right;margin-top:-24px;margin-bottom:20px;padding-right:2px">Payments as of ${fmtD(payments.imported_at)}</div>` : ''}
 
 ${include.orders ? `
 <div class="section-title">Orders (${orders.length})</div>
