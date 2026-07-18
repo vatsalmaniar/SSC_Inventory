@@ -121,7 +121,7 @@ export default function PeopleExpensesConfig() {
           <div>
             <button className="od-btn" style={{ marginBottom: 8 }} onClick={() => navigate('/people/expenses')}>← Back</button>
             <h1 className="page-title">Expense Configurator</h1>
-            <div className="page-sub">Mileage budgets by location, per-person overrides, and expense categories.</div>
+            <div className="page-sub">Petrol budget by branch (AMD/BRD), per-person budgets (e.g. Jayshree — Office), and categories.</div>
           </div>
           <div className="page-meta">
             <div className="meta-pill"><span className="meta-label">ACCESS</span><span className="meta-val">Admin / Management</span></div>
@@ -132,9 +132,9 @@ export default function PeopleExpensesConfig() {
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-head">
             <div>
-              <div className="card-eyebrow">Budgeted track</div>
-              <div className="card-title">Mileage budget by location</div>
-              <div className="card-sub">Every person at a location gets this monthly cap. Only the actual bill amount is paid — the budget is the ceiling.</div>
+              <div className="card-eyebrow">Team budget</div>
+              <div className="card-title">Petrol budget by branch (AMD / BRD)</div>
+              <div className="card-sub">Every person at that branch gets this monthly Petrol cap. Only the actual bill amount is paid — the budget is the ceiling.</div>
             </div>
           </div>
           {budgetedCats.length === 0 ? (
@@ -151,7 +151,7 @@ export default function PeopleExpensesConfig() {
                 <tbody>
                   {EX.LOCATIONS.map(loc => (
                     <tr key={loc}>
-                      <td style={{ fontWeight: 500 }}>{loc}</td>
+                      <td style={{ fontWeight: 500 }}>{EX.locLabel(loc)}</td>
                       {budgetedCats.map(c => {
                         const k = `${loc}|${c.id}`
                         return (
@@ -175,7 +175,7 @@ export default function PeopleExpensesConfig() {
           <div className="card-head">
             <div>
               <div className="card-eyebrow">Sales team</div>
-              <div className="card-title">Location & per-person budget</div>
+              <div className="card-title">Per-person budget (branch + individual)</div>
               <div className="card-sub">Budgets apply to Sales and Accounts only — Admin and Management submit claims without a budget. Blank falls back to the location budget (if the category has one).</div>
             </div>
           </div>
@@ -192,7 +192,7 @@ export default function PeopleExpensesConfig() {
                   <select className="exp-cfg-input" style={{ width: 110 }} value={p.location || ''}
                     onChange={e => savePersonLocation(p.id, e.target.value)}>
                     <option value="">—</option>
-                    {EX.LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
+                    {EX.LOCATIONS.map(l => <option key={l} value={l}>{EX.locLabel(l)}</option>)}
                   </select>
                 </div>
                 {/* one input per budgeted category (Petrol, Office Maintenance, …) */}

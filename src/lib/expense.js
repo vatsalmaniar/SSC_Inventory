@@ -18,6 +18,9 @@ export const CAN_CONFIG  = ['admin', 'management']
 //   person override → location budget → 0.
 // General categories (Food, Telephone…) have NO budget — spend only.
 export const LOCATIONS = ['Ahmedabad', 'Baroda']
+// The team calls these AMD / BRD (matching the Kaveri / Godawari warehouses).
+export const LOCATION_LABEL = { Ahmedabad: 'AMD — Ahmedabad', Baroda: 'BRD — Baroda' }
+export const locLabel = l => LOCATION_LABEL[l] || l || '—'
 
 // ── Status metadata (the claim state machine) ────────────────────
 export const STATUS_META = {
