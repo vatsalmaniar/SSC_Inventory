@@ -10,13 +10,13 @@
 -- only a ceiling, never the payout.
 --
 -- BUDGETS — mileage only:
---   • mileage categories (is_mileage)  → budget by LOCATION, with an optional
+--   • mileage categories (is_budgeted)  → budget by LOCATION, with an optional
 --     per-person override.  Resolution: person override → location → 0.
 --   • all other categories             → NO budget. Bill is paid once approved.
 --   Over-budget is a WARNING in the UI, never blocked here.
 --
 -- Tables:
---   expense_categories        master data (+ vendor_options, gl_code, is_mileage)
+--   expense_categories        master data (+ vendor_options, gl_code, is_budgeted)
 --   expense_location_budgets  location × mileage-category budget
 --   expense_budgets           per-person override of that mileage budget
 --   expenses                  the claims
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS public.expense_categories (
   color          text NOT NULL DEFAULT '#5B6878',   -- auto-assigned from SSC theme (see lib/expense.js)
   gl_code        text,                              -- Tally ledger, optional
   monthly_cap    numeric CHECK (monthly_cap IS NULL OR monthly_cap >= 0),
-  is_mileage     boolean NOT NULL DEFAULT false,    -- true => location-budgeted track
+  is_budgeted     boolean NOT NULL DEFAULT false,    -- true => this category has a budget (Petrol=location, Office=per-person)
   vendor_options text[],                            -- if set, claim form requires picking one (Uber/Ola…, Airtel/Jio…)
   is_active      boolean NOT NULL DEFAULT true,
   sort_order     int NOT NULL DEFAULT 0
@@ -308,7 +308,7 @@ RETURNS TABLE (
      WHERE e.month_start = m.ms AND e.is_test = p_is_test
   ),
   agg AS (
-    SELECT e.profile_id, c.is_mileage,
+    SELECT e.profile_id, c.is_budgeted,
       COALESCE(SUM(e.approved_amount) FILTER (WHERE e.status IN ('approved','reimbursed')),0) AS approved,
       COALESCE(SUM(e.amount)          FILTER (WHERE e.status IN ('pending','mgmt_approved')),0) AS pending,
       COALESCE(SUM(e.approved_amount) FILTER (WHERE e.status='reimbursed'),0) AS reimbursed,
@@ -316,10 +316,10 @@ RETURNS TABLE (
       COALESCE(SUM(e.amount)          FILTER (WHERE e.status='rejected'),0)   AS rejected
     FROM public.expenses e JOIN public.expense_categories c ON c.id=e.category_id, m
     WHERE e.month_start = m.ms AND e.is_test = p_is_test
-    GROUP BY e.profile_id, c.is_mileage
+    GROUP BY e.profile_id, c.is_budgeted
   ),
-  gen AS (SELECT profile_id, approved, pending FROM agg WHERE is_mileage=false),
-  mil AS (SELECT profile_id, approved, pending FROM agg WHERE is_mileage=true),
+  gen AS (SELECT profile_id, approved, pending FROM agg WHERE is_budgeted=false),
+  mil AS (SELECT profile_id, approved, pending FROM agg WHERE is_budgeted=true),
   ovr AS (SELECT profile_id, SUM(reimbursed) reimbursed, SUM(payable) payable, SUM(rejected) rejected FROM agg GROUP BY profile_id)
   SELECT pe.id, pe.role, pe.location,
     COALESCE((
@@ -333,7 +333,7 @@ RETURNS TABLE (
         (SELECT lb.budget_amount FROM public.expense_location_budgets lb
           WHERE lb.location=pe.location AND lb.category_id=c.id AND lb.month_start IS NULL),
         0))
-      FROM public.expense_categories c WHERE c.is_mileage AND c.is_active
+      FROM public.expense_categories c WHERE c.is_budgeted AND c.is_active
     ),0) AS mileage_budget,
     COALESCE(mil.approved,0), COALESCE(mil.pending,0),
     COALESCE(gen.approved,0), COALESCE(gen.pending,0),
@@ -396,7 +396,7 @@ CREATE POLICY "expbill_delete" ON storage.objects FOR DELETE TO authenticated
 -- ═══════════════════════════════════════════════
 -- 7. SEED — categories (colours from the SSC theme palette)
 -- ═══════════════════════════════════════════════
-INSERT INTO public.expense_categories (name, color, is_mileage, sort_order, vendor_options) VALUES
+INSERT INTO public.expense_categories (name, color, is_budgeted, sort_order, vendor_options) VALUES
   ('Petrol',                 '#1a73e8', true,   10, NULL),
   ('Food',                   '#0F766E', false,  20, NULL),
   ('Lunch',                  '#14B8B5', false,  21, NULL),

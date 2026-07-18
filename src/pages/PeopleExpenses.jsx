@@ -130,7 +130,7 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
             <div className="exp-field">
               <label className="exp-label">Category<span className="req">*</span></label>
               <select className={'exp-input' + (err.category ? ' err' : '')} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}{c.is_mileage ? ' · mileage' : ''}</option>)}
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}{c.is_budgeted ? ' · budgeted' : ''}</option>)}
               </select>
               {err.category && <div className="exp-err">{err.category}</div>}
             </div>
@@ -320,7 +320,7 @@ function ExpenseDrawer({ row, me, canApprove, canPay, onClose, onDone, onDelete 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="exp-rv-cat">
                 {row.vendor && <span className="exp-vendor">{row.vendor}</span>}
-                {row._mileage && <span className="exp-flag">MILEAGE</span>}
+                {row._budgeted && <span className="exp-flag">BUDGET</span>}
                 <span className="exp-status" style={{ color: m.color, background: m.bg, border: `1px solid ${m.border}` }}>
                   <span className="exp-status-dot" style={{ background: m.color }} />{m.label}
                 </span>
@@ -434,7 +434,7 @@ export default function PeopleExpenses() {
 
       const { data, error } = await fetchAll((from, to) => sb
         .from('expenses')
-        .select('*, expense_categories(name,color,is_mileage,gl_code), expense_bills(id,file_path,filename)')
+        .select('*, expense_categories(name,color,is_budgeted,gl_code), expense_bills(id,file_path,filename)')
         .eq('month_start', month).eq('is_test', testMode)
         .order('expense_date', { ascending: false }).order('id', { ascending: false })
         .range(from, to))
@@ -443,7 +443,7 @@ export default function PeopleExpenses() {
         ...r,
         _cat: r.expense_categories?.name || '—',
         _catColor: r.expense_categories?.color,
-        _mileage: !!r.expense_categories?.is_mileage,
+        _budgeted: !!r.expense_categories?.is_budgeted,
       })))
     } catch (e) { toast(friendlyError(e), 'error') }
     finally { setLoading(false) }
@@ -460,10 +460,10 @@ export default function PeopleExpenses() {
   const totals = useMemo(() => {
     const t = { approved: 0, pending: 0, payable: 0, reimbursed: 0, over: 0 }
     summary.forEach(s => {
-      t.approved += Number(s.mileage_approved) + Number(s.general_approved)
-      t.pending += Number(s.mileage_pending) + Number(s.general_pending)
+      t.approved += Number(s.budgeted_approved) + Number(s.other_approved)
+      t.pending += Number(s.budgeted_pending) + Number(s.other_pending)
       t.payable += Number(s.payable); t.reimbursed += Number(s.reimbursed)
-      if (EX.isOver(s.mileage_approved, s.mileage_budget)) t.over++
+      if (EX.isOver(s.budgeted_approved, s.budget)) t.over++
     })
     return t
   }, [summary])
@@ -473,13 +473,13 @@ export default function PeopleExpenses() {
   // total expense, what's been spent, and the budget it sits against.
   const N = v => Number(v || 0)
   const cardFor = rows => rows.reduce((a, r) => ({
-    expense: a.expense + N(r.mileage_approved) + N(r.general_approved),   // approved = actually spent
-    pending: a.pending + N(r.mileage_pending) + N(r.general_pending),     // awaiting approval
-    budget: a.budget + N(r.mileage_budget),                              // mileage budget (sales only)
-    mileageSpent: a.mileageSpent + N(r.mileage_approved),
+    expense: a.expense + N(r.budgeted_approved) + N(r.other_approved),   // approved = actually spent
+    pending: a.pending + N(r.budgeted_pending) + N(r.other_pending),     // awaiting approval
+    budget: a.budget + N(r.budget),            // sales: mileage · accounts: office
+    budgetedSpent: a.budgetedSpent + N(r.budgeted_approved),
     payable: a.payable + N(r.payable),
     reimbursed: a.reimbursed + N(r.reimbursed),
-  }), { expense: 0, pending: 0, budget: 0, mileageSpent: 0, payable: 0, reimbursed: 0 })
+  }), { expense: 0, pending: 0, budget: 0, budgetedSpent: 0, payable: 0, reimbursed: 0 })
 
   const selSum = isPriv && fPerson ? summary.filter(s => s.profile_id === fPerson) : null
   const card = isPriv
@@ -649,15 +649,15 @@ export default function PeopleExpenses() {
             <div className="exp-card-budget">
               <div className="exp-card-btrack">
                 <div className="exp-card-bfill" style={{
-                  width: Math.min(100, EX.pctUsed(card.mileageSpent, card.budget)) + '%',
-                  background: EX.isOver(card.mileageSpent, card.budget) ? '#FCA5A5' : '#3DD9D6',
+                  width: Math.min(100, EX.pctUsed(card.budgetedSpent, card.budget)) + '%',
+                  background: EX.isOver(card.budgetedSpent, card.budget) ? '#FCA5A5' : '#3DD9D6',
                 }} />
               </div>
               <div className="exp-card-bfoot">
-                <span>Mileage {fmtMoney(card.mileageSpent)} / {fmtMoney(card.budget)}</span>
-                <span>{EX.isOver(card.mileageSpent, card.budget)
-                  ? `${fmtMoney(-EX.remaining(card.budget, card.mileageSpent))} over`
-                  : `${fmtMoney(EX.remaining(card.budget, card.mileageSpent))} left`}</span>
+                <span>Mileage {fmtMoney(card.budgetedSpent)} / {fmtMoney(card.budget)}</span>
+                <span>{EX.isOver(card.budgetedSpent, card.budget)
+                  ? `${fmtMoney(-EX.remaining(card.budget, card.budgetedSpent))} over`
+                  : `${fmtMoney(EX.remaining(card.budget, card.budgetedSpent))} left`}</span>
               </div>
             </div>
           )}
@@ -743,7 +743,7 @@ export default function PeopleExpenses() {
                         <td>
                           <span className="exp-cat-name">{r._cat}</span>
                           {r.vendor && <span className="exp-vendor">{r.vendor}</span>}
-                          {r._mileage && <span className="exp-flag">MILEAGE</span>}
+                          {r._budgeted && <span className="exp-flag">BUDGET</span>}
                           {r.status === 'rejected' && r.review_note &&
                             <div className="exp-note" title={r.review_note}>{r.review_note}</div>}
                         </td>

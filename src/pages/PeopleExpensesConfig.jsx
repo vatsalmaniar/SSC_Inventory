@@ -23,7 +23,7 @@ export default function PeopleExpensesConfig() {
   const [categories, setCategories] = useState([])
   const [budgets, setBudgets] = useState({})   // `${profile_id}|${category_id}` -> per-person override
   const [locBud, setLocBud] = useState({})     // `${location}|${category_id}`   -> location budget
-  const [newCat, setNewCat] = useState({ name: '', gl_code: '', monthly_cap: '', is_mileage: false, vendor_options: '' })
+  const [newCat, setNewCat] = useState({ name: '', gl_code: '', monthly_cap: '', is_budgeted: false, vendor_options: '' })
 
   useEffect(() => { init() }, [])
 
@@ -92,16 +92,16 @@ export default function PeopleExpensesConfig() {
       const { error } = await sb.from('expense_categories').insert({
         name: newCat.name.trim(), color: EX.autoCatColor(newCat.name.trim()), gl_code: newCat.gl_code || null,
         monthly_cap: newCat.monthly_cap === '' ? null : Number(newCat.monthly_cap),
-        is_mileage: newCat.is_mileage, sort_order: (categories.length + 1) * 10,
+        is_budgeted: newCat.is_budgeted, sort_order: (categories.length + 1) * 10,
         vendor_options: (() => { const a = newCat.vendor_options.split(',').map(s => s.trim()).filter(Boolean); return a.length ? a : null })(),
       })
       if (error) throw error
-      setNewCat({ name: '', gl_code: '', monthly_cap: '', is_mileage: false, vendor_options: '' })
+      setNewCat({ name: '', gl_code: '', monthly_cap: '', is_budgeted: false, vendor_options: '' })
       toast('Category added.', 'success'); loadAll()
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
   }
 
-  const mileageCats = categories.filter(c => c.is_mileage && c.is_active)
+  const budgetedCats = categories.filter(c => c.is_budgeted && c.is_active)
 
   if (denied) return (
     <Layout pageKey="people">
@@ -137,22 +137,22 @@ export default function PeopleExpensesConfig() {
               <div className="card-sub">Every person at a location gets this monthly cap. Only the actual bill amount is paid — the budget is the ceiling.</div>
             </div>
           </div>
-          {mileageCats.length === 0 ? (
-            <div className="exp-cfg-ph">No mileage category yet — tick “Mileage” on a category below (e.g. Petrol).</div>
+          {budgetedCats.length === 0 ? (
+            <div className="exp-cfg-ph">No budgeted category yet — tick “Budgeted” on a category below (e.g. Petrol, Office Maintenance).</div>
           ) : (
             <div className="exp-cfg-table">
               <table>
                 <thead>
                   <tr>
                     <th>Location</th>
-                    {mileageCats.map(c => <th key={c.id}>{c.name} ₹ / month</th>)}
+                    {budgetedCats.map(c => <th key={c.id}>{c.name} ₹ / month</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {EX.LOCATIONS.map(loc => (
                     <tr key={loc}>
                       <td style={{ fontWeight: 500 }}>{loc}</td>
-                      {mileageCats.map(c => {
+                      {budgetedCats.map(c => {
                         const k = `${loc}|${c.id}`
                         return (
                           <td key={c.id}>
@@ -175,45 +175,47 @@ export default function PeopleExpensesConfig() {
           <div className="card-head">
             <div>
               <div className="card-eyebrow">Sales team</div>
-              <div className="card-title">Location & mileage override</div>
-              <div className="card-sub">Budgets apply to sales only — Admin and Management submit claims without a budget. Leave the override blank to use the location budget.</div>
+              <div className="card-title">Location & per-person budget</div>
+              <div className="card-sub">Budgets apply to Sales and Accounts only — Admin and Management submit claims without a budget. Blank falls back to the location budget (if the category has one).</div>
             </div>
           </div>
           <div className="exp-cfg-people">
-            {people.map(p => {
-              const mc = mileageCats[0]
-              const k = mc ? `${p.id}|${mc.id}` : null
-              const inherited = mc && p.location ? locBud[`${p.location}|${mc.id}`] : null
-              return (
-                <div key={p.id} className="exp-cfg-person">
-                  <div className="exp-avatar" style={{ background: EX.colorFor(p.id) }}>{EX.initialsFor(p.name)}</div>
-                  <div className="exp-cfg-pinfo">
-                    <div className="exp-cfg-pname">{p.name}</div>
-                    <div className="exp-cfg-prole">{p.role}</div>
-                  </div>
-                  <div>
-                    <div className="exp-cfg-mini">Location</div>
-                    <select className="exp-cfg-input" style={{ width: 116 }} value={p.location || ''}
-                      onChange={e => savePersonLocation(p.id, e.target.value)}>
-                      <option value="">—</option>
-                      {EX.LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                  </div>
-                  {mc && (
-                    <div>
-                      <div className="exp-cfg-mini">{mc.name} ₹</div>
-                      <input className="exp-cfg-input" style={{ width: 96 }} type="number" min="0"
+            {people.map(p => (
+              <div key={p.id} className="exp-cfg-person">
+                <div className="exp-avatar" style={{ background: EX.colorFor(p.id) }}>{EX.initialsFor(p.name)}</div>
+                <div className="exp-cfg-pinfo">
+                  <div className="exp-cfg-pname">{p.name}</div>
+                  <div className="exp-cfg-prole">{p.role}</div>
+                </div>
+                <div>
+                  <div className="exp-cfg-mini">Location</div>
+                  <select className="exp-cfg-input" style={{ width: 110 }} value={p.location || ''}
+                    onChange={e => savePersonLocation(p.id, e.target.value)}>
+                    <option value="">—</option>
+                    {EX.LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
+                {/* one input per budgeted category (Petrol, Office Maintenance, …) */}
+                {budgetedCats.map(c => {
+                  const k = `${p.id}|${c.id}`
+                  const inherited = p.location ? locBud[`${p.location}|${c.id}`] : null
+                  return (
+                    <div key={c.id}>
+                      <div className="exp-cfg-mini">{c.name} ₹</div>
+                      <input className="exp-cfg-input" style={{ width: 92 }} type="number" min="0"
                         placeholder={inherited != null ? String(inherited) : '—'}
                         defaultValue={budgets[k] ?? ''}
-                        onBlur={e => { const cur = budgets[k] ?? ''; if (String(e.target.value) !== String(cur)) saveBudget(p.id, mc.id, e.target.value) }} />
+                        onBlur={e => { const cur = budgets[k] ?? ''; if (String(e.target.value) !== String(cur)) saveBudget(p.id, c.id, e.target.value) }} />
                       <div className="exp-cfg-inherit">
-                        {budgets[k] != null ? 'override' : inherited != null ? `${fmtMoney(inherited)} (location)` : p.location ? 'no budget set' : 'set a location'}
+                        {budgets[k] != null ? 'set for person'
+                          : inherited != null ? `${fmtMoney(inherited)} (location)`
+                          : '—'}
                       </div>
                     </div>
-                  )}
-                </div>
-              )
-            })}
+                  )
+                })}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -230,7 +232,7 @@ export default function PeopleExpensesConfig() {
             <table>
               <thead>
                 <tr>
-                  <th>Name</th><th>Providers</th><th>GL code</th><th>Cap ₹</th><th>Mileage</th><th>Active</th>
+                  <th>Name</th><th>Providers</th><th>GL code</th><th>Cap ₹</th><th>Budgeted</th><th>Active</th>
                 </tr>
               </thead>
               <tbody>
@@ -254,7 +256,7 @@ export default function PeopleExpensesConfig() {
                     <td><input className="exp-cfg-input w-sm" defaultValue={c.gl_code || ''} placeholder="—" onBlur={e => e.target.value !== (c.gl_code || '') && saveCat(c.id, { gl_code: e.target.value || null })} /></td>
                     <td><input className="exp-cfg-input w-sm" type="number" min="0" defaultValue={c.monthly_cap ?? ''} placeholder="none"
                       onBlur={e => { const v = e.target.value === '' ? null : Number(e.target.value); if (v !== (c.monthly_cap ?? null)) saveCat(c.id, { monthly_cap: v }) }} /></td>
-                    <td><input type="checkbox" checked={c.is_mileage} onChange={e => saveCat(c.id, { is_mileage: e.target.checked })} /></td>
+                    <td><input type="checkbox" checked={c.is_budgeted} onChange={e => saveCat(c.id, { is_budgeted: e.target.checked })} /></td>
                     <td><input type="checkbox" checked={c.is_active} onChange={e => saveCat(c.id, { is_active: e.target.checked })} /></td>
                   </tr>
                 ))}
@@ -263,7 +265,7 @@ export default function PeopleExpensesConfig() {
                   <td><input className="exp-cfg-input w-md" value={newCat.vendor_options} onChange={e => setNewCat({ ...newCat, vendor_options: e.target.value })} placeholder="Uber, Ola…" /></td>
                   <td><input className="exp-cfg-input w-sm" value={newCat.gl_code} onChange={e => setNewCat({ ...newCat, gl_code: e.target.value })} placeholder="GL" /></td>
                   <td><input className="exp-cfg-input w-sm" type="number" min="0" value={newCat.monthly_cap} onChange={e => setNewCat({ ...newCat, monthly_cap: e.target.value })} placeholder="none" /></td>
-                  <td><input type="checkbox" checked={newCat.is_mileage} onChange={e => setNewCat({ ...newCat, is_mileage: e.target.checked })} /></td>
+                  <td><input type="checkbox" checked={newCat.is_budgeted} onChange={e => setNewCat({ ...newCat, is_budgeted: e.target.checked })} /></td>
                   <td><button className="od-btn od-btn-primary" onClick={addCat}>Add</button></td>
                 </tr>
               </tbody>
