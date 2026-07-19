@@ -421,3 +421,33 @@ ON CONFLICT (name) DO NOTHING;
 -- ═══════════════════════════════════════════════════════════════════
 -- END expense_management.sql
 -- ═══════════════════════════════════════════════════════════════════
+
+-- ═══════════════════════════════════════════════════════════════════
+-- v9 (2026-07-18): per-person in/out toggle + branch vs person budget scope
+-- ═══════════════════════════════════════════════════════════════════
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS expense_in_budget boolean NOT NULL DEFAULT true;
+ALTER TABLE public.expense_categories ADD COLUMN IF NOT EXISTS budget_scope text NOT NULL DEFAULT 'branch';
+ALTER TABLE public.expense_categories DROP CONSTRAINT IF EXISTS expense_categories_budget_scope_chk;
+ALTER TABLE public.expense_categories ADD CONSTRAINT expense_categories_budget_scope_chk CHECK (budget_scope IN ('branch','person'));
+
+-- Config people: all eligible sales+accounts (active, non-suspended) + their flag.
+DROP FUNCTION IF EXISTS public.expense_budget_people();
+CREATE FUNCTION public.expense_budget_people()
+RETURNS TABLE (id uuid, name text, role text, location text, in_budget boolean)
+LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT p.id, p.name, p.role, p.location, p.expense_in_budget
+  FROM public.profiles p LEFT JOIN auth.users u ON u.id = p.id
+  WHERE p.role IN ('sales','accounts')
+    AND (u.banned_until IS NULL OR u.banned_until <= now())
+    AND public.expense_role() IN ('admin','management')
+  ORDER BY p.expense_in_budget DESC, p.role, p.name;
+$$;
+GRANT EXECUTE ON FUNCTION public.expense_budget_people() TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.expense_set_budget_flag(p_id uuid, p_on boolean)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF public.expense_role() NOT IN ('admin','management') THEN RAISE EXCEPTION 'Not authorised'; END IF;
+  UPDATE public.profiles SET expense_in_budget = p_on WHERE id = p_id;
+END; $$;
+GRANT EXECUTE ON FUNCTION public.expense_set_budget_flag(uuid, boolean) TO authenticated;

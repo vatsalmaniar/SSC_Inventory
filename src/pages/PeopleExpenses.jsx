@@ -617,7 +617,8 @@ export default function PeopleExpenses() {
               <select className="exp-card-select" value={fPerson}
                 onChange={e => { setFPerson(e.target.value); setPage(0) }}>
                 <option value="">All people</option>
-                {summary.map(sm => (
+                {/* only active (non-suspended) people toggled ON in the budget config */}
+                {summary.filter(sm => sm.in_budget && !sm.suspended).map(sm => (
                   <option key={sm.profile_id} value={sm.profile_id}>{profiles[sm.profile_id]?.name || '—'}</option>
                 ))}
               </select>
@@ -690,7 +691,10 @@ export default function PeopleExpenses() {
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <div className="exp-spacer" />
-            <button className="od-btn" onClick={exportXls}>Export Excel</button>
+            <button className="exp-dl-btn" onClick={exportXls} title="Download Excel">
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+              Download Excel
+            </button>
           </div>
         )}
 

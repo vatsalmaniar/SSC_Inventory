@@ -20,6 +20,11 @@ export default function PeopleHub() {
 
   const tiles = [
     {
+      key: 'team', label: 'Team', desc: 'People directory, profiles, assets & lifecycle',
+      path: '/people/team', color: { bg: '#0f766e', icon: '#fff' }, available: true,
+      icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
+    },
+    {
       key: 'kpi', label: 'KRA / KPI Tracker', desc: 'Monthly performance scorecard',
       path: '/people/kpi', color: { bg: '#1d4ed8', icon: '#fff' }, available: true,
       icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-6"/></svg>,

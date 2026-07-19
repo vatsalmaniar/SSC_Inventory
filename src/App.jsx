@@ -55,6 +55,11 @@ const PeopleKpi = lazy(() => import('./pages/PeopleKpi'))
 const PeopleKpiConfig = lazy(() => import('./pages/PeopleKpiConfig'))
 const PeopleExpenses = lazy(() => import('./pages/PeopleExpenses'))
 const PeopleExpensesConfig = lazy(() => import('./pages/PeopleExpensesConfig'))
+const PeopleTeam = lazy(() => import('./pages/PeopleTeam'))
+const EmployeeDetail = lazy(() => import('./pages/EmployeeDetail'))
+const PeopleOrg = lazy(() => import('./pages/PeopleOrg'))
+const PeopleAssets = lazy(() => import('./pages/PeopleAssets'))
+const PeopleConfig = lazy(() => import('./pages/PeopleConfig'))
 const PurchaseInvoiceList = lazy(() => import('./pages/PurchaseInvoiceList'))
 const PurchaseInvoiceDetail = lazy(() => import('./pages/PurchaseInvoiceDetail'))
 const FCDashboard = lazy(() => import('./pages/FCDashboard'))
@@ -131,6 +136,11 @@ export default function App() {
           <Route path="/fc/transfers/new" element={<NewStockTransfer />} />
           <Route path="/fc/transfers/:id" element={<StockTransferDetail />} />
           <Route path="/people" element={<PeopleHub />} />
+          <Route path="/people/team" element={<PeopleTeam />} />
+          <Route path="/people/team/:id" element={<EmployeeDetail />} />
+          <Route path="/people/org" element={<PeopleOrg />} />
+          <Route path="/people/assets" element={<PeopleAssets />} />
+          <Route path="/people/config" element={<PeopleConfig />} />
           <Route path="/people/kpi" element={<PeopleKpi />} />
           <Route path="/people/kpi/config" element={<PeopleKpiConfig />} />
           <Route path="/people/expenses" element={<PeopleExpenses />} />

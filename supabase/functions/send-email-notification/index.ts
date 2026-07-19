@@ -48,9 +48,19 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string; bg: string; la
   opportunity_lost:     { emoji: '📉', color: '#dc2626', bg: '#fef2f2', label: 'Opportunity Lost' },
   overdue_followup:     { emoji: '⏰', color: '#b45309', bg: '#fffbeb', label: 'Overdue Follow-Up' },
   assignment:           { emoji: '👤', color: '#1d4ed8', bg: '#eff6ff', label: 'New Assignment' },
+  birthday_self:        { emoji: '🎂', color: '#db2777', bg: '#fdf2f8', label: 'Happy Birthday!' },
+  birthday_team:        { emoji: '🎂', color: '#db2777', bg: '#fdf2f8', label: 'Team Birthday' },
+  anniv_self:           { emoji: '🎉', color: '#7c3aed', bg: '#f5f3ff', label: 'Work Anniversary' },
+  anniv_team:           { emoji: '🎉', color: '#7c3aed', bg: '#f5f3ff', label: 'Work Anniversary' },
 }
 
+const CELEBRATION_TYPES = ['birthday_self', 'birthday_team', 'anniv_self', 'anniv_team']
+
 function subject(r: any): string {
+  if (r.email_type === 'birthday_self') return '🎂 Happy Birthday from Team SSC!'
+  if (r.email_type === 'birthday_team') return `🎂 It's ${r.from_name}'s Birthday today!`
+  if (r.email_type === 'anniv_self')    return '🎉 Happy Work Anniversary — Team SSC'
+  if (r.email_type === 'anniv_team')    return `🎉 ${r.from_name} celebrates a work anniversary!`
   const t = r.email_type
   const on = r.order_number || ''
   const cfg = TYPE_CONFIG[t]
@@ -77,7 +87,40 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+function buildCelebrationEmail(r: any): string {
+  const isBday = r.email_type === 'birthday_self' || r.email_type === 'birthday_team'
+  const isSelf = r.email_type === 'birthday_self' || r.email_type === 'anniv_self'
+  const emoji = isBday ? '🎂' : '🎉'
+  const grad = isBday
+    ? 'linear-gradient(90deg,#ec4899 0%,#f97316 55%,#f59e0b 100%)'
+    : 'linear-gradient(90deg,#2563eb 0%,#4f46e5 55%,#7c3aed 100%)'
+  const heading = isSelf
+    ? (isBday ? 'Happy Birthday!' : 'Happy Work Anniversary!')
+    : (isBday ? 'A Birthday at SSC' : 'A Work Anniversary at SSC')
+  const paras = (r.message || '').split('\n').map((line: string) =>
+    line.trim() === '' ? '' : `<p style="margin:0 0 12px;font-size:14.5px;color:#334155;line-height:1.75">${esc(line)}</p>`
+  ).join('')
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif">
+  <div style="max-width:560px;margin:0 auto;padding:40px 16px 32px">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px"><tr>
+      <td style="font-size:20px;font-weight:700;color:#1a4dab;letter-spacing:-0.5px;padding-left:4px">SSC ERP</td>
+    </tr></table>
+    <div style="background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="background:${grad};padding:30px 24px;text-align:center">
+        <div style="font-size:44px;line-height:1">${emoji}</div>
+        <div style="font-size:22px;font-weight:800;color:#ffffff;margin-top:8px">${esc(heading)}</div>
+      </div>
+      <div style="padding:28px 30px 32px">${paras}</div>
+    </div>
+    <div style="text-align:center;font-size:11px;color:#94a3b8;margin-top:18px">SSC Control Pvt. Ltd.</div>
+  </div>
+</body></html>`
+}
+
 function buildEmail(recipientName: string, r: any, extra: { customer?: string; dc?: string; fc?: string } = {}): string {
+  if (CELEBRATION_TYPES.includes(r.email_type)) return buildCelebrationEmail(r)
   const cfg = TYPE_CONFIG[r.email_type] || { emoji: '🔔', color: '#1a4dab', bg: '#eff6ff', label: 'Notification' }
   const link = (r.email_type === 'po_linked_co_cancelled' || r.email_type === 'po_mention')
     ? (r.po_id ? `${APP_URL}/procurement/po/${r.po_id}` : '')
@@ -252,11 +295,14 @@ async function handleNotification(sb: any, r: any) {
   const email = profile.email || (profile.username + '@ssccontrol.com')
   const recipientName = profile.name || profile.username
 
-  const prefKey = PREF_MAP[r.email_type] || 'status_changes'
-  const { data: pref } = await sb.from('email_preferences').select(prefKey).eq('user_id', r.user_id).maybeSingle()
-  if (pref && pref[prefKey] === false) {
-    await sb.from('email_log').insert({ notification_id: r.id, recipient_email: email, email_type: r.email_type, status: 'skipped' })
-    return new Response('opted out')
+  // Celebrations always send — they bypass the opt-out preferences
+  if (!CELEBRATION_TYPES.includes(r.email_type)) {
+    const prefKey = PREF_MAP[r.email_type] || 'status_changes'
+    const { data: pref } = await sb.from('email_preferences').select(prefKey).eq('user_id', r.user_id).maybeSingle()
+    if (pref && pref[prefKey] === false) {
+      await sb.from('email_log').insert({ notification_id: r.id, recipient_email: email, email_type: r.email_type, status: 'skipped' })
+      return new Response('opted out')
+    }
   }
 
   // Fetch extra order details for order-related emails

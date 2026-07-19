@@ -9,6 +9,30 @@
   font-family: 'Geist', sans-serif;
 }
 
+/* Global celebration bar. In-flow at the top of a column shell so the whole
+   sidebar+main row flows naturally below it — no fragile per-element offsets.
+   Only the position:fixed sidebar needs its top nudged to match. */
+:root { --cel-h: 40px; }
+.ly-shell { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* Celebration bar animation — slide-down entrance + slow subtle sheen */
+@keyframes cel-slide-in { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes cel-sheen { 0% { left: -60%; } 55%, 100% { left: 130%; } }
+.cel-strip { animation: cel-slide-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.cel-strip::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: skewX(-20deg); pointer-events: none;
+  animation: cel-sheen 7s ease-in-out 1.2s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cel-strip { animation: none; }
+  .cel-strip::after { display: none; }
+}
+html.has-celebration .ly-sidebar { top: var(--cel-h); min-height: calc(100vh - var(--cel-h)); }
+html.has-celebration .ly-wrap    { min-height: calc(100vh - var(--cel-h)); }
+html.has-celebration .ly-main    { min-height: calc(100vh - var(--cel-h)); }
+
 /* ── Sidebar ── */
 .ly-sidebar {
   width: 220px;

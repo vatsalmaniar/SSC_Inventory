@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb, checkSessionAge } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
+import CelebrationStrip from './CelebrationStrip'
 import './layout.css'
 
 const NAV_ITEMS = [
@@ -66,14 +67,17 @@ const NAV_ITEMS = [
   {
     key: 'people',
     label: 'People',
-    path: '/people/kpi',
+    path: '/people',
     roles: ['sales', 'ops', 'admin', 'management', 'accounts', 'fc_kaveri', 'fc_godawari'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
     sub: [
+      { key: 'people-hub',        label: 'Overview',      path: '/people' },
+      { key: 'people-team',       label: 'Team',          path: '/people/team' },
+      { key: 'people-org',        label: 'Org Chart',     path: '/people/org' },
+      { key: 'people-assets',     label: 'Assets',        path: '/people/assets', roles: ['admin','management'] },
       { key: 'people-kpi',        label: 'KRA / KPI',     path: '/people/kpi' },
-      { key: 'people-config',     label: 'Config',        path: '/people/kpi/config', roles: ['admin','management'] },
       { key: 'people-expenses',   label: 'Expenses',      path: '/people/expenses' },
-      { key: 'people-exp-config', label: 'Expense Config', path: '/people/expenses/config', roles: ['admin','management'] },
+      { key: 'people-config',     label: 'Configuration', path: '/people/config', roles: ['admin','management'] },
     ],
   },
   {
@@ -392,7 +396,10 @@ export default function Layout({ children, pageTitle, pageKey }) {
     && !NAV_ITEMS.some(n => n.key === pageKey && (n.roles.includes('all') || n.roles.includes(user.role)))
 
   return (
-    <div className="ly-wrap">
+    <div className="ly-shell">
+      {/* Global celebration bar — full-width, in normal flow above the sidebar + main row */}
+      <CelebrationStrip />
+      <div className="ly-wrap">
 
       {/* ── Sidebar ── */}
       <aside className={'ly-sidebar' + (sidebarCollapsed ? ' collapsed' : '')}>
@@ -787,6 +794,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
           ) : children}
         </div>
 
+      </div>
       </div>
     </div>
   )

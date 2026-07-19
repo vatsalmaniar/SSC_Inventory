@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
+import { useHistoryFilter, HistoryFilterBar, HistoryPager } from '../components/HistoryFilter'
+import { fetchAll } from '../lib/fetchAll'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 
@@ -40,6 +42,18 @@ const PO_STATUS = {
   delivery_confirmation:{ label: 'Delivery Confirmed',   bg: '#d1fae5', color: '#065f46' },
   material_received:    { label: 'Material Received',    bg: '#dcfce7', color: '#166534' },
   cancelled:            { label: 'Cancelled',            bg: '#fee2e2', color: '#991b1b' },
+}
+
+const GRN_STATUS = {
+  draft:      { label: 'Draft',      bg: '#f3f4f6', color: '#6b7280' },
+  checking:   { label: 'Checking',   bg: '#fef9c3', color: '#854d0e' },
+  confirmed:  { label: 'Confirmed',  bg: '#dcfce7', color: '#166534' },
+  cancelled:  { label: 'Cancelled',  bg: '#fee2e2', color: '#991b1b' },
+}
+
+const GRN_TYPE_LABELS = {
+  standard: 'Standard', purchase: 'Purchase', return: 'Return',
+  rejection: 'Rejection', sample_return: 'Sample Return',
 }
 
 function StatusBadge({ status, map }) {
@@ -81,7 +95,8 @@ export default function ItemDetail() {
   const [tab, setTab]           = useState('summary')
   const [orders, setOrders]     = useState([])
   const [pos, setPos]           = useState([])
-  const [kpi, setKpi]           = useState({ totalOrders: 0, pendingOrders: 0, deliveredOrders: 0, totalPos: 0, pendingPos: 0, receivedPos: 0 })
+  const [grns, setGrns]         = useState([])
+  const [kpi, setKpi]           = useState({ totalOrders: 0, pendingOrders: 0, deliveredOrders: 0, totalPos: 0, pendingPos: 0, receivedPos: 0, totalGrns: 0 })
   const [transfers, setTransfers] = useState([])
 
   useEffect(() => { init() }, [id])
@@ -103,40 +118,56 @@ export default function ItemDetail() {
       setAuditNames(map)
     }
 
-    const [ordItemsRes, poItemsRes, transferRes] = await Promise.all([
-      sb.from('order_items')
+    // fetchAll pages past PostgREST's 1000-row cap — these 360 tables are a decision
+    // log, so a very active item must never silently drop line items past row 1000.
+    const [ordItemsRes, poItemsRes, grnItemsRes, transferRes] = await Promise.all([
+      fetchAll((from, to) => sb.from('order_items')
         .select('id,qty,dispatched_qty,unit_price_after_disc,total_price,orders!inner(id,order_number,customer_name,order_date,status,is_test)')
         .eq('item_code', itemData.item_code)
         .eq('orders.is_test', false)
-        .order('id', { ascending: false }),
-      sb.from('po_items')
+        .order('id', { ascending: false })
+        .range(from, to)),
+      fetchAll((from, to) => sb.from('po_items')
         .select('id,qty,received_qty,unit_price,total_price,purchase_orders!inner(id,po_number,vendor_name,po_date,status)')
         .eq('item_code', itemData.item_code)
-        .order('id', { ascending: false }),
-      sb.from('stock_transfer_items')
+        .order('id', { ascending: false })
+        .range(from, to)),
+      fetchAll((from, to) => sb.from('grn_items')
+        .select('id,received_qty,accepted_qty,rejected_qty,grn:grn_id!inner(id,grn_number,grn_type,status,received_at,vendor_name,is_test)')
+        .eq('item_code', itemData.item_code)
+        .eq('grn.is_test', false)
+        .order('id', { ascending: false })
+        .range(from, to)),
+      fetchAll((from, to) => sb.from('stock_transfer_items')
         .select('id,qty,received_qty,stock_transfers!inner(id,transfer_number,source_fc,destination_fc,status,created_at,is_test)')
         .eq('item_code', itemData.item_code)
         .eq('stock_transfers.is_test', false)
-        .order('id', { ascending: false }),
+        .order('id', { ascending: false })
+        .range(from, to)),
     ])
     setTransfers(transferRes.data || [])
 
     const ordRows = ordItemsRes.data || []
     const poRows  = poItemsRes.data || []
+    const grnRows = grnItemsRes.data || []
 
     setOrders(ordRows)
     setPos(poRows)
+    setGrns(grnRows)
 
     const deliveredStatuses = ['dispatched_fc', 'goods_issued', 'invoice_generated']
     const pendingOrdStatuses = ['pending', 'dispatch', 'partial_dispatch', 'delivery_created', 'picking', 'packing']
 
-    const uniqueOrderIds = new Set(ordRows.map(r => r.orders?.id).filter(Boolean))
-    const uniquePoIds    = new Set(poRows.map(r => r.purchase_orders?.id).filter(Boolean))
+    // KPI tiles exclude cancelled (cancelled still show in the order-history list, just not counted).
+    const uniqueOrderIds = new Set(ordRows.filter(r => r.orders?.status !== 'cancelled').map(r => r.orders?.id).filter(Boolean))
+    const uniquePoIds    = new Set(poRows.filter(r => r.purchase_orders?.status !== 'cancelled').map(r => r.purchase_orders?.id).filter(Boolean))
 
     const pendingOrders   = new Set(ordRows.filter(r => pendingOrdStatuses.includes(r.orders?.status)).map(r => r.orders?.id)).size
     const deliveredOrders = new Set(ordRows.filter(r => deliveredStatuses.includes(r.orders?.status)).map(r => r.orders?.id)).size
     const pendingPos      = new Set(poRows.filter(r => ['pending', 'placed', 'partial'].includes(r.purchase_orders?.status)).map(r => r.purchase_orders?.id)).size
     const receivedPos     = new Set(poRows.filter(r => r.purchase_orders?.status === 'received').map(r => r.purchase_orders?.id)).size
+
+    const uniqueGrnIds = new Set(grnRows.map(r => r.grn?.id).filter(Boolean))
 
     setKpi({
       totalOrders:   uniqueOrderIds.size,
@@ -145,10 +176,29 @@ export default function ItemDetail() {
       totalPos:      uniquePoIds.size,
       pendingPos,
       receivedPos,
+      totalGrns:     uniqueGrnIds.size,
     })
 
     setLoading(false)
   }
+
+  // ── History filters (oldest → newest). Orders keep cancelled visible; POs stay cancelled-free. ──
+  const orderRows = [...orders].sort((a, b) => new Date(a.orders?.order_date || 0) - new Date(b.orders?.order_date || 0))
+  const poRows    = pos.filter(r => r.purchase_orders?.status !== 'cancelled')
+    .sort((a, b) => new Date(a.purchase_orders?.po_date || 0) - new Date(b.purchase_orders?.po_date || 0))
+  const ordersF = useHistoryFilter(orderRows, {
+    dateOf: r => r.orders?.order_date,
+    searchOf: r => `${r.orders?.order_number || ''} ${r.orders?.customer_name || ''}`,
+  })
+  const posF = useHistoryFilter(poRows, {
+    dateOf: r => r.purchase_orders?.po_date,
+    searchOf: r => `${r.purchase_orders?.po_number || ''} ${r.purchase_orders?.vendor_name || ''}`,
+  })
+  const grnRows = [...grns].sort((a, b) => new Date(a.grn?.received_at || 0) - new Date(b.grn?.received_at || 0))
+  const grnsF = useHistoryFilter(grnRows, {
+    dateOf: r => r.grn?.received_at,
+    searchOf: r => `${r.grn?.grn_number || ''} ${r.grn?.vendor_name || ''}`,
+  })
 
   if (loading) return (
     <Layout pageTitle="Item 360" pageKey="item360">
@@ -164,6 +214,7 @@ export default function ItemDetail() {
     { key: 'summary',  label: 'Summary' },
     { key: 'orders',   label: `Order History (${kpi.totalOrders})` },
     { key: 'pos',      label: `PO History (${kpi.totalPos})` },
+    { key: 'grns',     label: `GRNs (${kpi.totalGrns})` },
     { key: 'transfers', label: `Internal Transfers (${transfers.length})` },
   ]
 
@@ -212,6 +263,7 @@ export default function ItemDetail() {
                 { label: 'Total POs',        val: kpi.totalPos,        color: '#5b21b6' },
                 { label: 'Pending POs',      val: kpi.pendingPos,      color: '#92400e' },
                 { label: 'Received POs',     val: kpi.receivedPos,     color: '#166534' },
+                { label: 'GRNs',             val: kpi.totalGrns,       color: '#0d9488' },
                 { label: 'Internal Transfers', val: transfers.length,  color: '#0891b2' },
                 { label: 'Transfer Qty',     val: transferQty,         color: '#0891b2' },
               ].map(k => (
@@ -271,97 +323,168 @@ export default function ItemDetail() {
           )}
 
           {/* ── Order History Tab ── */}
-          {tab === 'orders' && (
+          {tab === 'orders' && (() => {
+            // Footer totals exclude cancelled (not counted), even though cancelled rows stay visible.
+            const nonCancelled = ordersF.filtered.filter(r => r.orders?.status !== 'cancelled')
+            return (
             <div className="c360-card">
               {orders.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--gray-400)', fontSize: 13 }}>No orders found for this item.</div>
+                <div className="c360-hempty">No orders found for this item.</div>
               ) : (
-                <table className="od-items-table">
-                  <thead>
-                    <tr>
-                      <th>Order #</th>
-                      <th>Customer</th>
-                      <th>Date</th>
-                      <th style={{ textAlign: 'right' }}>Qty Ordered</th>
-                      <th style={{ textAlign: 'right' }}>Qty Dispatched</th>
-                      <th style={{ textAlign: 'right' }}>Unit Price</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orders.map(r => (
-                      <tr key={r.id} onClick={() => navigate('/orders/' + r.orders?.id)} style={{ cursor: 'pointer' }}>
-                        <td><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#1a73e8' }}>{r.orders?.order_number || '—'}</span></td>
-                        <td style={{ fontSize: 13 }}>{r.orders?.customer_name || '—'}</td>
-                        <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{fmt(r.orders?.order_date)}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.qty ?? '—'}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.dispatched_qty ?? '—'}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{inr(r.unit_price_after_disc)}</td>
-                        <td><StatusBadge status={r.orders?.status} map={ORDER_STATUS} /></td>
+                <>
+                  <HistoryFilterBar f={ordersF} placeholder="Search order # or customer…" />
+                  {ordersF.filtered.length === 0 ? (
+                    <div className="c360-hempty">No orders match the current filters.</div>
+                  ) : (
+                  <table className="od-items-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 140 }}>Order #</th>
+                        <th>Customer</th>
+                        <th style={{ width: 110 }}>Date</th>
+                        <th style={{ width: 90, textAlign: 'right' }}>Qty Ordered</th>
+                        <th style={{ width: 110, textAlign: 'right' }}>Qty Dispatched</th>
+                        <th style={{ width: 100, textAlign: 'right' }}>Unit Price</th>
+                        <th style={{ width: 150, textAlign: 'left' }}>Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid var(--gray-200)', background: 'var(--gray-50)' }}>
-                      <td colSpan={3} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({orders.length} rows)</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{orders.reduce((s, r) => s + (r.qty || 0), 0)}</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{orders.reduce((s, r) => s + (r.dispatched_qty || 0), 0)}</td>
-                      <td colSpan={2} />
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody>
+                      {ordersF.paginated.map(r => (
+                        <tr key={r.id} onClick={() => navigate('/orders/' + r.orders?.id)} style={{ cursor: 'pointer' }}>
+                          <td><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#1a73e8' }}>{r.orders?.order_number || '—'}</span></td>
+                          <td style={{ fontSize: 13 }}>{r.orders?.customer_name || '—'}</td>
+                          <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{fmt(r.orders?.order_date)}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.qty ?? '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.dispatched_qty ?? '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{inr(r.unit_price_after_disc)}</td>
+                          <td><StatusBadge status={r.orders?.status} map={ORDER_STATUS} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--gray-200)', background: 'var(--gray-50)' }}>
+                        <td colSpan={3} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({nonCancelled.length} orders, excl. cancelled)</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{nonCancelled.reduce((s, r) => s + (r.qty || 0), 0)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{nonCancelled.reduce((s, r) => s + (r.dispatched_qty || 0), 0)}</td>
+                        <td colSpan={2} />
+                      </tr>
+                    </tfoot>
+                  </table>
+                  )}
+                  <HistoryPager f={ordersF} />
+                </>
+              )}
+            </div>
+            )
+          })()}
+
+          {/* ── PO History Tab ── */}
+          {tab === 'pos' && (
+            // Cancelled POs stay hidden here (poRows already excludes them), per earlier ask.
+            <div className="c360-card">
+              {poRows.length === 0 ? (
+                <div className="c360-hempty">No purchase orders found for this item.</div>
+              ) : (
+                <>
+                  <HistoryFilterBar f={posF} placeholder="Search PO # or vendor…" />
+                  {posF.filtered.length === 0 ? (
+                    <div className="c360-hempty">No purchase orders match the current filters.</div>
+                  ) : (
+                  <table className="od-items-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 150 }}>PO #</th>
+                        <th>Vendor</th>
+                        <th style={{ width: 110 }}>Date</th>
+                        <th style={{ width: 80, textAlign: 'right' }}>Qty</th>
+                        <th style={{ width: 110, textAlign: 'right' }}>Qty Received</th>
+                        <th style={{ width: 100, textAlign: 'right' }}>Unit Price</th>
+                        <th style={{ width: 150, textAlign: 'left' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {posF.paginated.map(r => (
+                        <tr key={r.id} onClick={() => navigate('/procurement/po/' + r.purchase_orders?.id)} style={{ cursor: 'pointer' }}>
+                          <td><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#5b21b6' }}>{r.purchase_orders?.po_number || '—'}</span></td>
+                          <td style={{ fontSize: 13 }}>{r.purchase_orders?.vendor_name || '—'}</td>
+                          <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{fmt(r.purchase_orders?.po_date)}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.qty ?? '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.received_qty ?? '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{inr(r.unit_price)}</td>
+                          <td><StatusBadge status={r.purchase_orders?.status} map={PO_STATUS} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--gray-200)', background: 'var(--gray-50)' }}>
+                        <td colSpan={3} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({posF.filtered.length} rows)</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{posF.filtered.reduce((s, r) => s + (r.qty || 0), 0)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{posF.filtered.reduce((s, r) => s + (r.received_qty || 0), 0)}</td>
+                        <td colSpan={2} />
+                      </tr>
+                    </tfoot>
+                  </table>
+                  )}
+                  <HistoryPager f={posF} />
+                </>
               )}
             </div>
           )}
 
-          {/* ── PO History Tab ── */}
-          {tab === 'pos' && (() => {
-            // Hide cancelled POs from the PO tab display. Cancelled POs still
-            // exist in `pos` (needed for KPIs / totals elsewhere) — only the
-            // list rendering excludes them per user ask (see main PO list for cancelled).
-            const visiblePos = pos.filter(r => r.purchase_orders?.status !== 'cancelled')
-            return (
+          {/* ── GRN History Tab ── */}
+          {tab === 'grns' && (
             <div className="c360-card">
-              {visiblePos.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--gray-400)', fontSize: 13 }}>No purchase orders found for this item.</div>
+              {grns.length === 0 ? (
+                <div className="c360-hempty">No GRNs found for this item.</div>
               ) : (
-                <table className="od-items-table">
-                  <thead>
-                    <tr>
-                      <th>PO #</th>
-                      <th>Vendor</th>
-                      <th>Date</th>
-                      <th style={{ textAlign: 'right' }}>Qty</th>
-                      <th style={{ textAlign: 'right' }}>Qty Received</th>
-                      <th style={{ textAlign: 'right' }}>Unit Price</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visiblePos.map(r => (
-                      <tr key={r.id} onClick={() => navigate('/procurement/po/' + r.purchase_orders?.id)} style={{ cursor: 'pointer' }}>
-                        <td><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#5b21b6' }}>{r.purchase_orders?.po_number || '—'}</span></td>
-                        <td style={{ fontSize: 13 }}>{r.purchase_orders?.vendor_name || '—'}</td>
-                        <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{fmt(r.purchase_orders?.po_date)}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.qty ?? '—'}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.received_qty ?? '—'}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{inr(r.unit_price)}</td>
-                        <td><StatusBadge status={r.purchase_orders?.status} map={PO_STATUS} /></td>
+                <>
+                  <HistoryFilterBar f={grnsF} placeholder="Search GRN # or vendor…" />
+                  {grnsF.filtered.length === 0 ? (
+                    <div className="c360-hempty">No GRNs match the current filters.</div>
+                  ) : (
+                  <table className="od-items-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 150 }}>GRN #</th>
+                        <th>Vendor / Source</th>
+                        <th style={{ width: 120 }}>Type</th>
+                        <th style={{ width: 110 }}>Received</th>
+                        <th style={{ width: 100, textAlign: 'right' }}>Qty Received</th>
+                        <th style={{ width: 90, textAlign: 'right' }}>Accepted</th>
+                        <th style={{ width: 90, textAlign: 'right' }}>Rejected</th>
+                        <th style={{ width: 130, textAlign: 'left' }}>Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid var(--gray-200)', background: 'var(--gray-50)' }}>
-                      <td colSpan={3} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({visiblePos.length} rows)</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{visiblePos.reduce((s, r) => s + (r.qty || 0), 0)}</td>
-                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{visiblePos.reduce((s, r) => s + (r.received_qty || 0), 0)}</td>
-                      <td colSpan={2} />
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody>
+                      {grnsF.paginated.map(r => (
+                        <tr key={r.id} onClick={() => navigate('/fc/grn/' + r.grn?.id)} style={{ cursor: 'pointer' }}>
+                          <td><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#0d9488' }}>{r.grn?.grn_number || '—'}</span></td>
+                          <td style={{ fontSize: 13 }}>{r.grn?.vendor_name || '—'}</td>
+                          <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{GRN_TYPE_LABELS[r.grn?.grn_type] || r.grn?.grn_type?.replace(/_/g, ' ') || '—'}</td>
+                          <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>{fmt(r.grn?.received_at)}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.received_qty ?? '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{r.accepted_qty ?? '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: (r.rejected_qty || 0) > 0 ? '#dc2626' : undefined }}>{r.rejected_qty ?? '—'}</td>
+                          <td><StatusBadge status={r.grn?.status} map={GRN_STATUS} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--gray-200)', background: 'var(--gray-50)' }}>
+                        <td colSpan={4} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gray-600)' }}>Total ({grnsF.filtered.length} rows)</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{grnsF.filtered.reduce((s, r) => s + (r.received_qty || 0), 0)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{grnsF.filtered.reduce((s, r) => s + (r.accepted_qty || 0), 0)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, padding: '8px 12px' }}>{grnsF.filtered.reduce((s, r) => s + (r.rejected_qty || 0), 0)}</td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                  )}
+                  <HistoryPager f={grnsF} />
+                </>
               )}
             </div>
-          )})()}
+          )}
 
           {/* ── Internal Transfers Tab ── */}
           {tab === 'transfers' && (

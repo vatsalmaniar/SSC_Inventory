@@ -6,7 +6,7 @@ import KpiConfigurator from '../components/KpiConfigurator'
 import { currentFyLabel } from '../lib/kpi'
 import '../styles/kpi-dashboard.css'
 
-export default function PeopleKpiConfig() {
+export default function PeopleKpiConfig({ embed = false }) {
   const navigate = useNavigate()
   const [accessDenied, setAccessDenied] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -35,7 +35,7 @@ export default function PeopleKpiConfig() {
     setThresholdsByTeam(tmap)
   }
 
-  if (accessDenied) return (
+  if (accessDenied) return embed ? null : (
     <Layout pageKey="people">
       <div style={{ padding: '80px 32px', maxWidth: 600, margin: '0 auto', textAlign: 'center' }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
@@ -47,12 +47,21 @@ export default function PeopleKpiConfig() {
       </div>
     </Layout>
   )
-  if (loading) return <Layout pageKey="people"><div className="o-loading">Loading…</div></Layout>
+  if (loading) return embed ? <div className="o-loading">Loading…</div> : <Layout pageKey="people"><div className="o-loading">Loading…</div></Layout>
+
+  const body = (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: 600 }}>
+        <KpiConfigurator teams={teams} thresholdsByTeam={thresholdsByTeam} onSaved={loadConfig} />
+      </div>
+    </div>
+  )
+
+  if (embed) return <div className="kpi-app density-comfortable accent-ssc" style={{ padding: 0 }}>{body}</div>
 
   return (
     <Layout pageKey="people">
       <div className="kpi-app density-comfortable accent-ssc">
-        {/* Page head */}
         <div className="page-head">
           <div>
             <button onClick={() => navigate('/people/kpi')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5B6878', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, padding: 0, marginBottom: 4 }}>
@@ -67,17 +76,7 @@ export default function PeopleKpiConfig() {
             <div className="meta-pill"><span className="meta-label">Admin</span><span className="meta-val">Restricted</span></div>
           </div>
         </div>
-
-        {/* Body — full-page card hosting the shared configurator */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', minHeight: 600 }}>
-            <KpiConfigurator
-              teams={teams}
-              thresholdsByTeam={thresholdsByTeam}
-              onSaved={loadConfig}
-            />
-          </div>
-        </div>
+        {body}
       </div>
     </Layout>
   )

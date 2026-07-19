@@ -5,6 +5,8 @@ import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
 import PhoneInput, { PhoneDisplay, isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
+import { useHistoryFilter, HistoryFilterBar, HistoryPager } from '../components/HistoryFilter'
+import { fetchAll } from '../lib/fetchAll'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -117,11 +119,13 @@ export default function CustomerDetail() {
     if (!custRes.data) { navigate('/customers'); return }
 
     const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes] = await Promise.all([
-      sb.from('orders')
+      fetchAll((from, to) => sb.from('orders')
         .select('id,order_number,customer_name,status,order_type,order_items(qty,total_price,unit_price_after_disc,cancelled_qty,line_status),created_at,po_number,order_dispatches(delivered_at)')
         .eq('is_test', false)
         .ilike('customer_name', custRes.data.customer_name)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)),
       sb.from('customer_contacts').select('*').eq('customer_id', id).order('created_at', { ascending: true }),
       sb.from('crm_opportunities')
         .select('id,opportunity_name,stage,estimated_value_inr,quotation_ref,quotation_value_inr,quotation_revision,created_at,brands,profiles(name),crm_principals(name)')
@@ -459,6 +463,13 @@ ${oppsHTML}
     w.onload = () => w.print()
   }
 
+  // ── Order history filter (oldest → newest, cancelled stay visible) ──
+  const orderRowsAsc = [...orders].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+  const ordersF = useHistoryFilter(orderRowsAsc, {
+    dateOf: r => r.created_at,
+    searchOf: r => `${r.order_number || ''} ${r.po_number || ''}`,
+  })
+
   if (loading) return (
     <Layout pageTitle="Customer 360" pageKey="customer360">
       <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
@@ -472,6 +483,7 @@ ${oppsHTML}
 
   const activeOrders    = orders.filter(o => !['cancelled','delivered','dispatched_fc'].includes(o.status))
   const completedOrders = orders.filter(o => ['delivered','dispatched_fc'].includes(o.status))
+  const nonCancelledOrders = orders.filter(o => o.status !== 'cancelled')  // KPI/total counts exclude cancelled
   const totalRevenue    = orders.filter(o => ['delivered','dispatched_fc'].includes(o.status)).reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0), 0)
   const openOpps        = opps.filter(o => !['WON','LOST'].includes(o.stage))
   const quotationOpps   = opps.filter(o => o.quotation_ref)
@@ -482,7 +494,7 @@ ${oppsHTML}
     { key:'summary',       label:'Summary' },
     { key:'contacts',      label:'Contacts',      count: contacts.length },
     { key:'opportunities', label:'Opportunities', count: opps.length },
-    { key:'orders',        label:'Orders',        count: orders.length },
+    { key:'orders',        label:'Orders',        count: nonCancelledOrders.length },
     { key:'visits',        label:'Visits',        count: visits.length },
     { key:'quotations',    label:'Quotations',    count: quotationOpps.length },
   ]
@@ -554,7 +566,7 @@ ${oppsHTML}
             <div className="c360-stats">
               <div className="c360-stat">
                 <span className="c360-stat-label">Total Orders</span>
-                <span className="c360-stat-value">{orders.length}</span>
+                <span className="c360-stat-value">{nonCancelledOrders.length}</span>
               </div>
               <div className="c360-stat">
                 <span className="c360-stat-label">Active</span>
@@ -934,43 +946,51 @@ ${oppsHTML}
             {activeTab === 'orders' && (
               <div className="c360-card">
                 <div className="c360-card-header">
-                  <div className="c360-card-title">Order History ({orders.length})</div>
+                  <div className="c360-card-title">Order History ({nonCancelledOrders.length})</div>
                   <span style={{ fontSize:12, color:'var(--gray-500)', fontWeight:600 }}>Lifetime: {fmtINR(totalRevenue)}</span>
                 </div>
                 {orders.length === 0 ? (
                   <div className="c360-empty"><div className="c360-empty-icon">📦</div>No orders found.</div>
                 ) : (
-                  <table className="c360-table">
-                    <thead>
-                      <tr>
-                        <th>Order #</th>
-                        <th>Type</th>
-                        <th>PO Ref</th>
-                        <th>Status</th>
-                        <th>Order Date</th>
-                        <th>Delivery Date</th>
-                        <th style={{ textAlign:'right' }}>Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orders.map(o => {
-                        const deliveredAt = (o.order_dispatches||[]).map(d=>d.delivered_at).filter(Boolean).sort().pop()
-                        return (
-                        <tr key={o.id} onClick={() => navigate('/orders/'+o.id)} style={{ cursor:'pointer' }}>
-                          <td className="mono">{o.order_number}</td>
-                          <td>{o.order_type==='SO'?'Standard':o.order_type==='CO'?'Custom':'Sample'}</td>
-                          <td style={{ color:'var(--gray-500)', fontSize:12 }}>{o.po_number||'—'}</td>
-                          <td>
-                            <span className={'od-status-badge '+statusBadgeClass(o.status)} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
-                          </td>
-                          <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmt(o.created_at)}</td>
-                          <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{deliveredAt ? fmt(deliveredAt) : '—'}</td>
-                          <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR((o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0))}</td>
+                  <>
+                    <HistoryFilterBar f={ordersF} placeholder="Search order # or PO ref…" />
+                    {ordersF.filtered.length === 0 ? (
+                      <div className="c360-hempty">No orders match the current filters.</div>
+                    ) : (
+                    <table className="c360-table">
+                      <thead>
+                        <tr>
+                          <th>Order #</th>
+                          <th>Type</th>
+                          <th>PO Ref</th>
+                          <th>Status</th>
+                          <th>Order Date</th>
+                          <th>Delivery Date</th>
+                          <th style={{ textAlign:'right' }}>Value</th>
                         </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {ordersF.paginated.map(o => {
+                          const deliveredAt = (o.order_dispatches||[]).map(d=>d.delivered_at).filter(Boolean).sort().pop()
+                          return (
+                          <tr key={o.id} onClick={() => navigate('/orders/'+o.id)} style={{ cursor:'pointer' }}>
+                            <td className="mono">{o.order_number}</td>
+                            <td>{o.order_type==='SO'?'Standard':o.order_type==='CO'?'Custom':'Sample'}</td>
+                            <td style={{ color:'var(--gray-500)', fontSize:12 }}>{o.po_number||'—'}</td>
+                            <td>
+                              <span className={'od-status-badge '+statusBadgeClass(o.status)} style={{ fontSize:10 }}>{statusLabel(o.status)}</span>
+                            </td>
+                            <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmt(o.created_at)}</td>
+                            <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{deliveredAt ? fmt(deliveredAt) : '—'}</td>
+                            <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR((o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0))}</td>
+                          </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    )}
+                    <HistoryPager f={ordersF} />
+                  </>
                 )}
               </div>
             )}

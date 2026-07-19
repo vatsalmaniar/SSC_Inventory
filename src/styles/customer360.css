@@ -319,6 +319,69 @@
 .c360-table tr:hover td { background: var(--gray-50); }
 .c360-table .mono { font-family: var(--mono); font-size: 12px; }
 
+/* ── History filter bar + pager (Order / PO history tabs) ── */
+.c360-hfilter {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.c360-hfilter-timeline {
+  display: inline-flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  background: var(--gray-50); border: 1px solid var(--gray-200);
+  border-radius: 9px; padding: 3px;
+}
+.c360-hfilter-timeline button {
+  background: transparent; border: 0; padding: 7px 14px;
+  font-family: var(--font); font-size: 12px; font-weight: 500;
+  color: var(--gray-500); cursor: pointer; border-radius: 6px;
+  transition: background 0.12s, color 0.12s;
+}
+.c360-hfilter-timeline button:hover { color: var(--gray-800); }
+.c360-hfilter-timeline button.on { background: var(--blue-800); color: #fff; }
+.c360-hfilter-custom { display: inline-flex; align-items: center; gap: 6px; padding-left: 6px; }
+.c360-hfilter-custom span { font-size: 11px; color: var(--gray-500); }
+.c360-hfilter-custom input {
+  border: 1px solid var(--gray-200); border-radius: 6px; padding: 4px 8px;
+  font-family: var(--font); font-size: 12px; color: var(--gray-800); outline: none;
+}
+.c360-hfilter-custom input:focus { border-color: var(--blue-800); }
+/* Search: one bordered pill = icon + input + clear, mirrors the order-list toolbar */
+.c360-hfilter-search {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--gray-200); border-radius: 8px;
+  padding: 6px 10px; background: #fff; color: var(--gray-400);
+  transition: border-color 0.12s;
+}
+.c360-hfilter-search:focus-within { border-color: var(--blue-800); }
+.c360-hfilter-search-ico { width: 15px; height: 15px; flex-shrink: 0; }
+.c360-hfilter-search input {
+  border: 0; background: transparent; outline: none;
+  font-family: var(--font); font-size: 13px; color: var(--gray-800);
+  min-width: 190px; padding: 0;
+}
+.c360-hfilter-clear {
+  background: none; border: 0; color: var(--gray-400);
+  cursor: pointer; font-size: 13px; line-height: 1; padding: 0; flex-shrink: 0;
+}
+.c360-hfilter-clear:hover { color: var(--gray-800); }
+.c360-pager {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--gray-100);
+  font-size: 12px; color: var(--gray-500);
+}
+.c360-pager-btns { display: inline-flex; align-items: center; gap: 4px; }
+.c360-page-btn {
+  min-width: 32px; padding: 5px 10px; border: 1px solid var(--gray-200);
+  background: #fff; border-radius: 7px; font-family: var(--font);
+  font-size: 12.5px; color: var(--gray-600); cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.c360-page-btn:hover:not(:disabled) { border-color: var(--gray-400); }
+.c360-page-btn.on { background: var(--blue-800); color: #fff; border-color: var(--blue-800); font-weight: 600; }
+.c360-page-btn:disabled { color: var(--gray-400); cursor: default; }
+.c360-pager-ell { padding: 0 4px; color: var(--gray-400); }
+.c360-hempty { text-align: center; padding: 32px 20px; color: var(--gray-400); font-size: 13px; }
+
 /* ── Empty state ── */
 .c360-empty {
   text-align: center;

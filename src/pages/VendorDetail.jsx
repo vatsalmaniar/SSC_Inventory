@@ -5,6 +5,8 @@ import { fmt } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import PhoneInput, { PhoneDisplay, isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
+import { useHistoryFilter, HistoryFilterBar, HistoryPager } from '../components/HistoryFilter'
+import { fetchAll } from '../lib/fetchAll'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -75,8 +77,8 @@ export default function VendorDetail() {
     if (!vendorRes.data) { setLoading(false); return }
 
     const [posRes, grnsRes, contactsRes] = await Promise.all([
-      sb.from('purchase_orders').select('id,po_number,status,total_amount,expected_delivery,po_date,order_number').eq('vendor_id', id).order('created_at', { ascending: false }),
-      sb.from('grn').select('id,grn_number,grn_type,status,received_at,invoice_number,invoice_amount').eq('vendor_id', id).order('created_at', { ascending: false }),
+      fetchAll((from, to) => sb.from('purchase_orders').select('id,po_number,status,total_amount,expected_delivery,po_date,order_number').eq('vendor_id', id).order('created_at', { ascending: false }).order('id', { ascending: false }).range(from, to)),
+      fetchAll((from, to) => sb.from('grn').select('id,grn_number,grn_type,status,received_at,invoice_number,invoice_amount').eq('vendor_id', id).order('created_at', { ascending: false }).order('id', { ascending: false }).range(from, to)),
       sb.from('vendor_contacts').select('*').eq('vendor_id', id).order('name'),
     ])
 
@@ -346,6 +348,14 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
     w.onload = () => w.print()
   }
 
+  // ── PO history filter (oldest → newest). Cancelled POs stay hidden, per earlier ask. ──
+  const poRowsAsc = pos.filter(p => p.status !== 'cancelled')
+    .sort((a, b) => new Date(a.po_date || 0) - new Date(b.po_date || 0))
+  const posF = useHistoryFilter(poRowsAsc, {
+    dateOf: p => p.po_date,
+    searchOf: p => `${p.po_number || ''} ${p.order_number || ''}`,
+  })
+
   if (loading) return (
     <Layout pageTitle="Vendor 360" pageKey="vendor360">
       <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
@@ -359,7 +369,8 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
 
   const openPos      = pos.filter(p => !['received','closed','cancelled'].includes(p.status))
   const closedPos    = pos.filter(p => ['received','closed'].includes(p.status))
-  const totalPOValue = pos.filter(p => p.status !== 'cancelled').reduce((s,p) => s + (p.total_amount||0), 0)
+  const nonCancelledPos = pos.filter(p => p.status !== 'cancelled')  // KPI/total counts exclude cancelled
+  const totalPOValue = nonCancelledPos.reduce((s,p) => s + (p.total_amount||0), 0)
   const openPOValue  = openPos.reduce((s,p) => s + (p.total_amount||0), 0)
   const initials     = vendor.vendor_name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
   const avatarBg     = ownerColor(vendor.vendor_name)
@@ -368,7 +379,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
   const tabs = [
     { key:'summary',  label:'Summary' },
     { key:'contacts', label:'Contacts', count: contacts.length },
-    { key:'pos',      label:'Purchase Orders', count: pos.length },
+    { key:'pos',      label:'Purchase Orders', count: nonCancelledPos.length },
     { key:'grns',     label:'GRNs', count: grns.length },
   ]
 
@@ -418,7 +429,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
             <div className="c360-stats">
               <div className="c360-stat">
                 <span className="c360-stat-label">Total POs</span>
-                <span className="c360-stat-value">{pos.length}</span>
+                <span className="c360-stat-value">{nonCancelledPos.length}</span>
               </div>
               <div className="c360-stat">
                 <span className="c360-stat-label">Open POs</span>
@@ -720,38 +731,46 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
             {activeTab === 'pos' && (
               <div className="c360-card">
                 <div className="c360-card-header">
-                  <div className="c360-card-title">Purchase Orders ({pos.length})</div>
+                  <div className="c360-card-title">Purchase Orders ({nonCancelledPos.length})</div>
                   <span style={{ fontSize:12, color:'var(--gray-500)', fontWeight:600 }}>Total: {fmtINR(totalPOValue)}</span>
                 </div>
-                {pos.length === 0 ? (
+                {poRowsAsc.length === 0 ? (
                   <div className="c360-empty"><div className="c360-empty-icon">📋</div>No purchase orders found.</div>
                 ) : (
-                  <table className="c360-table">
-                    <thead>
-                      <tr>
-                        <th>PO Number</th>
-                        <th>Linked Order</th>
-                        <th>Status</th>
-                        <th>PO Date</th>
-                        <th>Expected Delivery</th>
-                        <th style={{ textAlign:'right' }}>Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pos.filter(p => p.status !== 'cancelled').map(p => (
-                        <tr key={p.id} onClick={() => navigate('/procurement/po/'+p.id)} style={{ cursor:'pointer' }}>
-                          <td className="mono" style={{ color:'#1a73e8', fontWeight:700 }}>{p.po_number}</td>
-                          <td style={{ fontSize:12, color:'var(--gray-500)' }}>{p.order_number||'—'}</td>
-                          <td>
-                            <span className={'od-status-badge '+poStatusClass(p.status)} style={{ fontSize:10 }}>{poStatusLabel(p.status)}</span>
-                          </td>
-                          <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmt(p.po_date)}</td>
-                          <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{p.expected_delivery?fmt(p.expected_delivery):'—'}</td>
-                          <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR(p.total_amount)}</td>
+                  <>
+                    <HistoryFilterBar f={posF} placeholder="Search PO # or linked order…" />
+                    {posF.filtered.length === 0 ? (
+                      <div className="c360-hempty">No purchase orders match the current filters.</div>
+                    ) : (
+                    <table className="c360-table">
+                      <thead>
+                        <tr>
+                          <th>PO Number</th>
+                          <th>Linked Order</th>
+                          <th>Status</th>
+                          <th>PO Date</th>
+                          <th>Expected Delivery</th>
+                          <th style={{ textAlign:'right' }}>Value</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {posF.paginated.map(p => (
+                          <tr key={p.id} onClick={() => navigate('/procurement/po/'+p.id)} style={{ cursor:'pointer' }}>
+                            <td className="mono" style={{ color:'#1a73e8', fontWeight:700 }}>{p.po_number}</td>
+                            <td style={{ fontSize:12, color:'var(--gray-500)' }}>{p.order_number||'—'}</td>
+                            <td>
+                              <span className={'od-status-badge '+poStatusClass(p.status)} style={{ fontSize:10 }}>{poStatusLabel(p.status)}</span>
+                            </td>
+                            <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmt(p.po_date)}</td>
+                            <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{p.expected_delivery?fmt(p.expected_delivery):'—'}</td>
+                            <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR(p.total_amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    )}
+                    <HistoryPager f={posF} />
+                  </>
                 )}
               </div>
             )}
