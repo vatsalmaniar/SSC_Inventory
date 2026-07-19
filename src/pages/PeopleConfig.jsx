@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
+import { Spinner } from '../components/PeopleLoaders'
+import '../styles/people.css'
 import PeopleKpiConfig from './PeopleKpiConfig'
 import PeopleExpensesConfig from './PeopleExpensesConfig'
 import '../styles/kpi-dashboard.css'
@@ -34,7 +36,7 @@ export default function PeopleConfig() {
       </div>
     </Layout>
   )
-  if (loading) return <Layout pageKey="people" pageTitle="Configuration"><div className="o-loading">Loading…</div></Layout>
+  if (loading) return <Layout pageKey="people" pageTitle="Configuration"><div className="people-app"><Spinner /></div></Layout>
 
   const TABS = [
     { k:'kpi', l:'KRA / KPI', d:'Scoring thresholds, hero products & targets' },

@@ -6,6 +6,7 @@ import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
 import Layout from '../components/Layout'
+import { ProfileSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
 
 const DEPT_HEX = { 'Management':'#6D28D9','Sales':'#1E54B7','Operation & Support':'#0E7C6B','Opeartion & Support':'#0E7C6B','Account':'#C2255C','Back Office':'#8C99A8','People & Culture':'#C2255C' }
@@ -196,7 +197,7 @@ export default function EmployeeDetail() {
     catch (e) { toast(e?.message||friendlyError(e),'error') }
   }
 
-  if (loading) return <Layout pageKey="people" pageTitle="Employee"><div className="people-app"><div className="e-empty">Loading…</div></div></Layout>
+  if (loading) return <Layout pageKey="people" pageTitle="Employee"><div className="people-app"><ProfileSkeleton /></div></Layout>
   if (notFound || !emp) return (
     <Layout pageKey="people" pageTitle="Employee"><div className="people-app"><div className="e-empty">Employee not found. <button className="btn btn-neutral btn-sm" onClick={()=>navigate('/people/team')}>← Team</button></div></div></Layout>
   )

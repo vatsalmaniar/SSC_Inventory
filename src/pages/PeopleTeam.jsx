@@ -5,6 +5,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import Layout from '../components/Layout'
+import { TeamSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
 
 function Drawer({ title, sub, onClose, children, footer }) {
@@ -122,6 +123,8 @@ export default function PeopleTeam() {
   const Sel = ({ value, onChange, children }) => (
     <div className="f-sel"><select value={value} onChange={e=>onChange(e.target.value)}>{children}</select></div>
   )
+
+  if (loading) return <Layout pageKey="people" pageTitle="Team"><div className="people-app"><TeamSkeleton /></div></Layout>
 
   return (
     <Layout pageKey="people" pageTitle="Team">

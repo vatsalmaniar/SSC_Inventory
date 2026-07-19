@@ -5,6 +5,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import Layout from '../components/Layout'
+import { Spinner } from '../components/PeopleLoaders'
 import '../styles/people.css'
 
 const DEPT_HEX = { 'Management':'#6D28D9','Sales':'#1E54B7','Operation & Support':'#0E7C6B','Opeartion & Support':'#0E7C6B','Account':'#C2255C','Back Office':'#8C99A8','People & Culture':'#C2255C' }
@@ -84,7 +85,7 @@ export default function PeopleOrg() {
     catch (e) { toast(e?.message||friendlyError(e),'error') }
   }
 
-  if (loading) return <Layout pageKey="people" pageTitle="Org Chart"><div className="people-app"><div className="e-empty">Loading org chart…</div></div></Layout>
+  if (loading) return <Layout pageKey="people" pageTitle="Org Chart"><div className="people-app"><Spinner label="Loading org chart…" /></div></Layout>
 
   return (
     <Layout pageKey="people" pageTitle="Org Chart">

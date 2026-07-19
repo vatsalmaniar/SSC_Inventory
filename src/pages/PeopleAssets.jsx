@@ -5,6 +5,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import Layout from '../components/Layout'
+import { AssetsSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
 
 const TYPES = ['Laptop','Desktop','Mobile','Tablet','Monitor','Printer','Scanner','SIM','Other']
@@ -141,7 +142,7 @@ export default function PeopleAssets() {
   if (denied) return (
     <Layout pageKey="people" pageTitle="Assets"><div className="people-app"><div className="e-empty">This page is restricted to Admin &amp; Management.</div></div></Layout>
   )
-  if (loading) return <Layout pageKey="people" pageTitle="Assets"><div className="people-app"><div className="e-empty">Loading devices…</div></div></Layout>
+  if (loading) return <Layout pageKey="people" pageTitle="Assets"><div className="people-app"><AssetsSkeleton /></div></Layout>
 
   const Sel = ({ value, onChange, children }) => <div className="f-sel"><select value={value} onChange={e=>onChange(e.target.value)}>{children}</select></div>
 

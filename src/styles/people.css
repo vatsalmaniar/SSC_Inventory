@@ -342,3 +342,20 @@
 .people-app .tbl-wrap{ max-width:100%; }
 .people-app .pv{ min-width:0; }
 .people-app .pmain{ min-width:0; overflow-x:hidden; }
+
+/* ── Loading states ── */
+@keyframes p-shimmer{0%{background-position:-450px 0}100%{background-position:450px 0}}
+@keyframes p-spin{to{transform:rotate(360deg)}}
+.people-app .skel{background:linear-gradient(90deg,#eef1f5 25%,#f6f8fb 50%,#eef1f5 75%);background-size:900px 100%;animation:p-shimmer 1.15s infinite linear;border-radius:7px;}
+.people-app .p-spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:p-spin .7s linear infinite;}
+.people-app .p-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:80px 20px;color:var(--muted);font-size:13px;}
+/* skeleton table row matching etbl grid */
+.people-app .skel-row{display:grid;grid-template-columns:64px minmax(190px,1.5fr) 150px minmax(150px,1fr) 130px 120px 108px 68px;gap:14px;align-items:center;padding:13px 22px;border-bottom:1px solid var(--line-2);}
+.people-app .skel-row:last-child{border-bottom:0;}
+.people-app .skel-av{width:36px;height:36px;border-radius:50%;}
+.people-app .skel-line{height:12px;}
+/* skeleton asset row */
+.people-app .skel-arow{display:grid;grid-template-columns:150px minmax(160px,1.5fr) 120px 150px 120px minmax(160px,1fr) 90px;gap:14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line-2);}
+/* profile skeleton */
+.people-app .skel-cover{height:190px;border-radius:16px;}
+.people-app .skel-card{height:160px;border-radius:14px;}
