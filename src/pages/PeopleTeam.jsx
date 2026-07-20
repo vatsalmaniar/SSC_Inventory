@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
+import { signPhotos } from '../lib/photos'
 import Layout from '../components/Layout'
 import { TeamSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
@@ -64,12 +65,14 @@ export default function PeopleTeam() {
     ])
     const roleById = {}; (profs.data || []).forEach(p => { roleById[p.id] = p })
     const heldCount = {}; (held.data || []).forEach(a => { heldCount[a.employee_id] = (heldCount[a.employee_id]||0)+1 })
-    setRows((emp.data || []).map(e => ({
+    const built = (emp.data || []).map(e => ({
       ...e,
       role: e.profile_id ? roleById[e.profile_id]?.role : null,
       username: e.profile_id ? roleById[e.profile_id]?.username : null,
       assets: heldCount[e.id] || 0,
-    })))
+    }))
+    await signPhotos(built)
+    setRows(built)
   }
 
   async function addMember() {
@@ -179,7 +182,7 @@ export default function PeopleTeam() {
                     <div key={e.id} className="etbl-row" onClick={()=>navigate('/people/team/'+e.id)}>
                       <div className="e-id">{e.employee_code || '—'}</div>
                       <div className="e-name-cell">
-                        <div className="avatar av-36" style={{background:ownerColor(e.full_name), filter: st==='exited'?'grayscale(.5)':'none'}}>{initials(e.full_name)}</div>
+                        <div className="avatar av-36" style={e.signedPhoto?{backgroundImage:`url(${e.signedPhoto})`,backgroundSize:'cover',backgroundPosition:'center',filter:st==='exited'?'grayscale(.5)':'none'}:{background:ownerColor(e.full_name), filter: st==='exited'?'grayscale(.5)':'none'}}>{e.signedPhoto?'':initials(e.full_name)}</div>
                         <div className="e-nm">
                           <div className="e-nm-name">{e.full_name}</div>
                           <div className="e-nm-user">{e.username || 'no login'}</div>

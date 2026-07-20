@@ -6,6 +6,7 @@ import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc, deliveryDateIssue, deliveryDateMax } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
+import { usePeopleDir } from '../components/PeopleAvatar'
 import '../styles/orderdetail.css'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -26,7 +27,7 @@ const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','goods_issued
 
 const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
-function OwnerChip({name}) { if(!name) return '—'; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:26,height:26,borderRadius:'50%',background:ownerColor(name),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ini}</div><span style={{fontSize:13,fontWeight:500}}>{name}</span></div> }
+function OwnerChip({name}) { const _p=usePeopleDir()[(name||'').trim().toLowerCase()]; if(!name) return '—'; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:26,height:26,borderRadius:'50%',...(_p?{backgroundImage:'url('+_p+')',backgroundSize:'cover',backgroundPosition:'center'}:{background:ownerColor(name)}),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{_p?'':ini}</div><span style={{fontSize:13,fontWeight:500}}>{name}</span></div> }
 
 function emptyItem() {
   return { _new: true, item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '', description: '' }

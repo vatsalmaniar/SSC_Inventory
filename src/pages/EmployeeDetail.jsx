@@ -5,6 +5,8 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
+import { signPhotos } from '../lib/photos'
+import PhotoCropper from '../components/PhotoCropper'
 import Layout from '../components/Layout'
 import { ProfileSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
@@ -74,6 +76,8 @@ export default function EmployeeDetail() {
   const [showEdit, setShowEdit] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [photoSigned, setPhotoSigned] = useState('')
+  const [cropSrc, setCropSrc] = useState('')
   const guard = useRef(false)
 
   const isAdmin = role === 'admin'
@@ -84,6 +88,13 @@ export default function EmployeeDetail() {
   const canKPI = isMgmt || isSelf
 
   useEffect(() => { init() }, [id])   // eslint-disable-line
+  useEffect(() => {
+    const p = emp?.photo_url
+    if (!p) { setPhotoSigned(''); return }
+    if (/^https?:\/\//.test(p)) { setPhotoSigned(p); return }  // legacy public URL fallback
+    sb.storage.from('employee-photos').createSignedUrl(p, 3600)
+      .then(({ data }) => setPhotoSigned(data?.signedUrl || '')).catch(() => setPhotoSigned(''))
+  }, [emp?.photo_url])
 
   async function init() {
     setLoading(true); setNotFound(false)
@@ -106,11 +117,18 @@ export default function EmployeeDetail() {
       e.profile_id ? sb.from('profiles').select('id,username,role').eq('id', e.profile_id).maybeSingle() : Promise.resolve({data:null}),
       sb.from('employees').select('id,full_name,designation,department,reporting_manager_id,profile_id,lifecycle_status').eq('is_test', false),
       sb.from('employee_compensation').select('*').eq('employee_id', id).order('fy_label',{ascending:false}),
-      sb.from('asset_assignments').select('*, asset:assets(*)').eq('employee_id', id).is('assigned_to', null),
+      sb.from('asset_assignments').select('*').eq('employee_id', id).is('assigned_to', null),
       sb.from('employee_documents').select('*').eq('employee_id', id),
     ])
-    setPriv(pv?.data || null); setProfile(pr?.data || null); setAllEmps(all?.data || [])
-    setComp(cp?.data || []); setAssign(aa?.data || []); setDocs(dc?.data || [])
+    const allRows = all?.data || []; await signPhotos(allRows)
+    setPriv(pv?.data || null); setProfile(pr?.data || null); setAllEmps(allRows)
+    setComp(cp?.data || []); setDocs(dc?.data || [])
+    // device details come from the masked view (serial/MAC/IDs -> •••• for non admin/mgmt)
+    const assignRows = aa?.data || []
+    const aIds = assignRows.map(x => x.asset_id)
+    let avById = {}
+    if (aIds.length) { const { data: av } = await sb.from('assets_view').select('*').in('id', aIds); (av || []).forEach(x => { avById[x.id] = x }) }
+    setAssign(assignRows.map(x => ({ ...x, asset: avById[x.asset_id] || null })))
     if (e.profile_id) {
       const { data: k } = await sb.from('kpi_assignments').select('*').eq('profile_id', e.profile_id).eq('is_active', true).order('fy_label',{ascending:false}).limit(1).maybeSingle()
       setKpi(k || null)
@@ -141,16 +159,20 @@ export default function EmployeeDetail() {
     try { await sb.from('employees').update({ reporting_manager_id: newId || null }).eq('id', emp.id); toast('Reporting manager updated.','success'); await load(role) }
     catch (e) { toast(e?.message||friendlyError(e),'error') }
   }
-  async function onPhoto(ev) {
+  function onPhoto(ev) {
     const file = ev.target.files?.[0]; if (!file) return
-    setUploading(true)
+    const reader = new FileReader()
+    reader.onload = () => setCropSrc(reader.result)
+    reader.readAsDataURL(file)
+    ev.target.value = ''  // allow re-selecting the same file
+  }
+  async function uploadCropped(blob) {
+    setCropSrc(''); setUploading(true)
     try {
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
-      const path = `${emp.id}/photo_${Date.now()}.${ext}`
-      const { error: upErr } = await sb.storage.from('employee-photos').upload(path, file, { upsert: true })
+      const path = `${emp.id}/photo_${Date.now()}.jpg`
+      const { error: upErr } = await sb.storage.from('employee-photos').upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
       if (upErr) throw upErr
-      const { data: { publicUrl } } = sb.storage.from('employee-photos').getPublicUrl(path)
-      await sb.from('employees').update({ photo_url: publicUrl }).eq('id', emp.id)
+      await sb.from('employees').update({ photo_url: path }).eq('id', emp.id)
       toast('Photo updated.', 'success'); await load(role)
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { setUploading(false) }
@@ -232,11 +254,11 @@ export default function EmployeeDetail() {
               <div className="pcover-av">
                 {isMgmt ? (
                   <label className="photo-slot" title={uploading?'Uploading…':'Upload photo'}>
-                    <Avatar name={emp.full_name} cls="av-cover" exited={st==='exited'} photo={emp.photo_url} />
+                    <Avatar name={emp.full_name} cls="av-cover" exited={st==='exited'} photo={photoSigned} />
                     <span className="photo-edit"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12l7-7 3 3-7 7H2z"/><path d="M9 4l2-2 2 2-2 2"/></svg></span>
                     <input type="file" accept="image/*" onChange={onPhoto} />
                   </label>
-                ) : <Avatar name={emp.full_name} cls="av-cover" exited={st==='exited'} photo={emp.photo_url} />}
+                ) : <Avatar name={emp.full_name} cls="av-cover" exited={st==='exited'} photo={photoSigned} />}
               </div>
               <div className="pcover-id">
                 <h1 className="pcover-name">{emp.full_name}</h1>
@@ -270,10 +292,10 @@ export default function EmployeeDetail() {
               <div className="pcard-h"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="4" r="2.2"/><path d="M3.5 13.5c0-2.2 2-3.6 4.5-3.6s4.5 1.4 4.5 3.6"/></svg>Reporting Line</div>
               <div className="chain">
                 {mgr ? (
-                  <><button className="chain-node up" onClick={()=>navigate('/people/team/'+mgr.id)}><Avatar name={mgr.full_name} cls="av-28" /><div className="cn-txt"><div className="cn-name">{mgr.full_name}</div><div className="cn-role">Manager · {mgr.designation||'—'}</div></div></button><div className="chain-link" /></>
+                  <><button className="chain-node up" onClick={()=>navigate('/people/team/'+mgr.id)}><Avatar name={mgr.full_name} cls="av-28" photo={mgr.signedPhoto} /><div className="cn-txt"><div className="cn-name">{mgr.full_name}</div><div className="cn-role">Manager · {mgr.designation||'—'}</div></div></button><div className="chain-link" /></>
                 ) : <div className="chain-top">Top of organisation</div>}
-                <div className="chain-node me"><Avatar name={emp.full_name} cls="av-28" /><div className="cn-txt"><div className="cn-name">{emp.full_name}</div><div className="cn-role">{emp.designation||'—'}</div></div></div>
-                {reports.length ? <><div className="chain-link" /><div className="chain-reps">{reports.slice(0,8).map(r=><span key={r.id} title={r.full_name} onClick={()=>navigate('/people/team/'+r.id)}><Avatar name={r.full_name} cls="av-28" /></span>)}{reports.length>8 && <span className="chain-more">+{reports.length-8}</span>}</div></> : <div className="chain-empty">No direct reports</div>}
+                <div className="chain-node me"><Avatar name={emp.full_name} cls="av-28" photo={photoSigned} /><div className="cn-txt"><div className="cn-name">{emp.full_name}</div><div className="cn-role">{emp.designation||'—'}</div></div></div>
+                {reports.length ? <><div className="chain-link" /><div className="chain-reps">{reports.slice(0,8).map(r=><span key={r.id} title={r.full_name} onClick={()=>navigate('/people/team/'+r.id)}><Avatar name={r.full_name} cls="av-28" photo={r.signedPhoto} /></span>)}{reports.length>8 && <span className="chain-more">+{reports.length-8}</span>}</div></> : <div className="chain-empty">No direct reports</div>}
                 {isMgmt && (
                   <div className="chain-reassign"><span className="ra-l">Reassign manager</span>
                     <select className="rm-sel" value={emp.reporting_manager_id||''} onChange={e=>reassignManager(e.target.value)}>
@@ -478,6 +500,8 @@ export default function EmployeeDetail() {
           </>}
         </EditDrawer>
       )}
+
+      {cropSrc && <PhotoCropper src={cropSrc} onCancel={() => setCropSrc('')} onDone={uploadCropped} />}
     </Layout>
   )
 }

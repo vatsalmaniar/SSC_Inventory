@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import PeopleAvatar from '../components/PeopleAvatar'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
@@ -407,7 +408,7 @@ export default function PurchaseOrderList() {
                       <div className="ol-cell">
                         {po.submitted_by_name ? (
                           <div className="ol-owner" title={po.submitted_by_name}>
-                            <div className="ol-owner-avatar" style={{background: ownerColor(po.submitted_by_name)}}>{initials(po.submitted_by_name)}</div>
+                            <PeopleAvatar name={po.submitted_by_name} className="ol-owner-avatar" />
                             <span className="ol-owner-name">{po.submitted_by_name}</span>
                           </div>
                         ) : <span style={{color:'var(--o-muted-2)'}}>—</span>}

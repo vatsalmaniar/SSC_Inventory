@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
+import { signPhotos } from '../lib/photos'
 import Layout from '../components/Layout'
 import { AssetsSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
@@ -97,11 +98,12 @@ export default function PeopleAssets() {
   async function load() {
     const [as, aa, em] = await Promise.all([
       sb.from('assets').select('*').eq('is_test', false).order('asset_tag'),
-      sb.from('asset_assignments').select('id,asset_id,employee_id,employee:employees(full_name)').is('assigned_to', null),
+      sb.from('asset_assignments').select('id,asset_id,employee_id,employee:employees(full_name,photo_url)').is('assigned_to', null),
       sb.from('employees').select('id,full_name,department').neq('lifecycle_status','exited').order('full_name'),
     ])
     setAssets(as.data || [])
-    const h = {}; (aa.data || []).forEach(x => { h[x.asset_id] = { employee_id:x.employee_id, name:x.employee?.full_name || '—', assignment_id:x.id } })
+    const h = {}; (aa.data || []).forEach(x => { h[x.asset_id] = { employee_id:x.employee_id, name:x.employee?.full_name || '—', photo_url:x.employee?.photo_url || null, assignment_id:x.id } })
+    await signPhotos(Object.values(h))
     setHolders(h)
     setEmps(em.data || [])
   }
@@ -265,7 +267,7 @@ export default function PeopleAssets() {
                     </div>
                     <div>
                       {h ? (
-                        <span className="a-holder"><span className="avatar av-28" style={{background:ownerColor(h.name)}}>{initials(h.name)}</span>{h.name}</span>
+                        <span className="a-holder"><span className="avatar av-28" style={h.signedPhoto?{backgroundImage:`url(${h.signedPhoto})`,backgroundSize:'cover',backgroundPosition:'center'}:{background:ownerColor(h.name)}}>{h.signedPhoto?'':initials(h.name)}</span>{h.name}</span>
                       ) : <span className="a-unassigned">Unassigned</span>}
                     </div>
                     <div style={{textAlign:'right',whiteSpace:'nowrap'}}>

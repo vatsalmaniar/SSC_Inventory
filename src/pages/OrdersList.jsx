@@ -6,6 +6,7 @@ import { fetchAll } from '../lib/fetchAll'
 import { orderNetValue, ordersTotalValue } from '../lib/orderValue'
 import { xlsStatusStyle, xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
+import PeopleAvatar from '../components/PeopleAvatar'
 import '../styles/orders-redesign.css'
 
 const REP_PALETTE = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
@@ -15,7 +16,7 @@ function OwnerChip({ name }) {
   if (!name) return <span style={{color:'var(--o-muted-2)'}}>—</span>
   return (
     <div className="ol-owner" title={name}>
-      <div className="ol-owner-avatar" style={{background: ownerColor(name)}}>{initials(name)}</div>
+      <PeopleAvatar name={name} className="ol-owner-avatar" />
       <span className="ol-owner-name">{name}</span>
     </div>
   )

@@ -7,6 +7,7 @@ import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
+import { usePeopleDir } from '../components/PeopleAvatar'
 import '../styles/orderdetail.css'
 import '../styles/neworder.css'
 
@@ -29,11 +30,12 @@ const FC_OPTIONS = ['Kaveri','Godawari']
 const AVATAR_COLORS = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
 function ownerColor(name) { let h=0; for(let i=0;i<name.length;i++) h=name.charCodeAt(i)+((h<<5)-h); return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length] }
 function OwnerChip({ name }) {
+  const _p=usePeopleDir()[(name||'').trim().toLowerCase()];
   if (!name) return <span style={{ color:'var(--gray-300)' }}>—</span>
   const ini = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-      <div style={{ width:28, height:28, borderRadius:'50%', background:ownerColor(name), color:'white', fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ini}</div>
+      <div style={{ width:28, height:28, borderRadius:'50%', ...(_p?{backgroundImage:'url('+_p+')',backgroundSize:'cover',backgroundPosition:'center'}:{background:ownerColor(name)}), color:'white', fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{_p?'':ini}</div>
       <span style={{ fontSize:13, fontWeight:500, color:'var(--gray-800)' }}>{name}</span>
     </div>
   )

@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import PeopleAvatar from '../components/PeopleAvatar'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
 
@@ -473,7 +474,7 @@ export default function GRNList() {
                     <div className="ol-cell">
                       {g.received_by ? (
                         <div className="ol-owner" title={g.received_by}>
-                          <div className="ol-owner-avatar" style={{background: ownerColor(g.received_by)}}>{initials(g.received_by)}</div>
+                          <PeopleAvatar name={g.received_by} className="ol-owner-avatar" />
                           <span className="ol-owner-name">{g.received_by}</span>
                         </div>
                       ) : <span style={{color:'var(--o-muted-2)'}}>—</span>}

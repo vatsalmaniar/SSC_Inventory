@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
+import { signPhotos } from '../lib/photos'
 import Layout from '../components/Layout'
 import { Spinner } from '../components/PeopleLoaders'
 import '../styles/people.css'
@@ -13,7 +14,7 @@ const AVATAR_COLORS = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185
 function ownerColor(n='') { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length] }
 function initials(n='') { return n.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2) || '??' }
 function deptColor(d) { return DEPT_HEX[d] || '#5B738B' }
-const Avatar = ({ e, cls }) => <div className={'avatar '+cls} style={e.photo_url?{backgroundImage:`url(${e.photo_url})`,backgroundSize:'cover',backgroundPosition:'center'}:{background:ownerColor(e.full_name)}}>{e.photo_url?'':initials(e.full_name)}</div>
+const Avatar = ({ e, cls }) => <div className={'avatar '+cls} style={e.signedPhoto?{backgroundImage:`url(${e.signedPhoto})`,backgroundSize:'cover',backgroundPosition:'center'}:{background:ownerColor(e.full_name)}}>{e.signedPhoto?'':initials(e.full_name)}</div>
 const Pin = () => <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M6 1.3C4 1.3 2.8 2.8 2.8 4.4 2.8 6.6 6 10.5 6 10.5S9.2 6.6 9.2 4.4C9.2 2.8 8 1.3 6 1.3Z"/><circle cx="6" cy="4.3" r="1.1"/></svg>
 
 function OrgNode({ emp, childrenOf, depth, sel, onSelect, expanded, toggle }) {
@@ -56,7 +57,9 @@ export default function PeopleOrg() {
     const { data: p } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     setRole(p?.role || '')
     const { data } = await sb.from('employees').select('id,full_name,designation,department,branch,reporting_manager_id,lifecycle_status,photo_url').eq('is_test', false)
-    setEmps(data || [])
+    const list = data || []
+    await signPhotos(list)
+    setEmps(list)
     setLoading(false)
   }
 
