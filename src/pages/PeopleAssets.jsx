@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import QRCode from 'qrcode'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -11,6 +12,18 @@ import '../styles/people.css'
 const TYPES = ['Laptop','Desktop','Mobile','Tablet','Monitor','Printer','Scanner','SIM','Other']
 const STICKERS = ['Asset Tag','QR Code','Barcode','None']
 const PREFIX = { Laptop:'LAP', Desktop:'DSK', Mobile:'MOB', Tablet:'TAB', Monitor:'MON', Printer:'PRN', Scanner:'SCN', SIM:'SIM', Other:'AST' }
+// Windows system-info fields (Laptop / Desktop) — labels kept as shown in Windows.
+const SPEC_FIELDS = [
+  ['device_name','Device name'], ['full_device_name','Full device name'],
+  ['processor','Processor'], ['installed_ram','Installed RAM'],
+  ['device_id','Device ID'], ['product_id','Product ID'],
+  ['system_type','System type'], ['os_edition','Edition'],
+  ['os_version','Version'], ['os_build','OS build'],
+  ['os_installed_on','Installed on'], ['windows_experience','Experience'],
+  ['pen_touch','Pen and touch'],
+]
+const EMPTY_SPEC = Object.fromEntries(SPEC_FIELDS.map(([k]) => [k, '']))
+const HAS_SPECS = t => t === 'Laptop' || t === 'Desktop'
 const AVATAR_COLORS = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
 function ownerColor(n='') { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length] }
 function initials(n='') { return n.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2) || '??' }
@@ -29,11 +42,49 @@ export default function PeopleAssets() {
   const [fAssigned, setFAssigned] = useState('all')  // all | assigned | free
   const [showAdd, setShowAdd] = useState(false)
   const [assignFor, setAssignFor] = useState(null)   // asset object being assigned
-  const [addForm, setAddForm] = useState({ asset_tag:'', name:'', asset_type:'Laptop', make_model:'', serial_no:'', mac_id:'', sticker_type:'Asset Tag' })
+  const [selDevice, setSelDevice] = useState(null)   // asset object for detail view
+  const [qr, setQr] = useState('')
+  const [addForm, setAddForm] = useState({ asset_tag:'', name:'', asset_type:'Laptop', make_model:'', serial_no:'', mac_id:'', manufacturer:'', ...EMPTY_SPEC, sticker_type:'QR Code' })
   const [assignForm, setAssignForm] = useState({ employee_id:'', reason:'' })
   const guard = useRef(false)
 
   useEffect(() => { init() }, [])
+  useEffect(() => {
+    if (!selDevice) { setQr(''); return }
+    const payload = `${window.location.origin}/people/assets?tag=${encodeURIComponent(selDevice.asset_tag)}`
+    QRCode.toDataURL(payload, { margin: 1, width: 320, errorCorrectionLevel: 'M' }).then(setQr).catch(() => setQr(''))
+  }, [selDevice])
+
+  function printLabel(a) {
+    if (!qr) return
+    const w = window.open('', '_blank', 'width=560,height=300')
+    if (!w) { toast('Allow pop-ups to print the label.', 'error'); return }
+    const esc = s => String(s || '').replace(/</g, '&lt;')
+    w.document.write(`<!doctype html><html><head><title>${esc(a.asset_tag)}</title><style>
+      *{margin:0;box-sizing:border-box;font-family:'Geist','DM Sans',system-ui,sans-serif}
+      @page{size:100mm 44mm;margin:0}
+      html,body{width:100mm;height:44mm}
+      .label{width:100mm;height:44mm;display:flex;align-items:center;gap:3.5mm;padding:3mm 4mm}
+      .qr{width:38mm;height:38mm;flex-shrink:0}
+      .qr img{width:100%;height:100%;display:block}
+      .info{flex:1;min-width:0;overflow:hidden}
+      .tag{font-family:'Geist Mono',monospace;font-size:19pt;font-weight:700;color:#0A2540;letter-spacing:.5px;line-height:1}
+      .nm{font-size:10pt;color:#1D2D3E;margin-top:2mm;line-height:1.15}
+      .sub{font-size:8pt;color:#5B738B;font-family:'Geist Mono',monospace;margin-top:1.5mm}
+      .co{font-size:7pt;color:#8C99A8;letter-spacing:.12em;margin-top:2mm}
+    </style></head><body onload="window.print()">
+      <div class="label">
+        <div class="qr"><img src="${qr}"/></div>
+        <div class="info">
+          <div class="tag">${esc(a.asset_tag)}</div>
+          <div class="nm">${esc(a.name || a.make_model || a.asset_type)}</div>
+          ${a.serial_no ? `<div class="sub">S/N ${esc(a.serial_no)}</div>` : ''}
+          <div class="co">SSC CONTROL PVT. LTD.</div>
+        </div>
+      </div>
+    </body></html>`)
+    w.document.close()
+  }
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -76,7 +127,7 @@ export default function PeopleAssets() {
     return 'SSC-' + pfx + '-' + String(max + 1).padStart(3, '0')
   }
   function openAdd() {
-    setAddForm({ asset_tag: nextTag('Laptop'), name:'', asset_type:'Laptop', make_model:'', serial_no:'', mac_id:'', sticker_type:'Asset Tag' })
+    setAddForm({ asset_tag: nextTag('Laptop'), name:'', asset_type:'Laptop', make_model:'', serial_no:'', mac_id:'', manufacturer:'', ...EMPTY_SPEC, sticker_type:'QR Code' })
     setShowAdd(true)
   }
 
@@ -95,12 +146,13 @@ export default function PeopleAssets() {
       const { error } = await sb.from('assets').insert({
         asset_tag: addForm.asset_tag.trim(), name: addForm.name.trim() || null, asset_type: addForm.asset_type,
         make_model: addForm.make_model.trim() || null, serial_no: addForm.serial_no.trim() || null,
-        mac_id: addForm.mac_id.trim() || null,
+        mac_id: addForm.mac_id.trim() || null, manufacturer: addForm.manufacturer.trim() || null,
+        ...Object.fromEntries(SPEC_FIELDS.map(([k]) => [k, (addForm[k] || '').trim() || null])),
         sticker_type: addForm.sticker_type, status:'spare', condition:'returned',
       })
       if (error) throw error
       toast('Device added to register.', 'success')
-      setShowAdd(false); setAddForm({ asset_tag:'', name:'', asset_type:'Laptop', make_model:'', serial_no:'', mac_id:'', sticker_type:'Asset Tag' })
+      setShowAdd(false); setAddForm({ asset_tag:'', name:'', asset_type:'Laptop', make_model:'', serial_no:'', mac_id:'', manufacturer:'', ...EMPTY_SPEC, sticker_type:'QR Code' })
       await load()
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { guard.current = false }
@@ -191,7 +243,7 @@ export default function PeopleAssets() {
               ) : filtered.map(a => {
                 const h = holders[a.id]
                 return (
-                  <div key={a.id} className="arow">
+                  <div key={a.id} className="arow" style={{cursor:'pointer'}} onClick={()=>setSelDevice(a)}>
                     <div className="arow-tag">{a.asset_tag}</div>
                     <div className="arow-nm">
                       <div className="arow-ico"><DeviceIcon /></div>
@@ -206,7 +258,7 @@ export default function PeopleAssets() {
                     </div>
                     <div>
                       <div className="f-sel" style={{display:'inline-block'}}>
-                        <select value={a.condition||'returned'} onChange={e=>setCondition(a, e.target.value)} style={{padding:'6px 28px 6px 10px',fontSize:12}}>
+                        <select value={a.condition||'returned'} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();setCondition(a, e.target.value)}} style={{padding:'6px 28px 6px 10px',fontSize:12}}>
                           <option value="inuse">In use</option><option value="repair">In repair</option><option value="returned">Spare / Returned</option>
                         </select>
                       </div>
@@ -218,8 +270,8 @@ export default function PeopleAssets() {
                     </div>
                     <div style={{textAlign:'right',whiteSpace:'nowrap'}}>
                       {h
-                        ? <button className="btn btn-neutral btn-sm" onClick={()=>returnDevice(a)}>Return</button>
-                        : <button className="btn btn-ghost btn-sm" onClick={()=>{ setAssignFor(a); setAssignForm({employee_id:'',reason:''}) }}>Assign</button>}
+                        ? <button className="btn btn-neutral btn-sm" onClick={e=>{e.stopPropagation();returnDevice(a)}}>Return</button>
+                        : <button className="btn btn-ghost btn-sm" onClick={e=>{e.stopPropagation(); setAssignFor(a); setAssignForm({employee_id:'',reason:''}) }}>Assign</button>}
                     </div>
                   </div>
                 )
@@ -237,13 +289,26 @@ export default function PeopleAssets() {
             <div className="pd-f"><label>Type</label><select value={addForm.asset_type} onChange={e=>setAddForm(f=>({...f, asset_type:e.target.value, asset_tag: nextTag(e.target.value)}))}>{TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
             <div className="pd-f"><label>Asset ID · auto</label><input value={addForm.asset_tag} onChange={e=>setAddForm({...addForm,asset_tag:e.target.value})} placeholder="SSC-LAP-014" /></div>
           </div>
-          <div className="pd-f"><label>Device name</label><input value={addForm.name} onChange={e=>setAddForm({...addForm,name:e.target.value})} placeholder="MacBook Pro 16″" autoFocus /></div>
-          <div className="pd-f"><label>Make / Model</label><input value={addForm.make_model} onChange={e=>setAddForm({...addForm,make_model:e.target.value})} placeholder="Apple M3 Pro" /></div>
+          <div className="pd-f"><label>Device name</label><input value={addForm.name} onChange={e=>setAddForm({...addForm,name:e.target.value})} placeholder="e.g. Aarth's Laptop" autoFocus /></div>
           <div className="pd-2">
-            <div className="pd-f"><label>Serial No</label><input value={addForm.serial_no} onChange={e=>setAddForm({...addForm,serial_no:e.target.value})} /></div>
-            <div className="pd-f"><label>MAC ID</label><input value={addForm.mac_id} onChange={e=>setAddForm({...addForm,mac_id:e.target.value})} placeholder="00:1A:2B:3C:4D:5E" /></div>
+            <div className="pd-f"><label>Manufacturer</label><input value={addForm.manufacturer} onChange={e=>setAddForm({...addForm,manufacturer:e.target.value})} placeholder="HP" /></div>
+            <div className="pd-f"><label>Model / Laptop name</label><input value={addForm.make_model} onChange={e=>setAddForm({...addForm,make_model:e.target.value})} placeholder="HP ProBook 440 14 G9" /></div>
+          </div>
+          <div className="pd-2">
+            <div className="pd-f"><label>Serial number</label><input value={addForm.serial_no} onChange={e=>setAddForm({...addForm,serial_no:e.target.value})} placeholder="5CD42630HV" /></div>
+            <div className="pd-f"><label>MAC ID</label><input value={addForm.mac_id} onChange={e=>setAddForm({...addForm,mac_id:e.target.value})} placeholder="10:5F:AD:59:E5:F3" /></div>
           </div>
           <div className="pd-f"><label>Sticker</label><select value={addForm.sticker_type} onChange={e=>setAddForm({...addForm,sticker_type:e.target.value})}>{STICKERS.map(s=><option key={s}>{s}</option>)}</select></div>
+          {HAS_SPECS(addForm.asset_type) && (
+            <>
+              <div style={{fontSize:10.5,fontWeight:600,letterSpacing:'0.05em',textTransform:'uppercase',color:'#8C99A8',marginTop:8,borderTop:'1px solid #EFF1F4',paddingTop:12}}>System details · {addForm.asset_type}</div>
+              {SPEC_FIELDS.map(([k,l]) => (
+                <div key={k} className="pd-f"><label>{l}</label>
+                  <input type={k==='os_installed_on'?'date':'text'} value={addForm[k]} onChange={e=>setAddForm({...addForm,[k]:e.target.value})} />
+                </div>
+              ))}
+            </>
+          )}
         </Drawer>
       )}
 
@@ -258,6 +323,30 @@ export default function PeopleAssets() {
             </select>
           </div>
           <div className="pd-f"><label>Reason / note</label><input value={assignForm.reason} onChange={e=>setAssignForm({...assignForm,reason:e.target.value})} placeholder="optional" /></div>
+        </Drawer>
+      )}
+
+      {/* Device detail drawer */}
+      {selDevice && (
+        <Drawer title={selDevice.asset_tag} sub={selDevice.name || selDevice.make_model || selDevice.asset_type} onClose={()=>setSelDevice(null)}
+          footer={<><button className="pd-btn neutral" onClick={()=>setSelDevice(null)}>Close</button><button className="pd-btn primary" onClick={()=>printLabel(selDevice)} disabled={!qr}>Print QR label</button></>}>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,padding:'6px 0 12px',borderBottom:'1px solid #EFF1F4'}}>
+            {qr ? <img src={qr} alt="QR" style={{width:160,height:160}} /> : <div className="p-spin" style={{margin:'40px'}} />}
+            <div style={{fontSize:11,color:'#8C99A8',fontFamily:'Geist Mono,monospace'}}>Scan → opens this device</div>
+          </div>
+          {(() => {
+            const rows = [
+              ['Manufacturer', selDevice.manufacturer], ['Model', selDevice.make_model], ['Type', selDevice.asset_type],
+              ['Serial number', selDevice.serial_no], ['MAC ID', selDevice.mac_id], ['Sticker', selDevice.sticker_type],
+              ...SPEC_FIELDS.map(([k,l]) => [l, k==='os_installed_on' && selDevice[k] ? new Date(selDevice[k]).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : selDevice[k]]),
+            ].filter(([,v]) => v)
+            return <div style={{padding:'6px 0'}}>{rows.map(([l,v])=>(
+              <div key={l} style={{display:'flex',justifyContent:'space-between',gap:14,padding:'9px 0',borderBottom:'1px solid #EFF1F4'}}>
+                <span style={{fontSize:11.5,color:'#5B738B',flexShrink:0}}>{l}</span>
+                <span style={{fontSize:12.5,fontWeight:500,textAlign:'right',wordBreak:'break-word'}}>{v}</span>
+              </div>
+            ))}</div>
+          })()}
         </Drawer>
       )}
     </Layout>
