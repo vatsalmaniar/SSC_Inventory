@@ -142,6 +142,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
   const [user, setUser]           = useState(() => {
     try { const c = sessionStorage.getItem('ly_user'); return c ? JSON.parse(c) : { name: '', avatar: '', role: '' } } catch { return { name: '', avatar: '', role: '' } }
   })
+  const [userPhoto, setUserPhoto] = useState('')
   const [notifs, setNotifs]       = useState([])
   const [showNotifs, setShowNotifs] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -200,6 +201,11 @@ export default function Layout({ children, pageTitle, pageKey }) {
       const userData = { name, avatar, role, id: s.user.id }
       setUser(userData)
       try { sessionStorage.setItem('ly_user', JSON.stringify(userData)) } catch {}
+      // load the current user's employee photo (private bucket -> signed URL)
+      sb.from('employees').select('photo_url').eq('profile_id', s.user.id).maybeSingle().then(({ data }) => {
+        const pth = data?.photo_url
+        if (pth && !/^https?:\/\//.test(pth)) sb.storage.from('employee-photos').createSignedUrl(pth, 3600).then(({ data: d }) => setUserPhoto(d?.signedUrl || ''))
+      }).catch(() => {})
       loadNotifs(s.user.id)
     })
 
@@ -742,13 +748,13 @@ export default function Layout({ children, pageTitle, pageKey }) {
 
             <div className="ly-user-wrap" ref={userMenuRef}>
               <button className="ly-user-chip" onClick={() => setShowUserMenu(v => !v)}>
-                <div className="ly-user-avatar">{user.avatar || '?'}</div>
+                <div className="ly-user-avatar" style={userPhoto?{backgroundImage:`url(${userPhoto})`,backgroundSize:'cover',backgroundPosition:'center'}:undefined}>{userPhoto?'':(user.avatar || '?')}</div>
                 <span className="ly-user-name">{user.name || '...'}</span>
               </button>
               {showUserMenu && (
                 <div className="ly-user-menu">
                   <div className="ly-user-menu-head">
-                    <div className="ly-user-avatar-lg">{user.avatar || '?'}</div>
+                    <div className="ly-user-avatar-lg" style={userPhoto?{backgroundImage:`url(${userPhoto})`,backgroundSize:'cover',backgroundPosition:'center'}:undefined}>{userPhoto?'':(user.avatar || '?')}</div>
                     <div>
                       <div className="ly-user-menu-name">{user.name || '...'}</div>
                       <div className="ly-user-menu-role">{user.role || ''}</div>
