@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
@@ -754,9 +755,7 @@ ${oppsHTML}
                     <div className="c360-side-title">Account Owner</div>
                     {customer.account_owner
                       ? <div className="c360-owner-chip">
-                          <div className="c360-owner-avatar" style={{ background: ownerColor(customer.account_owner) }}>
-                            {customer.account_owner.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}
-                          </div>
+                          <PeopleAvatar name={customer.account_owner} className="c360-owner-avatar" />
                           <div>
                             <div className="c360-owner-name">{customer.account_owner}</div>
                             <div className="c360-owner-sub">Account Rep</div>

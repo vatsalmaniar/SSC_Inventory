@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import PeopleAvatar from '../components/PeopleAvatar'
 import Layout from '../components/Layout'
 import '../styles/crm-redesign.css'
 import { toast } from '../lib/toast'
@@ -124,7 +125,7 @@ export default function CRMTargets() {
               {displayReps.map(rep => (
                 <div key={rep.id} className="dl-row" style={{ gridTemplateColumns: 'minmax(200px, 1fr) repeat(4, 1fr)', cursor: 'default', alignItems:'flex-start' }}>
                   <div className="dl-cell dl-owner">
-                    <div className="dl-owner-avatar" style={{ background: ownerColor(rep.name) }}>{initials(rep.name)}</div>
+                    <PeopleAvatar name={rep.name} className="dl-owner-avatar" />
                     <span className="dl-owner-name">{rep.name}</span>
                   </div>
                   {TARGET_TYPES.map(type => {

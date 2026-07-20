@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
 import { fmtTs } from '../lib/fmt'
 import Layout from '../components/Layout'
@@ -517,7 +518,7 @@ export default function CRMQuotations() {
                     <div className="dl-cell dl-owner">
                       {q.profiles?.name ? (
                         <>
-                          <div className="dl-owner-avatar" style={{background: ownerColor(q.profiles.name)}}>{initials(q.profiles.name)}</div>
+                          <PeopleAvatar name={q.profiles.name} className="dl-owner-avatar" />
                           <span className="dl-owner-name">{q.profiles.name}</span>
                         </>
                       ) : <span style={{color:'var(--c-muted-2)'}}>—</span>}

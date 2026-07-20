@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import '../styles/crm-redesign.css'
@@ -279,9 +280,7 @@ function KanbanView({ opps, navigate, onMoveStage }) {
                             </span>
                           )}
                           {o.profiles?.name && (
-                            <div className="kb-card-avatar" title={o.profiles.name} style={{background: ownerColor(o.profiles.name)}}>
-                              {initials(o.profiles.name)}
-                            </div>
+                            <PeopleAvatar name={o.profiles.name} className="kb-card-avatar" title={o.profiles.name} />
                           )}
                         </div>
                       </div>
@@ -340,7 +339,7 @@ function ListView({ opps, navigate }) {
               <div className="dl-cell dl-owner">
                 {o.profiles?.name ? (
                   <>
-                    <div className="dl-owner-avatar" style={{background: ownerColor(o.profiles.name)}}>{initials(o.profiles.name)}</div>
+                    <PeopleAvatar name={o.profiles.name} className="dl-owner-avatar" />
                     <span className="dl-owner-name">{o.profiles.name}</span>
                   </>
                 ) : <span style={{color:'var(--c-muted-2)'}}>—</span>}

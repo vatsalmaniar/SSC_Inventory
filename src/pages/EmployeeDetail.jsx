@@ -120,8 +120,9 @@ export default function EmployeeDetail() {
       sb.from('asset_assignments').select('*').eq('employee_id', id).is('assigned_to', null),
       sb.from('employee_documents').select('*').eq('employee_id', id),
     ])
-    const allRows = all?.data || []; await signPhotos(allRows)
+    const allRows = all?.data || []
     setPriv(pv?.data || null); setProfile(pr?.data || null); setAllEmps(allRows)
+    signPhotos(allRows).then(() => setAllEmps([...allRows])).catch(() => {})   // photos async
     setComp(cp?.data || []); setDocs(dc?.data || [])
     // device details come from the masked view (serial/MAC/IDs -> •••• for non admin/mgmt)
     const assignRows = aa?.data || []

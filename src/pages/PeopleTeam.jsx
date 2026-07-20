@@ -71,8 +71,8 @@ export default function PeopleTeam() {
       username: e.profile_id ? roleById[e.profile_id]?.username : null,
       assets: heldCount[e.id] || 0,
     }))
-    await signPhotos(built)
-    setRows(built)
+    setRows(built)   // render instantly with initials
+    signPhotos(built).then(() => setRows([...built])).catch(() => {})   // photos pop in when signed
   }
 
   async function addMember() {

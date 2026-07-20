@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import PeopleAvatar from '../components/PeopleAvatar'
 import Layout from '../components/Layout'
 import '../styles/crm.css'
 import '../styles/crm-redesign.css'
@@ -208,7 +209,7 @@ export default function CRMCompanies() {
                       <div className="dl-cell">
                         {c.profiles?.name ? (
                           <div className="dl-owner" title={c.profiles.name}>
-                            <div className="dl-owner-avatar" style={{ background: ownerColor(c.profiles.name) }}>{initials(c.profiles.name)}</div>
+                            <PeopleAvatar name={c.profiles.name} className="dl-owner-avatar" />
                             <span className="dl-owner-name">{c.profiles.name}</span>
                           </div>
                         ) : <span style={{color:'var(--c-muted-2)'}}>—</span>}

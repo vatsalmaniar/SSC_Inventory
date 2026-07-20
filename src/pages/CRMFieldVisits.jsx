@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
 import { fmtNum, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
@@ -482,7 +483,7 @@ export default function CRMFieldVisits() {
                     <div className="dl-cell dl-owner">
                       {v.profiles?.name ? (
                         <>
-                          <div className="dl-owner-avatar" style={{background: ownerColor(v.profiles.name)}}>{v.profiles.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>
+                          <PeopleAvatar name={v.profiles.name} className="dl-owner-avatar" />
                           <span className="dl-owner-name">{v.profiles.name}</span>
                         </>
                       ) : <span style={{color:'var(--c-muted-2)'}}>—</span>}

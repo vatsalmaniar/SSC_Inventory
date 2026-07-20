@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import PeopleAvatar from '../components/PeopleAvatar'
 import { fmt } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
@@ -334,7 +335,7 @@ export default function CustomerMaster() {
                       <div className="ol-cust" style={{ fontWeight: 500 }}>{c.customer_name}</div>
                       <span className="ol-sample-tag" style={{ background: 'rgba(245,158,11,0.12)', color: '#B45309' }}>Credit Check</span>
                     </div>
-                    <div className="ol-cell">{c.account_owner ? <div className="ol-owner" title={c.account_owner}><div className="ol-owner-avatar" style={{ background: ownerColor(c.account_owner) }}>{initials(c.account_owner)}</div><span className="ol-owner-name">{c.account_owner}</span></div> : <span style={{color:'var(--o-muted-2)'}}>—</span>}</div>
+                    <div className="ol-cell">{c.account_owner ? <div className="ol-owner" title={c.account_owner}><PeopleAvatar name={c.account_owner} className="ol-owner-avatar" /><span className="ol-owner-name">{c.account_owner}</span></div> : <span style={{color:'var(--o-muted-2)'}}>—</span>}</div>
                     <div className="ol-cell" style={{ fontFamily: 'Geist Mono, monospace', fontSize: 11.5 }}>{c.gst || '—'}</div>
                     <div className="ol-cell">{c.credit_terms ? <span className="ol-status-pill" style={{ '--stage-color': CREDIT_COLORS[c.credit_terms] || '#94A3B8' }}><span className="ol-status-dot"/>{c.credit_terms}</span> : <span style={{color:'var(--o-muted-2)'}}>—</span>}</div>
                     <div className="ol-cell ol-date">{c.created_at ? new Date(c.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'}</div>
@@ -359,7 +360,7 @@ export default function CustomerMaster() {
                       <div className="ol-cust" style={{ fontWeight: 500 }}>{c.customer_name}</div>
                       <span className="ol-sample-tag" style={{ background: 'rgba(245,158,11,0.12)', color: '#B45309' }}>Pending Approval</span>
                     </div>
-                    <div className="ol-cell">{c.account_owner ? <div className="ol-owner" title={c.account_owner}><div className="ol-owner-avatar" style={{ background: ownerColor(c.account_owner) }}>{initials(c.account_owner)}</div><span className="ol-owner-name">{c.account_owner}</span></div> : <span style={{color:'var(--o-muted-2)'}}>—</span>}</div>
+                    <div className="ol-cell">{c.account_owner ? <div className="ol-owner" title={c.account_owner}><PeopleAvatar name={c.account_owner} className="ol-owner-avatar" /><span className="ol-owner-name">{c.account_owner}</span></div> : <span style={{color:'var(--o-muted-2)'}}>—</span>}</div>
                     <div className="ol-cell" style={{ fontFamily: 'Geist Mono, monospace', fontSize: 11.5 }}>{c.gst || '—'}</div>
                     <div className="ol-cell ol-date">{c.created_at ? new Date(c.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'}</div>
                   </div>
@@ -393,7 +394,7 @@ export default function CustomerMaster() {
                       </div>
                     </div>
                     <div className="ol-cell"><span className="dl-pr-tag" style={{ display:'inline-block', fontSize:11, fontWeight:500, padding:'3px 8px', borderRadius:5, background:'var(--o-bg-2)', border:'1px solid var(--o-line)', color:'var(--o-ink)', whiteSpace:'nowrap' }}>{c.customer_type || '—'}</span></div>
-                    <div className="ol-cell">{c.account_owner ? <div className="ol-owner" title={c.account_owner}><div className="ol-owner-avatar" style={{ background: ownerColor(c.account_owner) }}>{initials(c.account_owner)}</div><span className="ol-owner-name">{c.account_owner}</span></div> : <span style={{color:'var(--o-muted-2)'}}>—</span>}</div>
+                    <div className="ol-cell">{c.account_owner ? <div className="ol-owner" title={c.account_owner}><PeopleAvatar name={c.account_owner} className="ol-owner-avatar" /><span className="ol-owner-name">{c.account_owner}</span></div> : <span style={{color:'var(--o-muted-2)'}}>—</span>}</div>
                     <div className="ol-cell" style={{ fontFamily: 'Geist Mono, monospace', fontSize: 11.5 }}>{c.gst || '—'}</div>
                     <div className="ol-cell">{c.credit_terms ? <span className="ol-status-pill" style={{ '--stage-color': CREDIT_COLORS[c.credit_terms] || '#94A3B8' }}><span className="ol-status-dot"/>{c.credit_terms}</span> : <span style={{color:'var(--o-muted-2)'}}>—</span>}</div>
                   </div>

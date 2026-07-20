@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import PeopleAvatar from '../components/PeopleAvatar'
 import { fmtNum } from '../lib/fmt'
 import Layout from '../components/Layout'
 import '../styles/crm-redesign.css'
@@ -150,7 +151,7 @@ export default function CRMLeads() {
                       <div className="dl-cell">
                         {l.profiles?.name ? (
                           <div style={{ display:'flex', alignItems:'center', gap:6, minWidth: 0 }} title={l.profiles.name}>
-                            <div className="dl-owner-avatar" style={{ background: ownerColor(l.profiles.name), width: 22, height: 22, fontSize: 9 }}>{initials(l.profiles.name)}</div>
+                            <PeopleAvatar name={l.profiles.name} className="dl-owner-avatar" style={{ width: 22, height: 22, fontSize: 9 }} />
                           </div>
                         ) : <span style={{ color:'var(--c-muted-2)' }}>—</span>}
                       </div>

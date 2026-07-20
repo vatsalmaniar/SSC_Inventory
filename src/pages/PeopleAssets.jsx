@@ -103,8 +103,8 @@ export default function PeopleAssets() {
     ])
     setAssets(as.data || [])
     const h = {}; (aa.data || []).forEach(x => { h[x.asset_id] = { employee_id:x.employee_id, name:x.employee?.full_name || '—', photo_url:x.employee?.photo_url || null, assignment_id:x.id } })
-    await signPhotos(Object.values(h))
-    setHolders(h)
+    setHolders(h)   // render instantly
+    signPhotos(Object.values(h)).then(() => setHolders({ ...h })).catch(() => {})   // photos async
     setEmps(em.data || [])
   }
 

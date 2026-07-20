@@ -58,9 +58,8 @@ export default function PeopleOrg() {
     setRole(p?.role || '')
     const { data } = await sb.from('employees').select('id,full_name,designation,department,branch,reporting_manager_id,lifecycle_status,photo_url').eq('is_test', false)
     const list = data || []
-    await signPhotos(list)
-    setEmps(list)
-    setLoading(false)
+    setEmps(list); setLoading(false)   // render instantly
+    signPhotos(list).then(() => setEmps([...list])).catch(() => {})   // photos async
   }
 
   const { roots, childrenOf, byId } = useMemo(() => {
