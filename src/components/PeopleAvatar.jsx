@@ -19,10 +19,18 @@ async function loadDir() {
   if (loaded || inflight) return inflight
   inflight = (async () => {
     try {
-      const { data } = await sb.from('employees').select('full_name,photo_url').eq('is_test', false)
+      // key by BOTH the employee full_name AND the linked login/profile name,
+      // because Orders/CRM reference reps by their profile name (e.g. "Jaypal Jadeja"
+      // vs employee "Jaypalsinh Jadeja").
+      const { data } = await sb.from('employees').select('full_name,photo_url,profile:profiles(name)').eq('is_test', false)
       const rows = (data || []).filter(e => e.photo_url)
       await signPhotos(rows)
-      rows.forEach(e => { dir[norm(e.full_name)] = e.signedPhoto })
+      rows.forEach(e => {
+        if (!e.signedPhoto) return
+        dir[norm(e.full_name)] = e.signedPhoto
+        const pn = e.profile?.name
+        if (pn) dir[norm(pn)] = e.signedPhoto
+      })
     } catch (_) { /* leave dir empty -> initials fallback */ }
     loaded = true
     listeners.forEach(l => l())
