@@ -359,3 +359,11 @@
 /* profile skeleton */
 .people-app .skel-cover{height:190px;border-radius:16px;}
 .people-app .skel-card{height:160px;border-radius:14px;}
+
+/* Assets register — keep every cell inside its column (no overlap/wrap bleed) */
+.people-app .arow > div{ min-width:0; }
+.people-app .arow-nm{ overflow:hidden; }
+.people-app .a-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.people-app .a-sub{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.people-app .a-holder{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.people-app .arow .f-sel select{ max-width:100%; }
