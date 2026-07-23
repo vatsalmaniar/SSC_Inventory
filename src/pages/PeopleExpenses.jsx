@@ -246,6 +246,64 @@ function BillGrid({ bills }) {
   )
 }
 
+/* ══ Bulk pay — several approved claims, one transaction reference ══════ */
+function BulkPayDrawer({ rows, profiles, onClose, onDone }) {
+  const [txn, setTxn] = useState('')
+  const [saving, setSaving] = useState(false)
+  const guard = useRef(false)
+  const total = rows.reduce((s, r) => s + Number(r.approved_amount ?? r.amount), 0)
+  const people = [...new Set(rows.map(r => r.profile_id))]
+
+  async function go() {
+    if (guard.current) return
+    if (!txn.trim()) { toast('Enter the transaction number.', 'error'); return }
+    guard.current = true; setSaving(true)
+    try {
+      const { data, error } = await sb.rpc('expense_pay_bulk', { p_ids: rows.map(r => r.id), p_txn: txn.trim() })
+      if (error) throw error
+      toast(`Paid ${data} ${data === 1 ? 'claim' : 'claims'}.`, 'success')
+      onDone()
+    } catch (e) { toast(e?.message || friendlyError(e), 'error') }
+    finally { guard.current = false; setSaving(false) }
+  }
+
+  return (
+    <div className="od-drawer-scrim" onClick={onClose}>
+      <div className="od-drawer" style={{ width: 'min(480px,95vw)' }} onClick={e => e.stopPropagation()}>
+        <div className="od-drawer-head">
+          <div>
+            <div className="od-drawer-eyebrow">Reimbursement</div>
+            <div className="od-drawer-title">Pay {rows.length} {rows.length === 1 ? 'claim' : 'claims'}</div>
+            <div className="od-drawer-sub">{people.length === 1 ? (profiles[people[0]]?.name || '') : `${people.length} people`} · one transaction reference for all</div>
+          </div>
+          <button className="od-drawer-close" onClick={onClose}>×</button>
+        </div>
+        <div className="od-drawer-body">
+          <div className="exp-modal-ctx" style={{ marginBottom: 14 }}>Total payout <b>{fmtMoney(total)}</b></div>
+          <div className="exp-bulk-list">
+            {rows.map(r => (
+              <div key={r.id} className="exp-bulk-row">
+                <span className="exp-bulk-cat">{r._cat}{r.vendor ? ` · ${r.vendor}` : ''}</span>
+                <span className="exp-bulk-meta">{fmt(r.expense_date)}{people.length > 1 ? ` · ${profiles[r.profile_id]?.name || ''}` : ''}</span>
+                <span className="exp-bulk-amt">{fmtMoney(r.approved_amount ?? r.amount)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="exp-field" style={{ marginTop: 18 }}>
+            <label className="exp-label">Transaction No.<span className="req">*</span></label>
+            <input className="exp-input" value={txn} onChange={e => setTxn(e.target.value)} placeholder="UTR / txn reference" autoFocus />
+            <div className="exp-err" style={{ color: '#94A3B8' }}>This same reference is recorded on all {rows.length} claims.</div>
+          </div>
+        </div>
+        <div className="od-drawer-foot">
+          <button className="od-btn" onClick={onClose}>Cancel</button>
+          <button className="od-btn od-btn-pay" onClick={go} disabled={saving}>{saving ? '…' : `Pay ${fmtMoney(total)}`}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ══ One drawer for everything: detail + bills, with the footer action that
       applies to this row (approve/reject, pay, delete). Rows are clickable,
       so the table itself stays free of buttons. ══════════════════════════ */
@@ -403,6 +461,8 @@ export default function PeopleExpenses() {
   const [page, setPage] = useState(0)
   const [showAdd, setShowAdd] = useState(false)
   const [openRow, setOpenRow] = useState(null)   // row-click opens one drawer
+  const [selected, setSelected] = useState([])   // ids of approved claims picked for bulk pay
+  const [bulkPay, setBulkPay] = useState(null)    // { rows } when the bulk-pay drawer is open
 
   const isPriv = me && EX.CAN_SEE_ALL.includes(me.role)
   const canApprove = me && EX.CAN_APPROVE.includes(me.role)
@@ -558,6 +618,20 @@ export default function PeopleExpenses() {
     } catch (e) { toast('Failed to generate Excel: ' + (e.message || e), 'error'); console.error(e) }
   }
 
+  // ── Bulk pay: pick several APPROVED claims, pay them with one txn ref ──
+  const payableRows = filtered.filter(r => r.status === 'approved' && canPay)
+  const selectedRows = filtered.filter(r => selected.includes(r.id))
+  const selTotal = selectedRows.reduce((s, r) => s + Number(r.approved_amount ?? r.amount), 0)
+  const selPeople = [...new Set(selectedRows.map(r => r.profile_id))]
+  function toggleSel(id) { setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]) }
+  function selectAllPayable() {
+    const ids = payableRows.map(r => r.id)
+    const allOn = ids.length > 0 && ids.every(i => selected.includes(i))
+    setSelected(allOn ? [] : ids)
+  }
+  // drop selection whenever the visible set changes
+  useEffect(() => { setSelected([]) }, [fPerson, fStatus, fCat, month, testMode])
+
   // Exactly one labelled button per row, and only when this user is the one
   // who has to act. Everything else lives in the drawer (row is clickable).
   function rowAction(r) {
@@ -705,7 +779,24 @@ export default function PeopleExpenses() {
               <div className="card-eyebrow">Claims</div>
               <div className="card-title">{filtered.length} {filtered.length === 1 ? 'expense' : 'expenses'}</div>
             </div>
+            {canPay && payableRows.length > 0 && (
+              <div className="exp-sub-note">Tick approved claims to pay several at once</div>
+            )}
           </div>
+
+          {/* selection bar — appears once approved claims are ticked */}
+          {selected.length > 0 && (
+            <div className="exp-selbar">
+              <div>
+                <b>{selected.length}</b> selected · <b>{fmtMoney(selTotal)}</b>
+                {selPeople.length > 1 && <span className="exp-selbar-warn"> · {selPeople.length} people — one txn will apply to all</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="od-btn" onClick={() => setSelected([])}>Clear</button>
+                <button className="exp-dl-btn" style={{ background: '#6D28D9', borderColor: '#6D28D9' }} onClick={() => setBulkPay({ rows: selectedRows })}>Pay {fmtMoney(selTotal)}</button>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="o-loading">Loading…</div>
@@ -723,6 +814,15 @@ export default function PeopleExpenses() {
                 <table>
                   <thead>
                     <tr>
+                      {canPay && (
+                        <th className="chk">
+                          {payableRows.length > 0 && (
+                            <input type="checkbox" title="Select all approved"
+                              checked={payableRows.every(r => selected.includes(r.id))}
+                              onChange={selectAllPayable} />
+                          )}
+                        </th>
+                      )}
                       <th />
                       <th>Date</th>
                       <th className="num">Amount</th>
@@ -736,7 +836,14 @@ export default function PeopleExpenses() {
                   </thead>
                   <tbody>
                     {paged.map(r => (
-                      <tr key={r.id} className="exp-row" onClick={() => setOpenRow(r)}>
+                      <tr key={r.id} className={'exp-row' + (selected.includes(r.id) ? ' sel' : '')} onClick={() => setOpenRow(r)}>
+                        {canPay && (
+                          <td className="chk" onClick={e => e.stopPropagation()}>
+                            {r.status === 'approved'
+                              ? <input type="checkbox" checked={selected.includes(r.id)} onChange={() => toggleSel(r.id)} />
+                              : null}
+                          </td>
+                        )}
                         <td className="ico"><ExpenseIcon name={r._cat} color={r._catColor} small /></td>
                         <td className="date">{fmt(r.expense_date)}</td>
                         <td className="num">
@@ -782,6 +889,9 @@ export default function PeopleExpenses() {
         onClose={() => setOpenRow(null)}
         onDone={() => { setOpenRow(null); load() }}
         onDelete={() => { const r = openRow; setOpenRow(null); delExpense(r) }} />}
+      {bulkPay && <BulkPayDrawer rows={bulkPay.rows} profiles={profiles}
+        onClose={() => setBulkPay(null)}
+        onDone={() => { setBulkPay(null); setSelected([]); load() }} />}
     </Layout>
   )
 }

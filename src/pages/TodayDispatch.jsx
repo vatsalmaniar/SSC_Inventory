@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import '../styles/orders.css'
 
 
@@ -98,7 +99,7 @@ export default function TodayDispatch() {
           </div>
 
           {loading ? (
-            <div className="loading-state" style={{ padding: 40 }}><div className="loading-spin" /></div>
+            <Loading />
           ) : orders.length === 0 ? (
             <div className="orders-empty" style={{ background: 'white', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)' }}>
               <div className="orders-empty-icon">

@@ -5,6 +5,7 @@ import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import PhoneInput, { PhoneDisplay, isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
 import { useHistoryFilter, HistoryFilterBar, HistoryPager } from '../components/HistoryFilter'
 import { fetchAll } from '../lib/fetchAll'
@@ -473,7 +474,7 @@ ${oppsHTML}
 
   if (loading) return (
     <Layout pageTitle="Customer 360" pageKey="customer360">
-      <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
+      <div className="c360-page"><Loading /></div>
     </Layout>
   )
   if (!customer) return (

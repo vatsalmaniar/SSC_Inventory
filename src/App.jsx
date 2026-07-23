@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
+import Loading from './components/Loading'
 
 // Login stays eager — it's the entry point
 import Login from './pages/Login'
@@ -60,6 +61,12 @@ const EmployeeDetail = lazy(() => import('./pages/EmployeeDetail'))
 const PeopleOrg = lazy(() => import('./pages/PeopleOrg'))
 const PeopleAssets = lazy(() => import('./pages/PeopleAssets'))
 const PeopleConfig = lazy(() => import('./pages/PeopleConfig'))
+const PeopleAttendance = lazy(() => import('./pages/PeopleAttendance'))
+const PeopleMyAttendance = lazy(() => import('./pages/PeopleMyAttendance'))
+const PeopleLeave = lazy(() => import('./pages/PeopleLeave'))
+const PeopleRegularize = lazy(() => import('./pages/PeopleRegularize'))
+const PeopleMuster = lazy(() => import('./pages/PeopleMuster'))
+const PeopleSwipes = lazy(() => import('./pages/PeopleSwipes'))
 const PurchaseInvoiceList = lazy(() => import('./pages/PurchaseInvoiceList'))
 const PurchaseInvoiceDetail = lazy(() => import('./pages/PurchaseInvoiceDetail'))
 const FCDashboard = lazy(() => import('./pages/FCDashboard'))
@@ -75,7 +82,7 @@ const NotAuthorized = lazy(() => import('./pages/NotAuthorized'))
 export default function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'Geist,sans-serif',color:'#888'}}>Loading...</div>}>
+      <Suspense fallback={<Loading style={{minHeight:'100vh'}} />}>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
@@ -141,6 +148,12 @@ export default function App() {
           <Route path="/people/org" element={<PeopleOrg />} />
           <Route path="/people/assets" element={<PeopleAssets />} />
           <Route path="/people/config" element={<PeopleConfig />} />
+          <Route path="/people/attendance" element={<PeopleAttendance />} />
+          <Route path="/people/attendance/me" element={<PeopleMyAttendance />} />
+          <Route path="/people/attendance/leave" element={<PeopleLeave />} />
+          <Route path="/people/attendance/regularize" element={<PeopleRegularize />} />
+          <Route path="/people/attendance/muster" element={<PeopleMuster />} />
+          <Route path="/people/attendance/swipes" element={<PeopleSwipes />} />
           <Route path="/people/kpi" element={<PeopleKpi />} />
           <Route path="/people/kpi/config" element={<PeopleKpiConfig />} />
           <Route path="/people/expenses" element={<PeopleExpenses />} />

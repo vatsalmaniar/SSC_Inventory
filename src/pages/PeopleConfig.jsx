@@ -6,6 +6,7 @@ import { Spinner } from '../components/PeopleLoaders'
 import '../styles/people.css'
 import PeopleKpiConfig from './PeopleKpiConfig'
 import PeopleExpensesConfig from './PeopleExpensesConfig'
+import PeopleAttendanceConfig from './PeopleAttendanceConfig'
 import '../styles/kpi-dashboard.css'
 
 export default function PeopleConfig() {
@@ -13,7 +14,7 @@ export default function PeopleConfig() {
   const [params, setParams] = useSearchParams()
   const [denied, setDenied] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState(params.get('tab') === 'expenses' ? 'expenses' : 'kpi')
+  const [tab, setTab] = useState(['expenses','attendance'].includes(params.get('tab')) ? params.get('tab') : 'kpi')
 
   useEffect(() => { init() }, [])
 
@@ -25,7 +26,7 @@ export default function PeopleConfig() {
     setLoading(false)
   }
 
-  function pick(t) { setTab(t); setParams(t === 'expenses' ? { tab: 'expenses' } : {}) }
+  function pick(t) { setTab(t); setParams(t === 'kpi' ? {} : { tab: t }) }
 
   if (denied) return (
     <Layout pageKey="people" pageTitle="Configuration">
@@ -41,6 +42,7 @@ export default function PeopleConfig() {
   const TABS = [
     { k:'kpi', l:'KRA / KPI', d:'Scoring thresholds, hero products & targets' },
     { k:'expenses', l:'Expenses', d:'Budgets, mileage limits & categories' },
+    { k:'attendance', l:'Attendance', d:'Timing policy, geofences & holidays' },
   ]
 
   return (
@@ -67,7 +69,7 @@ export default function PeopleConfig() {
         </div>
 
         <div>
-          {tab === 'kpi' ? <PeopleKpiConfig embed /> : <PeopleExpensesConfig embed />}
+          {tab === 'kpi' ? <PeopleKpiConfig embed /> : tab === 'expenses' ? <PeopleExpensesConfig embed /> : <PeopleAttendanceConfig embed />}
         </div>
       </div>
     </Layout>

@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import '../styles/orders.css'
 
 const BILLING_MODULE_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
@@ -211,7 +212,7 @@ export default function SalesModule() {
           {/* Table */}
           <div className="od-table-card">
             {loading ? (
-              <div className="loading-state" style={{ padding:40 }}><div className="loading-spin" /></div>
+              <Loading />
             ) : filtered.length === 0 ? (
               <div className="orders-empty" style={{ border:'none' }}>
                 <div className="orders-empty-icon">

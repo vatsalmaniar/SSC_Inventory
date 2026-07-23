@@ -6,11 +6,54 @@ Built with plain HTML + Supabase (no framework).
 Deployed on Vercel: https://ssc-inventory.vercel.app
 
 ## Tech Stack
-- **Frontend**: Plain HTML, CSS, JavaScript (no framework)
+- **Frontend**: React + Vite (SPA). Page components in `src/pages`, shared UI in `src/components`, styles in `src/styles`.
 - **Database + Auth**: Supabase
 - **Hosting**: Vercel (GitHub auto-deploy)
-- **Fonts**: DM Sans + DM Mono (Google Fonts)
-- **XLS Parsing**: SheetJS (cdnjs)
+- **Fonts**: Geist + Geist Mono (self-hosted, `public/fonts`, loaded in `index.html`)
+- **XLS Parsing**: SheetJS / ExcelJS
+
+## UI Conventions — READ BEFORE BUILDING ANY UI
+New components keep drifting from the rest of the app (mismatched fonts, colours,
+one-off spinners). To stop this:
+
+1. **Design tokens are the single source of truth** — `src/styles/global.css :root`.
+   It defines the font families (`--font`, `--mono`), the **type scale**
+   (`--fs-eyebrow … --fs-3xl`), **weights** (`--fw-regular/medium/semibold/bold` —
+   the app never goes above `600`/semibold for numbers or titles), tracking, radii,
+   and the colour palette. **Never hardcode `font-family`, `font-size`, `font-weight`,
+   or colours in a component or stylesheet — reference the tokens.**
+2. **One shared `<Loading/>`** — `src/components/Loading.jsx` (renders the standard
+   `.o-loading` look). Use it for every page/section loading state. Do **not** hand-roll
+   another spinner (`.loading-spin`, `.p-spin`, inline `<div>Loading…</div>` are retired).
+3. **Reuse before you build.** Before creating any new UI, search `src/components`
+   and `src/styles` for something that already does the job and use it. Cross-module
+   chrome (e.g. the **Live** pill = `.meta-pill.live` + `.meta-dot` in global.css) is
+   defined once and shared — do not re-create it per module.
+4. **New pages must visually match existing pages.** The Orders dashboard
+   (`Orders.jsx` / `orders-redesign.css`) is the reference design language: Geist,
+   `#1a73e8` accent, `#f8f9fa` page background, 14px `--o-radius`, 600-max weights.
+   Adding a new one-off style is a **last resort — flag it to the user first.**
+
+### Shared components & helpers (find these before searching blind)
+| What | Where |
+|---|---|
+| Loading state (spinner) | `src/components/Loading.jsx` |
+| People skeletons | `src/components/PeopleLoaders.jsx` (TeamSkeleton / AssetsSkeleton / ProfileSkeleton; `Spinner` delegates to `<Loading/>`) |
+| Page shell (sidebar + topbar) | `src/components/Layout.jsx` |
+| Avatar (photo → initials) | `src/components/PeopleAvatar.jsx` |
+| Attendance punch button | `src/components/PunchButton.jsx` |
+| Sub-navs | `CRMSubNav` / `BillingSubNav` / `FCSubNav` / `ProcSubNav` / `AttendanceTabs` |
+| History timeline filter | `src/components/HistoryFilter.jsx` |
+| Month/year filter | `src/components/MonthYearFilter.jsx` |
+| Typeahead / PhoneInput / PhotoCropper / MiniMap | `src/components/*.jsx` |
+| Date/number formatting, FY constant | `src/lib/fmt.js` |
+| Toasts | `src/lib/toast.js` |
+| Friendly error messages | `src/lib/errorMsg.js` |
+| Order value (single formula) | `src/lib/orderValue.js` |
+| Paginated fetch (avoids 1000-row cap) | `src/lib/fetchAll.js` |
+| Supabase client | `src/lib/supabase.js` |
+| Excel export | `src/lib/xlsExport.js` |
+| Live "meta-pill" / status pill | `.meta-pill` / `.meta-pill.live` / `.meta-dot` in `src/styles/global.css` |
 
 ## Supabase Config
 - **URL**: https://kvjihrlbntxcdadogmhn.supabase.co

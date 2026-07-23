@@ -7,6 +7,7 @@ import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import { usePeopleDir } from '../components/PeopleAvatar'
 import '../styles/orderdetail.css'
 import '../styles/neworder.css'
@@ -1208,7 +1209,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
   if (loading) return (
     <Layout pageTitle="Purchase Order" pageKey="procurement">
-      <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
+      <div className="od-page"><Loading /></div>
     </Layout>
   )
 

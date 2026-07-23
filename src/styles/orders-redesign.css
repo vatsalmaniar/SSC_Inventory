@@ -19,24 +19,24 @@
   --o-radius: 14px;
   --o-shadow: 0 1px 3px rgba(11,27,48,0.06), 0 1px 2px rgba(11,27,48,0.04);
 
-  font-family: 'Geist', -apple-system, system-ui, sans-serif;
+  font-family: var(--font);
   background: var(--o-bg);
   color: var(--o-ink);
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: var(--fs-body);
+  line-height: var(--lh-base);
   padding: 24px 28px 48px;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 .orders-app * { box-sizing: border-box; }
-.orders-app .mono { font-family: 'Geist Mono', monospace; }
+.orders-app .mono { font-family: var(--mono); }
 
 .ly-content:has(.orders-app), .ly-main:has(.orders-app) { overflow-x: hidden; min-width: 0; }
 
 /* Page head */
 .orders-app .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
-.orders-app .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 0; color: var(--o-ink); }
-.orders-app .page-sub { font-size: 13px; color: var(--o-muted); margin-top: 4px; }
+.orders-app .page-title { font-size: var(--fs-xl); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-title); margin: 0; color: var(--o-ink); }
+.orders-app .page-sub { font-size: var(--fs-sm); color: var(--o-muted); margin-top: 4px; }
 .orders-app .page-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .orders-app .meta-pill { display: flex; align-items: center; gap: 8px; background: var(--o-surface); border: 1px solid var(--o-line); border-radius: 9px; padding: 6px 11px; font-size: 12px; white-space: nowrap; }
 .orders-app .meta-label { color: var(--o-muted); font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; }
@@ -54,8 +54,8 @@
 /* Cards */
 .orders-app .card { background: var(--o-surface); border: 1px solid var(--o-line); border-radius: var(--o-radius); padding: 18px 20px; box-shadow: var(--o-shadow); }
 .orders-app .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
-.orders-app .card-eyebrow { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--o-muted); margin-bottom: 4px; white-space: nowrap; }
-.orders-app .card-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.orders-app .card-eyebrow { font-family: var(--mono); font-size: var(--fs-eyebrow); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; color: var(--o-muted); margin-bottom: 4px; white-space: nowrap; }
+.orders-app .card-title { font-size: var(--fs-card); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-tight); }
 
 /* KPI tiles */
 .orders-app .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 4px; }

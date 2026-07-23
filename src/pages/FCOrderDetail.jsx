@@ -5,6 +5,7 @@ import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc } from '../lib/fmt'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import { usePeopleDir } from '../components/PeopleAvatar'
 import '../styles/orderdetail.css'
 import '../styles/orders.css'
@@ -652,7 +653,7 @@ export default function FCOrderDetail() {
 
   if (loading) return (
     <Layout pageTitle="FC — Order Detail" pageKey="fc">
-      <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
+      <div className="od-page"><Loading /></div>
     </Layout>
   )
   if (!order) return <Layout pageTitle="FC Order" pageKey="fc"><div className="od-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Order not found</div><div style={{fontSize:13}}>This order may have been deleted or you don't have access.</div></div></div></Layout>

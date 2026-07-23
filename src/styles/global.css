@@ -34,9 +34,37 @@
   --radius:    14px;
   --radius-sm:  8px;
   --radius-xs:  6px;
+
+  /* ── TYPE SCALE ── the ONLY place font sizes/weights/tracking are defined.
+     Values are the app's existing (Orders-dashboard) scale — do not hardcode px
+     for fonts in components; use these tokens. See CLAUDE.md “UI Conventions”. */
+  --fs-eyebrow: 10.5px;  /* mono eyebrows, tiny uppercase labels */
+  --fs-label:   12px;    /* labels, meta pills, chips */
+  --fs-sm:      13px;    /* subtitles, secondary text */
+  --fs-body:    14px;    /* base body */
+  --fs-card:    15px;    /* card titles */
+  --fs-lg:      19px;    /* section stat */
+  --fs-xl:      22px;    /* page titles / greetings */
+  --fs-2xl:     30px;    /* large KPI numbers */
+  --fs-3xl:     44px;    /* hero numbers */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+  --lh-base:     1.45;
+  --tracking-title:   -0.02em;
+  --tracking-tight:   -0.01em;
+  --tracking-eyebrow:  0.08em;
 }
 
 html, body { min-height: 100%; font-family: var(--font); color: var(--gray-900); }
+
+/* ── Live / status meta-pill — ONE definition shared across dashboards
+   (Orders, Attendance, …). Do not re-create per module. ── */
+.meta-pill { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--gray-200); border-radius: 9px; padding: 6px 11px; font-size: var(--fs-label); white-space: nowrap; }
+.meta-pill.live { background: rgba(16,185,129,0.08); border-color: rgba(16,185,129,0.2); color: #047857; }
+.meta-dot { width: 7px; height: 7px; background: #10B981; border-radius: 50%; box-shadow: 0 0 0 3px rgba(16,185,129,0.18); animation: o-pulse 1.6s infinite; }
+@keyframes o-pulse { 50% { box-shadow: 0 0 0 5px rgba(16,185,129,0.05); } }
 
 /* ── Numeric / identifier utility classes (use everywhere for visual consistency) ── */
 .num     { font-family: 'Geist Mono', monospace; font-weight: 500; font-variant-numeric: tabular-nums; }

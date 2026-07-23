@@ -1,6 +1,10 @@
 // Polished loading states for the People pages.
+// NOTE: Spinner now delegates to the shared <Loading/> so every page uses one
+// loading visual. Skeletons below stay as the People-specific skeleton pattern.
+import Loading from './Loading'
+
 export function Spinner({ label = 'Loading…' }) {
-  return <div className="p-loading"><div className="p-spin" />{label && <div>{label}</div>}</div>
+  return <Loading label={label} />
 }
 
 export function TeamSkeleton() {

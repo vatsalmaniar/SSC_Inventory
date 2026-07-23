@@ -6,6 +6,7 @@ import { toast } from '../lib/toast'
 import { fmt, fmtTs } from '../lib/fmt'
 import { friendlyError } from '../lib/errorMsg'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import { usePeopleDir } from '../components/PeopleAvatar'
 import '../styles/orderdetail.css'
 import '../styles/orders.css'
@@ -382,7 +383,7 @@ export default function BillingOrderDetail() {
         pi_number: piNumberInput.trim(), pi_pdf_url: piPdfUrl, status: 'pi_generated', updated_at: new Date().toISOString()
       }).eq('id', activeBatch.id)
     }
-    await sb.from('orders').update({ status: 'pi_generated', updated_at: new Date().toISOString() }).eq('id', id)
+    if (order.status === 'pi_requested') { await sb.from('orders').update({ status: 'pi_generated', updated_at: new Date().toISOString() }).eq('id', id) }
     await logActivity(`Proforma Invoice issued — ${piNumberInput.trim()}. Awaiting customer payment.`)
     await notifyUsers([], `${order.order_number} — Proforma Invoice issued (${piNumberInput.trim()}). Awaiting customer payment.`, 'pi_issued')
     toast('Proforma Invoice issued', 'success')
@@ -395,7 +396,7 @@ export default function BillingOrderDetail() {
     if (activeBatch) {
       await sb.from('order_dispatches').update({ status: 'pi_payment_pending', updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
     }
-    await sb.from('orders').update({ status: 'pi_payment_pending', updated_at: new Date().toISOString() }).eq('id', id)
+    if (order.status === 'pi_generated') { await sb.from('orders').update({ status: 'pi_payment_pending', updated_at: new Date().toISOString() }).eq('id', id) }
     await logActivity(`PI shared with customer — payment pending.`)
     await notifyUsers([], `${order.order_number} — PI shared with customer. Payment pending.`, 'payment_pending')
     toast('PI sent — awaiting payment', 'success')
@@ -412,7 +413,7 @@ export default function BillingOrderDetail() {
         updated_at: new Date().toISOString()
       }).eq('id', activeBatch.id)
     }
-    await sb.from('orders').update({ status: 'delivery_created', updated_at: new Date().toISOString() }).eq('id', id)
+    if (order.status === 'pi_payment_pending') { await sb.from('orders').update({ status: 'delivery_created', updated_at: new Date().toISOString() }).eq('id', id) }
     await logActivity(`PI Payment confirmed${paymentRef.trim() ? ' — Ref: ' + paymentRef.trim() : ''}. Order returned to Fulfilment Centre for picking & dispatch.`)
     const piFcRole = (activeBatch?.fulfilment_center === 'Godawari') ? 'fc_godawari' : 'fc_kaveri'
     await notifyUsers([piFcRole], `${order.order_number} — PI payment confirmed. Order ready for picking & dispatch.`, 'pi_payment_confirmed')
@@ -509,7 +510,7 @@ const mentionSuggestions = mentionQuery !== null
 
   if (loading) return (
     <Layout pageTitle="Billing — Order Detail" pageKey="billing">
-      <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
+      <div className="od-page"><Loading /></div>
     </Layout>
   )
   if (!order) return <Layout pageTitle="Billing" pageKey="billing"><div className="od-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Order not found</div><div style={{fontSize:13}}>This order may have been deleted or you don't have access.</div></div></div></Layout>
@@ -518,13 +519,13 @@ const mentionSuggestions = mentionQuery !== null
   const batchStatus   = activeBatch ? (activeBatch.status || 'delivery_created') : order.status
   const batchFC       = activeBatch?.fulfilment_center || order.fulfilment_center
   const pipelineIdx   = billingPipelineIdx(batchStatus)
-  const piPhaseIdx    = piPipelineIdx(order.status)
+  const piPhaseIdx    = piPipelineIdx(batchStatus)
   const isPIOrder     = activeBatch?.pi_required === true
   const isAdvanceOrder = order.credit_terms === 'Advance'
   const activePINum   = activeBatch?.pi_number || null
   const activePIPdf   = activeBatch?.pi_pdf_url || null
   const isCancelled   = order.status === 'cancelled'
-  const isInPIPhase   = ['pi_requested','pi_generated','pi_payment_pending'].includes(order.status)
+  const isInPIPhase   = ['pi_requested','pi_generated','pi_payment_pending'].includes(batchStatus)
   // When a batch is active, use ONLY that batch's data — never bleed other batch/order-level columns
   const activeDC      = activeBatch?.dc_number || order.dc_number
   const activeINV     = activeBatch ? activeBatch.invoice_number    : order.invoice_number
@@ -816,15 +817,15 @@ const mentionSuggestions = mentionQuery !== null
               <div className="od-card">
                 <div className="od-card-header">
                   <div className="od-card-title">
-                    {order.status === 'pi_requested'        && 'Action — Issue Proforma Invoice'}
-                    {order.status === 'pi_generated'        && 'Action — Confirm PI Sent to Customer'}
-                    {order.status === 'pi_payment_pending'  && 'Action — Confirm Payment Received'}
+                    {batchStatus === 'pi_requested'        && 'Action — Issue Proforma Invoice'}
+                    {batchStatus === 'pi_generated'        && 'Action — Confirm PI Sent to Customer'}
+                    {batchStatus === 'pi_payment_pending'  && 'Action — Confirm Payment Received'}
                   </div>
                 </div>
                 <div className="od-card-body">
 
                   {/* PI STEP 1: Issue PI */}
-                  {order.status === 'pi_requested' && (
+                  {batchStatus === 'pi_requested' && (
                     <div>
                       <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>
                         Generate and upload the Proforma Invoice PDF for this order.
@@ -860,7 +861,7 @@ const mentionSuggestions = mentionQuery !== null
                   )}
 
                   {/* PI STEP 2: Confirm PI sent to customer */}
-                  {order.status === 'pi_generated' && (
+                  {batchStatus === 'pi_generated' && (
                     <div>
                       {activePINum && (
                         <div style={{background:'#faf5ff',border:'1px solid #e9d5ff',borderRadius:8,padding:'10px 14px',marginBottom:14}}>
@@ -886,7 +887,7 @@ const mentionSuggestions = mentionQuery !== null
                   )}
 
                   {/* PI STEP 3: Confirm payment received */}
-                  {order.status === 'pi_payment_pending' && (
+                  {batchStatus === 'pi_payment_pending' && (
                     <div>
                       {activePINum && (
                         <div style={{background:'#faf5ff',border:'1px solid #e9d5ff',borderRadius:8,padding:'10px 14px',marginBottom:14}}>

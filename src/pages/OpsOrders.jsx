@@ -5,6 +5,7 @@ import { toast } from '../lib/toast'
 import { fmt, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import { usePeopleDir } from '../components/PeopleAvatar'
 import '../styles/orders.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -146,7 +147,7 @@ export default function OpsOrders() {
         </div>
 
         {loading ? (
-          <div className="loading-state"><div className="loading-spin" /></div>
+          <Loading />
         ) : filtered.length === 0 ? (
           <div className="orders-empty">
             <div className="orders-empty-icon">

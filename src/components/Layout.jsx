@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { sb, checkSessionAge } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import CelebrationStrip from './CelebrationStrip'
+import PunchButton from './PunchButton'
 import './layout.css'
 
 const NAV_ITEMS = [
@@ -73,6 +74,7 @@ const NAV_ITEMS = [
     sub: [
       { key: 'people-hub',        label: 'Overview',      path: '/people' },
       { key: 'people-team',       label: 'Team',          path: '/people/team' },
+      { key: 'people-attendance', label: 'Attendance',    path: '/people/attendance' },
       { key: 'people-org',        label: 'Org Chart',     path: '/people/org' },
       { key: 'people-assets',     label: 'Assets',        path: '/people/assets', roles: ['admin','management'] },
       { key: 'people-kpi',        label: 'KRA / KPI',     path: '/people/kpi' },
@@ -702,6 +704,8 @@ export default function Layout({ children, pageTitle, pageKey }) {
           </div>
 
           <div className="ly-topbar-right">
+            {/* Attendance punch */}
+            <PunchButton/>
             {/* Theme toggle */}
             <ThemeToggle/>
             {/* Bell */}

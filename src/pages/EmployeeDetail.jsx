@@ -70,6 +70,7 @@ export default function EmployeeDetail() {
   const [docs, setDocs] = useState([])
   const [kpi, setKpi] = useState(null)
   const [kpiMonthly, setKpiMonthly] = useState([])
+  const [leaveBal, setLeaveBal] = useState(null)
   const [secUser, setSecUser] = useState(null)
   const [tab, setTab] = useState('overview')
   const [reveal, setReveal] = useState({})
@@ -112,14 +113,16 @@ export default function EmployeeDetail() {
     const { data: e } = await sb.from('employees').select('*').eq('id', id).maybeSingle()
     if (!e) { setNotFound(true); return }
     setEmp(e)
-    const [pv, pr, all, cp, aa, dc] = await Promise.all([
+    const [pv, pr, all, cp, aa, dc, lb] = await Promise.all([
       sb.from('employee_private').select('*').eq('employee_id', id).maybeSingle(),
       e.profile_id ? sb.from('profiles').select('id,username,role').eq('id', e.profile_id).maybeSingle() : Promise.resolve({data:null}),
       sb.from('employees').select('id,full_name,designation,department,reporting_manager_id,profile_id,lifecycle_status').eq('is_test', false),
       sb.from('employee_compensation').select('*').eq('employee_id', id).order('fy_label',{ascending:false}),
       sb.from('asset_assignments').select('*').eq('employee_id', id).is('assigned_to', null),
       sb.from('employee_documents').select('*').eq('employee_id', id),
+      sb.from('leave_balances').select('*').eq('employee_id', id).eq('fy_label', currentFyLabel()).maybeSingle(),
     ])
+    setLeaveBal(lb?.data || null)
     const allRows = all?.data || []
     setPriv(pv?.data || null); setProfile(pr?.data || null); setAllEmps(allRows)
     signPhotos(allRows).then(() => setAllEmps([...allRows])).catch(() => {})   // photos async
@@ -145,6 +148,8 @@ export default function EmployeeDetail() {
   const reports = useMemo(() => emp ? allEmps.filter(x=>x.reporting_manager_id===emp.id && x.lifecycle_status!=='exited') : [], [emp, allEmps])
   const mgrOptions = useMemo(() => allEmps.filter(x=>x.id!==emp?.id && x.lifecycle_status!=='exited').sort((a,b)=>a.full_name.localeCompare(b.full_name)), [allEmps, emp])
   const fyComp = comp[0] || null
+  const leaveNum = leaveBal ? Number(leaveBal.credited)+Number(leaveBal.carried_forward)-Number(leaveBal.used)-Number(leaveBal.encashed) : null
+  const leaveCredited = leaveBal ? Number(leaveBal.credited)+Number(leaveBal.carried_forward) : null
 
   // KPI headline metric graph (actual_sales else first key)
   const kpiSeries = useMemo(() => {
@@ -324,6 +329,7 @@ export default function EmployeeDetail() {
                   {isMgmt && <Spec l="Date of Birth">{priv?.date_of_birth?fmtD(priv.date_of_birth)+' · '+ageFrom(priv.date_of_birth):'—'}</Spec>}
                   <Spec l="Department"><span className="dept-pill"><span className="dept-dot" style={{background:band}} />{emp.department||'—'}</span></Spec>
                   <Spec l="Branch / Location">{emp.branch||'—'}</Spec>
+                  <Spec l="Shift">{emp.shift_start ? `${emp.shift_start.slice(0,5)}–${emp.shift_end.slice(0,5)} · Part-time` : '10:00–18:30 · General'}</Spec>
                 </PCard>
                 <PCard icon={IC.job} title="Employment">
                   <Spec l="Date of Joining">{fmtD(emp.join_date)}</Spec>
@@ -332,6 +338,7 @@ export default function EmployeeDetail() {
                   {priv && <Spec l="Employment Type">{perm?'Permanent':'Contract / Probation'}</Spec>}
                   <Spec l="Login Role">{profile?(ROLE_LABELS[profile.role]||profile.role):'—'}</Spec>
                   <Spec l="User ID">{profile?.username?<span className="mono">{profile.username}</span>:'—'}</Spec>
+                  <Spec l="Leave Balance">{leaveNum!=null ? <span className="mono"><b>{leaveNum}</b> / {leaveCredited}</span> : '—'} <span className="sec-sub" style={{marginLeft:6}}>FY {currentFyLabel()}</span></Spec>
                 </PCard>
                 {isMgmt && (
                   <PCard icon={IC.heart} title="Personal & Family">

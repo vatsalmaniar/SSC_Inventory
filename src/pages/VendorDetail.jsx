@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { fmt } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import PhoneInput, { PhoneDisplay, isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
 import { useHistoryFilter, HistoryFilterBar, HistoryPager } from '../components/HistoryFilter'
 import { fetchAll } from '../lib/fetchAll'
@@ -358,7 +359,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
 
   if (loading) return (
     <Layout pageTitle="Vendor 360" pageKey="vendor360">
-      <div className="c360-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
+      <div className="c360-page"><Loading /></div>
     </Layout>
   )
   if (!vendor) return (

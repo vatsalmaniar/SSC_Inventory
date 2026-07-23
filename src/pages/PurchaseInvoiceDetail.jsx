@@ -7,6 +7,7 @@ import { fmtShort, fmtDateTime } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import { buildGrnHtml } from '../lib/grnHtml'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import { usePeopleDir } from '../components/PeopleAvatar'
 import '../styles/orderdetail.css'
 
@@ -440,7 +441,7 @@ export default function PurchaseInvoiceDetail() {
   // ── Loading / Not Found ──
   if (loading) return (
     <Layout pageTitle="Purchase Invoice" pageKey="billing">
-      <div className="od-page"><div className="loading-state" style={{paddingTop:80}}><div className="loading-spin"/></div></div>
+      <div className="od-page"><Loading /></div>
     </Layout>
   )
 

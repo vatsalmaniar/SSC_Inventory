@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
+import Loading from '../components/Loading'
 import { useHistoryFilter, HistoryFilterBar, HistoryPager } from '../components/HistoryFilter'
 import { fetchAll } from '../lib/fetchAll'
 import '../styles/orderdetail.css'
@@ -202,7 +203,7 @@ export default function ItemDetail() {
 
   if (loading) return (
     <Layout pageTitle="Item 360" pageKey="item360">
-      <div className="loading-state"><div className="loading-spin" /></div>
+      <Loading />
     </Layout>
   )
 
