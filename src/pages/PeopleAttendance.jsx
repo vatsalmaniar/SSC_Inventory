@@ -192,7 +192,7 @@ export default function PeopleAttendance() {
       // 2. location + geofence
       const geo = await new Promise(res => {
         if (!navigator.geolocation) return res(null)
-        navigator.geolocation.getCurrentPosition(p => res(p.coords), () => res(null), { enableHighAccuracy:true, timeout:8000 })
+        navigator.geolocation.getCurrentPosition(p => res(p.coords), () => res(null), { enableHighAccuracy:true, timeout:15000, maximumAge:30000 })
       })
       let lat=null, lng=null, acc=null, within=null, officeId=null
       if (geo) { lat=geo.latitude; lng=geo.longitude; acc=geo.accuracy
