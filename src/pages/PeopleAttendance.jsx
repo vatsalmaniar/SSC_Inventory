@@ -40,6 +40,8 @@ export default function PeopleAttendance() {
   const guard = useRef(false)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
+  const geoRef = useRef(null)
+  const [geoState, setGeoState] = useState('idle')  // idle | pending | ok | denied | unavailable | error
 
   useEffect(() => { init() }, [])
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t) }, [])
@@ -158,9 +160,20 @@ export default function PeopleAttendance() {
     return { onLeaveToday, notInYet, inCount }
   }, [scope, holidays, today])
 
+  function requestLocation() {
+    geoRef.current = null
+    if (!('geolocation' in navigator)) { setGeoState('unavailable'); return }
+    setGeoState('pending')
+    navigator.geolocation.getCurrentPosition(
+      p => { geoRef.current = p.coords; setGeoState('ok') },
+      err => { setGeoState(err && err.code === 1 ? 'denied' : 'error') },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    )
+  }
   async function openPunch() {
     if (!me) return
     setCamErr(''); setCamOpen(true)
+    requestLocation()
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 } }, audio: false })
       streamRef.current = stream
@@ -172,7 +185,7 @@ export default function PeopleAttendance() {
   function closeCam() {
     streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
-    setCamOpen(false)
+    setGeoState('idle'); setCamOpen(false)
   }
   useEffect(() => () => { streamRef.current?.getTracks().forEach(t=>t.stop()) }, [])
 
@@ -189,11 +202,11 @@ export default function PeopleAttendance() {
         cv.getContext('2d').drawImage(v, 0, 0, w, h)
         blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.6))
       }
-      // 2. location + geofence
-      const geo = await new Promise(res => {
-        if (!navigator.geolocation) return res(null)
-        navigator.geolocation.getCurrentPosition(p => res(p.coords), () => res(null), { enableHighAccuracy:true, timeout:15000, maximumAge:30000 })
-      })
+      // 2. location + geofence — requested when the punch opened; retry once if still pending
+      let geo = geoRef.current
+      if (!geo && ('geolocation' in navigator)) {
+        geo = await new Promise(res => navigator.geolocation.getCurrentPosition(p => res(p.coords), () => res(null), { enableHighAccuracy:true, timeout:15000, maximumAge:60000 }))
+      }
       let lat=null, lng=null, acc=null, within=null, officeId=null
       if (geo) { lat=geo.latitude; lng=geo.longitude; acc=geo.accuracy
         let best=null
@@ -386,7 +399,13 @@ export default function PeopleAttendance() {
                 : <video ref={videoRef} playsInline muted style={{width:'100%',height:'100%',objectFit:'cover',transform:'scaleX(-1)'}} />}
             </div>
             <div style={{padding:16,display:'flex',flexDirection:'column',gap:10}}>
-              <div style={{fontSize:12,color:'#5B6878',textAlign:'center'}}>📍 Your location is captured with the punch.</div>
+              <div style={{fontSize:12,textAlign:'center',lineHeight:1.5,color: geoState==='denied'?'#C2410C':'#5B6878'}}>
+                {geoState==='ok' ? '📍 Location captured.'
+                  : geoState==='pending' ? '📍 Getting your location…'
+                  : geoState==='denied' ? '⚠️ Location is blocked. Allow Location for this site in your browser settings, then punch again — otherwise your office location won’t be recorded.'
+                  : geoState==='unavailable' ? '📍 Location isn’t available on this device.'
+                  : '📍 Your location is captured with the punch.'}
+              </div>
               <button onClick={capturePunch} disabled={punching}
                 style={{width:'100%',border:0,borderRadius:10,padding:13,font:'inherit',fontSize:14.5,fontWeight:600,cursor:punching?'default':'pointer',color:'#fff',background:nextDir==='out'?'#C25A00':'#1a73e8',opacity:punching?0.65:1}}>
                 {punching ? 'Saving…' : (camErr ? `Check ${nextDir==='in'?'In':'Out'} without photo` : `📸 Capture & Check ${nextDir==='in'?'In':'Out'}`)}
