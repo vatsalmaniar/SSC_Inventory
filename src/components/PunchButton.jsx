@@ -132,6 +132,7 @@ export default function PunchButton() {
                   : geoState==='unavailable' ? '📍 Location isn’t available on this device.'
                   : '📍 Your location is captured with the punch.'}
               </div>
+              {geoState!=='ok' && geoState!=='pending' && <button onClick={requestLocation} style={{width:'100%',border:'1px solid #E8EBF0',background:'#fff',borderRadius:10,padding:10,font:'inherit',fontSize:13,fontWeight:600,color:'#0B1B30',cursor:'pointer'}}>📍 Enable location</button>}
               <button onClick={capturePunch} disabled={punching}
                 style={{width:'100%',border:0,borderRadius:10,padding:13,font:'inherit',fontSize:14.5,fontWeight:600,cursor:punching?'default':'pointer',color:'#fff',background:isOut?'#C25A00':'#1a73e8',opacity:punching?0.65:1}}>
                 {punching ? 'Saving…' : (camErr ? `Punch ${isOut?'Out':'In'} without photo` : `📸 Capture & Punch ${isOut?'Out':'In'}`)}
