@@ -125,17 +125,21 @@ export default function PunchButton() {
                 : <video ref={videoRef} playsInline muted style={{width:'100%',height:'100%',objectFit:'cover',transform:'scaleX(-1)'}} />}
             </div>
             <div style={{padding:16,display:'flex',flexDirection:'column',gap:10}}>
-              <div style={{fontSize:12,textAlign:'center',lineHeight:1.5,color: geoState==='denied'?'#C2410C':'#5B6878'}}>
-                {geoState==='ok' ? '📍 Location captured.'
-                  : geoState==='pending' ? '📍 Getting your location…'
-                  : geoState==='denied' ? '⚠️ Location is blocked. Allow Location for this site in your browser settings, then punch again — otherwise your office location won’t be recorded.'
-                  : geoState==='unavailable' ? '📍 Location isn’t available on this device.'
-                  : '📍 Your location is captured with the punch.'}
+              <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+                <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11.5,fontWeight:600,padding:'4px 11px',borderRadius:100,whiteSpace:'nowrap',color:camErr?'#C2410C':'#047857',background:camErr?'rgba(194,65,12,0.10)':'rgba(16,185,129,0.10)'}}>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  Camera {camErr ? 'blocked' : 'on'}
+                </span>
+                <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11.5,fontWeight:600,padding:'4px 11px',borderRadius:100,whiteSpace:'nowrap',color:geoState==='ok'?'#047857':geoState==='denied'?'#C2410C':'#5B6878',background:geoState==='ok'?'rgba(16,185,129,0.10)':geoState==='denied'?'rgba(194,65,12,0.10)':'#F1F3F5'}}>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+                  Location {geoState==='ok' ? 'on' : geoState==='pending' ? 'checking…' : geoState==='denied' ? 'blocked' : 'off'}
+                </span>
               </div>
-              {geoState!=='ok' && geoState!=='pending' && <button onClick={requestLocation} style={{width:'100%',border:'1px solid #E8EBF0',background:'#fff',borderRadius:10,padding:10,font:'inherit',fontSize:13,fontWeight:600,color:'#0B1B30',cursor:'pointer'}}>📍 Enable location</button>}
+              {(camErr || geoState==='denied') && <div style={{fontSize:11,color:'#C2410C',textAlign:'center',lineHeight:1.5}}>{geoState==='denied' ? 'Allow Location for this site in your browser settings, then tap Enable.' : 'Allow camera in your browser settings to capture a selfie.'}</div>}
+              {geoState!=='ok' && geoState!=='pending' && <button onClick={requestLocation} style={{width:'100%',border:'1px solid #E8EBF0',background:'#fff',borderRadius:10,padding:10,font:'inherit',fontSize:13,fontWeight:600,color:'#0B1B30',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:7}}><svg viewBox="0 0 24 24" width="15" height="15" fill="#1a73e8"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>Enable location</button>}
               <button onClick={capturePunch} disabled={punching}
                 style={{width:'100%',border:0,borderRadius:10,padding:13,font:'inherit',fontSize:14.5,fontWeight:600,cursor:punching?'default':'pointer',color:'#fff',background:isOut?'#C25A00':'#1a73e8',opacity:punching?0.65:1}}>
-                {punching ? 'Saving…' : (camErr ? `Punch ${isOut?'Out':'In'} without photo` : `📸 Capture & Punch ${isOut?'Out':'In'}`)}
+                {punching ? 'Saving…' : camErr ? `Punch ${isOut?'Out':'In'} without photo` : <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:8}}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Capture &amp; Punch {isOut?'Out':'In'}</span>}
               </button>
             </div>
           </div>

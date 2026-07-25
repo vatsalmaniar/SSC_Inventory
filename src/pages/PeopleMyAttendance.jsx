@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { currentFyLabel } from '../lib/kpi'
-import { computeDay, isWeekOff, minToHrs, fmtTime, STATUS_META, DEFAULT_CFG, effShift } from '../lib/attendance'
+import { computeDay, isWeekOff, minToHrs, fmtTime, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration } from '../lib/attendance'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
+import LeavePolicyDrawer from '../components/LeavePolicyDrawer'
 import { Spinner } from '../components/PeopleLoaders'
 import { adminEmpIds } from '../lib/attScope'
 import '../styles/people.css'
@@ -28,10 +29,12 @@ export default function PeopleMyAttendance() {
   const [meId, setMeId] = useState(null)
   const [picks, setPicks] = useState([])    // employees this viewer may open
   const [cfg, setCfg] = useState(DEFAULT_CFG)
+  const [policy, setPolicy] = useState(false)
   const [holidays, setHolidays] = useState(new Set())
   const [punches, setPunches] = useState([])
   const [leaveDates, setLeaveDates] = useState(new Set())
   const [imported, setImported] = useState({})   // work_date -> imported muster status
+  const [decls, setDecls] = useState([])         // special-day declarations covering this month
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d })
 
   const isMgmt = ['admin','management'].includes(role)
@@ -72,14 +75,15 @@ export default function PeopleMyAttendance() {
   async function load(t) {
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const end = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1)
-    const [c, hol, p, lv, ad] = await Promise.all([
+    const [c, hol, p, lv, ad, dc] = await Promise.all([
       sb.from('attendance_config').select('*').maybeSingle(),
       sb.from('holidays').select('holiday_date').eq('is_active', true),
       sb.from('attendance_punches').select('punch_at,direction').eq('employee_id', t.id).gte('punch_at', start.toISOString()).lt('punch_at', end.toISOString()).order('punch_at'),
       sb.from('leave_requests').select('from_date,to_date,is_half_day').eq('employee_id', t.id).eq('status','approved'),
       sb.from('attendance_days').select('work_date,status').eq('employee_id', t.id).gte('work_date', ymd(start)).lt('work_date', ymd(end)),
+      sb.from('attendance_declarations').select('*').lt('from_date', ymd(end)).gte('to_date', ymd(start)),
     ])
-    setCfg(c?.data || DEFAULT_CFG); setHolidays(new Set((hol?.data||[]).map(h=>h.holiday_date))); setPunches(p?.data||[])
+    setCfg(c?.data || DEFAULT_CFG); setHolidays(new Set((hol?.data||[]).map(h=>h.holiday_date))); setPunches(p?.data||[]); setDecls(dc?.data||[])
     const ld = new Set()
     ;(lv?.data||[]).forEach(r => { let d=new Date(r.from_date), e=new Date(r.to_date); while(d<=e){ ld.add(ymd(d)); d.setDate(d.getDate()+1) } })
     setLeaveDates(ld)
@@ -96,12 +100,14 @@ export default function PeopleMyAttendance() {
       const dt = new Date(y, mo, dd), key = ymd(dt)
       if (key > todayY) { out.push({ date:key, dd, status:'upcoming' }); continue }
       const pch = byDate[key]
-      if (pch && pch.length) { out.push({ date:key, dd, ...computeDay({ date:key, punches:pch, config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC }) }); continue }
-      if (imported[key]) { out.push({ date:key, dd, status: imported[key] }); continue }
-      out.push({ date:key, dd, ...computeDay({ date:key, punches:[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC }) })
+      let res
+      if (pch && pch.length) res = { date:key, dd, ...computeDay({ date:key, punches:pch, config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC }) }
+      else if (imported[key]) res = { date:key, dd, status: imported[key] }
+      else res = { date:key, dd, ...computeDay({ date:key, punches:[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC }) }
+      out.push(applyDeclaration(res, declarationFor(decls, emp?.branch, key)))
     }
     return out
-  }, [cursor, byDate, cfg, holidays, leaveDates, isFC, imported, emp])
+  }, [cursor, byDate, cfg, holidays, leaveDates, isFC, imported, emp, decls])
 
   const stats = useMemo(() => {
     const c = { present:0, half_day:0, absent:0, leave:0, holiday:0, weekoff:0 }
@@ -160,6 +166,10 @@ export default function PeopleMyAttendance() {
             <div className="ph-sub">Monthly log{!isSelf && ` · ${emp.designation||''}`}</div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',justifyContent:'flex-end'}}>
+            <button onClick={()=>setPolicy(true)} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:12.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}} title="How leave & LOP work">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
+              How leave &amp; LOP work
+            </button>
             <button className="btn btn-neutral btn-sm" onClick={downloadMyAtt} title="Download attendance (Excel)">
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download
@@ -208,14 +218,11 @@ export default function PeopleMyAttendance() {
           <div className="cal"><div className="cal-grid">
             {days.map(d => {
               const up = d.status==='upcoming', isToday = d.date===todayStr
-              let mk
-              if (up) mk = <div className="cal-mk future" />
-              else if (d.status==='weekoff') mk = <div className="cal-mk weekoff"><span>W</span></div>
-              else if (['present','half_day','holiday'].includes(d.status)) mk = <div className={'cal-mk '+d.status}>{d.status==='half_day'?<span style={{fontSize:11,fontWeight:800,color:'#fff'}}>½</span>:CHK}</div>
-              else mk = <div className={'cal-mk '+d.status}>{XMK}</div>
+              const st = up ? 'future' : d.status
               return (
                 <div key={d.date} className={'cal-cell'+(isToday?' today':'')+(up?' future':'')} title={(STATUS_META[d.status]?.label||'')+(d.code&&d.code.includes(':')?' · '+d.code:'')}>
-                  <span className="cal-day">{new Date(d.date).toLocaleDateString('en-GB',{weekday:'short'})} {d.dd}</span>{mk}
+                  <span className="cal-day">{new Date(d.date).toLocaleDateString('en-GB',{weekday:'short'})} {d.dd}</span>
+                  <div className={'cal-mk '+st+(d.declared?' decl':'')} />
                 </div>
               )
             })}
@@ -237,6 +244,8 @@ export default function PeopleMyAttendance() {
             )})}</tbody></table></div>
         </div>
       </div>
+
+      <LeavePolicyDrawer open={policy} onClose={()=>setPolicy(false)} />
     </Layout>
   )
 }

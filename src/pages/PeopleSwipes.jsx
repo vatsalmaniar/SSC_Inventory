@@ -197,7 +197,7 @@ export default function PeopleSwipes() {
                     <td>{r.method === 'mobile' ? <span className="method-tag gps">Mobile GPS</span> : r.method === 'biometric' ? <span className="method-tag biometric">Biometric</span> : <span className="method-tag web">{r.method}</span>}</td>
                     <td style={{ color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.note || ''}>{r.note || '—'}</td>
                     <td className="r">{r.lat != null && r.lng != null
-                      ? <a className="loc-icon" href={`https://maps.google.com/?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer" title="Open location in Maps"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg></a>
+                      ? <a className="loc-icon" href={`https://maps.google.com/?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer" title="Open location in Maps"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg></a>
                       : <span style={{ color: 'var(--muted-2)' }}>—</span>}</td>
                   </tr>
                 ))}

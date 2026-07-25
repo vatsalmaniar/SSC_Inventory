@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { computeDay, isWeekOff, fmtTime, minToHrs, STATUS_META, DEFAULT_CFG, effShift } from '../lib/attendance'
+import { computeDay, isWeekOff, fmtTime, minToHrs, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration, DECL_LABEL } from '../lib/attendance'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
@@ -24,6 +24,9 @@ const PENCIL = <svg width="11" height="11" viewBox="0 0 16 16" fill="none" strok
 
 // map computeDay/imported status → muster status classes
 const mapStatus = s => s==='half_day' ? 'half' : s==='lop' ? 'absent' : s==='upcoming' ? 'future' : s
+const declInp = { border:'1px solid var(--line)', borderRadius:8, padding:'8px 11px', font:'inherit', fontSize:13.5, color:'var(--ink)', background:'var(--surface)', outline:'none', width:'100%' }
+const declFieldL = { display:'flex', flexDirection:'column', gap:5, fontSize:11.5, fontWeight:600, color:'var(--muted)' }
+const DECL_REASONS = ['rainfall','flood','strike','festival','maintenance','other']
 
 export default function PeopleMuster() {
   const navigate = useNavigate()
@@ -42,6 +45,10 @@ export default function PeopleMuster() {
   const [dept, setDept] = useState('all')
   const [personId, setPersonId] = useState('')
   const [tip, setTip] = useState(null)            // { emp, rec, x, y }
+  const [decls, setDecls] = useState([])          // special-day declarations covering this month
+  const [showDecl, setShowDecl] = useState(false)
+  const [declForm, setDeclForm] = useState({ from_date:'', to_date:'', branch:'', status:'wfh', reason:'rainfall', note:'' })
+  const savingDecl = useRef(false)
 
   useEffect(() => { init() }, [cursor]) // eslint-disable-line
   useEffect(() => { if (emps.length && !emps.find(e=>e.id===personId)) setPersonId(emps[0].id) }, [emps]) // eslint-disable-line
@@ -58,10 +65,10 @@ export default function PeopleMuster() {
     let empQ = sb.from('employees').select('id,full_name,employee_code,designation,department,branch,shift_start,shift_end').neq('lifecycle_status','exited').order('full_name')
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const end = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1)
-    const [empRes, c, hol] = await Promise.all([empQ, sb.from('attendance_config').select('*').maybeSingle(), sb.from('holidays').select('holiday_date').eq('is_active',true)])
+    const [empRes, c, hol, decl] = await Promise.all([empQ, sb.from('attendance_config').select('*').maybeSingle(), sb.from('holidays').select('holiday_date').eq('is_active',true), sb.from('attendance_declarations').select('*').lt('from_date', ymd(end)).gte('to_date', ymd(start))])
     let list = empRes.data || []
     if (prof?.role === 'management') { const ex = await adminEmpIds(); list = list.filter(e => !ex.includes(e.id)) }
-    setEmps(list); setCfg(c?.data || DEFAULT_CFG); setHolidays(new Set((hol?.data||[]).map(h=>h.holiday_date)))
+    setEmps(list); setCfg(c?.data || DEFAULT_CFG); setHolidays(new Set((hol?.data||[]).map(h=>h.holiday_date))); setDecls(decl?.data || [])
     const ids = list.map(e=>e.id)
     if (ids.length) {
       const [pu, lv, ad, rg] = await Promise.all([
@@ -94,8 +101,9 @@ export default function PeopleMuster() {
     const computed = computeDay({ date:key, punches: punches||[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!leaveMap[`${emp.id}|${key}`], isFC:(emp.branch||'').startsWith('FC') })
     // …but the official muster status (imported/synced) wins for the status/code shown.
     const imp = imported[`${emp.id}|${key}`]
-    if (imp) return { ...computed, status: imp.s, code: imp.c != null ? imp.c : computed.code }
-    return computed
+    const result = imp ? { ...computed, status: imp.s, code: imp.c != null ? imp.c : computed.code } : computed
+    // special-day declaration (rainfall/WFH/etc) rescues would-be-absent days for the branch
+    return applyDeclaration(result, declarationFor(decls, emp.branch, key))
   }
 
   // per-employee month model (days + counts), memoised so hover doesn't recompute
@@ -107,14 +115,39 @@ export default function PeopleMuster() {
       const reg = regMap[`${e.id}|${ymd(dt)}`] || null
       return { day: dd, dow: dt.getDay(), we: isWeekOff(dt), status,
         late: (cc.late_min||0) > 0, reg, inM: cc.first_in || null, outM: cc.last_out || null,
-        worked: cc.worked_min || 0, code: cc.code || null }
+        worked: cc.worked_min || 0, code: cc.code || null, declared: cc.declared || null }
     })
     const c = { present:0, half:0, absent:0, leave:0, holiday:0, weekoff:0, reg:0, late:0 }
     days.forEach(d => { if (d.status!=='future' && c[d.status]!=null) c[d.status]++; if (d.reg) c.reg++; if (d.late) c.late++ })
     return { emp: e, days, c }
-  }), [emps, dayNums, cursor, punchMap, leaveMap, imported, regMap, cfg, holidays]) // eslint-disable-line
+  }), [emps, dayNums, cursor, punchMap, leaveMap, imported, regMap, cfg, holidays, decls]) // eslint-disable-line
 
   const depts = useMemo(() => { const s=[]; emps.forEach(e=>{ if(e.department && s.indexOf(e.department)<0) s.push(e.department) }); return s }, [emps])
+  const branches = useMemo(() => { const s=[]; emps.forEach(e=>{ if(e.branch && s.indexOf(e.branch)<0) s.push(e.branch) }); return s }, [emps])
+
+  async function saveDecl() {
+    if (savingDecl.current) return
+    if (!declForm.from_date || !declForm.to_date) { alert('Pick a date (or range).'); return }
+    if (declForm.to_date < declForm.from_date) { alert('End date is before the start date.'); return }
+    savingDecl.current = true
+    try {
+      const { data: { session } } = await sb.auth.getSession()
+      const { error } = await sb.from('attendance_declarations').insert({
+        from_date: declForm.from_date, to_date: declForm.to_date, branch: declForm.branch || null,
+        status: declForm.status, reason: declForm.reason, note: declForm.note?.trim() || null,
+        created_by: session?.user?.id || null,
+      })
+      if (error) throw error
+      setShowDecl(false); setDeclForm({ from_date:'', to_date:'', branch:'', status:'wfh', reason:'rainfall', note:'' })
+      await init()
+    } catch (e) { alert(e?.message || 'Failed to save declaration.') }
+    finally { savingDecl.current = false }
+  }
+  async function deleteDecl(id) {
+    if (!window.confirm('Remove this declaration?')) return
+    try { await sb.from('attendance_declarations').delete().eq('id', id); await init() }
+    catch (e) { alert(e?.message || 'Failed to remove.') }
+  }
   const gridRows = useMemo(() => musterData.filter(m => dept==='all' || m.emp.department===dept), [musterData, dept])
 
   async function downloadMuster() {
@@ -180,6 +213,7 @@ export default function PeopleMuster() {
             <div className="ph-sub">{emps.length} people · {monthLabel}</div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <button className="btn btn-primary btn-sm" onClick={()=>setShowDecl(true)} title="Declare a special day (rainfall / WFH / calamity)">+ Declare day</button>
             <button className="btn btn-neutral btn-sm" onClick={downloadMuster} title="Download detailed muster (Excel)">
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download
@@ -246,7 +280,7 @@ export default function PeopleMuster() {
                     <div className="mgx-strip">
                       {days.map(d => { const wk=d.dow===6&&d.day<lastDay, interactive=d.status!=='future'
                         return <span key={d.day}
-                          className={'mgc '+d.status+(d.reg?' reg':'')+(d.late?' late':'')+(d.day===todayNum?' today':'')+(wk?' wk':'')}
+                          className={'mgc '+d.status+(d.reg?' reg':'')+(d.late?' late':'')+(d.declared?' decl':'')+(d.day===todayNum?' today':'')+(wk?' wk':'')}
                           onMouseEnter={interactive?ev=>showTip(e,d,ev):undefined}
                           onMouseMove={interactive?moveTip:undefined}
                           onMouseLeave={interactive?hideTip:undefined} /> })}
@@ -329,9 +363,47 @@ export default function PeopleMuster() {
                 {r.late && <div className="mtt-tags"><span className="mtt-tag late">Late in</span></div>}
               </>}
               {r.reg && <div className="mtt-reg">{PENCIL}<div><div className="mtt-reg-t">Regularized</div><div className="mtt-reg-s">{(r.reg.reason||'Adjustment')} · {r.reg.status}</div></div></div>}
+              {r.declared && <div className="mtt-reg">{PENCIL}<div><div className="mtt-reg-t">Declared · {DECL_LABEL[r.declared.status]}</div><div className="mtt-reg-s">{r.declared.reason}{r.declared.note?' · '+r.declared.note:''}</div></div></div>}
             </div>
           )
         })()}
+
+        {showDecl && (
+          <div style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(11,27,48,0.55)',display:'grid',placeItems:'center',padding:16}} onClick={()=>setShowDecl(false)}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,width:'min(540px,96vw)',maxHeight:'92vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.35)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'16px 20px',borderBottom:'1px solid var(--line-2)'}}>
+                <div><div style={{fontWeight:600,fontSize:16,color:'var(--ink)'}}>Declare a special day</div><div style={{fontSize:12,color:'var(--muted)',marginTop:2}}>Rainfall / WFH / calamity — sets everyone at a location for the date(s)</div></div>
+                <button onClick={()=>setShowDecl(false)} style={{border:0,background:'none',fontSize:20,cursor:'pointer',color:'var(--muted)',lineHeight:1}}>✕</button>
+              </div>
+              <div style={{padding:'16px 20px',display:'flex',flexDirection:'column',gap:14}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                  <label style={declFieldL}>From<input type="date" value={declForm.from_date} onChange={e=>setDeclForm(f=>({...f,from_date:e.target.value,to_date:f.to_date||e.target.value}))} style={declInp}/></label>
+                  <label style={declFieldL}>To<input type="date" value={declForm.to_date} min={declForm.from_date} onChange={e=>setDeclForm(f=>({...f,to_date:e.target.value}))} style={declInp}/></label>
+                </div>
+                <label style={declFieldL}>Location<select value={declForm.branch} onChange={e=>setDeclForm(f=>({...f,branch:e.target.value}))} style={declInp}><option value="">All locations</option>{branches.map(b=><option key={b} value={b}>{b}</option>)}</select></label>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                  <label style={declFieldL}>Set status<select value={declForm.status} onChange={e=>setDeclForm(f=>({...f,status:e.target.value}))} style={declInp}>{Object.entries(DECL_LABEL).map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
+                  <label style={declFieldL}>Reason<select value={declForm.reason} onChange={e=>setDeclForm(f=>({...f,reason:e.target.value}))} style={declInp}>{DECL_REASONS.map(r=><option key={r} value={r}>{r[0].toUpperCase()+r.slice(1)}</option>)}</select></label>
+                </div>
+                <label style={declFieldL}>Note (optional)<input value={declForm.note} onChange={e=>setDeclForm(f=>({...f,note:e.target.value}))} placeholder="e.g. Heavy rain, city shut" style={declInp}/></label>
+                <div style={{fontSize:11.5,color:'var(--muted)',lineHeight:1.5}}>Only affects would-be-absent days at the chosen location. People who punched in, or are on approved leave, keep their real status. WFH counts as present (paid).</div>
+              </div>
+              {decls.length>0 && <div style={{padding:'0 20px 6px'}}>
+                <div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',color:'var(--muted)',margin:'2px 0 6px'}}>Declared this month</div>
+                {decls.map(d=>(
+                  <div key={d.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'8px 0',borderTop:'1px solid var(--line-2)',fontSize:12.5}}>
+                    <div style={{minWidth:0}}><b>{DECL_LABEL[d.status]}</b> · {d.reason}{d.branch?' · '+d.branch:' · All'}<div style={{fontSize:11,color:'var(--muted-2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.from_date}{d.to_date!==d.from_date?' → '+d.to_date:''}{d.note?' · '+d.note:''}</div></div>
+                    <button className="btn btn-neutral btn-sm" onClick={()=>deleteDecl(d.id)}>Remove</button>
+                  </div>
+                ))}
+              </div>}
+              <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'14px 20px',borderTop:'1px solid var(--line-2)',background:'var(--bg-2)'}}>
+                <button className="btn btn-neutral btn-sm" onClick={()=>setShowDecl(false)}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={saveDecl}>Declare</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   )

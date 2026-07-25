@@ -6,7 +6,9 @@ import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
 import { signPhotos } from '../lib/photos'
+import { calculateTax } from '../lib/tax'
 import PhotoCropper from '../components/PhotoCropper'
+import SalaryHelpDrawer from '../components/SalaryHelpDrawer'
 import Layout from '../components/Layout'
 import { ProfileSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
@@ -47,6 +49,17 @@ const IC = {
   lock:<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="7" width="10" height="6.5" rx="1.2"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>,
 }
 const Spec = ({ l, children }) => <div className="spec"><span className="spec-l">{l}</span><span className="spec-v">{children}</span></div>
+const CompLine = ({ l, v, strong, onHelp }) => (
+  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:12,padding:strong?'8px 0 0':'5px 0',marginTop:strong?4:0,borderTop:strong?'1px solid var(--line-2)':'none'}}>
+    <span style={{fontSize:12.5,color:strong?'var(--ink)':'var(--muted)',fontWeight:strong?600:400,display:'inline-flex',alignItems:'center',gap:5}}>
+      {l}
+      {onHelp && <button onClick={onHelp} title="How this is calculated" style={{border:0,background:'none',cursor:'pointer',color:'var(--accent)',padding:0,display:'inline-flex'}}>
+        <svg width="12.5" height="12.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
+      </button>}
+    </span>
+    <span style={{fontSize:strong?14:13,fontWeight:strong?600:500,color:'var(--ink)',fontFamily:"'Geist Mono',monospace"}}>{inr(v)}</span>
+  </div>
+)
 const PCard = ({ icon, title, right, wide, children }) => (
   <div className={'pcard'+(wide?' pcard-wide':'')}>
     <div className="pcard-h" style={right?{justifyContent:'space-between'}:undefined}><span style={{display:'inline-flex',alignItems:'center',gap:9}}>{icon}{title}</span>{right}</div>
@@ -148,6 +161,29 @@ export default function EmployeeDetail() {
   const reports = useMemo(() => emp ? allEmps.filter(x=>x.reporting_manager_id===emp.id && x.lifecycle_status!=='exited') : [], [emp, allEmps])
   const mgrOptions = useMemo(() => allEmps.filter(x=>x.id!==emp?.id && x.lifecycle_status!=='exited').sort((a,b)=>a.full_name.localeCompare(b.full_name)), [allEmps, emp])
   const fyComp = comp[0] || null
+  const [taxHelp, setTaxHelp] = useState(null)
+  const regime = emp?.tax_regime || 'new'
+  const taxCalc = useMemo(() => {
+    if (!fyComp || fyComp.monthly_gross == null) return null
+    return calculateTax({
+      regime,
+      grossAnnual: Number(fyComp.monthly_gross) * 12,
+      basic: Number(fyComp.basic||0) * 12,
+      hra: Number(fyComp.hra||0) * 12,
+      professionalTax: Number(fyComp.professional_tax||0) * 12,
+      monthsRemainingInFy: 12,
+    })
+  }, [fyComp, regime])
+  const computedTds = taxCalc ? taxCalc.monthlyTds : 0
+  const dedHeads = fyComp ? (Number(fyComp.pf_employee||0)+Number(fyComp.esic_employee||0)+Number(fyComp.professional_tax||0)+Number(fyComp.accidental_insurance||0)+Number(fyComp.gratuity||0)+Number(fyComp.bonus||0)+Number(fyComp.advance||0)) : 0
+  const totalDed = dedHeads + computedTds
+  const netPay = fyComp ? Number(fyComp.monthly_gross||0) - totalDed : 0
+  async function setRegime(r) {
+    if (r === regime || !emp) return
+    const { error } = await sb.from('employees').update({ tax_regime: r }).eq('id', id)
+    if (error) { toast(error.message, 'error'); return }
+    setEmp({ ...emp, tax_regime: r }); toast(`Regime set to ${r==='old'?'Old':'New'}`, 'success')
+  }
   const leaveNum = leaveBal ? Number(leaveBal.credited)+Number(leaveBal.carried_forward)-Number(leaveBal.used)-Number(leaveBal.encashed) : null
   const leaveCredited = leaveBal ? Number(leaveBal.credited)+Number(leaveBal.carried_forward) : null
 
@@ -366,7 +402,15 @@ export default function EmployeeDetail() {
             )}
 
             {tab==='comp' && canComp && (
-              <PCard icon={<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v6M6.3 6.3h2.4a1.3 1.3 0 0 1 0 2.6H6.3M6.3 8.9h2.6"/></svg>} title="Salary" right={<span className="sec-sub">Annual CTC · FY {fyComp?.fy_label||currentFyLabel()}</span>}>
+              <PCard icon={<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v6M6.3 6.3h2.4a1.3 1.3 0 0 1 0 2.6H6.3M6.3 8.9h2.6"/></svg>} title="Salary" right={<div style={{display:'flex',alignItems:'center',gap:10}}>
+                {fyComp && <div style={{display:'inline-flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:11,color:'var(--muted-2)'}}>Regime</span>
+                  <div style={{display:'inline-flex',gap:2,padding:2,background:'var(--bg)',borderRadius:7}}>
+                    {['new','old'].map(r=>(<button key={r} onClick={()=>setRegime(r)} style={{border:0,cursor:'pointer',borderRadius:5,padding:'3px 9px',fontSize:11,fontWeight:600,fontFamily:'inherit',color:regime===r?'#fff':'var(--muted)',background:regime===r?'var(--accent)':'transparent'}}>{r==='new'?'New':'Old'}</button>))}
+                  </div>
+                </div>}
+                <span className="sec-sub">FY {fyComp?.fy_label||currentFyLabel()}</span>
+              </div>}>
                 {!fyComp ? <div className="comp-locked">No salary recorded.</div> : (
                   <>
                     <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)'}}>
@@ -375,7 +419,41 @@ export default function EmployeeDetail() {
                       {kpi && <div style={{padding:'18px 20px'}}><div className="pmc-l">KPI Target</div><div className="pmc-v" style={{fontSize:18}}>{inr(kpi.annual_target_inr)}</div></div>}
                     </div>
                     {comp.length>1 && <div style={{padding:'12px 20px',borderTop:'1px solid var(--line-2)',fontSize:12,color:'var(--muted)'}}>History · {comp.map(c=>`${c.fy_label}: ${inr(c.annual_ctc_inr)}`).join('  ·  ')}</div>}
-                    <div style={{padding:'0 20px 14px',fontSize:11.5,color:'var(--muted-2)'}}>Detailed salary breakup will be added once you share the structure.</div>
+                    {fyComp.monthly_gross != null ? (
+                      <div style={{borderTop:'1px solid var(--line-2)'}}>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr'}}>
+                          <div style={{padding:'16px 20px',borderRight:'1px solid var(--line-2)'}}>
+                            <div className="pmc-l" style={{marginBottom:6}}>Earnings{fyComp.salary_ratio && <span style={{color:'var(--muted-2)',fontWeight:400,textTransform:'none',letterSpacing:0}}> · {fyComp.salary_ratio}</span>}</div>
+                            <CompLine l="Basic" v={fyComp.basic}/>
+                            <CompLine l="HRA" v={fyComp.hra}/>
+                            <CompLine l="Travel Allowance" v={fyComp.travel_allowance}/>
+                            <CompLine l="Special Allowance" v={fyComp.special_allowance}/>
+                            <CompLine l="Monthly Gross" v={fyComp.monthly_gross} strong/>
+                          </div>
+                          <div style={{padding:'16px 20px'}}>
+                            <div className="pmc-l" style={{marginBottom:6}}>Deductions</div>
+                            <CompLine l="PF (Employee)" v={fyComp.pf_employee}/>
+                            <CompLine l="ESIC (Employee)" v={fyComp.esic_employee}/>
+                            <CompLine l="Professional Tax" v={fyComp.professional_tax}/>
+                            <CompLine l="Accidental Insurance" v={fyComp.accidental_insurance}/>
+                            <CompLine l="Gratuity" v={fyComp.gratuity} onHelp={()=>setTaxHelp('gratuity')}/>
+                            <CompLine l="Bonus" v={fyComp.bonus} onHelp={()=>setTaxHelp('bonus')}/>
+                            <CompLine l="TDS" v={computedTds} onHelp={()=>setTaxHelp('tds')}/>
+                            {Number(fyComp.advance)>0 && <CompLine l="Advance" v={fyComp.advance}/>}
+                            <CompLine l="Total Deductions" v={totalDed} strong/>
+                          </div>
+                        </div>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',padding:'14px 20px',borderTop:'1px solid var(--line-2)',background:'var(--bg)'}}>
+                          <div><div className="pmc-l">Net Payable / month</div><div className="pmc-v" style={{fontSize:20,color:'var(--st-present)'}}>{inr(netPay)}</div></div>
+                          <div style={{fontSize:11.5,color:'var(--muted)',textAlign:'right'}}>
+                            Employer PF {inr(fyComp.pf_employer)} · ESIC {inr(fyComp.esic_employer)}<br/>
+                            <span style={{color:'var(--muted-2)'}}>TDS computed ({regime==='old'?'Old':'New'} regime) · excludes overtime</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{padding:'0 20px 14px',fontSize:11.5,color:'var(--muted-2)'}}>Detailed salary breakup not available for this record.</div>
+                    )}
                   </>
                 )}
               </PCard>
@@ -510,6 +588,8 @@ export default function EmployeeDetail() {
       )}
 
       {cropSrc && <PhotoCropper src={cropSrc} onCancel={() => setCropSrc('')} onDone={uploadCropped} />}
+
+      <SalaryHelpDrawer topic={taxHelp} data={{ calc: taxCalc, regime, basic: fyComp?.basic, bonus: fyComp?.bonus }} onClose={()=>setTaxHelp(null)} />
     </Layout>
   )
 }

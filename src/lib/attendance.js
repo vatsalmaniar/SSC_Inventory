@@ -7,6 +7,32 @@ export const DEFAULT_CFG = { office_start:'10:00', grace_until:'10:15', half_day
 // else the general shift from attendance_config. Grace / half-day cutoff stay from config.
 export const effShift = (emp, cfg = DEFAULT_CFG) => ({ ...cfg, office_start: emp?.shift_start || cfg.office_start, office_end: emp?.shift_end || cfg.office_end })
 
+// ── Special-day declarations (rainfall / WFH / calamity bulk status) ──
+const DECL_TO_STATUS = { present: 'present', wfh: 'present', holiday: 'holiday', half_day: 'half_day' }
+export const DECL_LABEL = { present: 'Present', wfh: 'WFH', holiday: 'Holiday', half_day: 'Half day' }
+
+// Find the declaration (if any) that covers this branch + date. A branch-specific
+// declaration wins over an all-locations (branch = null) one.
+export function declarationFor(declarations, branch, dateStr) {
+  if (!declarations || !declarations.length) return null
+  let all = null
+  for (const d of declarations) {
+    if (dateStr >= d.from_date && dateStr <= d.to_date) {
+      if (d.branch === branch) return d
+      if (d.branch == null && !all) all = d
+    }
+  }
+  return all
+}
+
+// Apply a declaration to a computed day. It only RESCUES would-be-absent days —
+// real punches (present/half), approved leave, holidays and week-offs all win.
+// WFH is recorded as Present with a code so payroll counts it as paid.
+export function applyDeclaration(computed, decl) {
+  if (!decl || !computed || computed.status !== 'absent') return computed
+  return { ...computed, status: DECL_TO_STATUS[decl.status] || 'present', declared: decl, code: decl.status === 'wfh' ? 'WFH' : computed.code }
+}
+
 export function toMin(t) { const [h, m] = (t || '0:0').slice(0,5).split(':').map(Number); return h * 60 + m }
 export function minToHrs(min) { if (min == null) return '—'; const h = Math.floor(min/60), m = min%60; return `${h}h ${String(m).padStart(2,'0')}m` }
 export function fmtTime(d) { if (!d) return '—'; const x = new Date(d); return x.toLocaleTimeString('en-IN', { hour:'numeric', minute:'2-digit', hour12:true }) }

@@ -79,6 +79,7 @@ const NAV_ITEMS = [
       { key: 'people-assets',     label: 'Assets',        path: '/people/assets', roles: ['admin','management'] },
       { key: 'people-kpi',        label: 'KRA / KPI',     path: '/people/kpi' },
       { key: 'people-expenses',   label: 'Expenses',      path: '/people/expenses' },
+      { key: 'people-salary-calc', label: 'Salary Calculator', path: '/people/salary-calculator', roles: ['admin','management'] },
       { key: 'people-config',     label: 'Configuration', path: '/people/config', roles: ['admin','management'] },
     ],
   },

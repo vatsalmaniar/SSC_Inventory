@@ -8,6 +8,7 @@ import { currentFyLabel } from '../lib/kpi'
 import { isWeekOff } from '../lib/attendance'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
+import LeavePolicyDrawer from '../components/LeavePolicyDrawer'
 import { Spinner } from '../components/PeopleLoaders'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
@@ -40,6 +41,7 @@ export default function PeopleLeave() {
   const [inbox, setInbox] = useState([])
   const [holidays, setHolidays] = useState(new Set())
   const [show, setShow] = useState(false)
+  const [policy, setPolicy] = useState(false)
   const [form, setForm] = useState({ from:'', to:'', is_half:false, half_period:'first', reason:'' })
   const guard = useRef(false)
   const isMgmt = ['admin','management'].includes(role)
@@ -133,6 +135,7 @@ export default function PeopleLeave() {
           const credited = bal ? Number(bal.credited)+Number(bal.carried_forward) : 25
           const used = bal ? Number(bal.used) : 0
           const carried = bal ? Number(bal.carried_forward) : 0
+          const lop = bal ? Number(bal.lop_days||0) : 0
           const pct = credited>0 && balNum!=null ? Math.max(0,Math.min(100, Math.round((balNum/credited)*100))) : 0
           return (
             <div className="acard" style={{marginBottom:14,padding:'18px 20px',display:'flex',alignItems:'flex-start',gap:16,flexWrap:'wrap'}}>
@@ -140,10 +143,19 @@ export default function PeopleLeave() {
                 <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3a7 7 0 0 1 7 7H3a7 7 0 0 1 7-7Z"/><path d="M10 10v5a2 2 0 0 0 3.4 1.4"/></svg>
               </span>
               <div style={{flex:1,minWidth:220}}>
-                <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--muted)'}}>Leave balance · FY {currentFyLabel()}</div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                  <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--muted)'}}>Leave balance · FY {currentFyLabel()}</div>
+                  <button onClick={()=>setPolicy(true)} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:11.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0,flexShrink:0}}>
+                    <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
+                    How leave &amp; LOP work
+                  </button>
+                </div>
                 <div style={{fontSize:30,fontWeight:600,letterSpacing:'-0.025em',lineHeight:1,marginTop:6,fontFamily:"'Geist Mono',monospace"}}>{balNum ?? '—'}<small style={{fontSize:14,color:'var(--muted-2)',fontWeight:500,fontFamily:"'Geist',sans-serif"}}> / {credited} left</small></div>
                 <div style={{height:7,borderRadius:5,background:'var(--bg)',overflow:'hidden',marginTop:12,maxWidth:420}}><div style={{height:'100%',width:pct+'%',background:'var(--accent)',borderRadius:5}} /></div>
-                <div style={{fontSize:11.5,color:'var(--muted)',marginTop:9}}><b style={{color:'var(--ink)'}}>{used}</b> used · <b style={{color:'var(--ink)'}}>{carried}</b> carried forward · <b style={{color:'var(--ink)'}}>{bal?Number(bal.credited):0}</b> credited</div>
+                <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginTop:9}}>
+                  <div style={{fontSize:11.5,color:'var(--muted)'}}><b style={{color:'var(--ink)'}}>{used}</b> used · <b style={{color:'var(--ink)'}}>{carried}</b> carried forward · <b style={{color:'var(--ink)'}}>{bal?Number(bal.credited):0}</b> credited</div>
+                  {lop>0 && <span title="Loss of Pay — unpaid days deducted from salary. Separate from your paid leave." style={{fontSize:11,fontWeight:600,color:'var(--st-absent)',background:'#FCEBEB',borderRadius:6,padding:'3px 8px',fontFamily:"'Geist Mono',monospace"}}>{lop} LOP · unpaid</span>}
+                </div>
               </div>
             </div>
           )
@@ -198,6 +210,8 @@ export default function PeopleLeave() {
           <div style={{fontSize:12,color:'var(--muted)'}}>Working days: <b>{days}</b> (weekends &amp; holidays excluded). Goes to your manager, then Ankit (HR).</div>
         </Drawer>
       )}
+
+      <LeavePolicyDrawer open={policy} onClose={()=>setPolicy(false)} />
     </Layout>
   )
 }

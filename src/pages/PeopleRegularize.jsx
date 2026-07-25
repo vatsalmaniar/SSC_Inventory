@@ -18,6 +18,16 @@ const ST = {
   rejected:{l:'Rejected',c:'#BB0000',b:'rgba(187,0,0,0.08)'},
   cancelled:{l:'Cancelled',c:'#8C99A8',b:'rgba(140,153,168,0.12)'},
 }
+const REG_REASONS = [
+  { k:'forgot_in',  l:'Forgot to punch in' },
+  { k:'forgot_out', l:'Forgot to punch out' },
+  { k:'field',      l:'On field / client visit' },
+  { k:'wfh',        l:'Work from home' },
+  { k:'biometric',  l:'Biometric / device issue' },
+  { k:'on_duty',    l:'On duty' },
+  { k:'other',      l:'Other' },
+]
+const REG_LABEL = Object.fromEntries(REG_REASONS.map(r => [r.k, r.l]))
 function Drawer({title,sub,onClose,children,footer}){return createPortal(<><div className="people-drawer-scrim" onClick={onClose}/><div className="people-drawer"><div className="pd-h"><div><div className="pd-h-t">{title}</div>{sub&&<div className="pd-h-s">{sub}</div>}</div><button className="pd-x" onClick={onClose}>✕</button></div><div className="pd-b">{children}</div>{footer&&<div className="pd-foot">{footer}</div>}</div></>,document.body)}
 
 export default function PeopleRegularize() {
@@ -30,7 +40,7 @@ export default function PeopleRegularize() {
   const [mine, setMine] = useState([])
   const [inbox, setInbox] = useState([])
   const [show, setShow] = useState(false)
-  const [form, setForm] = useState({ work_date:'', requested_in:'10:00', requested_out:'18:30', reason:'' })
+  const [form, setForm] = useState({ work_date:'', side:'in', requested_in:'10:00', requested_out:'18:30', reason_type:'forgot_in', note:'' })
   const guard = useRef(false)
   const isMgmt = ['admin','management'].includes(role)
 
@@ -63,18 +73,21 @@ export default function PeopleRegularize() {
   async function apply() {
     if (guard.current) return
     if (!form.work_date) { toast('Pick the date to fix.', 'error'); return }
-    if (!form.requested_in && !form.requested_out) { toast('Enter at least an in or out time.', 'error'); return }
-    if (form.requested_in && form.requested_out && form.requested_out < form.requested_in) { toast('Out time is before in time.', 'error'); return }
+    const t = form.side === 'in' ? form.requested_in : form.requested_out
+    if (!t) { toast(`Enter the correct ${form.side === 'in' ? 'in' : 'out'}-time.`, 'error'); return }
+    if (form.reason_type === 'other' && !form.note.trim()) { toast('Add a note describing the reason.', 'error'); return }
+    const reason = [REG_LABEL[form.reason_type], form.note.trim()].filter(Boolean).join(' — ')
     guard.current = true
     try {
       const { error } = await sb.from('regularizations').insert({
         employee_id: meId, work_date: form.work_date,
-        requested_in: form.requested_in || null, requested_out: form.requested_out || null,
-        reason: form.reason.trim() || null,
+        requested_in:  form.side === 'in'  ? form.requested_in  : null,
+        requested_out: form.side === 'out' ? form.requested_out : null,
+        reason,
       })
       if (error) throw error
       toast('Regularization sent to your manager.', 'success')
-      setShow(false); setForm({ work_date:'', requested_in:'10:00', requested_out:'18:30', reason:'' })
+      setShow(false); setForm({ work_date:'', side:'in', requested_in:'10:00', requested_out:'18:30', reason_type:'forgot_in', note:'' })
       await load(meId)
     } catch (e) { toast(e?.message||friendlyError(e),'error') }
     finally { guard.current = false }
@@ -152,14 +165,27 @@ export default function PeopleRegularize() {
       </div>
 
       {show && (
-        <Drawer title="Regularize a day" sub="Correct in/out for a missed or wrong punch" onClose={()=>setShow(false)}
+        <Drawer title="Regularize a day" sub="Correct one punch — in-time or out-time — for a missed or wrong entry" onClose={()=>setShow(false)}
           footer={<><button className="pd-btn neutral" onClick={()=>setShow(false)}>Cancel</button><button className="pd-btn primary" onClick={apply}>Send request</button></>}>
           <div className="pd-f"><label>Date to fix</label><input type="date" value={form.work_date} max={new Date().toLocaleDateString('en-CA')} onChange={e=>setForm({...form,work_date:e.target.value})} /></div>
-          <div className="pd-2">
-            <div className="pd-f"><label>Correct in-time</label><input type="time" value={form.requested_in} onChange={e=>setForm({...form,requested_in:e.target.value})} /></div>
-            <div className="pd-f"><label>Correct out-time</label><input type="time" value={form.requested_out} onChange={e=>setForm({...form,requested_out:e.target.value})} /></div>
+          <div className="pd-f"><label>What to correct</label>
+            <div className="reg-seg">
+              {[['in','In-time','forgot_in'],['out','Out-time','forgot_out']].map(([s,lbl,rt])=>(
+                <button key={s} type="button" className={'reg-seg-b'+(form.side===s?' on':'')}
+                  onClick={()=>setForm(f=>({...f, side:s, reason_type: (f.reason_type==='forgot_in'||f.reason_type==='forgot_out')?rt:f.reason_type}))}>{lbl}</button>
+              ))}
+            </div>
           </div>
-          <div className="pd-f"><label>Reason</label><input value={form.reason} onChange={e=>setForm({...form,reason:e.target.value})} placeholder="e.g. forgot to punch out" /></div>
+          {form.side==='in'
+            ? <div className="pd-f"><label>Correct in-time</label><input type="time" value={form.requested_in} onChange={e=>setForm({...form,requested_in:e.target.value})} /></div>
+            : <div className="pd-f"><label>Correct out-time</label><input type="time" value={form.requested_out} onChange={e=>setForm({...form,requested_out:e.target.value})} /></div>}
+          <div className="pd-f"><label>Reason</label>
+            <select value={form.reason_type} onChange={e=>setForm({...form,reason_type:e.target.value})}>
+              {REG_REASONS.map(r=><option key={r.k} value={r.k}>{r.l}</option>)}
+            </select>
+          </div>
+          <div className="pd-f"><label>Note {form.reason_type==='other'?'':<span style={{color:'var(--muted)',fontWeight:400}}>(optional)</span>}</label>
+            <input value={form.note} onChange={e=>setForm({...form,note:e.target.value})} placeholder={form.reason_type==='other'?'Describe the reason':'Add any detail (optional)'} /></div>
           <div style={{fontSize:12,color:'var(--muted)'}}>On approval, a correction punch is added <b>alongside</b> the original record (nothing is overwritten). Goes to your manager, then Ankit (HR).</div>
         </Drawer>
       )}

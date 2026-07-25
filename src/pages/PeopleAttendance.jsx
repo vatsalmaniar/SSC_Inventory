@@ -10,6 +10,7 @@ import { signPhotos } from '../lib/photos'
 import { adminEmpIds } from '../lib/attScope'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
+import LeavePolicyDrawer from '../components/LeavePolicyDrawer'
 import { Spinner } from '../components/PeopleLoaders'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
@@ -37,6 +38,7 @@ export default function PeopleAttendance() {
   const [punching, setPunching] = useState(false)
   const [camOpen, setCamOpen] = useState(false)
   const [camErr, setCamErr] = useState('')
+  const [policy, setPolicy] = useState(false)
   const guard = useRef(false)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -268,7 +270,13 @@ export default function PeopleAttendance() {
             <h1 className="ph-title">{greet}, {me.full_name.split(' ')[0]}</h1>
             <div className="ph-sub">{pending>0 ? <>You have <b>{pending}</b> leave request{pending>1?'s':''} pending.</> : 'Attendance overview'}</div>
           </div>
-          <div className="meta-pill live"><span className="meta-dot" /> Live</div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <button onClick={()=>setPolicy(true)} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:12.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}} title="How leave & LOP work">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
+              How leave &amp; LOP work
+            </button>
+            <div className="meta-pill live"><span className="meta-dot" /> Live</div>
+          </div>
         </div>
 
         <AttendanceTabs role={role} isManager={team.length > 0} />
@@ -298,7 +306,7 @@ export default function PeopleAttendance() {
             </div>
             <div className="hero-cta">
               <button className="btn btn-cyan" onClick={openPunch} disabled={punching}>
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="2" y="4.5" width="12" height="8.5" rx="1.5"/><circle cx="8" cy="8.7" r="2.2"/><path d="M6 4.5l1-1.5h2l1 1.5"/></svg>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                 {nextDir==='in'?'Check In':'Check Out'}
               </button>
               <button className="btn btn-onnavy" onClick={()=>navigate('/people/attendance/regularize')}>Regularize</button>
@@ -366,12 +374,12 @@ export default function PeopleAttendance() {
         {/* ── on leave + team (visible to everyone; presence-level data) ── */}
         <div className="agrid g-2">
           <div className="acard">
-            <div className="card-h bd"><span className="card-t">On leave today</span><span className="card-count">{onLeaveToday.length}</span></div>
-            {onLeaveToday.length===0 ? <div className="list-empty">Nobody's on leave today.</div> :
-              <div className="plist">{onLeaveToday.map(s=>(
+            <div className="card-h bd"><span className="card-t">Out today</span><span className="card-count">{onLeaveToday.length + notInYet.length}</span></div>
+            {(onLeaveToday.length + notInYet.length)===0 ? <div className="list-empty">Everyone's in the office.</div> :
+              <div className="plist">{[...onLeaveToday.map(s=>({s,type:'leave'})), ...notInYet.map(s=>({s,type:'absent'}))].map(({s,type})=>(
                 <div key={s.id} className="prow" style={{cursor:'pointer'}} onClick={()=>navigate('/people/attendance/me?emp='+s.id)}>
                   <Av e={s} size={36} /><div className="prow-b"><div className="prow-n">{s.full_name}</div><div className="prow-s">{s.designation||'—'}</div></div>
-                  <div className="prow-r"><span className="spill leave"><span className="led" />Leave</span></div></div>
+                  <div className="prow-r"><span className={'spill '+type}><span className="led" />{type==='leave' ? 'On leave' : 'Not in office'}</span></div></div>
               ))}</div>}
           </div>
           <div className="acard">
@@ -399,21 +407,27 @@ export default function PeopleAttendance() {
                 : <video ref={videoRef} playsInline muted style={{width:'100%',height:'100%',objectFit:'cover',transform:'scaleX(-1)'}} />}
             </div>
             <div style={{padding:16,display:'flex',flexDirection:'column',gap:10}}>
-              <div style={{fontSize:12,textAlign:'center',lineHeight:1.5,color: geoState==='denied'?'#C2410C':'#5B6878'}}>
-                {geoState==='ok' ? '📍 Location captured.'
-                  : geoState==='pending' ? '📍 Getting your location…'
-                  : geoState==='denied' ? '⚠️ Location is blocked. Allow Location for this site in your browser settings, then punch again — otherwise your office location won’t be recorded.'
-                  : geoState==='unavailable' ? '📍 Location isn’t available on this device.'
-                  : '📍 Your location is captured with the punch.'}
+              <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+                <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11.5,fontWeight:600,padding:'4px 11px',borderRadius:100,whiteSpace:'nowrap',color:camErr?'#C2410C':'#047857',background:camErr?'rgba(194,65,12,0.10)':'rgba(16,185,129,0.10)'}}>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  Camera {camErr ? 'blocked' : 'on'}
+                </span>
+                <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11.5,fontWeight:600,padding:'4px 11px',borderRadius:100,whiteSpace:'nowrap',color:geoState==='ok'?'#047857':geoState==='denied'?'#C2410C':'#5B6878',background:geoState==='ok'?'rgba(16,185,129,0.10)':geoState==='denied'?'rgba(194,65,12,0.10)':'#F1F3F5'}}>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+                  Location {geoState==='ok' ? 'on' : geoState==='pending' ? 'checking…' : geoState==='denied' ? 'blocked' : 'off'}
+                </span>
               </div>
-              {geoState!=='ok' && geoState!=='pending' && <button onClick={requestLocation} style={{width:'100%',border:'1px solid #E8EBF0',background:'#fff',borderRadius:10,padding:10,font:'inherit',fontSize:13,fontWeight:600,color:'#0B1B30',cursor:'pointer'}}>📍 Enable location</button>}
+              {(camErr || geoState==='denied') && <div style={{fontSize:11,color:'#C2410C',textAlign:'center',lineHeight:1.5}}>{geoState==='denied' ? 'Allow Location for this site in your browser settings, then tap Enable.' : 'Allow camera in your browser settings to capture a selfie.'}</div>}
+              {geoState!=='ok' && geoState!=='pending' && <button onClick={requestLocation} style={{width:'100%',border:'1px solid #E8EBF0',background:'#fff',borderRadius:10,padding:10,font:'inherit',fontSize:13,fontWeight:600,color:'#0B1B30',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:7}}><svg viewBox="0 0 24 24" width="15" height="15" fill="#1a73e8"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>Enable location</button>}
               <button onClick={capturePunch} disabled={punching}
                 style={{width:'100%',border:0,borderRadius:10,padding:13,font:'inherit',fontSize:14.5,fontWeight:600,cursor:punching?'default':'pointer',color:'#fff',background:nextDir==='out'?'#C25A00':'#1a73e8',opacity:punching?0.65:1}}>
-                {punching ? 'Saving…' : (camErr ? `Check ${nextDir==='in'?'In':'Out'} without photo` : `📸 Capture & Check ${nextDir==='in'?'In':'Out'}`)}
+                {punching ? 'Saving…' : camErr ? `Check ${nextDir==='in'?'In':'Out'} without photo` : <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:8}}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Capture &amp; Check {nextDir==='in'?'In':'Out'}</span>}
               </button>
             </div>
           </div>
         </div>, document.body)}
+
+      <LeavePolicyDrawer open={policy} onClose={()=>setPolicy(false)} />
     </Layout>
   )
 }
