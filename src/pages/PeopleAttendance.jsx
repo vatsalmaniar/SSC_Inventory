@@ -133,17 +133,18 @@ export default function PeopleAttendance() {
   const byDate = useMemo(() => { const m={}; punches.forEach(p => (m[ymd(p.punch_at)] ||= []).push(p)); return m }, [punches])
   const today = ymd(now)
   const myCfg = useMemo(() => effShift(me, cfg), [me, cfg])
-  const todayComputed = useMemo(() => computeDay({ date: today, punches: byDate[today]||[], config: myCfg, isHoliday: holidays.has(today), isFC }), [byDate, today, myCfg, holidays, isFC])
+  const meExempt = me?.attendance_exempt, meProb = me?.lifecycle_status==='probation'
+  const todayComputed = useMemo(() => computeDay({ date: today, punches: byDate[today]||[], config: myCfg, isHoliday: holidays.has(today), isFC, exempt: meExempt, probation: meProb }), [byDate, today, myCfg, holidays, isFC, meExempt, meProb])
   const todayPunches = byDate[today] || []
-  const nextDir = todayPunches.length && todayPunches[todayPunches.length-1].direction === 'in' ? 'out' : 'in'
+  const nextDir = todayPunches.length % 2 === 1 ? 'out' : 'in'   // derived: 1st in, 2nd out, …
 
   // recent history (last 14 days with punches)
-  const history = useMemo(() => Object.keys(byDate).sort().reverse().slice(0,14).map(dt => ({ date: dt, ...computeDay({ date: dt, punches: byDate[dt], config: myCfg, isHoliday: holidays.has(dt), isFC }) })), [byDate, myCfg, holidays, isFC])
+  const history = useMemo(() => Object.keys(byDate).sort().reverse().slice(0,14).map(dt => ({ date: dt, ...computeDay({ date: dt, punches: byDate[dt], config: myCfg, isHoliday: holidays.has(dt), isFC, exempt: meExempt, probation: meProb }) })), [byDate, myCfg, holidays, isFC, meExempt, meProb])
 
   // this-month stats + donut
   const monthStats = useMemo(() => {
     const mk = today.slice(0,7)
-    const days = Object.keys(byDate).filter(d => d.startsWith(mk)).map(d => computeDay({ date: d, punches: byDate[d], config: myCfg, isHoliday: holidays.has(d), isFC }))
+    const days = Object.keys(byDate).filter(d => d.startsWith(mk)).map(d => computeDay({ date: d, punches: byDate[d], config: myCfg, isHoliday: holidays.has(d), isFC, exempt: meExempt, probation: meProb }))
     const c = { present:0, half_day:0, absent:0, leave:0, holiday:0 }
     let inMins=[], workMins=[], ontime=0, tot=0
     days.forEach(d => { c[d.status] = (c[d.status]||0)+1

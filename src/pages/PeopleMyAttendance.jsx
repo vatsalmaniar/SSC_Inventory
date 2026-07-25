@@ -101,9 +101,9 @@ export default function PeopleMyAttendance() {
       if (key > todayY) { out.push({ date:key, dd, status:'upcoming' }); continue }
       const pch = byDate[key]
       let res
-      if (pch && pch.length) res = { date:key, dd, ...computeDay({ date:key, punches:pch, config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC }) }
+      if (pch && pch.length) res = { date:key, dd, ...computeDay({ date:key, punches:pch, config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC, exempt:emp?.attendance_exempt, probation:emp?.lifecycle_status==='probation' }) }
       else if (imported[key]) res = { date:key, dd, status: imported[key] }
-      else res = { date:key, dd, ...computeDay({ date:key, punches:[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC }) }
+      else res = { date:key, dd, ...computeDay({ date:key, punches:[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC, exempt:emp?.attendance_exempt, probation:emp?.lifecycle_status==='probation' }) }
       out.push(applyDeclaration(res, declarationFor(decls, emp?.branch, key)))
     }
     return out

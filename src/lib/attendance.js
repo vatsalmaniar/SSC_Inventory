@@ -54,33 +54,41 @@ export function distanceM(a, b) {
   return Math.round(2 * R * Math.asin(Math.sqrt(s)))
 }
 
-// punches: [{punch_at, direction}] for this date. Returns computed day.
-export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday = false, onLeave = false, isFC = false }) {
+// punches: [{punch_at, direction?}] for this date. Returns computed day.
+// Policy engine: In/Out are DERIVED from punch order (1st swipe = In, last = Out) —
+// the device's in/out flag is unreliable, so it is ignored.
+//   exempt    → non-punching admins: never absent from no-punch (always Present)
+//   probation → probation/notice: leave & absence are unpaid (is_lop)
+export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday = false, onLeave = false, isFC = false, exempt = false, probation = false }) {
   const d = new Date(date)
   if (isHoliday) return { status: 'holiday' }
   if (isWeekOff(d)) return { status: 'weekoff' }
-  if (onLeave) return { status: 'leave' }
+  if (onLeave) return { status: 'leave', is_lop: probation }   // probation leave = unpaid
 
-  const ins  = punches.filter(p => p.direction === 'in').map(p => new Date(p.punch_at)).sort((a,b)=>a-b)
-  const outs = punches.filter(p => p.direction === 'out').map(p => new Date(p.punch_at)).sort((a,b)=>a-b)
-  if (!ins.length) return { status: 'absent' }
-
-  const firstIn = ins[0], lastOut = outs.length ? outs[outs.length-1] : null
+  // Derive In/Out purely from time order — ignore any device direction flag.
+  const times = punches.map(p => new Date(p.punch_at)).filter(t => !isNaN(+t)).sort((a,b)=>a-b)
+  if (!times.length) {
+    if (exempt) return { status: 'present', code: 'EX' }        // admin non-puncher — stays Present
+    return { status: 'absent', is_lop: true }                   // uninformed absence → LOP
+  }
+  const firstIn = times[0]
+  const lastOut = times.length > 1 ? times[times.length-1] : null
   const inMin  = firstIn.getHours()*60 + firstIn.getMinutes()
   const startMin = toMin(config.office_start), graceMin = toMin(config.grace_until)
   const cutoffMin = toMin(config.half_day_cutoff), endMin = toMin(config.office_end)
+  const outCutoff = config.early_grace ? toMin(config.early_grace) : endMin   // must stay till this for the PM half
 
   let status = 'present', late = 0, early = 0, code = null
-  if (inMin > cutoffMin) return { status: 'absent', first_in: firstIn }   // arrival after 2:30 -> absent
-  if (inMin > graceMin) { status = 'half_day'; late = inMin - startMin; code = 'A:P' }   // late in -> missed 1st half (absent AM, present PM)
+  if (inMin > cutoffMin) return { status: 'absent', first_in: firstIn, is_lop: true }   // arrived too late → absent (LOP)
+  if (inMin > graceMin) { status = 'half_day'; late = inMin - startMin; code = 'A:P' }   // late in → lost AM half
 
-  let outMin = lastOut ? lastOut.getHours()*60 + lastOut.getMinutes() : null
-  if (outMin != null && outMin < endMin) { early = endMin - outMin; if (status === 'present') { status = 'half_day'; code = 'P:A' } }   // left early -> present AM, absent PM
+  const outMin = lastOut ? lastOut.getHours()*60 + lastOut.getMinutes() : null
+  if (outMin != null && outMin < outCutoff) { early = outCutoff - outMin; if (status === 'present') { status = 'half_day'; code = 'P:A' } }   // left early → lost PM half
 
   const worked = lastOut ? Math.round((lastOut - firstIn) / 60000) : null
   const ot = (isFC && outMin != null && outMin > endMin) ? (outMin - endMin) : 0
-  const leaveDeducted = status === 'half_day' ? 0.5 : (status === 'absent' ? 1 : 0)
-  return { status, code, first_in: firstIn, last_out: lastOut, worked_min: worked, late_min: late, early_min: early, ot_min: ot, leave_deducted: leaveDeducted }
+  const leaveDeducted = status === 'half_day' ? 0.5 : 0
+  return { status, code, first_in: firstIn, last_out: lastOut, worked_min: worked, late_min: late, early_min: early, ot_min: ot, leave_deducted: leaveDeducted, missing_punch: times.length === 1 }
 }
 
 // Soothing, light palette (eye-friendly) — used across attendance (badges, strips, dots)

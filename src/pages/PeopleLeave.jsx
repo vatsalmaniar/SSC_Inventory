@@ -15,6 +15,8 @@ import '../styles/attendance-ui.css'
 
 const ymd = d => new Date(d).toLocaleDateString('en-CA')
 const fmtD = d => d ? new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'
+// Going-forward leave auto-deduction starts here; anything earlier is already in the seeded baseline (no double-count).
+const LEAVE_DEDUCT_FROM = '2026-08-01'
 const ST = {
   pending:{l:'Pending manager',c:'#C25A00',b:'rgba(226,101,0,0.12)'},
   mgr_approved:{l:'Pending HR',c:'#0369a1',b:'rgba(3,105,161,0.10)'},
@@ -37,6 +39,7 @@ export default function PeopleLeave() {
   const [meId, setMeId] = useState(null)
   const [hrId, setHrId] = useState(null)
   const [bal, setBal] = useState(null)
+  const [fwdUsed, setFwdUsed] = useState(0)   // half-days×0.5 + leaves since LEAVE_DEDUCT_FROM
   const [mine, setMine] = useState([])
   const [inbox, setInbox] = useState([])
   const [holidays, setHolidays] = useState(new Set())
@@ -60,22 +63,25 @@ export default function PeopleLeave() {
   }
 
   async function load(myId, r) {
-    const [cfg, hol, bl, mn, ib] = await Promise.all([
+    const [cfg, hol, bl, mn, ib, ad] = await Promise.all([
       sb.from('attendance_config').select('hr_approver_employee_id').maybeSingle(),
       sb.from('holidays').select('holiday_date').eq('is_active', true),
       myId ? sb.from('leave_balances').select('*').eq('employee_id', myId).eq('fy_label', currentFyLabel()).maybeSingle() : Promise.resolve({data:null}),
       myId ? sb.from('leave_requests').select('*').eq('employee_id', myId).order('created_at',{ascending:false}) : Promise.resolve({data:[]}),
       // inbox: pending/mgr_approved requests I'm allowed to see (RLS: reports + admin/mgmt) with requester info
       sb.from('leave_requests').select('*, emp:employees!leave_requests_employee_id_fkey(full_name,designation,reporting_manager_id)').in('status',['pending','mgr_approved']).order('created_at'),
+      // going-forward consumption from the muster: half-days (0.5) + leave days (1) since the cutoff
+      myId ? sb.from('attendance_days').select('status').eq('employee_id', myId).gte('work_date', LEAVE_DEDUCT_FROM).in('status',['half_day','leave']) : Promise.resolve({data:[]}),
     ])
     setHrId(cfg?.data?.hr_approver_employee_id || null)
     setHolidays(new Set((hol?.data||[]).map(h=>h.holiday_date)))
     setBal(bl?.data || null); setMine(mn?.data || [])
+    setFwdUsed((ad?.data||[]).reduce((s,r)=> s + (r.status==='leave' ? 1 : 0.5), 0))
     // exclude my own from the approvals inbox
     setInbox((ib?.data||[]).filter(x => x.employee_id !== myId))
   }
 
-  const balNum = bal ? Number(bal.credited)+Number(bal.carried_forward)-Number(bal.used)-Number(bal.encashed) : null
+  const balNum = bal ? Number(bal.credited)+Number(bal.carried_forward)-Number(bal.used)-Number(bal.encashed)-fwdUsed : null
   const days = useMemo(() => form.from && form.to ? leaveDays(form.from, form.to, form.is_half, holidays) : 0, [form, holidays])
 
   async function apply() {
@@ -153,7 +159,7 @@ export default function PeopleLeave() {
                 <div style={{fontSize:30,fontWeight:600,letterSpacing:'-0.025em',lineHeight:1,marginTop:6,fontFamily:"'Geist Mono',monospace"}}>{balNum ?? '—'}<small style={{fontSize:14,color:'var(--muted-2)',fontWeight:500,fontFamily:"'Geist',sans-serif"}}> / {credited} left</small></div>
                 <div style={{height:7,borderRadius:5,background:'var(--bg)',overflow:'hidden',marginTop:12,maxWidth:420}}><div style={{height:'100%',width:pct+'%',background:'var(--accent)',borderRadius:5}} /></div>
                 <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginTop:9}}>
-                  <div style={{fontSize:11.5,color:'var(--muted)'}}><b style={{color:'var(--ink)'}}>{used}</b> used · <b style={{color:'var(--ink)'}}>{carried}</b> carried forward · <b style={{color:'var(--ink)'}}>{bal?Number(bal.credited):0}</b> credited</div>
+                  <div style={{fontSize:11.5,color:'var(--muted)'}}><b style={{color:'var(--ink)'}}>{used}</b> used · <b style={{color:'var(--ink)'}}>{carried}</b> carried forward · <b style={{color:'var(--ink)'}}>{bal?Number(bal.credited):0}</b> credited{fwdUsed>0 && <> · <b style={{color:'var(--ink)'}}>{fwdUsed}</b> since Aug (half-days &amp; leave)</>}</div>
                   {lop>0 && <span title="Loss of Pay — unpaid days deducted from salary. Separate from your paid leave." style={{fontSize:11,fontWeight:600,color:'var(--st-absent)',background:'#FCEBEB',borderRadius:6,padding:'3px 8px',fontFamily:"'Geist Mono',monospace"}}>{lop} LOP · unpaid</span>}
                 </div>
               </div>

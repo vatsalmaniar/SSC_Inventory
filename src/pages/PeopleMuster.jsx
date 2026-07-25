@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { computeDay, isWeekOff, fmtTime, minToHrs, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration, DECL_LABEL } from '../lib/attendance'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
+import { toast } from '../lib/toast'
 import AttendanceTabs from '../components/AttendanceTabs'
 import { Spinner } from '../components/PeopleLoaders'
 import PeopleAvatar from '../components/PeopleAvatar'
@@ -49,6 +50,11 @@ export default function PeopleMuster() {
   const [showDecl, setShowDecl] = useState(false)
   const [declForm, setDeclForm] = useState({ from_date:'', to_date:'', branch:'', status:'wfh', reason:'rainfall', note:'' })
   const savingDecl = useRef(false)
+  const [meId, setMeId] = useState(null)
+  const [markCell, setMarkCell] = useState(null)      // { emp, day, date, status }
+  const [markStatus, setMarkStatus] = useState('present')
+  const [markNote, setMarkNote] = useState('')
+  const markGuard = useRef(false)
 
   useEffect(() => { init() }, [cursor]) // eslint-disable-line
   useEffect(() => { if (emps.length && !emps.find(e=>e.id===personId)) setPersonId(emps[0].id) }, [emps]) // eslint-disable-line
@@ -60,9 +66,10 @@ export default function PeopleMuster() {
     const { data: prof } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     setRole(prof?.role || '')
     const { data: me } = await sb.from('employees').select('id').eq('profile_id', session.user.id).maybeSingle()
+    setMeId(me?.id || null)
     const mgmt = ['admin','management'].includes(prof?.role)
     if (!mgmt) { setDenied(true); setLoading(false); return }   // Muster is admin/management only
-    let empQ = sb.from('employees').select('id,full_name,employee_code,designation,department,branch,shift_start,shift_end').neq('lifecycle_status','exited').order('full_name')
+    let empQ = sb.from('employees').select('id,full_name,employee_code,designation,department,branch,shift_start,shift_end,attendance_exempt,lifecycle_status').neq('lifecycle_status','exited').order('full_name')
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const end = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1)
     const [empRes, c, hol, decl] = await Promise.all([empQ, sb.from('attendance_config').select('*').maybeSingle(), sb.from('holidays').select('holiday_date').eq('is_active',true), sb.from('attendance_declarations').select('*').lt('from_date', ymd(end)).gte('to_date', ymd(start))])
@@ -98,7 +105,7 @@ export default function PeopleMuster() {
     if (key > todayY) return { status:'upcoming' }
     // always compute from live swipes first, so we have real in/out/worked times…
     const punches = punchMap[`${emp.id}|${key}`]
-    const computed = computeDay({ date:key, punches: punches||[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!leaveMap[`${emp.id}|${key}`], isFC:(emp.branch||'').startsWith('FC') })
+    const computed = computeDay({ date:key, punches: punches||[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!leaveMap[`${emp.id}|${key}`], isFC:(emp.branch||'').startsWith('FC'), exempt:emp.attendance_exempt, probation:emp.lifecycle_status==='probation' })
     // …but the official muster status (imported/synced) wins for the status/code shown.
     const imp = imported[`${emp.id}|${key}`]
     const result = imp ? { ...computed, status: imp.s, code: imp.c != null ? imp.c : computed.code } : computed
@@ -147,6 +154,23 @@ export default function PeopleMuster() {
     if (!window.confirm('Remove this declaration?')) return
     try { await sb.from('attendance_declarations').delete().eq('id', id); await init() }
     catch (e) { alert(e?.message || 'Failed to remove.') }
+  }
+  const canMark = role==='admin' || (meId && cfg?.hr_approver_employee_id===meId)
+  function openMark(emp, d) {
+    const date = ymd(new Date(cursor.getFullYear(), cursor.getMonth(), d.day))
+    setMarkCell({ emp, day:d.day, date, status:d.status })
+    setMarkStatus(d.status==='half' ? 'half_day' : (d.status==='future'||d.status==='holiday'||d.status==='weekoff') ? 'present' : d.status)
+    setMarkNote('')
+  }
+  async function saveMark() {
+    if (markGuard.current || !markCell) return
+    markGuard.current = true
+    try {
+      const { error } = await sb.rpc('att_mark_day', { p_employee_id: markCell.emp.id, p_date: markCell.date, p_status: markStatus, p_note: markNote.trim()||null })
+      if (error) throw error
+      toast('Attendance marked','success'); setMarkCell(null); await init()
+    } catch (e) { toast(e?.message || 'Failed to mark','error') }
+    finally { markGuard.current = false }
   }
   const gridRows = useMemo(() => musterData.filter(m => dept==='all' || m.emp.department===dept), [musterData, dept])
 
@@ -281,9 +305,11 @@ export default function PeopleMuster() {
                       {days.map(d => { const wk=d.dow===6&&d.day<lastDay, interactive=d.status!=='future'
                         return <span key={d.day}
                           className={'mgc '+d.status+(d.reg?' reg':'')+(d.late?' late':'')+(d.declared?' decl':'')+(d.day===todayNum?' today':'')+(wk?' wk':'')}
+                          style={canMark&&interactive?{cursor:'pointer'}:undefined}
                           onMouseEnter={interactive?ev=>showTip(e,d,ev):undefined}
                           onMouseMove={interactive?moveTip:undefined}
-                          onMouseLeave={interactive?hideTip:undefined} /> })}
+                          onMouseLeave={interactive?hideTip:undefined}
+                          onClick={canMark&&interactive?()=>openMark(e,d):undefined} /> })}
                     </div>
                     <div className="mgx-sum">
                       <span className="msum-n"><b>{present}</b> / {scheduled} days</span>
@@ -400,6 +426,32 @@ export default function PeopleMuster() {
               <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'14px 20px',borderTop:'1px solid var(--line-2)',background:'var(--bg-2)'}}>
                 <button className="btn btn-neutral btn-sm" onClick={()=>setShowDecl(false)}>Cancel</button>
                 <button className="btn btn-primary btn-sm" onClick={saveDecl}>Declare</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {markCell && (
+          <div style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(11,27,48,0.55)',display:'grid',placeItems:'center',padding:16}} onClick={()=>setMarkCell(null)}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,width:'min(440px,96vw)',boxShadow:'0 20px 60px rgba(0,0,0,0.35)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'16px 20px',borderBottom:'1px solid var(--line-2)'}}>
+                <div><div style={{fontWeight:600,fontSize:16,color:'var(--ink)'}}>Mark attendance</div><div style={{fontSize:12,color:'var(--muted)',marginTop:2}}>{markCell.emp.full_name} · {new Date(markCell.date).toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}</div></div>
+                <button onClick={()=>setMarkCell(null)} style={{border:0,background:'none',fontSize:20,cursor:'pointer',color:'var(--muted)',lineHeight:1}}>✕</button>
+              </div>
+              <div style={{padding:'16px 20px',display:'flex',flexDirection:'column',gap:14}}>
+                <label style={declFieldL}>Status<select value={markStatus} onChange={e=>setMarkStatus(e.target.value)} style={declInp}>
+                  <option value="present">Present</option>
+                  <option value="half_day">Half day</option>
+                  <option value="absent">Absent</option>
+                  <option value="leave">Leave</option>
+                  <option value="lop">LOP</option>
+                </select></label>
+                <label style={declFieldL}>Note (optional)<input value={markNote} onChange={e=>setMarkNote(e.target.value)} placeholder="e.g. Was present, missed punch" style={declInp}/></label>
+                <div style={{fontSize:11.5,color:'var(--muted)',lineHeight:1.5}}>Overrides the computed status for this day, and is logged (who &amp; when). Admin &amp; HR only.</div>
+              </div>
+              <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'14px 20px',borderTop:'1px solid var(--line-2)',background:'var(--bg-2)'}}>
+                <button className="btn btn-neutral btn-sm" onClick={()=>setMarkCell(null)}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={saveMark}>Save</button>
               </div>
             </div>
           </div>
