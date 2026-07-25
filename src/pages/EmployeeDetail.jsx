@@ -98,7 +98,7 @@ export default function EmployeeDetail() {
   const isMgmt = ['admin','management'].includes(role)
   const isSelf = emp && profile && emp.profile_id === uid
   const targetIsAdmin = profile?.role === 'admin'
-  const canComp = isAdmin || (role === 'management' && !targetIsAdmin)
+  const canComp = isAdmin || (role === 'management' && !targetIsAdmin) || isSelf
   const canKPI = isMgmt || isSelf
 
   useEffect(() => { init() }, [id])   // eslint-disable-line
@@ -405,9 +405,13 @@ export default function EmployeeDetail() {
               <PCard icon={<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v6M6.3 6.3h2.4a1.3 1.3 0 0 1 0 2.6H6.3M6.3 8.9h2.6"/></svg>} title="Salary" right={<div style={{display:'flex',alignItems:'center',gap:10}}>
                 {fyComp && <div style={{display:'inline-flex',alignItems:'center',gap:6}}>
                   <span style={{fontSize:11,color:'var(--muted-2)'}}>Regime</span>
-                  <div style={{display:'inline-flex',gap:2,padding:2,background:'var(--bg)',borderRadius:7}}>
-                    {['new','old'].map(r=>(<button key={r} onClick={()=>setRegime(r)} style={{border:0,cursor:'pointer',borderRadius:5,padding:'3px 9px',fontSize:11,fontWeight:600,fontFamily:'inherit',color:regime===r?'#fff':'var(--muted)',background:regime===r?'var(--accent)':'transparent'}}>{r==='new'?'New':'Old'}</button>))}
-                  </div>
+                  {isMgmt ? (
+                    <div style={{display:'inline-flex',gap:2,padding:2,background:'var(--bg)',borderRadius:7}}>
+                      {['new','old'].map(r=>(<button key={r} onClick={()=>setRegime(r)} style={{border:0,cursor:'pointer',borderRadius:5,padding:'3px 9px',fontSize:11,fontWeight:600,fontFamily:'inherit',color:regime===r?'#fff':'var(--muted)',background:regime===r?'var(--accent)':'transparent'}}>{r==='new'?'New':'Old'}</button>))}
+                    </div>
+                  ) : (
+                    <span style={{fontSize:11,fontWeight:600,color:'var(--accent)',background:'var(--accent-soft)',borderRadius:6,padding:'3px 9px'}}>{regime==='old'?'Old':'New'}</span>
+                  )}
                 </div>}
                 <span className="sec-sub">FY {fyComp?.fy_label||currentFyLabel()}</span>
               </div>}>
