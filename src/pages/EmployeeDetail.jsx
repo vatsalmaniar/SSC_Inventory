@@ -224,7 +224,7 @@ export default function EmployeeDetail() {
       full_name: emp.full_name, employee_code: emp.employee_code || '', designation: emp.designation || '',
       department: emp.department || '', branch: emp.branch || '', join_date: emp.join_date || '', lifecycle_status: emp.lifecycle_status,
       gender: priv?.gender || '', date_of_birth: priv?.date_of_birth || '', personal_phone: priv?.personal_phone || '',
-      personal_email: priv?.personal_email || '', emergency_contact: priv?.emergency_contact || '', pan: priv?.pan || '', aadhaar: priv?.aadhaar || '',
+      personal_email: priv?.personal_email || '', emergency_contact: priv?.emergency_contact || '', pan: priv?.pan || '', aadhaar: priv?.aadhaar || '', uan_no: priv?.uan_no || '', esic_no: priv?.esic_no || '',
       spouse_name: priv?.spouse_name || '', spouse_phone: priv?.spouse_phone || '', spouse_dob: priv?.spouse_dob || '', is_permanent: priv?.is_permanent ?? true,
     })
     setShowEdit(true)
@@ -245,6 +245,7 @@ export default function EmployeeDetail() {
           employee_id: emp.id, gender: editForm.gender || null, date_of_birth: editForm.date_of_birth || null,
           personal_phone: editForm.personal_phone || null, personal_email: editForm.personal_email || null,
           emergency_contact: editForm.emergency_contact || null, pan: editForm.pan || null, aadhaar: editForm.aadhaar || null,
+          uan_no: editForm.uan_no?.trim() || null, esic_no: editForm.esic_no?.trim() || null,
           spouse_name: editForm.spouse_name || null, spouse_phone: editForm.spouse_phone || null,
           spouse_dob: editForm.spouse_dob || null, is_permanent: editForm.is_permanent,
         }, { onConflict: 'employee_id' })
@@ -393,6 +394,8 @@ export default function EmployeeDetail() {
                       <Spec l={<>Aadhaar <span className="lock-tag">Restricted</span></>}>
                         <span className="masked"><span className="masked-val">{reveal.aad?(priv?.aadhaar||'—'):maskAad(priv?.aadhaar)}</span><button className="eye-btn" onClick={()=>setReveal(r=>({...r,aad:!r.aad}))}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8Z"/><circle cx="8" cy="8" r="1.8"/></svg></button></span>
                       </Spec>
+                      <Spec l="UAN (PF)">{priv?.uan_no ? <span className="mono">{priv.uan_no}</span> : '—'}</Spec>
+                      <Spec l="ESIC No.">{priv?.esic_no ? <span className="mono">{priv.esic_no}</span> : <span className="no-access">— (above ESIC limit)</span>}</Spec>
                     </>
                   ) : (
                     <div className="legal-locked"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><div>PAN &amp; Aadhaar are hidden for your role.<br/>Visible to Admin &amp; Management only.</div></div>
@@ -578,6 +581,8 @@ export default function EmployeeDetail() {
             <div className="pd-2">
               <div className="pd-f"><label>PAN</label><input value={editForm.pan} onChange={e=>setEditForm({...editForm,pan:e.target.value.toUpperCase()})} placeholder="ABCPM1234A" /></div>
               <div className="pd-f"><label>Aadhaar</label><input value={editForm.aadhaar} onChange={e=>setEditForm({...editForm,aadhaar:e.target.value})} placeholder="1234 5678 9012" /></div>
+              <div className="pd-f"><label>UAN (PF)</label><input value={editForm.uan_no} onChange={e=>setEditForm({...editForm,uan_no:e.target.value})} placeholder="12-digit UAN" /></div>
+              <div className="pd-f"><label>ESIC No.</label><input value={editForm.esic_no} onChange={e=>setEditForm({...editForm,esic_no:e.target.value})} placeholder="10-digit (if applicable)" /></div>
             </div>
             <div className="pd-2">
               <div className="pd-f"><label>Spouse name</label><input value={editForm.spouse_name} onChange={e=>setEditForm({...editForm,spouse_name:e.target.value})} /></div>
