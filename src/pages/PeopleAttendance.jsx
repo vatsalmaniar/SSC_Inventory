@@ -135,6 +135,7 @@ export default function PeopleAttendance() {
   const today = ymd(now)
   const myCfg = useMemo(() => effShift(me, cfg), [me, cfg])
   const meExempt = me?.attendance_exempt, meProb = me?.lifecycle_status==='probation'
+  const canWebPunch = ['sales','admin','management'].includes(role)   // others must use the biometric device
   const todayComputed = useMemo(() => computeDay({ date: today, punches: byDate[today]||[], config: myCfg, isHoliday: holidays.has(today), isFC, exempt: meExempt, probation: meProb }), [byDate, today, myCfg, holidays, isFC, meExempt, meProb])
   const todayPunches = byDate[today] || []
   const nextDir = todayPunches.length % 2 === 1 ? 'out' : 'in'   // derived: 1st in, 2nd out, …
@@ -305,10 +306,12 @@ export default function PeopleAttendance() {
               </div>
             </div>
             <div className="hero-cta">
-              <button className="btn btn-cyan" onClick={openPunch} disabled={punching}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                {nextDir==='in'?'Check In':'Check Out'}
-              </button>
+              {canWebPunch
+                ? <button className="btn btn-cyan" onClick={openPunch} disabled={punching}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    {nextDir==='in'?'Check In':'Check Out'}
+                  </button>
+                : <div className="btn btn-neutral" style={{cursor:'default',pointerEvents:'none',opacity:0.85}}>Check in on the biometric device</div>}
               <button className="btn btn-onnavy" onClick={()=>navigate('/people/attendance/regularize')}>Regularize</button>
             </div>
           </section>

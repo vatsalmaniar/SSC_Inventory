@@ -8,6 +8,7 @@ import { distanceM } from '../lib/attendance'
 // Compact attendance punch for the top header: selfie + location, feeds attendance_punches.
 export default function PunchButton() {
   const [me, setMe] = useState(null)
+  const [canPunch, setCanPunch] = useState(false)   // web punch = sales / admin / management only
   const [offices, setOffices] = useState([])
   const [nextDir, setNextDir] = useState('in')
   const [camOpen, setCamOpen] = useState(false)
@@ -24,8 +25,12 @@ export default function PunchButton() {
   async function load() {
     const { data: { session } } = await sb.auth.getSession()
     if (!session) return
-    const { data: emp } = await sb.from('employees').select('id').eq('profile_id', session.user.id).maybeSingle()
+    const [{ data: emp }, { data: prof }] = await Promise.all([
+      sb.from('employees').select('id').eq('profile_id', session.user.id).maybeSingle(),
+      sb.from('profiles').select('role').eq('id', session.user.id).maybeSingle(),
+    ])
     if (!emp) return
+    setCanPunch(['sales','admin','management'].includes(prof?.role))
     setMe(emp)
     const [{ data: off }, { data: tp }] = await Promise.all([
       sb.from('office_locations').select('*').eq('is_active', true),
@@ -100,7 +105,7 @@ export default function PunchButton() {
     finally { guard.current = false; setPunching(false) }
   }
 
-  if (!me) return null
+  if (!me || !canPunch) return null   // biometric-only roles don't get the web punch
   const isOut = nextDir === 'out'
 
   return (
