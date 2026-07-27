@@ -352,7 +352,7 @@ export default function PeopleKpi() {
         {/* Page head */}
         <div className="page-head">
           <div>
-            <h1 className="page-title">KRA · KPI Performance</h1>
+            <h1 className="page-title">Performance</h1>
             <div className="page-sub">Monthly performance for the Growth & Customer Success teams.</div>
           </div>
           <div className="page-meta">

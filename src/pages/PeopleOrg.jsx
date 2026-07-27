@@ -87,17 +87,17 @@ export default function PeopleOrg() {
     catch (e) { toast(e?.message||friendlyError(e),'error') }
   }
 
-  if (loading) return <Layout pageKey="people" pageTitle="Org Chart"><div className="people-app"><Spinner label="Loading org chart…" /></div></Layout>
+  if (loading) return <Layout pageKey="people" pageTitle="Organisation"><div className="people-app"><Spinner label="Loading org chart…" /></div></Layout>
 
   return (
-    <Layout pageKey="people" pageTitle="Org Chart">
+    <Layout pageKey="people" pageTitle="Organisation">
       <div className="people-app">
         <div className="ph">
           <div>
             <button onClick={()=>navigate('/people/team')} style={{background:'none',border:0,cursor:'pointer',color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:4,fontSize:13,padding:0,marginBottom:4}}>
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>Team
             </button>
-            <h1 className="ph-title">Org Chart</h1>
+            <h1 className="ph-title">Organisation</h1>
             <div className="ph-sub">Reporting structure across SSC · click a card to inspect{isMgmt?' or reassign':''}</div>
           </div>
           <div className="ph-actions">

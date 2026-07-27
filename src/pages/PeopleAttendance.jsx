@@ -11,6 +11,7 @@ import { adminEmpIds } from '../lib/attScope'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
 import LeavePolicyDrawer from '../components/LeavePolicyDrawer'
+import StatusDonut from '../components/StatusDonut'
 import { Spinner } from '../components/PeopleLoaders'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
@@ -290,9 +291,7 @@ export default function PeopleAttendance() {
               <span className="hero-chip"><span className="led" style={{background: firstIn?'var(--st-present)':'#ff8b6b'}} />{firstIn?'Checked in':'Not in yet'}</span>
             </div>
             <div className="hero-body">
-              <div className="hero-ring" style={{background:`conic-gradient(var(--accent) ${pct*3.6}deg, var(--line) 0)`}}>
-                <div className="hero-ring-c"><div className="hero-ring-v">{pct}%</div><div className="hero-ring-l">of shift</div></div>
-              </div>
+              <StatusDonut pct={pct} centerLabel="of shift" />
               <div className="hero-mid">
                 <div className="hero-stat">
                   <div><div className="hero-stat-l">Checked in</div><div className="hero-stat-v mono">{firstIn?fmtTime(firstIn):'—'}</div></div>
@@ -350,13 +349,17 @@ export default function PeopleAttendance() {
         <div className="agrid g-2u" style={{marginBottom:16}}>
           <div className="acard">
             <div className="card-h bd"><span className="card-t">My month</span><span className="card-sub">this month</span></div>
-            <div className="mdonut">
-              <div className="donut2" style={{background:`conic-gradient(${conic}, var(--line) 0)`}}><div className="donut2-c"><div className="donut2-v">{donutC.present}</div><div className="donut2-l">present days</div></div></div>
-              <div className="mlegend">
-                {[['present','Present'],['half_day','Half day'],['leave','Leave'],['absent','Absent']].map(([k,l])=>(
-                  <div key={k} className="mleg"><span className="mleg-dot" style={{background:stColor[k]}} /><span className="mleg-n">{l}</span><span className="mleg-v">{donutC[k]||0}</span></div>
-                ))}
-              </div>
+            <div className="mdonut" style={{padding:'6px 4px 10px'}}>
+              <StatusDonut
+                pct={(() => { const t=(donutC.present||0)+(donutC.half_day||0)+(donutC.leave||0)+(donutC.absent||0); return t ? Math.round((donutC.present||0)/t*100) : 0 })()}
+                centerLabel="PRESENT"
+                rows={[
+                  { label:'Present',  value:donutC.present||0,  color:stColor.present },
+                  { label:'Half day', value:donutC.half_day||0, color:stColor.half_day },
+                  { label:'Leave',    value:donutC.leave||0,    color:stColor.leave },
+                ]}
+                summary={{ label:'Absent', value:donutC.absent||0 }}
+              />
             </div>
           </div>
           <div className="acard">

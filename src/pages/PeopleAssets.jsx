@@ -194,21 +194,21 @@ export default function PeopleAssets() {
   }
 
   if (denied) return (
-    <Layout pageKey="people" pageTitle="Assets"><div className="people-app"><div className="e-empty">This page is restricted to Admin &amp; Management.</div></div></Layout>
+    <Layout pageKey="people" pageTitle="Devices"><div className="people-app"><div className="e-empty">This page is restricted to Admin &amp; Management.</div></div></Layout>
   )
-  if (loading) return <Layout pageKey="people" pageTitle="Assets"><div className="people-app"><AssetsSkeleton /></div></Layout>
+  if (loading) return <Layout pageKey="people" pageTitle="Devices"><div className="people-app"><AssetsSkeleton /></div></Layout>
 
   const Sel = ({ value, onChange, children }) => <div className="f-sel"><select value={value} onChange={e=>onChange(e.target.value)}>{children}</select></div>
 
   return (
-    <Layout pageKey="people" pageTitle="Assets">
+    <Layout pageKey="people" pageTitle="Devices">
       <div className="people-app">
         <div className="ph">
           <div>
             <button onClick={()=>navigate('/people')} style={{background:'none',border:0,cursor:'pointer',color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:4,fontSize:13,padding:0,marginBottom:4}}>
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
             </button>
-            <h1 className="ph-title">Assets &amp; Devices</h1>
+            <h1 className="ph-title">Devices</h1>
             <div className="ph-sub">Company device register — add devices, then assign to people</div>
           </div>
           <div className="ph-actions">

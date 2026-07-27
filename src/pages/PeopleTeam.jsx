@@ -147,7 +147,7 @@ export default function PeopleTeam() {
               <button className="on"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 4h12M2 8h12M2 12h12"/></svg>List</button>
               <button onClick={()=>navigate('/people/org')}><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="6" y="1.5" width="4" height="3.5" rx="1"/><rect x="1.5" y="11" width="4" height="3.5" rx="1"/><rect x="10.5" y="11" width="4" height="3.5" rx="1"/><path d="M8 5v3M3.5 11V8h9v3"/></svg>Org</button>
             </div>
-            {isAdmin && <button className="btn btn-neutral" onClick={()=>navigate('/people/assets')}>Assets</button>}
+            {isAdmin && <button className="btn btn-neutral" onClick={()=>navigate('/people/assets')}>Devices</button>}
             {isAdmin && <button className="btn btn-primary" onClick={()=>setShowAdd(true)}>
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M8 3v10M3 8h10" strokeLinecap="round"/></svg>Add Member
             </button>}
@@ -171,7 +171,7 @@ export default function PeopleTeam() {
             <div className="etbl">
               <div className="etbl-head">
                 <div>Emp ID</div><div>Name</div><div>Department</div><div>Designation · Location</div>
-                <div>Login / Role</div><div>Last Login</div><div>Status</div><div style={{textAlign:'right'}}>Assets</div>
+                <div>Login / Role</div><div>Last Login</div><div>Status</div><div style={{textAlign:'right'}}>Devices</div>
               </div>
               <div>
                 {filtered.length === 0 ? (

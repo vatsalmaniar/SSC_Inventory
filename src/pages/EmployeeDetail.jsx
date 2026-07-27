@@ -274,7 +274,7 @@ export default function EmployeeDetail() {
     { k:'overview', l:'Overview' },
     ...(canComp ? [{ k:'comp', l:'Salary' }] : []),
     ...(canKPI && kpi ? [{ k:'kpi', l:'KPI' }] : []),
-    { k:'assets', l:'Assets', c:assign.length },
+    { k:'assets', l:'Devices', c:assign.length },
     { k:'expense', l:'Expense & Budget' },
     ...(isMgmt ? [{ k:'documents', l:'Documents', c:docs.length }] : []),
     ...(isAdmin && emp.profile_id ? [{ k:'security', l:'Security' }] : []),
@@ -317,7 +317,7 @@ export default function EmployeeDetail() {
               <div className="pmicro-cell"><div className="pmc-l">Tenure</div><div className="pmc-v">{tenure(emp.join_date)}</div></div>
               <div className="pmicro-cell"><div className="pmc-l">Joined</div><div className="pmc-v" style={{fontSize:14}}>{fmtD(emp.join_date)}</div></div>
               <div className="pmicro-cell"><div className="pmc-l">Direct Reports</div><div className="pmc-v">{reports.length}</div></div>
-              <div className="pmicro-cell"><div className="pmc-l">Assets</div><div className="pmc-v">{assign.length}</div></div>
+              <div className="pmicro-cell"><div className="pmc-l">Devices</div><div className="pmc-v">{assign.length}</div></div>
               {priv && <div className="pmicro-cell"><div className="pmc-l">Age</div><div className="pmc-v">{ageFrom(priv.date_of_birth)}</div></div>}
             </div>
           </div>
@@ -491,7 +491,7 @@ export default function EmployeeDetail() {
             )}
 
             {tab==='assets' && (
-              <PCard icon={<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2.5" y="4" width="11" height="7" rx="1"/><path d="M5.5 13.5h5M8 11v2.5"/></svg>} title={`Assigned Assets · ${assign.length}`} right={isMgmt && <button className="btn btn-ghost btn-sm" onClick={()=>navigate('/people/assets')}>Manage Devices</button>}>
+              <PCard icon={<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2.5" y="4" width="11" height="7" rx="1"/><path d="M5.5 13.5h5M8 11v2.5"/></svg>} title={`Assigned Devices · ${assign.length}`} right={isMgmt && <button className="btn btn-ghost btn-sm" onClick={()=>navigate('/people/assets')}>Manage Devices</button>}>
                 {!assign.length ? <div className="e-empty" style={{padding:'30px 0'}}>No devices assigned to {emp.full_name.split(' ')[0]}.</div> : (
                   <div className="atiles">{assign.map(a=>(
                     <div key={a.id} className="atile">
