@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -462,8 +462,8 @@ export default function NewOrder() {
               </thead>
               <tbody>
                 {items.map((item, idx) => (
-                  <>
-                  <tr key={idx} className={item.item_code ? 'row-filled' : ''} style={{ borderBottom: item.item_code ? 'none' : undefined }}>
+                  <Fragment key={idx}>
+                  <tr className={item.item_code ? 'row-filled' : ''} style={{ borderBottom: item.item_code ? 'none' : undefined }}>
                     <td className="col-sr">{idx + 1}</td>
                     <td className="col-code">
                       <Typeahead
@@ -527,7 +527,7 @@ export default function NewOrder() {
                       </td>
                     </tr>
                   )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

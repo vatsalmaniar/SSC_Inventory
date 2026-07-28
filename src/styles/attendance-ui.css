@@ -345,3 +345,10 @@
   .people-app .stile-v{font-size:22px;}
   .people-app .stile-foot{white-space:normal;}
 }
+
+/* ── Muster phone tier (≤560px): slimmer sticky name column ── */
+@media (max-width:560px){
+  .people-app .mgx-emp{width:150px;padding:4px 6px 4px 10px;}
+  .people-app .mgx-emp .m-emp-s{display:none;}
+  .people-app .mcal-summary{gap:14px;}
+}

@@ -492,3 +492,10 @@
   .people-app .pd-2{grid-template-columns:1fr;}
   .people-app .pmicro-cell{padding:10px 14px;}
 }
+
+/* ── Org chart phone tier (≤560px): tighter canvas; inspector becomes a
+   bottom sheet (it's a fixed 308px card that covered the screen) ── */
+@media (max-width:560px){
+  .people-app .org-canvas{padding:20px 12px 26px;}
+  .people-org-inspect{left:0;right:0;top:auto;bottom:0;width:auto;max-height:72vh;overflow-y:auto;border-radius:16px 16px 0 0;border-bottom:0;}
+}

@@ -431,3 +431,8 @@
   color: #1a73e8;
   white-space: nowrap;
 }
+
+/* ── Phone/tablet (≤820px): 360 history tables scroll inside their card ── */
+@media (max-width: 820px) {
+  .c360-page table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}

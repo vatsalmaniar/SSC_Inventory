@@ -409,7 +409,10 @@ export default function Layout({ children, pageTitle, pageKey }) {
     const [ordersRes, companiesRes, leadsRes, oppsRes, vendorsRes, poRes, grnRes, piRes, itemsRes] = await Promise.all([
       canOrders ? sb.from('orders').select('id,order_number,customer_name,status').or(`order_number.ilike.%${q}%,customer_name.ilike.%${q}%`).eq('is_test', false).limit(5) : { data: [] },
       (canCRM || canProcurement) ? sb.from('customers').select('id,customer_name').ilike('customer_name', `%${q}%`).limit(5) : { data: [] },
-      canCRM    ? sb.from('crm_leads').select('id,contact_name_freetext,freetext_company,stage').or(`contact_name_freetext.ilike.%${q}%,freetext_company.ilike.%${q}%`).limit(5) : { data: [] },
+      // NOTE: crm_leads has no `stage` column — selecting it 400s the whole
+      // query and lead results vanish from global search. The result row
+      // already falls back to the 'Lead' label.
+      canCRM    ? sb.from('crm_leads').select('id,contact_name_freetext,freetext_company').or(`contact_name_freetext.ilike.%${q}%,freetext_company.ilike.%${q}%`).limit(5) : { data: [] },
       canCRM    ? sb.from('crm_opportunities').select('id,opportunity_name,product_notes,stage').or(`opportunity_name.ilike.%${q}%,product_notes.ilike.%${q}%`).limit(5) : { data: [] },
       (canCRM || canProcurement) ? sb.from('vendors').select('id,vendor_code,vendor_name,status').or(`vendor_code.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
       canProcurement ? sb.from('purchase_orders').select('id,po_number,vendor_name,status').or(`po_number.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },

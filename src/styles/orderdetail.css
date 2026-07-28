@@ -609,3 +609,33 @@ html:not([data-theme="dark"]) .od-page {
   .od-comment-input-row { flex-direction: column; gap: 8px; }
   .od-comment-input-row button { width: 100%; }
 }
+
+/* ── Phone (≤560px): item/batch tables scroll inside their card instead of
+   getting clipped by the shell (rows are ~530px min with real data) ── */
+@media (max-width: 560px) {
+  .od-items-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
+/* ── Phone (≤560px): pipeline stages become a swipeable strip; the action
+   button (Accept Order / Confirm…) drops to its own full-width row — they
+   were sharing one flex row and crushing the chevrons into each other. ── */
+@media (max-width: 560px) {
+  .od-pipeline-bar { flex-wrap: wrap; }
+  .od-pipeline-stages { flex: 1 1 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .od-pipe-stage { flex: 0 0 auto; min-width: 122px; font-size: 12px; height: 48px; }
+  .od-pipeline-bar > button { flex: 1 1 100%; margin: 8px 10px 10px; justify-content: center; padding: 12px; }
+}
+
+/* ── Phone/small-tablet (≤600px): header actions (Back / Edit / Cancel)
+   share one row as equal thirds — no two-line buttons, no ragged wrap ── */
+@media (max-width: 600px) {
+  .od-header-actions { width: 100%; display: flex; gap: 8px; flex-wrap: nowrap; }
+  .od-header-actions button {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+    font-size: 12px;
+    padding: 10px 4px;
+    white-space: nowrap;
+  }
+}

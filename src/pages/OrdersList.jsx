@@ -396,7 +396,7 @@ export default function OrdersList() {
 
   return (
     <Layout pageTitle="Orders List" pageKey="orders">
-      <div className="orders-app">
+      <div className="orders-app olist-app">
         <div className="page-head">
           <div>
             <h1 className="page-title">Orders</h1>

@@ -335,3 +335,17 @@
 .crm-app .crm-empty { padding: 60px 20px; text-align: center; color: var(--c-muted); }
 .crm-app .crm-empty-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--c-ink); }
 .crm-app .crm-loading { padding: 60px 20px; text-align: center; color: var(--c-muted); }
+
+/* ── CRM list rows (leads/opps/quotes/visits/companies/samples/targets)
+   → stacked cards on phones. Rows carry inline gridTemplateColumns. ── */
+@media (max-width: 560px) {
+  .crm-app .dl-row.dl-head { display: none; }
+  .crm-app .dl-row.dl-data {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 4px 12px;
+    padding: 12px 14px;
+  }
+  .crm-app .dl-row.dl-data > :nth-child(1),
+  .crm-app .dl-row.dl-data > :nth-child(2) { grid-column: 1 / -1; }
+  .crm-app .dl-row.dl-data > * { text-align: left !important; }
+}

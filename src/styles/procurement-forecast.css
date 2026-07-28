@@ -256,3 +256,45 @@
 @media (max-width: 900px) {
   .pf-app .sc-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── Phone tier (≤560px): forecast worksheet rows become suggestion cards.
+   Column header row hides; each cell gets its own labelled slot. ── */
+@media (max-width: 560px) {
+  .pf-app .sc-stats { grid-template-columns: repeat(2, 1fr); }
+  .pf-app .it-row.it-head { display: none; }
+  .pf-app .it-row.it-data {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+      "code   code   status"
+      "months months months"
+      "avg    min    po"
+      "stock  stock  stock";
+    gap: 8px 10px;
+    padding: 12px 14px;
+  }
+  .pf-app .it-row.it-data > :nth-child(1) { grid-area: code; }
+  .pf-app .it-row.it-data > :nth-child(2) { grid-area: months; }
+  .pf-app .it-row.it-data > :nth-child(3) { grid-area: avg; }
+  .pf-app .it-row.it-data > :nth-child(4) { grid-area: min; }
+  .pf-app .it-row.it-data > :nth-child(5) { grid-area: po; }
+  .pf-app .it-row.it-data > :nth-child(6) { grid-area: stock; }
+  .pf-app .it-row.it-data > :nth-child(7) { grid-area: status; justify-self: end; align-self: start; }
+  /* labels for the bare numbers */
+  .pf-app .it-row.it-data > :nth-child(3)::before { content: 'Avg/Qtr'; }
+  .pf-app .it-row.it-data > :nth-child(4)::before { content: 'Min'; }
+  .pf-app .it-row.it-data > :nth-child(5)::before { content: 'PO Qty'; }
+  .pf-app .it-row.it-data > :nth-child(3)::before,
+  .pf-app .it-row.it-data > :nth-child(4)::before,
+  .pf-app .it-row.it-data > :nth-child(5)::before {
+    display: block;
+    font-family: 'Geist Mono', monospace;
+    font-size: 9.5px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--pf-muted, #8896b3);
+    margin-bottom: 2px;
+  }
+  /* month strip: 3-up stays, inputs get finger-size */
+  .pf-app .it-sales-months .it-input { font-size: 16px; min-height: 34px; }
+  .pf-app .it-stock-col .it-input { font-size: 16px; }
+}

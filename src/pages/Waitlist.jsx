@@ -475,7 +475,7 @@ export default function Waitlist() {
             ) : (
               <div style={{ border: '1px solid var(--o-line-2)', borderRadius: 12, overflow: 'hidden', background: 'var(--o-surface, #fff)' }}>
                 {overduePaginated.map(({ o, od, auto }, idx) => (
-                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: idx < overduePaginated.length - 1 ? '1px solid var(--o-line)' : 'none' }}>
+                  <div key={o.id} className="wl-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: idx < overduePaginated.length - 1 ? '1px solid var(--o-line)' : 'none' }}>
                     <div style={{ minWidth: 0, flex: 1, cursor: 'pointer' }} onClick={() => navigate('/orders/' + o.id)}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: 'Geist Mono, monospace', fontSize: 12.5, color: 'var(--ssc-blue)' }}>{o.order_number}</span>
@@ -485,7 +485,7 @@ export default function Waitlist() {
                         {ownerName(o)} · ordered {fmt(o.order_date)} · due {fmt(od.due)}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <div className="wl-chips" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {auto.map(f => <FlagChip key={f.key} kind={f.key}>{f.label}</FlagChip>)}
                       {o.hold_party && (
                         <FlagChip kind={o.hold_party} title={`Flagged by ${o.hold_set_by || '—'} on ${o.hold_set_at ? fmt(o.hold_set_at) : '—'}`}>
@@ -530,9 +530,9 @@ export default function Waitlist() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {groupsPaginated.map(g => (
                 <div key={g.item_code} style={{ border: '1px solid var(--o-line-2)', borderRadius: 12, overflow: 'hidden', background: 'var(--o-surface, #fff)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', background: 'var(--gray-50)', borderBottom: '1px solid var(--o-line-2)' }}>
+                  <div className="wl-ghead" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', background: 'var(--gray-50)', borderBottom: '1px solid var(--o-line-2)' }}>
                     <div style={{ fontFamily: 'Geist Mono, monospace', fontSize: 13.5, fontWeight: 700, color: 'var(--o-ink)' }}>{g.item_code}</div>
-                    <div style={{ display: 'flex', gap: 16, fontSize: 12, fontFamily: 'Geist Mono, monospace' }}>
+                    <div className="wl-gstats" style={{ display: 'flex', gap: 16, fontSize: 12, fontFamily: 'Geist Mono, monospace' }}>
                       <span style={{ color: '#92400e' }}>need {g.totalWaiting}</span>
                       <span style={{ color: g.available >= g.totalWaiting ? '#166534' : g.available > 0 ? '#b45309' : '#b91c1c' }}>
                         {g.available > 0 ? `${g.available} in stock` : 'none in stock'}
@@ -544,7 +544,7 @@ export default function Waitlist() {
                     const consumedBefore = g.rows.slice(0, idx).reduce((s, x) => s + x.remaining, 0)
                     const canGet = Math.max(0, Math.min(r.remaining, g.available - consumedBefore))
                     return (
-                      <div key={r.order_id} onClick={() => navigate('/orders/' + r.order_id)}
+                      <div key={r.order_id} className="wl-srow" onClick={() => navigate('/orders/' + r.order_id)}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: idx < g.rows.length - 1 ? '1px solid var(--o-line)' : 'none', cursor: 'pointer' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-muted)', fontFamily: 'Geist Mono, monospace', minWidth: 22 }}>#{idx + 1}</span>
@@ -554,7 +554,7 @@ export default function Waitlist() {
                           </div>
                           {r.on_hold && <FlagChip kind="credit">On Hold</FlagChip>}
                         </div>
-                        <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 12, fontFamily: 'Geist Mono, monospace' }}>
+                        <div className="wl-sstats" style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 12, fontFamily: 'Geist Mono, monospace' }}>
                           <span style={{ color: '#92400e' }}>{r.remaining} units</span>
                           {g.available > 0 && <span style={{ color: canGet >= r.remaining ? '#166534' : canGet > 0 ? '#b45309' : 'var(--o-muted)' }}>{canGet >= r.remaining ? 'can fulfil' : canGet > 0 ? `${canGet} now` : 'wait'}</span>}
                           <span style={{ color: 'var(--o-muted)' }}>{daysSince(r.order_date)}d waiting</span>
