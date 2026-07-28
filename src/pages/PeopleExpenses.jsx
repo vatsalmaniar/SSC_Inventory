@@ -872,6 +872,49 @@ export default function PeopleExpenses() {
                   </tbody>
                 </table>
               </div>
+              {/* Mobile claim cards (≤560px) — same rows & handlers as the table */}
+              <div className="exp-cards">
+                {paged.map(r => (
+                  <div key={r.id} className={'exp-mcard' + (selected.includes(r.id) ? ' sel' : '')} onClick={() => setOpenRow(r)}>
+                    <div className="exp-mcard-top">
+                      <ExpenseIcon name={r._cat} color={r._catColor} small />
+                      <div className="exp-mcard-mid">
+                        <span className="exp-cat-name">{r._cat}</span>
+                        {isPriv && !fPerson && <span className="exp-mcard-person">{profiles[r.profile_id]?.name || '—'}</span>}
+                      </div>
+                      <div className="exp-mcard-amt">
+                        {fmtMoney(r.approved_amount ?? r.amount)}
+                        {r.approved_amount != null && Number(r.approved_amount) !== Number(r.amount) &&
+                          <span className="exp-strike">{fmtMoney(r.amount)}</span>}
+                      </div>
+                    </div>
+                    {r.vendor && <div className="exp-mcard-vendor">{r.vendor}</div>}
+                    <div className="exp-mcard-meta">
+                      <span>{fmt(r.expense_date)}</span>
+                      <span className="exp-dash">·</span>
+                      <span>{EX.PAYMENT_LABEL[r.payment_method] || r.payment_method}</span>
+                      {(r.expense_bills || []).length > 0 && <>
+                        <span className="exp-dash">·</span>
+                        <span className="exp-billcount">{I.clip}{(r.expense_bills || []).length}</span>
+                      </>}
+                      {r._budgeted && <span className="exp-flag">BUDGET</span>}
+                    </div>
+                    {r.status === 'rejected' && r.review_note && <div className="exp-note">{r.review_note}</div>}
+                    <div className="exp-mcard-foot" onClick={e => e.stopPropagation()}>
+                      <StatusChip status={r.status} txn={r.payment_ref} />
+                      <div className="exp-mcard-acts">
+                        {canPay && r.status === 'approved' && (
+                          <label className="exp-mcard-sel">
+                            <input type="checkbox" checked={selected.includes(r.id)} onChange={() => toggleSel(r.id)} />
+                            Select
+                          </label>
+                        )}
+                        {rowAction(r)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
               {totalPages > 1 && (
                 <div className="exp-pager">
                   <button className="od-btn" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>Prev</button>

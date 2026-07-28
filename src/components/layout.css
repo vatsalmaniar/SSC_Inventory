@@ -558,6 +558,9 @@ html.has-celebration .ly-main    { min-height: calc(100vh - var(--cel-h)); }
 
   .ly-main,
   .ly-main-collapsed { margin-left: 0; }
+  /* flex children default to min-width:auto — one over-wide element would
+     otherwise stretch the whole shell (topbar included) past the viewport */
+  .ly-main { min-width: 0; }
 
   .ly-backdrop {
     display: block;

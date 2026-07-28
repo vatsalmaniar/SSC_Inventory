@@ -444,3 +444,51 @@
   /* ≥16px stops iOS focus-zoom inside drawer forms */
   .people-drawer .pd-f input,.people-drawer .pd-f select{font-size:16px;}
 }
+
+/* ── Mobile hardening (≤820px) — header actions wrap, grids can't blow out ── */
+@media (max-width:820px){
+  .people-app .ph-actions{flex-wrap:wrap;}
+  /* grid children default to min-width:auto and can force tracks wider than
+     the screen (content gets clipped by the page's overflow-x:hidden) */
+  .people-app .att-kpis>*,.people-app .att-grid>*,.people-app .att-row2>*,
+  .people-app .astats>*,.people-app .pmain-grid>*,.people-app .atiles>*,
+  .people-app .dchips>*,.people-app .pm-2>*,.people-app .at-grid>*{min-width:0;}
+}
+
+/* ── Leave page phone fixes (≤560px). PeopleLeave.jsx rows are inline-styled
+   and the file is pending unrelated work — these attribute hooks stack the
+   approval/request grids; refactor to classes when the JSX frees up. ── */
+@media (max-width:560px){
+  .people-app .att-card > div[style*="grid"]{grid-template-columns:1fr !important;gap:6px !important;}
+  .people-app .acard div[style*="space-between"]{flex-wrap:wrap;}
+}
+
+/* ── Team list mobile cards (≤560px) + Employee 360 phone tier ── */
+.people-app .team-cards{display:none;}
+@media (max-width:560px){
+  /* Team: cards replace the wide table */
+  .people-app .card:has(.team-cards) .tbl-wrap{display:none;}
+  .people-app .team-cards{display:block;}
+  .people-app .team-card{display:flex;gap:11px;align-items:flex-start;padding:13px 16px;border-bottom:1px solid var(--line-2);cursor:pointer;}
+  .people-app .team-card:last-child{border-bottom:0;}
+  .people-app .team-card:active{background:var(--bg-2);}
+  .people-app .team-card-mid{flex:1;min-width:0;}
+  .people-app .team-card-mid .e-nm-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .people-app .team-card-sub{font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .people-app .team-card-tags{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:7px;}
+  .people-app .team-card-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;}
+
+  /* Employee 360: linear header on phones — actions row, then avatar + name.
+     No absolute buttons, no negative-margin overlap (they collided at 390px). */
+  .people-app .pcover-actions{position:static;display:flex;justify-content:flex-end;padding:12px 14px 0;}
+  .people-app .pcover-band{height:auto !important;border-bottom:0 !important;padding-bottom:10px;}
+  .people-app .pcover-body{flex-wrap:nowrap;align-items:flex-start;gap:12px;padding:0 16px 14px;margin-top:0;}
+  .people-app .av-cover{width:64px;height:64px;font-size:22px;border-radius:16px;}
+  .people-app .pcover-av .avatar{box-shadow:var(--p-shadow);}
+  .people-app .pcover-id{min-width:0;}
+  .people-app .pcover-name{font-size:19px;}
+  .people-app .pcover-sub{font-size:12px;}
+  .people-app .prof-tags{flex-wrap:wrap;}
+  .people-app .pd-2{grid-template-columns:1fr;}
+  .people-app .pmicro-cell{padding:10px 14px;}
+}

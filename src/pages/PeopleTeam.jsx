@@ -167,6 +167,31 @@ export default function PeopleTeam() {
         </div>
 
         <div className="card">
+          {/* Mobile cards (≤560px) — same rows as the table below */}
+          <div className="team-cards">
+            {filtered.length === 0 ? (
+              <div className="e-empty">No people match your filters.</div>
+            ) : filtered.map(e => {
+              const st = (e.lifecycle_status || 'confirmed')
+              return (
+                <div key={e.id} className="team-card" onClick={()=>navigate('/people/team/'+e.id)}>
+                  <div className="avatar av-36" style={e.signedPhoto?{backgroundImage:`url(${e.signedPhoto})`,backgroundSize:'cover',backgroundPosition:'center',filter:st==='exited'?'grayscale(.5)':'none'}:{background:ownerColor(e.full_name), filter: st==='exited'?'grayscale(.5)':'none'}}>{e.signedPhoto?'':initials(e.full_name)}</div>
+                  <div className="team-card-mid">
+                    <div className="e-nm-name">{e.full_name}</div>
+                    <div className="team-card-sub">{e.designation || '—'}{e.branch ? ' · ' + e.branch : ''}</div>
+                    <div className="team-card-tags">
+                      <span className="dept-pill"><span className="dept-dot" style={{background:deptColor(e.department)}} />{e.department || '—'}</span>
+                      <span className={'status '+st}><span className="led" />{STATUS_LABEL[st]||st}</span>
+                    </div>
+                  </div>
+                  <div className="team-card-right">
+                    <span className="e-id">{e.employee_code || '—'}</span>
+                    <span className={'asset-badge'+(e.assets?'':' zero')}>{e.assets}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
           <div className="tbl-wrap">
             <div className="etbl">
               <div className="etbl-head">

@@ -312,3 +312,13 @@
 .orders-app .o-dl-btn { background: var(--o-surface); border: 0; border-right: 1px solid var(--o-line); padding: 7px 12px; font: inherit; font-size: 12px; cursor: pointer; color: var(--o-ink); display: inline-flex; align-items: center; gap: 6px; }
 .orders-app .o-dl-btn:last-child { border-right: 0; }
 .orders-app .o-dl-btn:hover { background: var(--o-bg-2); }
+
+/* ── Mobile hardening (≤600px): KPI tiles can't blow out of the page
+   (shared by Orders dashboard + People hub) ── */
+@media (max-width: 600px) {
+  .orders-app .kpi-row { gap: 8px; }
+  .orders-app .kpi-row > * { min-width: 0; }
+  .orders-app .kt-value { font-size: 20px; }
+  .orders-app .kt-sub, .orders-app .kt-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .orders-app .o-mid > *, .orders-app .o-anal > *, .orders-app .o-bottom > * { min-width: 0; }
+}

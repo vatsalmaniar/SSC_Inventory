@@ -332,3 +332,16 @@
 .people-app .reg-seg{display:flex;gap:6px;background:var(--surface-2,#f1f3f5);padding:4px;border-radius:10px;}
 .people-app .reg-seg-b{flex:1;border:0;background:transparent;padding:8px 12px;border-radius:7px;font-family:'Geist',sans-serif;font-size:13px;font-weight:var(--fw-semibold,600);color:var(--muted);cursor:pointer;transition:background .12s,color .12s;}
 .people-app .reg-seg-b.on{background:var(--surface,#fff);color:var(--accent);box-shadow:0 1px 2px rgba(16,24,40,.08);}
+
+/* ── Mobile hardening (≤820px) + phone tier (≤560px) ── */
+@media (max-width:820px){
+  .people-app .dash-top>*,.people-app .stiles>*,
+  .people-app .g-2>*,.people-app .g-2u>*,.people-app .g-5>*{min-width:0;}
+}
+@media (max-width:560px){
+  .people-app .hero{padding:18px 16px;}
+  .people-app .hero-body{gap:16px;}
+  .people-app .stiles{gap:8px;}
+  .people-app .stile-v{font-size:22px;}
+  .people-app .stile-foot{white-space:normal;}
+}

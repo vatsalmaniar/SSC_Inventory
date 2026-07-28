@@ -404,3 +404,40 @@
   .exp-bulk-row { grid-template-columns: 1fr; gap: 8px; }
   .exp-rv-dl { grid-template-columns: 1fr; }
 }
+
+/* ── Phone (≤560px): 16px inputs stop iOS focus-zoom; summary card sizing ── */
+@media (max-width: 560px) {
+  .exp-input, .exp-select, .exp-textarea { font-size: 16px; }
+  .exp-card-amount { font-size: 28px; }
+  .exp-card-split { gap: 16px; }
+}
+
+/* ── Mobile (≤820px): the hero's admin people-<select> refuses to shrink in
+   a no-wrap flex row (intrinsic width = widest option) and stretched the
+   whole page. Wrap the row, cap the select, contain the page. ── */
+@media (max-width: 820px) {
+  .kpi-app { overflow-x: hidden; }
+  .kpi-app .exp-card-top { flex-wrap: wrap; }
+  .kpi-app .exp-card-top > * { min-width: 0; }
+  .kpi-app .exp-card-select { max-width: 100%; }
+}
+
+/* ── Mobile claim cards: replace the claims table below 560px ── */
+.kpi-app .exp-cards { display: none; }
+@media (max-width: 560px) {
+  .kpi-app .exp-table { display: none; }
+  .kpi-app .exp-cards { display: flex; flex-direction: column; }
+  .kpi-app .exp-mcard { display: flex; flex-direction: column; gap: 8px; padding: 13px 16px; border-bottom: 1px solid var(--kline-2); cursor: pointer; }
+  .kpi-app .exp-mcard:last-child { border-bottom: 0; }
+  .kpi-app .exp-mcard.sel { background: rgba(26,115,232,0.07); }
+  .kpi-app .exp-mcard-top { display: flex; align-items: center; gap: 10px; }
+  .kpi-app .exp-mcard-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .kpi-app .exp-mcard-mid .exp-cat-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kpi-app .exp-mcard-person { font-size: 11.5px; color: var(--kmuted); }
+  .kpi-app .exp-mcard-amt { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; font-family: 'Geist Mono', monospace; font-size: 15px; font-weight: 600; color: var(--kink); }
+  .kpi-app .exp-mcard-vendor { font-size: 12px; color: var(--kmuted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kpi-app .exp-mcard-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--kmuted); }
+  .kpi-app .exp-mcard-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .kpi-app .exp-mcard-acts { display: flex; align-items: center; gap: 8px; }
+  .kpi-app .exp-mcard-sel { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--kink); cursor: pointer; }
+}
