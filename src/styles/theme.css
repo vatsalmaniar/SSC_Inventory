@@ -1343,3 +1343,13 @@ html[data-theme="dark"] .c360-page .c360-tab:hover { color: #D4D4D4 !important; 
 html[data-theme="dark"] .c360-page .c360-tab.active { color: #818CF8 !important; border-bottom-color: #818CF8 !important; }
 html[data-theme="dark"] .c360-page .c360-tab-count { background: #3C3C3C !important; color: #D4D4D4 !important; }
 html[data-theme="dark"] .c360-page .c360-tab.active .c360-tab-count { background: rgba(129,140,248,0.15) !important; color: #C7D2FE !important; }
+
+/* ── Responsive shell (mobile drawer + search panel) — dark theme ── */
+html[data-theme="dark"] .ly-mobile-menu-btn,
+html[data-theme="dark"] .ly-mobile-search-btn { background: #2D2D2D !important; border-color: #3C3C3C !important; color: #D4D4D4 !important; }
+html[data-theme="dark"] .ly-mobile-menu-btn:hover,
+html[data-theme="dark"] .ly-mobile-search-btn:hover { background: #3C3C3C !important; color: #FFFFFF !important; }
+html[data-theme="dark"] .ly-backdrop { background: rgba(0,0,0,0.6); }
+@media (max-width: 820px) {
+  html[data-theme="dark"] .ly-search-wrap { background: #181818; border-bottom-color: #3C3C3C; box-shadow: 0 12px 24px rgba(0,0,0,0.4); }
+}

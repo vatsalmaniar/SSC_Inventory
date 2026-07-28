@@ -432,3 +432,15 @@
 .people-app .att-hrow{display:grid;grid-template-columns:140px 1fr 1fr 130px 92px;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid var(--line-2);}
 .people-app .att-hrow.head{font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);}
 .people-app .att-hrow:last-child{border-bottom:0;}
+
+/* ── Phone tier (≤560px) — People module ── */
+@media (max-width:560px){
+  /* profile + form 2-col grids stack */
+  .people-app .pm-2{grid-template-columns:1fr;}
+  .people-app .at-grid{grid-template-columns:1fr;}
+  /* slide-in drawers (add/assign/edit) go full-width */
+  .people-drawer{width:100vw;max-width:100vw;}
+  .people-drawer .pd-2{grid-template-columns:1fr;}
+  /* ≥16px stops iOS focus-zoom inside drawer forms */
+  .people-drawer .pd-f input,.people-drawer .pd-f select{font-size:16px;}
+}

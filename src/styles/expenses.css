@@ -397,3 +397,10 @@
 .kpi-app .exp-bulk-cat { font-size: 12.5px; font-weight: 500; color: var(--kink); }
 .kpi-app .exp-bulk-meta { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--kmuted); }
 .kpi-app .exp-bulk-amt { font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 600; color: var(--kink); }
+
+/* ── Phone tier (≤560px) ── */
+@media (max-width: 560px) {
+  .exp-grid2 { grid-template-columns: 1fr; }
+  .exp-bulk-row { grid-template-columns: 1fr; gap: 8px; }
+  .exp-rv-dl { grid-template-columns: 1fr; }
+}

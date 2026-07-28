@@ -152,14 +152,56 @@ export default function Layout({ children, pageTitle, pageKey }) {
   const [nameDraft, setNameDraft] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [collapsedSubs, setCollapsedSubs] = useState({})
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+  const [sidebarCollapsedPref, setSidebarCollapsedPref] = useState(() => {
     try { return sessionStorage.getItem('ly_sidebar_collapsed') === 'true' } catch { return false }
   })
 
+  // ── Mobile shell (≤820px): sidebar renders as an off-canvas drawer ──
+  const [isMobile, setIsMobile] = useState(() => {
+    try { return window.matchMedia('(max-width: 820px)').matches } catch { return false }
+  })
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const mobileSearchBtnRef = useRef(null)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 820px)')
+    const onChange = e => setIsMobile(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  // Close drawer + mobile search whenever the route changes
+  useEffect(() => { setDrawerOpen(false); setMobileSearchOpen(false) }, [location.pathname])
+
+  // Leaving mobile widths dismisses the drawer so no stray backdrop remains
+  useEffect(() => { if (!isMobile) { setDrawerOpen(false); setMobileSearchOpen(false) } }, [isMobile])
+
+  // Lock page scroll while the drawer is open
+  useEffect(() => {
+    if (drawerOpen) {
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = prev }
+    }
+  }, [drawerOpen])
+
+  // On mobile the sidebar is an off-canvas drawer and always renders expanded
+  // content — the collapsed icon-only mode is a desktop-only preference.
+  const sidebarCollapsed = !isMobile && sidebarCollapsedPref
+
   function toggleSidebar() {
-    setSidebarCollapsed(prev => {
+    setSidebarCollapsedPref(prev => {
       const next = !prev
       try { sessionStorage.setItem('ly_sidebar_collapsed', String(next)) } catch {}
+      return next
+    })
+  }
+
+  function toggleMobileSearch() {
+    setMobileSearchOpen(v => {
+      const next = !v
+      if (next) setTimeout(() => searchInputRef.current?.focus(), 60)
       return next
     })
   }
@@ -324,10 +366,15 @@ export default function Layout({ children, pageTitle, pageKey }) {
     return Math.floor(diff / 1440) + 'd ago'
   }
 
-  // Close search on outside click
+  // Close search on outside click (the mobile toggle button is exempt so its
+  // own onClick can close the panel instead of insta-reopening it)
   useEffect(() => {
     function handleClick(e) {
-      if (searchRef.current && !searchRef.current.contains(e.target)) setSearchOpen(false)
+      if (searchRef.current && !searchRef.current.contains(e.target)
+          && !(mobileSearchBtnRef.current && mobileSearchBtnRef.current.contains(e.target))) {
+        setSearchOpen(false)
+        setMobileSearchOpen(false)
+      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -411,7 +458,8 @@ export default function Layout({ children, pageTitle, pageKey }) {
       <div className="ly-wrap">
 
       {/* ── Sidebar ── */}
-      <aside className={'ly-sidebar' + (sidebarCollapsed ? ' collapsed' : '')}>
+      {drawerOpen && <div className="ly-backdrop" onClick={() => setDrawerOpen(false)} />}
+      <aside className={'ly-sidebar' + (sidebarCollapsed ? ' collapsed' : '') + (drawerOpen ? ' drawer-open' : '')}>
 
         <div className="ly-logo-row">
           {sidebarCollapsed ? (
@@ -514,6 +562,9 @@ export default function Layout({ children, pageTitle, pageKey }) {
         {/* Topbar */}
         <header className="ly-topbar">
           <div className="ly-topbar-left">
+            <button className="ly-mobile-menu-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:18,height:18}}><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+            </button>
             {sidebarCollapsed && (
               <button className="ly-topbar-hamburger" onClick={toggleSidebar} title="Expand sidebar">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:18,height:18}}><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -524,11 +575,12 @@ export default function Layout({ children, pageTitle, pageKey }) {
             <span className="ly-topbar-page">{pageTitle || 'Home'}</span>
           </div>
           {/* Global Search */}
-          <div ref={searchRef} style={{position:'relative',flex:1,maxWidth:400,margin:'0 24px'}}>
+          <div ref={searchRef} className={'ly-search-wrap' + (mobileSearchOpen ? ' open' : '')}>
             <div style={{display:'flex',alignItems:'center',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:10,padding:'0 12px',gap:8,transition:'border-color 0.15s',borderColor:searchOpen?'#1a73e8':'var(--gray-200)'}}>
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:15,height:15,color:'var(--gray-400)',flexShrink:0}}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               <input
                 ref={searchInputRef}
+                className="ly-search-input"
                 value={searchQ}
                 onChange={onSearchChange}
                 onFocus={() => { if (searchQ.length >= 2) setSearchOpen(true) }}
@@ -536,7 +588,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
                 style={{flex:1,border:'none',background:'none',outline:'none',fontFamily:'var(--font)',fontSize:13,color:'var(--gray-900)',padding:'8px 0'}}
               />
               {searchQ && <button onClick={() => { setSearchQ(''); setSearchOpen(false); setSearchResults({ orders:[], companies:[], leads:[], opportunities:[], vendors:[], purchaseOrders:[], grns:[], purchaseInvoices:[], items:[] }) }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--gray-400)',padding:0,lineHeight:1}}>✕</button>}
-              {!searchQ && <span style={{fontSize:11,color:'var(--gray-300)',background:'var(--gray-100)',border:'1px solid var(--gray-200)',borderRadius:4,padding:'2px 5px',flexShrink:0}}>⌘K</span>}
+              {!searchQ && <span className="ly-search-kbd" style={{fontSize:11,color:'var(--gray-300)',background:'var(--gray-100)',border:'1px solid var(--gray-200)',borderRadius:4,padding:'2px 5px',flexShrink:0}}>⌘K</span>}
             </div>
             {searchOpen && (
               <div style={{position:'absolute',top:'calc(100% + 6px)',left:0,right:0,background:'white',border:'1px solid var(--gray-200)',borderRadius:12,boxShadow:'0 8px 32px rgba(0,0,0,0.12)',zIndex:9999,overflow:'hidden',maxHeight:440,overflowY:'auto'}}>
@@ -705,6 +757,10 @@ export default function Layout({ children, pageTitle, pageKey }) {
           </div>
 
           <div className="ly-topbar-right">
+            {/* Mobile search toggle */}
+            <button ref={mobileSearchBtnRef} className="ly-mobile-search-btn" onClick={toggleMobileSearch} aria-label="Search">
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:16,height:16}}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
             {/* Attendance punch */}
             <PunchButton/>
             {/* Theme toggle */}

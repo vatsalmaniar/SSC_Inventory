@@ -291,3 +291,11 @@
   .kpi-app .team-panel { position: static; max-height: 480px; }
 }
 
+
+/* ── Phone tier (≤560px) ── */
+@media (max-width: 560px) {
+  .kpi-app .kra-split { grid-template-columns: 1fr; }
+  .kpi-app .hero-score-body { grid-template-columns: 1fr; justify-items: start; }
+  .kpi-app .scrubber { grid-template-columns: repeat(6, 1fr); row-gap: 6px; }
+  .kpi-app .drawer-body { grid-template-columns: 1fr; }
+}
