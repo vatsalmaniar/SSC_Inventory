@@ -436,3 +436,17 @@
 @media (max-width: 820px) {
   .c360-page table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
+
+/* ── Phone (≤600px): 360 hero goes linear — action buttons first (equal
+   widths), then avatar + name (wrapping, not ellipsis-to-nothing), badges
+   flow; stat chips become a 2-col grid instead of ragged wrap. ── */
+@media (max-width: 600px) {
+  .c360-hero { padding: 16px 16px 14px; }
+  .c360-hero-top { flex-wrap: wrap; row-gap: 12px; }
+  .c360-hero-actions { order: -1; width: 100%; }
+  .c360-hero-actions .c360-btn { flex: 1 1 0; min-width: 0; justify-content: center; text-align: center; white-space: nowrap; font-size: 12px; padding: 9px 4px; }
+  .c360-hero-info { flex: 1 1 0; }
+  .c360-hero-name { white-space: normal; }
+  .c360-stats { display: grid; grid-template-columns: repeat(2, 1fr); }
+  .c360-stat { min-width: 0; }
+}
