@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime } from '../lib/fmt'
@@ -56,10 +57,10 @@ async function openGrnHtmlForId(grnId) {
   const grn = grnRes.data
   if (!grn) {
     const msg = grnRes.error ? `Could not load GRN: ${grnRes.error.message}` : 'GRN not found.'
-    w.document.open(); w.document.write(`<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#9b1c1c">${msg}</body></html>`); w.document.close(); return
+    writeDoc(w, `<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#9b1c1c">${msg}</body></html>`); return
   }
   const html = buildGrnHtml(grn, itemsRes.data || [])
-  w.document.open(); w.document.write(html); w.document.close()
+  writeDoc(w, html)
 }
 
 // Open the PO as a print-ready HTML document in a new tab. Same approach as
@@ -80,7 +81,7 @@ async function openPoHtmlForId(poId) {
   const items = itemsRes.data || []
   if (!po) {
     const msg = poRes.error ? `Could not load PO: ${poRes.error.message}` : 'PO not found.'
-    w.document.open(); w.document.write(`<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#9b1c1c">${msg}</body></html>`); w.document.close(); return
+    writeDoc(w, `<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;color:#9b1c1c">${msg}</body></html>`); return
   }
   let vendorCode = ''
   if (po.vendor_id) {
@@ -251,8 +252,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 </body></html>`
 
   w.document.open()
-  w.document.write(html)
-  w.document.close()
+  writeDoc(w, html)
 }
 
 export default function PurchaseInvoiceDetail() {

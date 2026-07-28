@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
@@ -934,8 +935,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
     const html = buildPoHtml(poNumber)
     const w = window.open('', '_blank')
     if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
-    w.document.write(html)
-    w.document.close()
+    writeDoc(w, html)
   }
 
   // ── Stage 3: Order Placed ──

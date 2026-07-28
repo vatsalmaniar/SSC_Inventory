@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
@@ -460,8 +461,7 @@ ${oppsHTML}
 
     const w = window.open('', '_blank')
     if (!w) { toast('Popup blocked — allow popups and try again'); return }
-    w.document.write(html)
-    w.document.close()
+    writeDoc(w, html)
     w.onload = () => w.print()
   }
 

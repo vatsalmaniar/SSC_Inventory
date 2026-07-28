@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc } from '../lib/fmt'
 import Layout from '../components/Layout'
@@ -195,8 +196,7 @@ function printStockTransferDC(transfer, items) {
 
   const w = window.open('', '_blank')
   if (!w) { return false }
-  w.document.write(html)
-  w.document.close()
+  writeDoc(w, html)
   return true
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
@@ -449,8 +450,7 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
     const html = buildGrnHtmlShared(grn, grnItems)
     const w = window.open('', '_blank')
     if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
-    w.document.write(html)
-    w.document.close()
+    writeDoc(w, html)
   }
 
   if (loading) return (

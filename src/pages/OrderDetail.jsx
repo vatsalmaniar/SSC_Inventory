@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc, deliveryDateIssue, deliveryDateMax } from '../lib/fmt'
@@ -104,8 +105,7 @@ ${items.map((item, idx) => `<tr><td style="color:#94a3b8">${idx+1}</td><td class
 
   const w = window.open('', '_blank')
   if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
-  w.document.write(html)
-  w.document.close()
+  writeDoc(w, html)
   w.onload = () => w.print()
 }
 

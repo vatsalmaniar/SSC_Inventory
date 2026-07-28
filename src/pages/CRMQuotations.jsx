@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
 import { fmtTs } from '../lib/fmt'
@@ -405,8 +406,7 @@ export default function CRMQuotations() {
 </body></html>`
     const w = window.open('', '_blank')
     if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
-    w.document.write(html)
-    w.document.close()
+    writeDoc(w, html)
     w.focus()
     setTimeout(() => w.print(), 600)
   }

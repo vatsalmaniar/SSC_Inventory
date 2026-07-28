@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import { fmt } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
@@ -344,8 +345,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
 
     const w = window.open('', '_blank')
     if (!w) { toast('Popup blocked — allow popups and try again'); return }
-    w.document.write(html)
-    w.document.close()
+    writeDoc(w, html)
     w.onload = () => w.print()
   }
 

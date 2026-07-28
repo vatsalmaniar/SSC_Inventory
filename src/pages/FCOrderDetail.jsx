@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc } from '../lib/fmt'
@@ -328,8 +329,7 @@ function printDCChallan(order, activeBatch, activeDC, isSample = false, custCode
 
   const w = window.open('', '_blank')
   if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
-  w.document.write(html)
-  w.document.close()
+  writeDoc(w, html)
 }
 
 export default function FCOrderDetail() {

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { signPhotos } from '../lib/photos'
@@ -61,7 +62,7 @@ export default function PeopleAssets() {
     const w = window.open('', '_blank', 'width=560,height=300')
     if (!w) { toast('Allow pop-ups to print the label.', 'error'); return }
     const esc = s => String(s || '').replace(/</g, '&lt;')
-    w.document.write(`<!doctype html><html><head><title>${esc(a.asset_tag)}</title><style>
+    writeDoc(w, `<!doctype html><html><head><title>${esc(a.asset_tag)}</title><style>
       *{margin:0;box-sizing:border-box;font-family:'Geist','DM Sans',system-ui,sans-serif}
       @page{size:100mm 44mm;margin:0}
       html,body{width:100mm;height:44mm}
@@ -84,7 +85,6 @@ export default function PeopleAssets() {
         </div>
       </div>
     </body></html>`)
-    w.document.close()
   }
 
   async function init() {

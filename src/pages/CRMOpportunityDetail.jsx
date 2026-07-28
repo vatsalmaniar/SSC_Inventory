@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { writeDoc } from '../lib/printDoc'
 import { friendlyError } from '../lib/errorMsg'
 
 import { toast } from '../lib/toast'
@@ -921,8 +922,7 @@ export default function CRMOpportunityDetail() {
 </body></html>`
     const w = window.open('', '_blank')
     if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
-    w.document.write(html)
-    w.document.close()
+    writeDoc(w, html)
     w.focus()
     setTimeout(() => w.print(), 600)
   }
