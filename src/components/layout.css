@@ -30,12 +30,17 @@
   .cel-strip::after { display: none; }
 }
 
+/* iOS Safari "font boosting" inflates text inside very wide blocks — the
+   ticker track is exactly that, so pin the size or iPhones render it huge. */
+.cel-strip, .cel-track { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
 /* Phones: messages are longer than the screen — the track scrolls across the
    fixed 40px strip as a ticker so greetings stay fully readable. The strip's
    height must NOT change (sidebar/backdrop offsets key off --cel-h). */
 @keyframes cel-marquee { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }
 @media (max-width: 600px) {
-  .cel-strip { justify-content: flex-start; padding: 0; }
+  /* !important: the strip's base font-size is set inline in the component */
+  .cel-strip { justify-content: flex-start; padding: 0; font-size: 13px !important; }
   .cel-track { animation: cel-marquee 16s linear infinite; will-change: transform; }
 }
 @media (max-width: 600px) and (prefers-reduced-motion: reduce) {
