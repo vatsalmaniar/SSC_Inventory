@@ -43,16 +43,21 @@ export default function CelebrationStrip() {
           : 'linear-gradient(90deg, #2563eb 0%, #4f46e5 55%, #7c3aed 100%)',
       color:'#fff', fontSize:14, fontWeight:600, letterSpacing:0.1,
     }}>
-      {items.map((it, i) => (
-        <span key={it.employee_id + it.kind + i} style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
-          <span style={{ fontSize:17 }}>{it.kind === 'birthday' ? '🎂' : it.kind === 'joined' ? '👋' : '🎉'}</span>
-          {it.kind === 'birthday'
-            ? <span>Happy Birthday, <strong>{it.full_name}</strong>! Wishing you a wonderful year ahead 🥳 — with love, Team SSC</span>
-            : it.kind === 'joined'
-              ? <span>Welcome to SSC, <strong>{it.full_name}</strong>! Delighted to have you on board — joining us today 🎉 — Team SSC</span>
-              : <span>Congratulations <strong>{it.full_name}</strong> on <strong>{it.years} year{it.years>1?'s':''}</strong> with SSC! Thank you for all you do 🙌 — Team SSC</span>}
-        </span>
-      ))}
+      {/* .cel-track scrolls as a ticker on phones (layout.css ≤600px) so the
+          full message is readable inside the fixed 40px strip; on desktop it
+          renders exactly as before. Duration scales with message count. */}
+      <div className="cel-track" style={{ display:'inline-flex', alignItems:'center', gap:22, whiteSpace:'nowrap', animationDuration: `${Math.max(16, items.length * 10)}s` }}>
+        {items.map((it, i) => (
+          <span key={it.employee_id + it.kind + i} style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontSize:17 }}>{it.kind === 'birthday' ? '🎂' : it.kind === 'joined' ? '👋' : '🎉'}</span>
+            {it.kind === 'birthday'
+              ? <span>Happy Birthday, <strong>{it.full_name}</strong>! Wishing you a wonderful year ahead 🥳 — with love, Team SSC</span>
+              : it.kind === 'joined'
+                ? <span>Welcome to SSC, <strong>{it.full_name}</strong>! Delighted to have you on board — joining us today 🎉 — Team SSC</span>
+                : <span>Congratulations <strong>{it.full_name}</strong> on <strong>{it.years} year{it.years>1?'s':''}</strong> with SSC! Thank you for all you do 🙌 — Team SSC</span>}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }

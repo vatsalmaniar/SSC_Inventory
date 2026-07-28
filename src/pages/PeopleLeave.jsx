@@ -149,7 +149,7 @@ export default function PeopleLeave() {
                 <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3a7 7 0 0 1 7 7H3a7 7 0 0 1 7-7Z"/><path d="M10 10v5a2 2 0 0 0 3.4 1.4"/></svg>
               </span>
               <div style={{flex:1,minWidth:220}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                <div className="lv-tile-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                   <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--muted)'}}>Leave balance · FY {currentFyLabel()}</div>
                   <div style={{display:'inline-flex',alignItems:'center',gap:12,flexShrink:0}}>
                     <button onClick={()=>setPolicy(true)} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:11.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}}>
@@ -183,7 +183,7 @@ export default function PeopleLeave() {
               const canHr  = r.status==='mgr_approved' && (iAmHr || isMgmt)
               const s = ST[r.status]
               return (
-                <div key={r.id} style={{display:'grid',gridTemplateColumns:'1.4fr 1fr auto',gap:12,alignItems:'center',padding:'11px 0',borderBottom:'1px solid var(--line-2)'}}>
+                <div key={r.id} className="lv-row" style={{display:'grid',gridTemplateColumns:'1.4fr 1fr auto',gap:12,alignItems:'center',padding:'11px 0',borderBottom:'1px solid var(--line-2)'}}>
                   <div><div style={{fontWeight:600,fontSize:13.5}}>{r.emp?.full_name}</div><div style={{fontSize:11.5,color:'var(--muted-2)'}}>{r.reason||'—'}</div></div>
                   <div style={{fontSize:12.5}}>{fmtD(r.from_date)} → {fmtD(r.to_date)} · <b>{r.days}d</b>{r.is_half_day?' (half)':''}</div>
                   <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end'}}>
@@ -201,7 +201,7 @@ export default function PeopleLeave() {
         <div className="att-card">
           <div className="att-card-h"><span className="att-card-t">My requests</span></div>
           {mine.length===0 ? <div className="e-empty" style={{padding:'24px 0'}}>No leave requests yet.</div> : mine.map(r => { const s=ST[r.status]; return (
-            <div key={r.id} style={{display:'grid',gridTemplateColumns:'1fr auto',gap:12,alignItems:'center',padding:'11px 0',borderBottom:'1px solid var(--line-2)'}}>
+            <div key={r.id} className="lv-row" style={{display:'grid',gridTemplateColumns:'1fr auto',gap:12,alignItems:'center',padding:'11px 0',borderBottom:'1px solid var(--line-2)'}}>
               <div><div style={{fontSize:13.5,fontWeight:600}}>{fmtD(r.from_date)} → {fmtD(r.to_date)} · {r.days}d{r.is_half_day?' (half)':''}</div><div style={{fontSize:11.5,color:'var(--muted-2)'}}>{r.reason||'—'}{r.decision_note?` · ${r.decision_note}`:''}</div></div>
               <div style={{display:'flex',gap:8,alignItems:'center'}}><span className="att-badge" style={{color:s.c,background:s.b}}>{s.l}</span>{['pending','mgr_approved'].includes(r.status) && <button className="btn btn-neutral btn-sm" onClick={()=>cancelMine(r)}>Cancel</button>}</div>
             </div>

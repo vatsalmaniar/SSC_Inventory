@@ -455,12 +455,11 @@
   .people-app .dchips>*,.people-app .pm-2>*,.people-app .at-grid>*{min-width:0;}
 }
 
-/* ── Leave page phone fixes (≤560px). PeopleLeave.jsx rows are inline-styled
-   and the file is pending unrelated work — these attribute hooks stack the
-   approval/request grids; refactor to classes when the JSX frees up. ── */
+/* ── Leave page phone fixes (≤560px): approval/request rows stack, the
+   balance-tile header wraps. !important beats the rows' inline styles. ── */
 @media (max-width:560px){
-  .people-app .att-card > div[style*="grid"]{grid-template-columns:1fr !important;gap:6px !important;}
-  .people-app .acard div[style*="space-between"]{flex-wrap:wrap;}
+  .people-app .lv-row{grid-template-columns:1fr !important;gap:6px !important;}
+  .people-app .lv-tile-head{flex-wrap:wrap;}
 }
 
 /* ── Team list mobile cards (≤560px) + Employee 360 phone tier ── */

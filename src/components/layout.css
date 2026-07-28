@@ -29,6 +29,19 @@
   .cel-strip { animation: none; }
   .cel-strip::after { display: none; }
 }
+
+/* Phones: messages are longer than the screen — the track scrolls across the
+   fixed 40px strip as a ticker so greetings stay fully readable. The strip's
+   height must NOT change (sidebar/backdrop offsets key off --cel-h). */
+@keyframes cel-marquee { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }
+@media (max-width: 600px) {
+  .cel-strip { justify-content: flex-start; padding: 0; }
+  .cel-track { animation: cel-marquee 16s linear infinite; will-change: transform; }
+}
+@media (max-width: 600px) and (prefers-reduced-motion: reduce) {
+  .cel-track { animation: none !important; padding: 0 14px; }
+  .cel-strip { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
 html.has-celebration .ly-sidebar { top: var(--cel-h); min-height: calc(100vh - var(--cel-h)); }
 html.has-celebration .ly-wrap    { min-height: calc(100vh - var(--cel-h)); }
 html.has-celebration .ly-main    { min-height: calc(100vh - var(--cel-h)); }
