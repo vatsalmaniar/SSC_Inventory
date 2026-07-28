@@ -5,6 +5,27 @@ const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!
 const SB_URL = Deno.env.get('SUPABASE_URL')!
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const FROM = 'SSC ERP <notifications@ssccontrol.com>'
+
+// Resend caps at 10 requests/sec. Celebration/welcome dispatches insert many
+// notifications at once → the webhook fires a burst of function calls → some get
+// 429'd and silently dropped. Retry on 429 / 5xx with exponential backoff + jitter
+// so bursts self-smooth. Each call sends one email, so this just spaces retries out.
+async function resendSend(payload: unknown, attempts = 5): Promise<Response> {
+  let res!: Response
+  for (let i = 0; i < attempts; i++) {
+    res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.status !== 429 && res.status < 500) return res   // sent, or a permanent error — don't retry
+    if (i < attempts - 1) {
+      const backoff = 350 * Math.pow(2, i) + Math.floor(Math.random() * 300)  // ~0.35s,0.7s,1.4s,2.8s + jitter
+      await new Promise((r) => setTimeout(r, backoff))
+    }
+  }
+  return res
+}
 const APP_URL = 'https://app.ssccontrol.com'
 
 serve(async (req) => {
@@ -325,11 +346,7 @@ async function handleNotification(sb: any, r: any) {
   }
 
   try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM, to: [email], subject: subject(r), html: buildEmail(recipientName, r, extra) }),
-    })
+    const res = await resendSend({ from: FROM, to: [email], subject: subject(r), html: buildEmail(recipientName, r, extra) })
     const data = await res.json()
 
     try {
