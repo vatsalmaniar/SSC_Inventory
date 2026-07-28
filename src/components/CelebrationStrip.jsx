@@ -49,7 +49,7 @@ export default function CelebrationStrip() {
           {it.kind === 'birthday'
             ? <span>Happy Birthday, <strong>{it.full_name}</strong>! Wishing you a wonderful year ahead 🥳 — with love, Team SSC</span>
             : it.kind === 'joined'
-              ? <span>Please welcome <strong>{it.full_name}</strong> to the SSC family — joining us today! 👋 — Team SSC</span>
+              ? <span>Welcome to SSC, <strong>{it.full_name}</strong>! Delighted to have you on board — joining us today 🎉 — Team SSC</span>
               : <span>Congratulations <strong>{it.full_name}</strong> on <strong>{it.years} year{it.years>1?'s':''}</strong> with SSC! Thank you for all you do 🙌 — Team SSC</span>}
         </span>
       ))}
