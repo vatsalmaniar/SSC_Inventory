@@ -441,3 +441,12 @@
   .kpi-app .exp-mcard-acts { display: flex; align-items: center; gap: 8px; }
   .kpi-app .exp-mcard-sel { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--kink); cursor: pointer; }
 }
+
+/* ── Bill upload: gallery picker + dedicated camera button (phones only).
+   NOT scoped to .kpi-app — the Add Expense drawer is portaled to <body>. ── */
+.exp-drop-row { display: flex; gap: 8px; }
+.exp-drop-row .exp-drop { flex: 1; min-width: 0; }
+.exp-drop-cam { display: none !important; flex: 0 0 auto; }
+@media (max-width: 820px) {
+  .exp-drop-cam { display: flex !important; }
+}

@@ -172,13 +172,25 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
 
             <div className="exp-field">
               <label className="exp-label">Bills<span className="req">*</span><span className="hint">photo or PDF · max {EX.MAX_BILLS} · ≤ 8 MB</span></label>
-              <label className={'exp-drop' + (err.files ? ' err' : '')}>
-                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width: 16, height: 16 }}>
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-                Tap to add a bill or take a photo
-                <input type="file" accept={EX.BILL_ACCEPT} capture="environment" multiple style={{ display: 'none' }} onChange={pickFiles} />
-              </label>
+              {/* No `capture` on the main input — the OS picker then offers
+                  gallery/files (and iOS adds its own camera option). The
+                  dedicated camera button (phones only, CSS) forces capture. */}
+              <div className="exp-drop-row">
+                <label className={'exp-drop' + (err.files ? ' err' : '')}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width: 16, height: 16 }}>
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  Add bill — gallery or PDF
+                  <input type="file" accept={EX.BILL_ACCEPT} multiple style={{ display: 'none' }} onChange={pickFiles} />
+                </label>
+                <label className={'exp-drop exp-drop-cam' + (err.files ? ' err' : '')}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width: 16, height: 16 }}>
+                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
+                  </svg>
+                  Take photo
+                  <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={pickFiles} />
+                </label>
+              </div>
               {files.length > 0 && (
                 <div className="exp-files">
                   {files.map((f, i) => (
