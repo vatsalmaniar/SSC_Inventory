@@ -54,13 +54,15 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string; bg: string; la
   anniv_team:           { emoji: '🎉', color: '#7c3aed', bg: '#f5f3ff', label: 'Work Anniversary' },
 }
 
-const CELEBRATION_TYPES = ['birthday_self', 'birthday_team', 'anniv_self', 'anniv_team']
+const CELEBRATION_TYPES = ['birthday_self', 'birthday_team', 'anniv_self', 'anniv_team', 'welcome_self', 'welcome_team']
 
 function subject(r: any): string {
   if (r.email_type === 'birthday_self') return '🎂 Happy Birthday from Team SSC!'
   if (r.email_type === 'birthday_team') return `🎂 It's ${r.from_name}'s Birthday today!`
   if (r.email_type === 'anniv_self')    return '🎉 Happy Work Anniversary — Team SSC'
   if (r.email_type === 'anniv_team')    return `🎉 ${r.from_name} celebrates a work anniversary!`
+  if (r.email_type === 'welcome_self')  return '👋 Welcome to SSC Control!'
+  if (r.email_type === 'welcome_team')  return `👋 Please welcome ${r.from_name} to SSC!`
   const t = r.email_type
   const on = r.order_number || ''
   const cfg = TYPE_CONFIG[t]
@@ -88,15 +90,20 @@ function esc(s: string): string {
 }
 
 function buildCelebrationEmail(r: any): string {
+  const isWelcome = r.email_type === 'welcome_self' || r.email_type === 'welcome_team'
   const isBday = r.email_type === 'birthday_self' || r.email_type === 'birthday_team'
-  const isSelf = r.email_type === 'birthday_self' || r.email_type === 'anniv_self'
-  const emoji = isBday ? '🎂' : '🎉'
-  const grad = isBday
-    ? 'linear-gradient(90deg,#ec4899 0%,#f97316 55%,#f59e0b 100%)'
-    : 'linear-gradient(90deg,#2563eb 0%,#4f46e5 55%,#7c3aed 100%)'
-  const heading = isSelf
-    ? (isBday ? 'Happy Birthday!' : 'Happy Work Anniversary!')
-    : (isBday ? 'A Birthday at SSC' : 'A Work Anniversary at SSC')
+  const isSelf = r.email_type === 'birthday_self' || r.email_type === 'anniv_self' || r.email_type === 'welcome_self'
+  const emoji = isWelcome ? '👋' : isBday ? '🎂' : '🎉'
+  const grad = isWelcome
+    ? 'linear-gradient(90deg,#0ea5e9 0%,#10b981 60%,#22c55e 100%)'
+    : isBday
+      ? 'linear-gradient(90deg,#ec4899 0%,#f97316 55%,#f59e0b 100%)'
+      : 'linear-gradient(90deg,#2563eb 0%,#4f46e5 55%,#7c3aed 100%)'
+  const heading = isWelcome
+    ? (isSelf ? 'Welcome to SSC!' : 'A New Face at SSC')
+    : isSelf
+      ? (isBday ? 'Happy Birthday!' : 'Happy Work Anniversary!')
+      : (isBday ? 'A Birthday at SSC' : 'A Work Anniversary at SSC')
   const paras = (r.message || '').split('\n').map((line: string) =>
     line.trim() === '' ? '' : `<p style="margin:0 0 12px;font-size:14.5px;color:#334155;line-height:1.75">${esc(line)}</p>`
   ).join('')

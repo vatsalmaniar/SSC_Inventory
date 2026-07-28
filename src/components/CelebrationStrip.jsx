@@ -29,6 +29,7 @@ export default function CelebrationStrip() {
   if (items.length === 0) return null
 
   const hasBirthday = items.some(i => i.kind === 'birthday')
+  const hasJoined = items.some(i => i.kind === 'joined')
 
   return (
     <div className="cel-strip" style={{
@@ -37,15 +38,19 @@ export default function CelebrationStrip() {
       padding:'0 20px', overflow:'hidden', whiteSpace:'nowrap',
       background: hasBirthday
         ? 'linear-gradient(90deg, #ec4899 0%, #f97316 55%, #f59e0b 100%)'
-        : 'linear-gradient(90deg, #2563eb 0%, #4f46e5 55%, #7c3aed 100%)',
+        : hasJoined
+          ? 'linear-gradient(90deg, #0ea5e9 0%, #10b981 60%, #22c55e 100%)'
+          : 'linear-gradient(90deg, #2563eb 0%, #4f46e5 55%, #7c3aed 100%)',
       color:'#fff', fontSize:14, fontWeight:600, letterSpacing:0.1,
     }}>
       {items.map((it, i) => (
         <span key={it.employee_id + it.kind + i} style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
-          <span style={{ fontSize:17 }}>{it.kind === 'birthday' ? '🎂' : '🎉'}</span>
+          <span style={{ fontSize:17 }}>{it.kind === 'birthday' ? '🎂' : it.kind === 'joined' ? '👋' : '🎉'}</span>
           {it.kind === 'birthday'
             ? <span>Happy Birthday, <strong>{it.full_name}</strong>! Wishing you a wonderful year ahead 🥳 — with love, Team SSC</span>
-            : <span>Congratulations <strong>{it.full_name}</strong> on <strong>{it.years} year{it.years>1?'s':''}</strong> with SSC! Thank you for all you do 🙌 — Team SSC</span>}
+            : it.kind === 'joined'
+              ? <span>Please welcome <strong>{it.full_name}</strong> to the SSC family — joining us today! 👋 — Team SSC</span>
+              : <span>Congratulations <strong>{it.full_name}</strong> on <strong>{it.years} year{it.years>1?'s':''}</strong> with SSC! Thank you for all you do 🙌 — Team SSC</span>}
         </span>
       ))}
     </div>

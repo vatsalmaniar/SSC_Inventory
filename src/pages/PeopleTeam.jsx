@@ -5,9 +5,21 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { signPhotos } from '../lib/photos'
+import { computeStructure, RATIOS } from '../lib/salaryStructure'
+import { FY_LABEL } from '../lib/fmt'
 import Layout from '../components/Layout'
 import { TeamSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
+
+const FY = FY_LABEL.replace(/^FY\s*/, '')   // 'FY 26-27' → '26-27'
+const LOGIN_ROLES = [['sales','Sales'],['accounts','Accounts'],['management','Management'],['ops','Operations'],['fc_kaveri','FC Kaveri'],['fc_godawari','FC Godawari']]
+const inr = n => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+const autoUsername = (name='') => {
+  const p = name.trim().toLowerCase().replace(/[^a-z\s]/g,'').split(/\s+/).filter(Boolean)
+  return p.length === 0 ? '' : p.length === 1 ? p[0] : `${p[0]}.${p[p.length-1]}`
+}
+const genPassword = () => 'Ssc@' + Math.floor(1000 + Math.random() * 9000)
+const today = () => new Date().toISOString().slice(0, 10)
 
 function Drawer({ title, sub, onClose, children, footer }) {
   return createPortal(
@@ -19,6 +31,32 @@ function Drawer({ title, sub, onClose, children, footer }) {
         {footer && <div className="pd-foot">{footer}</div>}
       </div>
     </>, document.body)
+}
+
+function Section({ title, sub, open, onToggle, children }) {
+  return (
+    <div style={{ border:'1px solid #E4E7EC', borderRadius:10, marginBottom:12, overflow:'hidden' }}>
+      <button type="button" onClick={onToggle} style={{ width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'11px 14px', background:'#FAFBFC', border:0, cursor:'pointer', fontFamily:'inherit' }}>
+        <span style={{ fontSize:12.5, fontWeight:600, color:'#1D2D3E' }}>{title}{sub && <span style={{ fontWeight:400, color:'#8C99A8' }}> · {sub}</span>}</span>
+        <span style={{ fontSize:11, color:'#8C99A8' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && <div style={{ padding:'12px 14px' }}>{children}</div>}
+    </div>
+  )
+}
+
+const EMPTY_FORM = {
+  // basic (employees)
+  full_name:'', employee_code:'', department:'', designation:'', branch:'', join_date:'',
+  reporting_manager_id:'', lifecycle_status:'probation', tax_regime:'new',
+  // statutory & personal (employee_private)
+  gender:'', marital_status:'', date_of_birth:'', personal_phone:'', personal_email:'',
+  emergency_contact:'', pan:'', aadhaar:'', uan_no:'', esic_no:'',
+  spouse_name:'', spouse_phone:'', spouse_dob:'', is_permanent:true,
+  // salary (employee_compensation)
+  annual_ctc:'', salary_ratio:'50 / 20 / 10 / 20', pf_applicable:false, professional_tax:'200', accidental_insurance:'128',
+  // login
+  create_login:false, username:'', login_role:'sales', password:'', team_id:'',
 }
 
 const DEPT_HEX = { 'Management':'#6D28D9', 'Sales':'#1E54B7', 'Operation & Support':'#0E7C6B', 'Opeartion & Support':'#0E7C6B', 'Account':'#C2255C', 'Back Office':'#8C99A8', 'People & Culture':'#C2255C' }
@@ -35,6 +73,8 @@ export default function PeopleTeam() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isMgmt, setIsMgmt] = useState(false)   // admin OR management — can onboard
+  const [teams, setTeams] = useState([])
   const [rows, setRows] = useState([])
   const [search, setSearch] = useState('')
   const [fStatus, setFStatus] = useState('all')
@@ -43,7 +83,9 @@ export default function PeopleTeam() {
   const [fLoc, setFLoc] = useState('all')
   const [testMode, setTestMode] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [addForm, setAddForm] = useState({ full_name:'', employee_code:'', department:'', designation:'', branch:'', join_date:'', lifecycle_status:'probation' })
+  const [addForm, setAddForm] = useState({ ...EMPTY_FORM })
+  const [openSec, setOpenSec] = useState({ basic:true, statutory:false, salary:false, login:false })
+  const [createdCreds, setCreatedCreds] = useState(null)   // { username, password } after a login is made
   const guard = useRef(false)
 
   useEffect(() => { init() }, [])
@@ -54,6 +96,9 @@ export default function PeopleTeam() {
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     setIsAdmin(profile?.role === 'admin')
+    setIsMgmt(profile?.role === 'admin' || profile?.role === 'management')
+    const { data: tm } = await sb.from('kpi_teams_safe').select('id,name').eq('is_active', true).order('name')
+    setTeams(tm || [])
     await load(); setLoading(false)
   }
 
@@ -75,31 +120,113 @@ export default function PeopleTeam() {
     signPhotos(built).then(() => setRows([...built])).catch(() => {})   // photos pop in when signed
   }
 
+  const set = patch => setAddForm(f => ({ ...f, ...patch }))
+  const toggleLogin = on => {
+    if (on) set({ create_login:true, username: addForm.username || autoUsername(addForm.full_name), password: addForm.password || genPassword() })
+    else set({ create_login:false })
+  }
+
+  // live salary breakup preview (mgmt only) — recomputed as CTC/ratio/regime change
+  const salPreview = useMemo(() => {
+    const ctc = parseFloat(addForm.annual_ctc) || 0
+    if (!ctc) return null
+    return computeStructure({
+      annualCtc: ctc, ratio: addForm.salary_ratio, regime: addForm.tax_regime,
+      pfApplicable: addForm.pf_applicable,
+      professionalTax: parseFloat(addForm.professional_tax) || 0,
+      accidentalInsurance: parseFloat(addForm.accidental_insurance) || 0,
+    })
+  }, [addForm.annual_ctc, addForm.salary_ratio, addForm.tax_regime, addForm.pf_applicable, addForm.professional_tax, addForm.accidental_insurance])
+
+  const resetAdd = () => { setAddForm({ ...EMPTY_FORM }); setCreatedCreds(null); setOpenSec({ basic:true, statutory:false, salary:false, login:false }) }
+  const closeAdd = () => { setShowAdd(false); resetAdd() }
+
   async function addMember() {
     if (guard.current) return
-    if (!addForm.full_name.trim()) { toast('Full name is required.', 'error'); return }
+    const f = addForm
+    if (!f.full_name.trim()) { toast('Full name is required.', 'error'); return }
+    if (f.create_login) {
+      if (!f.username.trim()) { toast('Username is required for the login.', 'error'); return }
+      if ((f.password || '').length < 6) { toast('Temp password must be at least 6 characters.', 'error'); return }
+      if (f.login_role === 'sales' && !f.team_id) { toast('Pick a team for the sales login (target auto-assigns).', 'error'); return }
+    }
     guard.current = true
     try {
-      const { error } = await sb.from('employees').insert({
-        full_name: addForm.full_name.trim(),
-        employee_code: addForm.employee_code.trim() || null,
-        department: addForm.department.trim() || null,
-        designation: addForm.designation.trim() || null,
-        branch: addForm.branch.trim() || null,
-        join_date: addForm.join_date || null,
-        lifecycle_status: addForm.lifecycle_status,
-        is_active: addForm.lifecycle_status !== 'exited',
-      })
+      // 1) base employee record
+      const { data: emp, error } = await sb.from('employees').insert({
+        full_name: f.full_name.trim(),
+        employee_code: f.employee_code.trim() || null,
+        department: f.department.trim() || null,
+        designation: f.designation.trim() || null,
+        branch: f.branch.trim() || null,
+        join_date: f.join_date || null,
+        reporting_manager_id: f.reporting_manager_id || null,
+        lifecycle_status: f.lifecycle_status,
+        is_active: f.lifecycle_status !== 'exited',
+        tax_regime: f.tax_regime,
+        is_test: testMode,
+      }).select('id').single()
       if (error) throw error
-      toast('Team member added.', 'success')
-      setShowAdd(false); setAddForm({ full_name:'', employee_code:'', department:'', designation:'', branch:'', join_date:'', lifecycle_status:'probation' })
+      const empId = emp.id
+
+      // 2) statutory & personal (mgmt) — only if something was entered
+      if (isMgmt) {
+        const hasPriv = [f.gender,f.marital_status,f.date_of_birth,f.personal_phone,f.personal_email,f.emergency_contact,f.pan,f.aadhaar,f.uan_no,f.esic_no,f.spouse_name,f.spouse_phone,f.spouse_dob].some(v => (v||'').trim && v.trim())
+        if (hasPriv || f.is_permanent === false) {
+          const { error: e2 } = await sb.from('employee_private').upsert({
+            employee_id: empId, gender: f.gender || null, marital_status: f.marital_status || null,
+            date_of_birth: f.date_of_birth || null, personal_phone: f.personal_phone || null, personal_email: f.personal_email || null,
+            emergency_contact: f.emergency_contact || null, pan: f.pan?.trim().toUpperCase() || null, aadhaar: f.aadhaar?.trim() || null,
+            uan_no: f.uan_no?.trim() || null, esic_no: f.esic_no?.trim() || null,
+            spouse_name: f.spouse_name || null, spouse_phone: f.spouse_phone || null, spouse_dob: f.spouse_dob || null,
+            is_permanent: f.is_permanent,
+          }, { onConflict: 'employee_id' })
+          if (e2) throw e2
+        }
+      }
+
+      // 3) salary breakup (mgmt) — only if a CTC was entered
+      const ctc = parseFloat(f.annual_ctc) || 0
+      if (isMgmt && ctc > 0) {
+        const s = computeStructure({ annualCtc: ctc, ratio: f.salary_ratio, regime: f.tax_regime, pfApplicable: f.pf_applicable, professionalTax: parseFloat(f.professional_tax) || 0, accidentalInsurance: parseFloat(f.accidental_insurance) || 0 })
+        const { error: e3 } = await sb.from('employee_compensation').insert({
+          employee_id: empId, fy_label: FY, annual_ctc_inr: ctc, effective_from: f.join_date || today(),
+          source: 'onboarding', revision_reason: 'Onboarding', is_current: true,
+          monthly_ctc: s.monthlyCtc, monthly_gross: s.gross, basic: s.basic, hra: s.hra,
+          travel_allowance: s.travelAllowance, special_allowance: s.specialAllowance, salary_ratio: f.salary_ratio,
+          pf_employer: s.employerPf, esic_employer: s.employerEsic, pf_employee: s.pfEmployee, esic_employee: s.esicEmployee,
+          professional_tax: s.professionalTax, accidental_insurance: s.accidentalInsurance,
+          gratuity: s.gratuity, bonus: s.bonus, tds: s.tds, total_deductions: s.totalDeductions,
+          net_payable: s.netPayable, breakup_source: 'computed', updated_at: new Date().toISOString(),
+        })
+        if (e3) throw e3
+      }
+
+      // 4) app login (optional) — links employees.profile_id server-side
+      if (f.create_login) {
+        const uname = f.username.trim().toLowerCase()
+        const { data: newUid, error: e4 } = await sb.rpc('admin_create_login', {
+          p_employee_id: empId, p_username: uname, p_password: f.password, p_role: f.login_role, p_name: f.full_name.trim(),
+        })
+        if (e4) throw e4
+        // 5) sales → KPI team + auto target (multiplier resolved server-side)
+        if (f.login_role === 'sales' && f.team_id) {
+          const { error: e5 } = await sb.rpc('assign_kpi_target', { p_profile_id: newUid, p_team_id: f.team_id, p_fy_label: FY, p_annual_ctc: ctc })
+          if (e5) throw e5
+        }
+        setCreatedCreds({ username: uname, password: f.password })
+      }
+
+      toast(f.create_login ? 'Onboarded — share the login below.' : 'Team member onboarded.', 'success')
       await load()
+      if (!f.create_login) closeAdd()   // no creds to show → close straight away
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { guard.current = false }
   }
 
   const depts = useMemo(() => Array.from(new Set(rows.map(r=>r.department).filter(Boolean))).sort(), [rows])
   const locs  = useMemo(() => Array.from(new Set(rows.map(r=>r.branch).filter(Boolean))).sort(), [rows])
+  const managers = useMemo(() => rows.filter(r=>r.lifecycle_status!=='exited').map(r=>({ id:r.id, name:r.full_name })).sort((a,b)=>a.name.localeCompare(b.name)), [rows])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -148,7 +275,7 @@ export default function PeopleTeam() {
               <button onClick={()=>navigate('/people/org')}><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="6" y="1.5" width="4" height="3.5" rx="1"/><rect x="1.5" y="11" width="4" height="3.5" rx="1"/><rect x="10.5" y="11" width="4" height="3.5" rx="1"/><path d="M8 5v3M3.5 11V8h9v3"/></svg>Org</button>
             </div>
             {isAdmin && <button className="btn btn-neutral" onClick={()=>navigate('/people/assets')}>Devices</button>}
-            {isAdmin && <button className="btn btn-primary" onClick={()=>setShowAdd(true)}>
+            {isMgmt && <button className="btn btn-primary" onClick={()=>{ resetAdd(); setShowAdd(true) }}>
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M8 3v10M3 8h10" strokeLinecap="round"/></svg>Add Member
             </button>}
           </div>
@@ -234,24 +361,144 @@ export default function PeopleTeam() {
       </div>
 
       {showAdd && (
-        <Drawer title="Add Team Member" sub="Creates an employee record (no login — link a login later)" onClose={()=>setShowAdd(false)}
-          footer={<><button className="pd-btn neutral" onClick={()=>setShowAdd(false)}>Cancel</button><button className="pd-btn primary" onClick={addMember}>Add Member</button></>}>
-          <div className="pd-f"><label>Full name *</label><input value={addForm.full_name} onChange={e=>setAddForm({...addForm,full_name:e.target.value})} placeholder="Full name" autoFocus /></div>
-          <div className="pd-2">
-            <div className="pd-f"><label>Employee ID</label><input value={addForm.employee_code} onChange={e=>setAddForm({...addForm,employee_code:e.target.value})} placeholder="e.g. 101" /></div>
-            <div className="pd-f"><label>Join date</label><input type="date" value={addForm.join_date} onChange={e=>setAddForm({...addForm,join_date:e.target.value})} /></div>
-          </div>
-          <div className="pd-2">
-            <div className="pd-f"><label>Department</label><input value={addForm.department} onChange={e=>setAddForm({...addForm,department:e.target.value})} list="dept-list" placeholder="Department" /><datalist id="dept-list">{depts.map(d=><option key={d} value={d} />)}</datalist></div>
-            <div className="pd-f"><label>Branch / Location</label><input value={addForm.branch} onChange={e=>setAddForm({...addForm,branch:e.target.value})} list="loc-list" placeholder="Location" /><datalist id="loc-list">{locs.map(l=><option key={l} value={l} />)}</datalist></div>
-          </div>
-          <div className="pd-f"><label>Designation</label><input value={addForm.designation} onChange={e=>setAddForm({...addForm,designation:e.target.value})} placeholder="Designation" /></div>
-          <div className="pd-f"><label>Lifecycle status</label><select value={addForm.lifecycle_status} onChange={e=>setAddForm({...addForm,lifecycle_status:e.target.value})}><option value="probation">Probation (default · 3 months)</option><option value="confirmed">Confirmed</option><option value="notice">Notice</option></select></div>
-          {addForm.lifecycle_status==='probation' && addForm.join_date && (
-            <div style={{fontSize:11.5,color:'#5B738B',background:'#FAFBFC',border:'1px solid #E4E7EC',borderRadius:8,padding:'8px 11px'}}>
-              Probation ends <strong style={{color:'#1D2D3E'}}>{new Date(new Date(addForm.join_date).setMonth(new Date(addForm.join_date).getMonth()+3)).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</strong> — confirm them then.
+        <Drawer
+          title={createdCreds ? 'Login created' : 'Onboard Team Member'}
+          sub={createdCreds ? 'Share these credentials — the password is shown only once.' : 'Record, statutory details, salary & app login — all in one step.'}
+          onClose={closeAdd}
+          footer={createdCreds
+            ? <button className="pd-btn primary" onClick={closeAdd} style={{ marginLeft:'auto' }}>Done</button>
+            : <><button className="pd-btn neutral" onClick={closeAdd}>Cancel</button><button className="pd-btn primary" onClick={addMember}>{addForm.create_login ? 'Onboard & create login' : 'Onboard'}</button></>}>
+
+          {createdCreds ? (
+            <div style={{ padding:'4px 2px' }}>
+              <div style={{ fontSize:13, color:'#276749', background:'#F2FBF6', border:'1px solid #cdeede', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
+                ✓ Onboarded. The member must change this password on first login.
+              </div>
+              {[['Username', createdCreds.username], ['Temp password', createdCreds.password]].map(([l,v]) => (
+                <div key={l} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, border:'1px solid #E4E7EC', borderRadius:9, padding:'10px 13px', marginBottom:9 }}>
+                  <div><div style={{ fontSize:11, color:'#8C99A8', fontWeight:600 }}>{l}</div><div style={{ fontSize:14, fontFamily:'var(--mono, monospace)', color:'#1D2D3E' }}>{v}</div></div>
+                  <button className="btn btn-neutral btn-sm" onClick={()=>{ navigator.clipboard?.writeText(v); toast('Copied.', 'success') }}>Copy</button>
+                </div>
+              ))}
+              <div style={{ fontSize:11.5, color:'#8C99A8', marginTop:6 }}>Login: <b>{createdCreds.username}@ssccontrol.com</b></div>
             </div>
+          ) : (<>
+
+          {/* ── Basic ── */}
+          <Section title="Basic details" open={openSec.basic} onToggle={()=>setOpenSec(s=>({...s,basic:!s.basic}))}>
+            <div className="pd-f"><label>Full name *</label><input value={addForm.full_name} onChange={e=>{ const v=e.target.value; set({ full_name:v, ...(addForm.create_login ? { username: autoUsername(v) } : {}) }) }} placeholder="First Last" autoFocus /></div>
+            <div className="pd-2">
+              <div className="pd-f"><label>Employee ID</label><input value={addForm.employee_code} onChange={e=>set({employee_code:e.target.value})} placeholder="e.g. 101" /></div>
+              <div className="pd-f"><label>Join date</label><input type="date" value={addForm.join_date} onChange={e=>set({join_date:e.target.value})} max={today()} /></div>
+            </div>
+            <div className="pd-2">
+              <div className="pd-f"><label>Department</label><input value={addForm.department} onChange={e=>set({department:e.target.value})} list="dept-list" placeholder="Department" /><datalist id="dept-list">{depts.map(d=><option key={d} value={d} />)}</datalist></div>
+              <div className="pd-f"><label>Branch / Location</label><input value={addForm.branch} onChange={e=>set({branch:e.target.value})} list="loc-list" placeholder="Location" /><datalist id="loc-list">{locs.map(l=><option key={l} value={l} />)}</datalist></div>
+            </div>
+            <div className="pd-f"><label>Designation</label><input value={addForm.designation} onChange={e=>set({designation:e.target.value})} placeholder="Designation" /></div>
+            <div className="pd-2">
+              <div className="pd-f"><label>Reporting manager</label><select value={addForm.reporting_manager_id} onChange={e=>set({reporting_manager_id:e.target.value})}><option value="">— none —</option>{managers.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
+              <div className="pd-f"><label>Lifecycle status</label><select value={addForm.lifecycle_status} onChange={e=>set({lifecycle_status:e.target.value})}><option value="probation">Probation (default · 3 months)</option><option value="confirmed">Confirmed</option><option value="notice">Notice</option></select></div>
+            </div>
+            {addForm.lifecycle_status==='probation' && addForm.join_date && (
+              <div style={{fontSize:11.5,color:'#5B738B',background:'#FAFBFC',border:'1px solid #E4E7EC',borderRadius:8,padding:'8px 11px'}}>
+                Probation ends <strong style={{color:'#1D2D3E'}}>{new Date(new Date(addForm.join_date).setMonth(new Date(addForm.join_date).getMonth()+3)).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</strong> — confirm them then.
+              </div>
+            )}
+          </Section>
+
+          {/* ── Statutory & Personal (mgmt) ── */}
+          {isMgmt && (
+          <Section title="Statutory & personal" sub="PAN · Aadhaar · UAN · ESIC" open={openSec.statutory} onToggle={()=>setOpenSec(s=>({...s,statutory:!s.statutory}))}>
+            <div className="pd-2">
+              <div className="pd-f"><label>Gender</label><select value={addForm.gender} onChange={e=>set({gender:e.target.value})}><option value="">—</option><option>Male</option><option>Female</option><option>Other</option></select></div>
+              <div className="pd-f"><label>Marital status</label><select value={addForm.marital_status} onChange={e=>set({marital_status:e.target.value})}><option value="">—</option><option>Single</option><option>Married</option></select></div>
+            </div>
+            <div className="pd-2">
+              <div className="pd-f"><label>Date of birth</label><input type="date" value={addForm.date_of_birth} onChange={e=>set({date_of_birth:e.target.value})} max={today()} /></div>
+              <div className="pd-f"><label>Personal phone</label><input value={addForm.personal_phone} onChange={e=>set({personal_phone:e.target.value})} placeholder="10-digit" /></div>
+            </div>
+            <div className="pd-2">
+              <div className="pd-f"><label>Personal email</label><input value={addForm.personal_email} onChange={e=>set({personal_email:e.target.value})} placeholder="name@example.com" /></div>
+              <div className="pd-f"><label>Emergency contact</label><input value={addForm.emergency_contact} onChange={e=>set({emergency_contact:e.target.value})} placeholder="Name · phone" /></div>
+            </div>
+            <div className="pd-2">
+              <div className="pd-f"><label>PAN</label><input value={addForm.pan} onChange={e=>set({pan:e.target.value})} placeholder="ABCDE1234F" style={{textTransform:'uppercase'}} maxLength={10} /></div>
+              <div className="pd-f"><label>Aadhaar</label><input value={addForm.aadhaar} onChange={e=>set({aadhaar:e.target.value})} placeholder="12 digits" maxLength={12} /></div>
+            </div>
+            <div className="pd-2">
+              <div className="pd-f"><label>UAN (PF)</label><input value={addForm.uan_no} onChange={e=>set({uan_no:e.target.value})} placeholder="12-digit UAN" /></div>
+              <div className="pd-f"><label>ESIC No.</label><input value={addForm.esic_no} onChange={e=>set({esic_no:e.target.value})} placeholder="17-digit IP number" /></div>
+            </div>
+            <div className="pd-2">
+              <div className="pd-f"><label>Spouse name</label><input value={addForm.spouse_name} onChange={e=>set({spouse_name:e.target.value})} placeholder="—" /></div>
+              <div className="pd-f"><label>Spouse phone</label><input value={addForm.spouse_phone} onChange={e=>set({spouse_phone:e.target.value})} placeholder="—" /></div>
+            </div>
+            <div className="pd-2">
+              <div className="pd-f"><label>Spouse birthdate</label><input type="date" value={addForm.spouse_dob} onChange={e=>set({spouse_dob:e.target.value})} max={today()} /></div>
+              <div className="pd-f"><label>Employment type</label><select value={addForm.is_permanent ? 'perm' : 'contract'} onChange={e=>set({is_permanent: e.target.value==='perm'})}><option value="perm">Permanent</option><option value="contract">Contract</option></select></div>
+            </div>
+          </Section>
           )}
+
+          {/* ── Salary (mgmt) ── */}
+          {isMgmt && (
+          <Section title="Salary" sub={salPreview ? `Net ${inr(salPreview.netPayable)}/mo` : 'optional'} open={openSec.salary} onToggle={()=>setOpenSec(s=>({...s,salary:!s.salary}))}>
+            <div className="pd-2">
+              <div className="pd-f"><label>Annual CTC (₹)</label><input value={addForm.annual_ctc} onChange={e=>set({annual_ctc:e.target.value.replace(/[^\d.]/g,'')})} placeholder="e.g. 600000" inputMode="numeric" /></div>
+              <div className="pd-f"><label>Structure ratio</label><select value={addForm.salary_ratio} onChange={e=>set({salary_ratio:e.target.value})}>{Object.keys(RATIOS).map(r=><option key={r} value={r}>{r}</option>)}</select></div>
+            </div>
+            <div className="pd-2">
+              <div className="pd-f"><label>Tax regime</label><select value={addForm.tax_regime} onChange={e=>set({tax_regime:e.target.value})}><option value="new">New</option><option value="old">Old</option></select></div>
+              <div className="pd-f"><label>PF applicable</label><select value={addForm.pf_applicable ? 'y':'n'} onChange={e=>set({pf_applicable: e.target.value==='y'})}><option value="n">No</option><option value="y">Yes</option></select></div>
+            </div>
+            <div className="pd-2">
+              <div className="pd-f"><label>Professional tax /mo</label><input value={addForm.professional_tax} onChange={e=>set({professional_tax:e.target.value.replace(/[^\d.]/g,'')})} inputMode="numeric" /></div>
+              <div className="pd-f"><label>Accidental insurance /mo</label><input value={addForm.accidental_insurance} onChange={e=>set({accidental_insurance:e.target.value.replace(/[^\d.]/g,'')})} inputMode="numeric" /></div>
+            </div>
+            {salPreview && (
+              <div style={{ border:'1px solid #E4E7EC', borderRadius:9, overflow:'hidden', marginTop:4 }}>
+                <div style={{ background:'#FAFBFC', padding:'8px 12px', fontSize:11, fontWeight:600, color:'#5B738B', letterSpacing:'0.03em' }}>MONTHLY BREAKUP · {addForm.tax_regime==='old'?'Old':'New'} regime</div>
+                <div style={{ padding:'4px 0' }}>
+                  {[['Basic',salPreview.basic],['HRA',salPreview.hra],['Travel',salPreview.travelAllowance],['Special',salPreview.specialAllowance],['Gross',salPreview.gross],['PF (employee)',salPreview.pfEmployee],['Gratuity',salPreview.gratuity],['Bonus',salPreview.bonus],['TDS',salPreview.tds],['Total deductions',salPreview.totalDeductions]].map(([l,v])=>(
+                    <div key={l} style={{ display:'flex', justifyContent:'space-between', padding:'4px 12px', fontSize:12.5, color:'#374151' }}><span style={{color:'#5B738B'}}>{l}</span><span style={{fontFamily:'var(--mono, monospace)'}}>{inr(v)}</span></div>
+                  ))}
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 12px', fontSize:13.5, fontWeight:600, color:'#0B1B30', borderTop:'1px solid #E4E7EC', marginTop:2 }}><span>Net payable</span><span style={{fontFamily:'var(--mono, monospace)'}}>{inr(salPreview.netPayable)}</span></div>
+                </div>
+              </div>
+            )}
+          </Section>
+          )}
+
+          {/* ── App login ── */}
+          <Section title="App login" sub={addForm.create_login ? 'will be created' : 'optional'} open={openSec.login} onToggle={()=>setOpenSec(s=>({...s,login:!s.login}))}>
+            <label style={{ display:'flex', alignItems:'center', gap:9, cursor:'pointer', fontSize:13, color:'#1D2D3E', marginBottom:addForm.create_login?12:0 }}>
+              <input type="checkbox" checked={addForm.create_login} onChange={e=>toggleLogin(e.target.checked)} style={{ width:16, height:16 }} />
+              Also create an app login for this member
+            </label>
+            {addForm.create_login && (<>
+              <div className="pd-2">
+                <div className="pd-f"><label>Username</label><input value={addForm.username} onChange={e=>set({username:e.target.value.toLowerCase().replace(/[^a-z0-9._]/g,'')})} placeholder="first.last" /></div>
+                <div className="pd-f"><label>Role</label><select value={addForm.login_role} onChange={e=>set({login_role:e.target.value})}>{LOGIN_ROLES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>
+              </div>
+              <div className="pd-f"><label>Temp password</label>
+                <div style={{ display:'flex', gap:8 }}>
+                  <input value={addForm.password} onChange={e=>set({password:e.target.value})} style={{ flex:1 }} />
+                  <button className="btn btn-neutral btn-sm" type="button" onClick={()=>set({password:genPassword()})}>New</button>
+                </div>
+              </div>
+              <div style={{ fontSize:11.5, color:'#8C99A8', marginTop:2 }}>Login email will be <b>{(addForm.username||'username')}@ssccontrol.com</b>. They'll be asked to change this password on first login.</div>
+              {addForm.login_role==='sales' && (
+                <div className="pd-f" style={{ marginTop:12 }}><label>Sales team (target auto-assigns)</label>
+                  <select value={addForm.team_id} onChange={e=>set({team_id:e.target.value})}><option value="">— select team —</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>
+                </div>
+              )}
+            </>)}
+            {!addForm.create_login && (
+              <div style={{ fontSize:11.5, color:'#8C99A8', marginTop:8 }}>Sales members appear in KRA/KPI only once a login exists — turn this on to assign their team & target now.</div>
+            )}
+          </Section>
+          </>)}
         </Drawer>
       )}
     </Layout>

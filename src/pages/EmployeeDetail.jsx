@@ -147,7 +147,11 @@ export default function EmployeeDetail() {
     if (aIds.length) { const { data: av } = await sb.from('assets_view').select('*').in('id', aIds); (av || []).forEach(x => { avById[x.id] = x }) }
     setAssign(assignRows.map(x => ({ ...x, asset: avById[x.asset_id] || null })))
     if (e.profile_id) {
-      const { data: k } = await sb.from('kpi_assignments').select('*').eq('profile_id', e.profile_id).eq('is_active', true).order('fy_label',{ascending:false}).limit(1).maybeSingle()
+      // mgmt sees any employee's assignment; a self-viewer reads kpi_self (target only, NO multiplier/CTC)
+      const kq = mgmt
+        ? sb.from('kpi_assignments').select('*').eq('profile_id', e.profile_id).eq('is_active', true).order('fy_label',{ascending:false}).limit(1)
+        : sb.from('kpi_self').select('*').eq('is_active', true).order('fy_label',{ascending:false}).limit(1)
+      const { data: k } = await kq.maybeSingle()
       setKpi(k || null)
       if (k) { const { data: md } = await sb.from('kpi_monthly_data').select('month_start,kpi_key,value').eq('assignment_id', k.id); setKpiMonthly(md || []) }
     }

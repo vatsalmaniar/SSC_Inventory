@@ -65,6 +65,7 @@ const PeopleAttendance = lazy(() => import('./pages/PeopleAttendance'))
 const PeopleMyAttendance = lazy(() => import('./pages/PeopleMyAttendance'))
 const PeopleLeave = lazy(() => import('./pages/PeopleLeave'))
 const SalaryCalculator = lazy(() => import('./pages/SalaryCalculator'))
+const Handbook = lazy(() => import('./pages/Handbook'))
 const PeopleRegularize = lazy(() => import('./pages/PeopleRegularize'))
 const PeopleMuster = lazy(() => import('./pages/PeopleMuster'))
 const PeopleSwipes = lazy(() => import('./pages/PeopleSwipes'))
@@ -150,6 +151,7 @@ export default function App() {
           <Route path="/people/assets" element={<PeopleAssets />} />
           <Route path="/people/config" element={<PeopleConfig />} />
           <Route path="/people/salary-calculator" element={<SalaryCalculator />} />
+          <Route path="/people/handbook" element={<Handbook />} />
           <Route path="/people/attendance" element={<PeopleAttendance />} />
           <Route path="/people/attendance/me" element={<PeopleMyAttendance />} />
           <Route path="/people/attendance/leave" element={<PeopleLeave />} />

@@ -170,6 +170,10 @@ export default function PeopleMyAttendance() {
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
               How leave &amp; LOP work
             </button>
+            <button onClick={()=>navigate('/people/handbook')} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:12.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}} title="Employee Handbook">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4h9a2 2 0 0 1 2 2v10a1.5 1.5 0 0 0-1.5-1.5H4z" strokeLinejoin="round"/><path d="M4 4v11"/></svg>
+              Handbook
+            </button>
             <button className="btn btn-neutral btn-sm" onClick={downloadMyAtt} title="Download attendance (Excel)">
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download

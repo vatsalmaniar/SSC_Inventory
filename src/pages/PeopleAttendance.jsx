@@ -278,6 +278,10 @@ export default function PeopleAttendance() {
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
               How leave &amp; LOP work
             </button>
+            <button onClick={()=>navigate('/people/handbook')} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:12.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}} title="Employee Handbook">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4h9a2 2 0 0 1 2 2v10a1.5 1.5 0 0 0-1.5-1.5H4z" strokeLinejoin="round"/><path d="M4 4v11"/></svg>
+              Handbook
+            </button>
             <div className="meta-pill live"><span className="meta-dot" /> Live</div>
           </div>
         </div>

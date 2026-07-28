@@ -151,10 +151,16 @@ export default function PeopleLeave() {
               <div style={{flex:1,minWidth:220}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                   <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--muted)'}}>Leave balance · FY {currentFyLabel()}</div>
-                  <button onClick={()=>setPolicy(true)} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:11.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0,flexShrink:0}}>
-                    <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
-                    How leave &amp; LOP work
-                  </button>
+                  <div style={{display:'inline-flex',alignItems:'center',gap:12,flexShrink:0}}>
+                    <button onClick={()=>setPolicy(true)} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:11.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}}>
+                      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
+                      How leave &amp; LOP work
+                    </button>
+                    <button onClick={()=>navigate('/people/handbook')} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:11.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}} title="Employee Handbook">
+                      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4h9a2 2 0 0 1 2 2v10a1.5 1.5 0 0 0-1.5-1.5H4z" strokeLinejoin="round"/><path d="M4 4v11"/></svg>
+                      Handbook
+                    </button>
+                  </div>
                 </div>
                 <div style={{fontSize:30,fontWeight:600,letterSpacing:'-0.025em',lineHeight:1,marginTop:6,fontFamily:"'Geist Mono',monospace"}}>{balNum ?? '—'}<small style={{fontSize:14,color:'var(--muted-2)',fontWeight:500,fontFamily:"'Geist',sans-serif"}}> / {credited} left</small></div>
                 <div style={{height:7,borderRadius:5,background:'var(--bg)',overflow:'hidden',marginTop:12,maxWidth:420}}><div style={{height:'100%',width:pct+'%',background:'var(--accent)',borderRadius:5}} /></div>

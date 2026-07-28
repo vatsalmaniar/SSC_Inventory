@@ -118,17 +118,27 @@ export default function PeopleKpi() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('id,name,role').eq('id', session.user.id).single()
-    setUser({ id: session.user.id, name: profile?.name || '', role: profile?.role || 'sales' })
+    const role = profile?.role || 'sales'
+    setUser({ id: session.user.id, name: profile?.name || '', role })
+    // KPI is for sales (own) + admin/management. Non-KPI roles (ops/fc/accounts) → dashboard, not an empty page.
+    if (!['sales','admin','management'].includes(role)) { navigate('/people'); return }
+    const isAdminRole = ['admin','management'].includes(profile?.role)
 
     const [tRes, aRes, thRes, hpRes, dRes, kRes] = await Promise.all([
-      sb.from('kpi_teams').select('*').eq('is_active', true).order('name'),
-      sb.from('kpi_assignments').select('*, profiles(id,name,role)').eq('fy_label', fy).eq('is_active', true),
+      // kpi_teams_safe never exposes target_multiplier (secret business logic)
+      sb.from('kpi_teams_safe').select('*').eq('is_active', true).order('name'),
+      // employees read kpi_self (target amounts only, NO multiplier / CTC); admins read the full table
+      (isAdminRole
+        ? sb.from('kpi_assignments').select('*, profiles(id,name,role)').eq('fy_label', fy).eq('is_active', true)
+        : sb.from('kpi_self').select('*').eq('fy_label', fy).eq('is_active', true)),
       sb.from('kpi_thresholds').select('*').eq('fy_label', fy),
       sb.from('kpi_hero_products').select('month_start, brand, category, subcategory, series'),
       sb.from('kpi_definitions').select('*').eq('is_active', true).order('sort_order'),
       sb.from('kpi_kra_categories').select('*').order('sort_order'),
     ])
     setTeams(tRes.data || [])
+    // employee's kpi_self rows have no embedded profile — attach their own
+    if (!isAdminRole) aRes.data = (aRes.data || []).map(a => ({ ...a, profiles: { id: profile.id, name: profile.name, role: profile.role } }))
     setAssignments(aRes.data || [])
 
     const tmap = {}; (thRes.data || []).forEach(t => { (tmap[t.team_id] ||= {})[t.kpi_key] = t })

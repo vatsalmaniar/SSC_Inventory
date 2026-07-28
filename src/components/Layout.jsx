@@ -97,7 +97,7 @@ const NAV_ITEMS = [
       { key: 'people-attendance', label: 'Attendance',    path: '/people/attendance' },
       { key: 'people-org',        label: 'Organisation',  path: '/people/org' },
       { key: 'people-assets',     label: 'Devices',       path: '/people/assets', roles: ['admin','management'] },
-      { key: 'people-kpi',        label: 'Performance',   path: '/people/kpi' },
+      { key: 'people-kpi',        label: 'Performance',   path: '/people/kpi', roles: ['sales','admin','management'] },
       { key: 'people-expenses',   label: 'Expenses',      path: '/people/expenses' },
       { key: 'people-salary-calc', label: 'Salary Calculator', path: '/people/salary-calculator', roles: ['admin','management'] },
       { key: 'people-config',     label: 'Configuration', path: '/people/config', roles: ['admin','management'] },
