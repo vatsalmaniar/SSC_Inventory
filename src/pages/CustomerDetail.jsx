@@ -5,6 +5,7 @@ import { writeDoc } from '../lib/printDoc'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
+import { ordersTotalValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
 import PhoneInput, { PhoneDisplay, isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
@@ -483,10 +484,13 @@ ${oppsHTML}
     </Layout>
   )
 
-  const activeOrders    = orders.filter(o => !['cancelled','delivered','dispatched_fc'].includes(o.status))
-  const completedOrders = orders.filter(o => ['delivered','dispatched_fc'].includes(o.status))
+  const activeOrders    = orders.filter(o => !['cancelled','closed','delivered','dispatched_fc'].includes(o.status))
+  const completedOrders = orders.filter(o => ['delivered','dispatched_fc','closed'].includes(o.status))
   const nonCancelledOrders = orders.filter(o => o.status !== 'cancelled')  // KPI/total counts exclude cancelled
-  const totalRevenue    = orders.filter(o => ['delivered','dispatched_fc'].includes(o.status)).reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0), 0)
+  // Revenue = net goods value of every non-cancelled, non-sample order — the
+  // canonical formula (ordersTotalValue). Keying on delivered-status alone made
+  // partially-dispatched orders' value vanish from Customer 360 entirely.
+  const totalRevenue    = ordersTotalValue(orders)
   const openOpps        = opps.filter(o => !['WON','LOST'].includes(o.stage))
   const quotationOpps   = opps.filter(o => o.quotation_ref)
   const initials        = customer.customer_name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)

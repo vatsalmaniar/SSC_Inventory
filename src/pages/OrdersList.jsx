@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import { orderNetValue, ordersTotalValue } from '../lib/orderValue'
+import { FC_PIPELINE_STATUSES, PI_STAGES } from '../lib/orderStatus'
 import { xlsStatusStyle, xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
 import PeopleAvatar from '../components/PeopleAvatar'
@@ -77,7 +78,7 @@ function isPartiallyDispatched(o) {
   return items.some(i => (i.posted_qty || 0) > 0) && items.some(i => i.qty > ((i.posted_qty || 0) + (i.cancelled_qty || 0)))
 }
 
-const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','pi_requested','pi_generated','pi_payment_pending','goods_issued','pending_billing','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_pending','eway_generated']
+const FC_ACTIVE_STATUSES = [...FC_PIPELINE_STATUSES, ...PI_STAGES]  // canonical — src/lib/orderStatus.js
 
 function isPendingDelivery(o) {
   if (['dispatched_fc','cancelled'].includes(o.status)) return false

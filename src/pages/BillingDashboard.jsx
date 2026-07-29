@@ -19,7 +19,7 @@ const STATUS_COLORS = {
   eway_generated:'#22C55E', dispatched_fc:'#047857',
 }
 
-const PI_STATUSES = ['pi_requested','pi_generated','pi_payment_pending']
+import { PI_STAGES as PI_STATUSES } from '../lib/orderStatus'
 const BILLING_STATUSES = [...PI_STATUSES,'goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc','partial_dispatch','closed']
 const PIPELINE_KEYS = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 

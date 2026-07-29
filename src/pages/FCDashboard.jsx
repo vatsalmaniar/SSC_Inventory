@@ -23,7 +23,7 @@ const STATUS_COLORS = {
 
 const ACTION_STATUSES  = ['delivery_created','picking','packing']
 const BILLING_STATUSES = ['goods_issued','credit_check','goods_issue_posted','delivery_ready']
-const PI_STATUSES      = ['pi_requested','pi_generated','pi_payment_pending']
+import { PI_STAGES as PI_STATUSES } from '../lib/orderStatus'
 const FC_ALL_STATUSES  = [...ACTION_STATUSES, ...PI_STATUSES, ...BILLING_STATUSES, 'invoice_generated','eway_generated','dispatched_fc','partial_dispatch','closed']
 
 const PIPELINE_ORDER = [

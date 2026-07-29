@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, FY_LABEL, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
+import { PI_STAGES } from '../lib/orderStatus'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import * as XLSX from 'xlsx'
@@ -93,7 +94,7 @@ export default function BillingList() {
     setLoading(false)
   }
 
-  const piStatuses = ['pi_requested','pi_generated','pi_payment_pending']
+  const piStatuses = PI_STAGES  // canonical — src/lib/orderStatus.js
   const actionStatuses = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','goods_issue_posted','delivery_ready']
   const waitingStatuses = ['credit_check','invoice_generated','eway_generated']
 

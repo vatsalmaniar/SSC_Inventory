@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
+import { TERMINAL_STATUSES } from '../lib/orderStatus'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import '../styles/orders-redesign.css'
 
-const DEAD_STATUSES = ['cancelled', 'dispatched_fc', 'closed']
+const DEAD_STATUSES = TERMINAL_STATUSES  // canonical — src/lib/orderStatus.js
 const FLAG_ROLES = ['ops', 'admin', 'management']
 
 // Reason whitelists — must mirror orders_hold_reason_check in sql/waiting_for_clearance.sql
