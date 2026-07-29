@@ -5,6 +5,7 @@ import { writeDoc } from '../lib/printDoc'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc } from '../lib/fmt'
+import { PI_STAGES } from '../lib/orderStatus'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
 import { usePeopleDir } from '../components/PeopleAvatar'
@@ -62,7 +63,7 @@ function stageLabel(status) {
   }[status] || status
 }
 
-const PI_STATUSES = ['pi_requested','pi_generated','pi_payment_pending']
+const PI_STATUSES = PI_STAGES  // canonical — src/lib/orderStatus.js
 
 function getDotType(msg) {
   const m = msg?.toLowerCase() || ''

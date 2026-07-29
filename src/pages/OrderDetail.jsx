@@ -5,6 +5,7 @@ import { writeDoc } from '../lib/printDoc'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc, deliveryDateIssue, deliveryDateMax } from '../lib/fmt'
+import { FC_PIPELINE_STATUSES, TERMINAL_STATUSES } from '../lib/orderStatus'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
@@ -25,7 +26,7 @@ const ORDER_MODULE_STAGES = [
 const ORDER_PIPELINE_KEYS = ORDER_MODULE_STAGES.map(s => s.key)
 
 // Statuses that mean "handed to FC/Sales" — order is in progress beyond ops
-const FC_ACTIVE_STATUSES = ['delivery_created','picking','packing','goods_issued','pending_billing','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_pending','eway_generated','dispatched_fc']
+const FC_ACTIVE_STATUSES = [...FC_PIPELINE_STATUSES, 'dispatched_fc']  // canonical — src/lib/orderStatus.js
 
 const _OC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return _OC[Math.abs(h)%_OC.length] }
@@ -325,7 +326,10 @@ export default function OrderDetail() {
   const showDispatchCols = hasAnyDispatched
   // Next Batch button: ops can dispatch remaining items when order is in FC flow AND there are
   // still units not reserved in any batch yet. Full Delivery reserves everything → button hides.
-  const canNextBatch     = isOps && !isCancelled && isInFCFlow && hasUndispatched
+  // partial_dispatch counts too: a batch already delivered with remaining
+  // un-batched qty is EXACTLY when the next batch is needed (CO0845 incident —
+  // the surfaced 177 were unshippable without this).
+  const canNextBatch     = isOps && !isCancelled && (isInFCFlow || order?.status === 'partial_dispatch') && hasUndispatched
 
   const actionBtnLabel = isPending ? 'Accept Order'
     : order?.status === 'inv_check'       ? 'Confirm Approval'
@@ -615,7 +619,7 @@ export default function OrderDetail() {
       .eq('stock_status', 'out_of_stock')
       .lt('orders.order_date', order.order_date)
       .eq('orders.is_test', order.is_test || false)
-    const DEAD = ['cancelled', 'dispatched_fc', 'closed']
+    const DEAD = TERMINAL_STATUSES  // canonical — src/lib/orderStatus.js
     const candidates = (data || []).filter(it => {
       const o = it.orders
       if (!o || o.id === id || DEAD.includes(o.status)) return false
@@ -1157,14 +1161,14 @@ if (match) {
               </div>
             )}
 
-            {isInFCFlow && order.status !== 'dispatched_fc' && (
+            {(isInFCFlow || order.status === 'partial_dispatch') && order.status !== 'dispatched_fc' && (
               <div className="od-delivery-banner">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg>
                 <div>
                   <div className="od-pending-banner-label">Delivery In Progress{order.fulfilment_center ? ` — ${order.fulfilment_center}` : ''}</div>
                   <div>
                     {hasUndispatched ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, (i.qty || 0) - (i.dispatched_qty || 0) - (i.cancelled_qty || 0)), 0)} units pending next batch. ` : ''}
-                    Currently: {{'delivery_created':'Delivery Created','goods_issued':'Goods Issued','pending_billing':'Pending Billing','credit_check':'Credit Check','goods_issue_posted':'Goods Issue Posted','invoice_generated':'Invoice Generated','delivery_ready':'Delivery Ready','eway_pending':'Ready for E-Way Bill','eway_generated':'E-Way Bill Generated'}[order.status] || order.status}
+                    Currently: {{'delivery_created':'Delivery Created','goods_issued':'Goods Issued','pending_billing':'Pending Billing','credit_check':'Credit Check','goods_issue_posted':'Goods Issue Posted','invoice_generated':'Invoice Generated','delivery_ready':'Delivery Ready','eway_pending':'Ready for E-Way Bill','eway_generated':'E-Way Bill Generated','partial_dispatch':'Partially Dispatched — remaining qty needs a batch'}[order.status] || order.status}
                   </div>
                   {batches.some(b => b.status === 'delivery_created' && b.credit_checked === false && b.credit_override === true) ? (
                     <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8, width:'fit-content', background:'#fef2f2', border:'1px solid #fecaca', color:'#b91c1c', borderRadius:8, padding:'7px 13px', fontSize:12.5, fontWeight:600 }}>
