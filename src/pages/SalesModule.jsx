@@ -7,7 +7,7 @@ import Layout from '../components/Layout'
 import Loading from '../components/Loading'
 import '../styles/orders.css'
 
-const BILLING_MODULE_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
+const BILLING_MODULE_STATUSES = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc','partial_dispatch','closed']
 
 
 function statusLabel(s) {

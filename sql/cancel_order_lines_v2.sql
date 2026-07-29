@@ -196,11 +196,17 @@ BEGIN
     RAISE EXCEPTION 'cancel_order_lines: nothing to cancel (all qty = 0)';
   END IF;
 
-  -- Header status: only flip to 'cancelled' if no line was ever dispatched/posted AND every line cancelled
+  -- Header status derived from LINE QUANTITIES, not line_status labels.
+  -- (A fully-DELIVERED line that was never cancelled keeps line_status='active'
+  --  forever, which left orders stuck at partial_dispatch after cancelling the
+  --  remainder — CO1029/CO1030 incident 2026-07-08.)
+  -- unresolved line = posted + cancelled < qty  →  work remains, header untouched
+  -- all resolved + nothing posted  → cancelled  (nothing ever went out)
+  -- all resolved + something posted → closed    (delivered part + cancelled part)
   SELECT
-    COUNT(*) FILTER (WHERE line_status = 'active'),
+    COUNT(*) FILTER (WHERE COALESCE(posted_qty,0) + COALESCE(cancelled_qty,0) < qty),
     COUNT(*),
-    bool_or(COALESCE(dispatched_qty,0) > 0 OR COALESCE(posted_qty,0) > 0)
+    bool_or(COALESCE(posted_qty,0) > 0)
     INTO v_active_lines, v_total_lines, v_any_dispatched
     FROM public.order_items WHERE order_id = p_order_id;
 

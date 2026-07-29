@@ -20,7 +20,7 @@ const STATUS_COLORS = {
 }
 
 const PI_STATUSES = ['pi_requested','pi_generated','pi_payment_pending']
-const BILLING_STATUSES = [...PI_STATUSES,'goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
+const BILLING_STATUSES = [...PI_STATUSES,'goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc','partial_dispatch','closed']
 const PIPELINE_KEYS = ['pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 
 export default function BillingDashboard() {

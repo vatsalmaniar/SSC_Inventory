@@ -84,8 +84,11 @@ export default function BillingList() {
     if (truncated) console.warn('BillingList: batch list hit the fetch ceiling — consider server-side pagination.')
     // Samples stay out of Billing EXCEPT at the E-Way step (delivery_ready) —
     // a sample > ₹50k needs Accounts to generate the e-way before FC delivers.
+    // Batches of CANCELLED orders carry no billing work — never show them here
+    // (the order itself stays visible under the Orders List "Cancelled" chip).
     const rows = (data || []).filter(b =>
-      b.orders?.order_type !== 'SAMPLE' || SAMPLE_BILLING_STAGES.includes(b.status))
+      b.orders?.status !== 'cancelled' &&
+      (b.orders?.order_type !== 'SAMPLE' || SAMPLE_BILLING_STAGES.includes(b.status)))
     setBatches(rows)
     setLoading(false)
   }

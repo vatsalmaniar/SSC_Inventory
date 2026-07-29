@@ -13,6 +13,7 @@ import { friendlyError } from '../lib/errorMsg'
 const STATUSES = ['all', 'partial', 'pending', 'inv_check', 'inventory_check', 'dispatch', 'delivery_created', 'picking', 'packing', 'inflow', 'dispatched_fc', 'cancelled']
 
 function isPartiallyDispatched(o) {
+  if (['cancelled', 'closed'].includes(o.status)) return false  // terminal orders are never "partial"
   const items = o.order_items || []
   // Partial = some qty has been GI-posted AND something is still pending (under user-visible posted_qty model)
   return items.some(i => (i.posted_qty || 0) > 0) && items.some(i => i.qty > ((i.posted_qty || 0) + (i.cancelled_qty || 0)))
@@ -304,12 +305,14 @@ export default function OpsOrders() {
 
               <div className="detail-section">
                 <div className="detail-section-title">Update Status</div>
+                {/* Real pipeline statuses only (pre-dispatch corrections). Cancelling
+                    goes through the Order Detail cancel drawer — the atomic path that
+                    reverses batches; the DB rejects raw status strays. */}
                 <select className="status-select" value={newStatus} onChange={e => setNewStatus(e.target.value)}>
-                  <option value="pending">Pending</option>
-                  <option value="processing">Processing</option>
-                  <option value="dispatched">Dispatched</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
+                  <option value="pending">Pending Approval</option>
+                  <option value="inv_check">Order Approved</option>
+                  <option value="inventory_check">Inventory Check</option>
+                  <option value="dispatch">Ready to Ship</option>
                 </select>
                 <textarea className="notes-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes for the sales team (optional)..." />
                 <button className="save-status-btn" onClick={saveStatus} disabled={saving}>

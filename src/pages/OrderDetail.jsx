@@ -305,6 +305,9 @@ export default function OrderDetail() {
   const pipelineIdx      = ORDER_PIPELINE_KEYS.indexOf(effectiveStatus)
   const canAdvance       = isOps && !isCancelled && !isInFCFlow && pipelineIdx >= 0 && pipelineIdx < ORDER_PIPELINE_KEYS.length - 1
   const hasAnyDispatched = (order?.order_items || []).some(i => (i.dispatched_qty || 0) > 0)
+  // Anything still cancellable? (qty not yet GI-posted and not already cancelled).
+  // Zero cancellable = order is fully delivered → cancellation is a RETURN, not a cancel.
+  const hasAnyCancellable = (order?.order_items || []).some(i => i.qty - (i.posted_qty || 0) - (i.cancelled_qty || 0) > 0)
   // For CO: hide Add PO once no active line still needs procurement — covered by
   // an active PO, from stock, OR already dispatched (shared helper, lib/coverage.js)
   const _coActiveLines = order?.order_type === 'CO' ? (order?.order_items || []).filter(i => (i.line_status || 'active') === 'active') : []
@@ -874,23 +877,34 @@ if (match) {
     setCancelInitiatorFreeText('')
   }
 
+  // Full cancel = cancel every line's remaining quantity through the ONE atomic
+  // path (cancel_order_lines RPC). The RPC reverses in-flight batches ("recall"),
+  // stamps line cancelled_qty/line_status, derives the header status (cancelled,
+  // or closed when goods were already issued) and writes the audit comment.
+  // The old raw orders.update({status:'cancelled'}) orphaned live batches (they
+  // kept showing as pending in Billing/FC) — the DB trigger now rejects it.
   async function cancelFullOrder() {
     if (cancelGuardRef.current) return
-    if (hasAnyDispatched) {
-      toast('This order has dispatched items. Use Partial cancellation instead.')
-      return
-    }
     const initiator = cancelInitiatorType === 'staff' ? cancelInitiatorName : (cancelInitiatorFreeText.trim() || 'Customer')
     if (!initiator) { toast('Please select who initiated the cancellation.'); return }
     if (!cancelReason.trim()) { toast('Please enter a reason.'); return }
+    const linesToCancel = (order.order_items || [])
+      .map(i => ({ item_id: i.id, cancel_qty: Math.max(0, i.qty - (i.posted_qty || 0) - (i.cancelled_qty || 0)) }))
+      .filter(l => l.cancel_qty > 0)
+    if (!linesToCancel.length) {
+      toast('All quantity on this order is already delivered — a delivered order cannot be cancelled. Use the Return flow (GRN → Cancellation Return) instead.', 'error')
+      return
+    }
     cancelGuardRef.current = true
     setSaving(true)
-    const logMsg = `Order cancelled — Initiated by: ${initiator} | Reason: ${cancelReason.trim()}`
-    const { error: hdrErr } = await sb.from('orders').update({ status: 'cancelled', cancelled_reason: cancelReason.trim(), cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id)
-    if (hdrErr) { toast(friendlyError(hdrErr, 'Cancellation failed')); cancelGuardRef.current = false; setSaving(false); return }
-    await sb.from('order_comments').insert({
-      order_id: id, author_name: user.name, message: logMsg, tagged_users: [], is_activity: true, is_cancellation: true
+    const { error } = await sb.rpc('cancel_order_lines', {
+      p_order_id: id,
+      p_lines: linesToCancel,
+      p_reason: cancelReason.trim(),
+      p_initiator_type: cancelInitiatorType,
+      p_initiator_name: initiator,
     })
+    if (error) { toast(friendlyError(error, 'Cancellation failed')); cancelGuardRef.current = false; setSaving(false); return }
     await notifyUsers([], `${order.order_number} — Order cancelled. Reason: ${cancelReason.trim()}`, 'order_cancelled')
     await notifyOpsForLinkedPOs()
     toast('Order cancelled', 'success')
@@ -2213,7 +2227,7 @@ if (match) {
                 </div>
                 <div className="od-drawer-sub">
                   {cancelMode === 'choice' && 'Choose how much of this order to cancel.'}
-                  {cancelMode === 'full' && 'Cancels every line. Only available when nothing has been dispatched yet.'}
+                  {cancelMode === 'full' && (hasAnyDispatched ? 'Recalls in-flight batches and cancels all remaining quantity. Goods already issued stay delivered — the order will close.' : 'Cancels every line in one atomic step.')}
                   {cancelMode === 'partial' && 'Pick lines and the qty to cancel. Already-dispatched qty stays untouched.'}
                 </div>
               </div>
@@ -2228,15 +2242,15 @@ if (match) {
                   <button
                     className="od-dispatch-choice-btn"
                     onClick={() => setCancelMode('full')}
-                    disabled={hasAnyDispatched}
-                    title={hasAnyDispatched ? 'This order has dispatched items. Use Partial cancellation.' : ''}
-                    style={hasAnyDispatched ? { opacity: 0.45, cursor: 'not-allowed' } : {}}>
+                    disabled={!hasAnyCancellable}
+                    title={!hasAnyCancellable ? 'All quantity is delivered — use the Return flow (GRN → Cancellation Return).' : ''}
+                    style={!hasAnyCancellable ? { opacity: 0.45, cursor: 'not-allowed' } : {}}>
                     <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:28,height:28,color:'#dc2626',marginBottom:8}}>
                       <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                     </svg>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#0B1B30' }}>Cancel Full Order</div>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#0B1B30' }}>{hasAnyDispatched ? 'Recall & Cancel Remaining' : 'Cancel Full Order'}</div>
                     <div style={{ fontSize: 12, color: '#5B6878', marginTop: 4 }}>
-                      {hasAnyDispatched ? 'Disabled — items already dispatched' : 'Cancels every line in one go'}
+                      {!hasAnyCancellable ? 'Delivered — use Return instead' : hasAnyDispatched ? 'Recalls in-flight batches, cancels the rest' : 'Cancels every line in one go'}
                     </div>
                   </button>
                   <button className="od-dispatch-choice-btn" onClick={() => setCancelMode('partial')}>

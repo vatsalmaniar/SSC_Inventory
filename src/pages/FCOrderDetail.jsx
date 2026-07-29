@@ -624,19 +624,26 @@ export default function FCOrderDetail() {
       await sb.from('order_dispatches').update({ status: 'dispatched_fc', delivered_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', activeBatch.id)
       // Safety net: ensure posted_qty is incremented even if the batch skipped the
       // explicit GI-post step in Billing. mark_batch_posted is idempotent — no-ops
-      // if it was already applied. Prevents the "fully delivered but still shows
-      // pending" bug from recurring.
-      await sb.rpc('mark_batch_posted', { p_dispatch_id: activeBatch.id })
+      // if it was already applied. Fail LOUD: the DB integrity trigger would
+      // reject the header write below anyway if posted_qty stays behind.
+      const { error: postErr } = await sb.rpc('mark_batch_posted', { p_dispatch_id: activeBatch.id })
+      if (postErr) { toast(friendlyError(postErr, 'Could not post delivered quantities — delivery not completed.')); setSaving(false); return }
     }
-    // Order is fully done only when ALL batches are dispatched_fc
-    const { data: allBatchData } = await sb.from('order_dispatches').select('status').eq('order_id', id)
-    const allBatchesDone = (allBatchData || []).every(b => b.status === 'dispatched_fc')
-    const finalStatus = allBatchesDone ? 'dispatched_fc' : 'partial_dispatch'
+    // Order is fully done only when ALL ORDERED QUANTITY is resolved —
+    // every line posted or cancelled. "All batches delivered" was the old
+    // (wrong) rule: qty never put into any batch slipped through as Delivered
+    // (the SO0174 class — 177 orders, ₹1.7 Cr hidden). Status is derived from
+    // line reality; the DB trigger enforces the same rule.
+    const { data: lineData } = await sb.from('order_items').select('qty,posted_qty,cancelled_qty').eq('order_id', id)
+    const lines = lineData || []
+    const allResolved = lines.length > 0 && lines.every(i => (i.posted_qty || 0) + (i.cancelled_qty || 0) >= i.qty)
+    const anyCancelled = lines.some(i => (i.cancelled_qty || 0) > 0)
+    const finalStatus = allResolved ? (anyCancelled ? 'closed' : 'dispatched_fc') : 'partial_dispatch'
     const { error } = await sb.from('orders').update({ status: finalStatus, updated_at: new Date().toISOString() }).eq('id', id)
     if (error) { toast(friendlyError(error)); setSaving(false); return }
-    await logActivity(allBatchesDone ? 'Order Delivered — all batches complete.' : 'Batch Delivered — remaining batch(es) still pending.')
-    if (allBatchesDone) await notifyUsers([], `${order.order_number} — Order delivered to customer.`, 'order_delivered')
-    toast(allBatchesDone ? 'Order delivered' : 'Batch delivered', 'success')
+    await logActivity(allResolved ? 'Order Delivered — all ordered quantity resolved.' : 'Batch Delivered — undispatched quantity remains on the order.')
+    if (allResolved) await notifyUsers([], `${order.order_number} — Order delivered to customer.`, 'order_delivered')
+    toast(allResolved ? 'Order delivered' : 'Batch delivered — remaining qty still open', 'success')
     setConfirm(null)
     setSaving(false)
     await loadOrder()

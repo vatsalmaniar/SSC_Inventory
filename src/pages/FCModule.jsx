@@ -73,7 +73,9 @@ export default function FCModule() {
     })
     if (error) console.error('FCModule load error:', error)
     if (truncated) console.warn('FCModule: batch list hit the fetch ceiling — consider server-side pagination.')
-    setBatches(data || [])
+    // Batches of cancelled orders carry no FC work — keep them out of the
+    // worklist (the order stays visible in Orders List under "Cancelled").
+    setBatches((data || []).filter(b => b.orders?.status !== 'cancelled' && b.status !== 'cancelled'))
     setLoading(false)
   }
 

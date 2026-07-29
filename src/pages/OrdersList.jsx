@@ -44,6 +44,7 @@ const STATUS_COLORS = {
   eway_generated:     '#22C55E', // bright green
   dispatched_fc:      '#047857', // deep emerald
   cancelled:          '#EF4444', // red
+  closed:             '#475569', // slate — delivered part + cancelled remainder
 }
 function statusColor(s) { return STATUS_COLORS[s] || '#94A3B8' }
 
@@ -58,7 +59,7 @@ function statusLabel(s) {
     goods_issued:'Goods Issued', pending_billing:'Pending Billing', credit_check:'Credit Check',
     goods_issue_posted:'GI Posted', invoice_generated:'Invoice Generated',
     delivery_ready:'Delivery Ready', eway_pending:'E-Way Pending', eway_generated:'E-Way Generated',
-    dispatched_fc:'Delivered', cancelled:'Cancelled',
+    dispatched_fc:'Delivered', cancelled:'Cancelled', closed:'Closed',
   }[s] || s
 }
 
@@ -70,6 +71,7 @@ function fmtCr(val) {
 }
 
 function isPartiallyDispatched(o) {
+  if (['cancelled', 'closed'].includes(o.status)) return false  // terminal orders are never "partial"
   const items = o.order_items || []
   // Partial = some qty has been GI-posted AND something is still pending (under user-visible posted_qty model)
   return items.some(i => (i.posted_qty || 0) > 0) && items.some(i => i.qty > ((i.posted_qty || 0) + (i.cancelled_qty || 0)))

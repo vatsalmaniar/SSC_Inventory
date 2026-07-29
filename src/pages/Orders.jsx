@@ -18,10 +18,11 @@ const STATUS_LABELS = {
 
 function statusGroup(s) {
   if (['pending'].includes(s)) return 'pending'
-  if (['inv_check','inventory_check','dispatch','partial_dispatch'].includes(s)) return 'approved'
+  if (['inv_check','inventory_check','dispatch'].includes(s)) return 'approved'
+  if (s === 'partial_dispatch') return 'partial'  // own bucket — visibly pending work, not "approved"
   if (['delivery_created','picking','packing'].includes(s)) return 'fc'
-  if (['goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated'].includes(s)) return 'billing'
-  if (s === 'dispatched_fc') return 'delivered'
+  if (['goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','pi_requested','pi_generated','pi_payment_pending','pending_billing','eway_pending'].includes(s)) return 'billing'
+  if (s === 'dispatched_fc' || s === 'closed') return 'delivered'  // closed = delivered part + cancelled remainder
   if (s === 'cancelled') return 'cancelled'
   return 'pending'
 }
@@ -64,7 +65,9 @@ function buildMonthlyData(orders) {
     if (!slot) return
     slot.ordered++
     slot.orderedValue += (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
-    if (o.status === 'dispatched_fc') {
+    // Delivered = fully resolved with goods issued ('closed' = delivered part +
+    // cancelled remainder). partial_dispatch is honestly NOT delivered.
+    if (o.status === 'dispatched_fc' || o.status === 'closed') {
       slot.delivered++
       slot.deliveredValue += (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
     }
@@ -155,14 +158,14 @@ export default function Orders() {
   const sampleOrders = orders.filter(o => o.order_type === 'SAMPLE')
 
   // Status pipeline counts + values
-  const statusGroups = ['pending','approved','fc','billing','delivered','cancelled'].map(g => {
+  const statusGroups = ['pending','approved','partial','fc','billing','delivered','cancelled'].map(g => {
     const list = orders.filter(o => statusGroup(o.status) === g)
     return {
       id: g,
-      label: { pending:'Pending Approval', approved:'Approved · Ops', fc:'At Fulfilment Centre', billing:'Billing / Accounts', delivered:'Delivered', cancelled:'Cancelled' }[g],
+      label: { pending:'Pending Approval', approved:'Approved · Ops', partial:'Partially Dispatched', fc:'At Fulfilment Centre', billing:'Billing / Accounts', delivered:'Delivered', cancelled:'Cancelled' }[g],
       count: list.length,
       value: list.reduce((s,o) => s + (o.order_items || []).reduce((a,i) => a + (i.total_price || 0), 0), 0),
-      color: { pending:'#F59E0B', approved:'#1a73e8', fc:'#0F766E', billing:'#D97706', delivered:'#10B981', cancelled:'#EF4444' }[g],
+      color: { pending:'#F59E0B', approved:'#1a73e8', partial:'#C2410C', fc:'#0F766E', billing:'#D97706', delivered:'#10B981', cancelled:'#EF4444' }[g],
     }
   }).filter(s => s.count > 0)
   const totalActiveCount = statusGroups.filter(s => s.id !== 'delivered' && s.id !== 'cancelled').reduce((a,b) => a+b.count, 0)

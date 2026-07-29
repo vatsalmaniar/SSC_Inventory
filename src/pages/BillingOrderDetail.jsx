@@ -383,6 +383,8 @@ export default function BillingOrderDetail() {
         pi_number: piNumberInput.trim(), pi_pdf_url: piPdfUrl, status: 'pi_generated', updated_at: new Date().toISOString()
       }).eq('id', activeBatch.id)
     }
+    // Only advance the order-level status when it was in the same PI phase —
+    // multi-batch orders keep their overall header state.
     if (order.status === 'pi_requested') { await sb.from('orders').update({ status: 'pi_generated', updated_at: new Date().toISOString() }).eq('id', id) }
     await logActivity(`Proforma Invoice issued — ${piNumberInput.trim()}. Awaiting customer payment.`)
     await notifyUsers([], `${order.order_number} — Proforma Invoice issued (${piNumberInput.trim()}). Awaiting customer payment.`, 'pi_issued')
@@ -519,6 +521,10 @@ const mentionSuggestions = mentionQuery !== null
   const batchStatus   = activeBatch ? (activeBatch.status || 'delivery_created') : order.status
   const batchFC       = activeBatch?.fulfilment_center || order.fulfilment_center
   const pipelineIdx   = billingPipelineIdx(batchStatus)
+  // PI-phase decisions read from the ACTIVE BATCH, not order.status. For a
+  // partial-dispatch order the header carries 'partial_dispatch' while an
+  // individual batch may still be in a PI stage — the actions must follow
+  // the batch. Single-batch orders are unaffected (batchStatus == order.status).
   const piPhaseIdx    = piPipelineIdx(batchStatus)
   const isPIOrder     = activeBatch?.pi_required === true
   const isAdvanceOrder = order.credit_terms === 'Advance'
