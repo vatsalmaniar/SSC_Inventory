@@ -17,7 +17,9 @@ const FLAG_ROLES = ['ops', 'admin', 'management']
 const REASONS = {
   sales:    ['Payment follow-up', 'Customer confirmation pending', 'Order change expected', 'PO/price issue'],
   customer: ['Project not ready', 'Machines not ready'],
+  stock:    ['Awaiting procurement', 'Vendor delay', 'Partial stock only'],
 }
+const PARTY_LABEL = { sales: 'Sales', customer: 'Customer', stock: 'Out of Stock' }
 
 function ownerName(o) { return o.account_owner || o.engineer_name || '' }
 
@@ -55,6 +57,7 @@ const CHIP_STYLES = {
   fc:       { color: '#0f766e', background: '#f0fdfa', border: '1px solid #99f6e4' },
   sales:    { color: '#1e40af', background: '#eff6ff', border: '1px solid #bfdbfe' },
   customer: { color: '#3730a3', background: '#eef2ff', border: '1px solid #c7d2fe' },
+  stock:    { color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a' },  // manual out-of-stock — amber like the auto chip
   none:     { color: '#b45309', background: '#fffbeb', border: '1px dashed #f59e0b' },
 }
 function FlagChip({ kind, children, title }) {
@@ -147,7 +150,7 @@ export default function Waitlist() {
     sales:    overdue.filter(r => r.o.hold_party === 'sales').length,
     customer: overdue.filter(r => r.o.hold_party === 'customer').length,
     credit:   overdue.filter(r => r.auto.some(f => f.key === 'credit')).length,
-    oos:      overdue.filter(r => r.auto.some(f => f.key === 'oos')).length,
+    oos:      overdue.filter(r => r.auto.some(f => f.key === 'oos') || r.o.hold_party === 'stock').length,  // auto-detected + manually flagged
     pi:       overdue.filter(r => r.auto.some(f => f.key === 'pi')).length,
     fc:       overdue.filter(r => r.auto.some(f => f.key === 'fc')).length,
     none:     overdue.filter(r => !r.o.hold_party && r.auto.length === 0).length,
@@ -159,6 +162,7 @@ export default function Waitlist() {
     if (flagFilter === 'all') return true
     if (flagFilter === 'none') return !r.o.hold_party && r.auto.length === 0
     if (flagFilter === 'sales' || flagFilter === 'customer') return r.o.hold_party === flagFilter
+    if (flagFilter === 'oos') return r.auto.some(f => f.key === 'oos') || r.o.hold_party === 'stock'
     return r.auto.some(f => f.key === flagFilter)
   })
 
@@ -264,7 +268,7 @@ export default function Waitlist() {
             order: o.order_number, customer: o.customer_name, owner: ownerName(o),
             od: fmt(o.order_date), due: fmt(od.due), days: od.days,
             auto: auto.map(f => f.label).join(', '),
-            held: o.hold_party === 'sales' ? `Sales (${o.hold_set_by})` : o.hold_party === 'customer' ? 'Customer' : '',
+            held: o.hold_party === 'sales' ? `Sales (${o.hold_set_by})` : o.hold_party ? PARTY_LABEL[o.hold_party] : '',
             reason: o.hold_reason || '', fon: o.hold_set_at ? fmt(o.hold_set_at) : '',
           })
           const d = row.getCell('days')
@@ -272,7 +276,7 @@ export default function Waitlist() {
           d.alignment = { horizontal: 'center' }
           if (o.hold_party) {
             const h = row.getCell('held')
-            const st = o.hold_party === 'sales' ? { bg: 'FFEFF6FF', fg: 'FF1E40AF' } : { bg: 'FFEEF2FF', fg: 'FF3730A3' }
+            const st = o.hold_party === 'sales' ? { bg: 'FFEFF6FF', fg: 'FF1E40AF' } : o.hold_party === 'stock' ? { bg: 'FFFFFBEB', fg: 'FF92400E' } : { bg: 'FFEEF2FF', fg: 'FF3730A3' }
             h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: st.bg } }
             h.font = { bold: true, color: { argb: st.fg } }
           } else if (auto.length === 0) {
@@ -355,13 +359,13 @@ export default function Waitlist() {
 
       let sr = 0
       overdueFiltered.forEach(({ o, od, auto }) => {
-        const manualFlag = o.hold_party === 'sales' ? `Sales Hold (${o.hold_set_by})` : o.hold_party === 'customer' ? 'Customer Hold' : ''
+        const manualFlag = o.hold_party === 'sales' ? `Sales Hold (${o.hold_set_by})` : o.hold_party === 'customer' ? 'Customer Hold' : o.hold_party === 'stock' ? 'Out of Stock Hold' : ''
         const flagLabel = [manualFlag, ...auto.map(f => f.label)].filter(Boolean).join(', ') || 'NEEDS FLAG'
         const base = {
           order: o.order_number, customer: o.customer_name, owner: ownerName(o),
           od: fmt(o.order_date), due: fmt(od.due), days: od.days,
           flag: flagLabel, comment: o.hold_reason || '',
-          held: o.hold_party === 'sales' ? o.hold_set_by : (o.hold_party === 'customer' ? 'Customer' : ''),
+          held: o.hold_party === 'sales' ? o.hold_set_by : (o.hold_party ? PARTY_LABEL[o.hold_party] : ''),
           fon: o.hold_set_at ? fmt(o.hold_set_at) : '',
           status: o.status,
         }
@@ -373,7 +377,7 @@ export default function Waitlist() {
           d.alignment = { horizontal: 'center' }
 
           // Flag cell — colored by hold kind, same palette as the on-screen chips
-          const flagKind = o.hold_party === 'sales' ? 'sales' : o.hold_party === 'customer' ? 'customer' : (auto[0]?.key || 'none')
+          const flagKind = ['sales', 'customer', 'stock'].includes(o.hold_party) ? o.hold_party : (auto[0]?.key || 'none')
           const flagStyle = CHIP_STYLES[flagKind] || CHIP_STYLES.none
           const f = row.getCell('flag')
           f.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toArgb(flagStyle.background) } }
@@ -490,7 +494,7 @@ export default function Waitlist() {
                       {auto.map(f => <FlagChip key={f.key} kind={f.key}>{f.label}</FlagChip>)}
                       {o.hold_party && (
                         <FlagChip kind={o.hold_party} title={`Flagged by ${o.hold_set_by || '—'} on ${o.hold_set_at ? fmt(o.hold_set_at) : '—'}`}>
-                          {o.hold_party === 'sales' ? `Sales · ${o.hold_set_by}` : 'Customer'} — {o.hold_reason}
+                          {o.hold_party === 'sales' ? `Sales · ${o.hold_set_by}` : PARTY_LABEL[o.hold_party] || o.hold_party} — {o.hold_reason}
                         </FlagChip>
                       )}
                       {!o.hold_party && auto.length === 0 && <FlagChip kind="none">Needs flag</FlagChip>}
@@ -606,6 +610,7 @@ export default function Waitlist() {
                     <option value="">Select…</option>
                     <option value="sales">Sales</option>
                     <option value="customer">Customer</option>
+                    <option value="stock">Out of Stock</option>
                   </select>
                 </div>
                 {fParty === 'sales' && (

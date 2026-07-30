@@ -2403,7 +2403,7 @@ if (match) {
                     {jumpFlagged.map((r, i) => (
                       <div key={r.order_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 12px', borderBottom: i < jumpFlagged.length - 1 ? '1px solid var(--gray-100)' : 'none', fontSize: 12, color: 'var(--gray-500)' }}>
                         <span><span style={{ fontFamily: 'Geist Mono, monospace' }}>{r.order_number}</span> · {r.customer_name}</span>
-                        <span style={{ whiteSpace: 'nowrap' }}>Held by {r.hold_party === 'sales' ? `Sales (${r.hold_set_by})` : 'Customer'} — {r.hold_reason}</span>
+                        <span style={{ whiteSpace: 'nowrap' }}>Held by {r.hold_party === 'sales' ? `Sales (${r.hold_set_by})` : r.hold_party === 'stock' ? 'Out of Stock' : 'Customer'} — {r.hold_reason}</span>
                       </div>
                     ))}
                   </div>

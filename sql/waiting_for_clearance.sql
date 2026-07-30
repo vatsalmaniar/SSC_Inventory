@@ -19,7 +19,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_hold_party_check') THEN
     ALTER TABLE public.orders
       ADD CONSTRAINT orders_hold_party_check
-      CHECK (hold_party IS NULL OR hold_party IN ('sales','customer'));
+      CHECK (hold_party IS NULL OR hold_party IN ('sales','customer','stock'));  -- 'stock' added 2026-07-30 (manual Out of Stock flag)
   END IF;
   -- (re)create so reason edits are idempotent — must mirror REASONS in Waitlist.jsx
   IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_hold_reason_check') THEN
@@ -32,7 +32,9 @@ BEGIN
       'Payment follow-up','Customer confirmation pending','Order change expected','PO/price issue',
       -- held by customer
       'Project not ready','Machines not ready',
-      -- either
+      -- out of stock (manual — added 2026-07-30)
+      'Awaiting procurement','Vendor delay','Partial stock only',
+      -- legacy only ('Other' removed from UI 2026-07-03; 7 old flags keep it)
       'Other'
     ));
   -- a reason requires a party and vice versa (flag is set/cleared as a unit)
