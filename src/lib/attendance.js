@@ -1,5 +1,26 @@
 // Attendance policy engine — computes a day's status from raw punches + config,
 // so the dashboard/muster work on-demand (no nightly job needed on Micro).
+//
+// Everything here is pinned to IST. The office is in India and the ingest side already
+// pins IST (essl-sync, the connector, reg_decide), but this layer used the browser's
+// timezone — so the same month opened from a laptop set to UTC re-bucketed punches into
+// different days and produced different LOP totals. Attendance decides pay; it must not
+// depend on where the viewer happens to be.
+
+export const IST_TZ = 'Asia/Kolkata'
+
+// YYYY-MM-DD of the IST work date for an instant, whatever the viewer's timezone.
+export const istYmd = d => new Date(d).toLocaleDateString('en-CA', { timeZone: IST_TZ })
+
+// The instant an IST calendar day begins — for punch_at range filters.
+export const istDayStart = ymdStr => new Date(`${ymdStr}T00:00:00+05:30`)
+
+// Minutes since IST midnight for an instant. Replaces getHours()/getMinutes(), which read
+// the browser's clock.
+export function istMinutes(d) {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: IST_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(d))
+  return (+parts.find(p => p.type === 'hour').value) * 60 + (+parts.find(p => p.type === 'minute').value)
+}
 
 // early_grace_min is how many minutes before your shift ENDS you may leave and still keep
 // the afternoon half — 15 by default, matching the policy shown to staff (LeavePolicyDrawer:
@@ -60,9 +81,14 @@ export function fmtTime(d) { if (!d) return '—'; const x = new Date(d); return
 
 // Sundays off; 2nd & 4th Saturday off. Other Saturdays = working.
 export function isWeekOff(date) {
-  const d = new Date(date), dow = d.getDay()
+  // Resolved as a plain calendar date. 'YYYY-MM-DD' parses as UTC midnight but getDay() reads
+  // the browser's clock, so west of UTC every date landed on the previous weekday and Monday
+  // attendance was scored against Sunday.
+  const s = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(date) ? date.slice(0, 10) : istYmd(date)
+  const [y, m, dd] = s.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1, dd)), dow = d.getUTCDay()
   if (dow === 0) return true
-  if (dow === 6) { const nth = Math.ceil(d.getDate() / 7); return nth === 2 || nth === 4 }
+  if (dow === 6) { const nth = Math.ceil(dd / 7); return nth === 2 || nth === 4 }
   return false
 }
 
@@ -81,9 +107,8 @@ export function distanceM(a, b) {
 //   exempt    → non-punching admins: never absent from no-punch (always Present)
 //   probation → probation/notice: leave & absence are unpaid (is_lop)
 export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday = false, onLeave = false, leaveHalf = false, leavePeriod = 'first', isFC = false, exempt = false, probation = false }) {
-  const d = new Date(date)
   if (isHoliday) return { status: 'holiday' }
-  if (isWeekOff(d)) return { status: 'weekoff' }
+  if (isWeekOff(date)) return { status: 'weekoff' }
   if (onLeave) {
     // Half-day leave: the request stores is_half_day/half_period and charges the balance 0.5,
     // but this used to collapse to a full 'leave' day — so the company paid 1.0 for a 0.5
@@ -105,7 +130,7 @@ export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday
 
   if (!times.length) return { status: 'absent', is_lop: true }   // uninformed absence → LOP
 
-  const inMin  = firstIn.getHours()*60 + firstIn.getMinutes()
+  const inMin  = istMinutes(firstIn)
   const startMin = toMin(config.office_start), graceMin = toMin(config.grace_until)
   const cutoffMin = toMin(config.half_day_cutoff), endMin = toMin(config.office_end)
   // Grace is measured back from THIS employee's shift end, so custom shifts keep the same
@@ -131,7 +156,7 @@ export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday
   if (inMin > cutoffMin) return { status: 'absent', first_in: firstIn, last_out: lastOut, is_lop: true }   // arrived too late → absent (LOP)
   if (inMin > graceMin) { status = 'half_day'; late = inMin - startMin; code = 'A:P' }   // late in → lost AM half
 
-  const outMin = lastOut.getHours()*60 + lastOut.getMinutes()
+  const outMin = istMinutes(lastOut)
   if (outMin < outCutoff) { early = outCutoff - outMin; if (status === 'present') { status = 'half_day'; code = 'P:A' } }   // left early → lost PM half
 
   const worked = Math.round((lastOut - firstIn) / 60000)

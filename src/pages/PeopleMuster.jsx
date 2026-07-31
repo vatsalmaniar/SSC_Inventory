@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { computeDay, isWeekOff, fmtTime, minToHrs, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration, DECL_LABEL } from '../lib/attendance'
+import { computeDay, isWeekOff, fmtTime, minToHrs, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration, DECL_LABEL, istYmd } from '../lib/attendance'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
 import { toast } from '../lib/toast'
@@ -13,7 +13,7 @@ import { fetchAll } from '../lib/fetchAll'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
 
-const ymd = d => new Date(d).toLocaleDateString('en-CA')
+const ymd = istYmd   // IST work date — never the viewer's timezone
 const monthKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
 const DOWL = ['S','M','T','W','T','F','S']
 const WD = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']

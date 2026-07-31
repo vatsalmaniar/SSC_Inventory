@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { currentFyLabel } from '../lib/kpi'
-import { computeDay, isWeekOff, minToHrs, fmtTime, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration } from '../lib/attendance'
+import { computeDay, isWeekOff, minToHrs, fmtTime, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration, istYmd, istMinutes } from '../lib/attendance'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
@@ -15,7 +15,7 @@ import '../styles/attendance-ui.css'
 const AVC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
 const oc = (n='') => { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return AVC[Math.abs(h)%AVC.length] }
 const ini = (n='') => n.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2) || '??'
-const ymd = d => new Date(d).toLocaleDateString('en-CA')
+const ymd = istYmd   // IST work date — never the viewer's timezone
 const monthKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
 
 export default function PeopleMyAttendance() {
@@ -117,8 +117,8 @@ export default function PeopleMyAttendance() {
     let ot=0, work=[], ins=[], outs=[]
     days.forEach(d => { if(d.status==='upcoming')return; c[d.status]=(c[d.status]||0)+1
       if(d.ot_min)ot+=d.ot_min; if(d.worked_min)work.push(d.worked_min)
-      if(d.first_in)ins.push(d.first_in.getHours()*60+d.first_in.getMinutes())
-      if(d.last_out)outs.push(d.last_out.getHours()*60+d.last_out.getMinutes()) })
+      if(d.first_in)ins.push(istMinutes(d.first_in))
+      if(d.last_out)outs.push(istMinutes(d.last_out)) })
     const avg=a=>a.length?Math.round(a.reduce((s,x)=>s+x,0)/a.length):null
     const fmtMin=m=>m==null?'—':`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`
     return { c, ot, totalWork: work.reduce((s,x)=>s+x,0), avgIn:fmtMin(avg(ins)), avgOut:fmtMin(avg(outs)),

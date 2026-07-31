@@ -5,7 +5,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
-import { computeDay, isWeekOff, distanceM, minToHrs, fmtTime, toMin, STATUS_META, DEFAULT_CFG, effShift, currentlyIn } from '../lib/attendance'
+import { computeDay, isWeekOff, distanceM, minToHrs, fmtTime, toMin, STATUS_META, DEFAULT_CFG, effShift, currentlyIn, istYmd } from '../lib/attendance'
 import { signPhotos } from '../lib/photos'
 import { adminEmpIds } from '../lib/attScope'
 import Layout from '../components/Layout'
@@ -19,7 +19,7 @@ import '../styles/attendance-ui.css'
 const AVC = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
 const oc = (n='') => { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return AVC[Math.abs(h)%AVC.length] }
 const ini = (n='') => n.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2) || '??'
-const ymd = d => new Date(d).toLocaleDateString('en-CA')  // YYYY-MM-DD local
+const ymd = istYmd   // IST work date — never the viewer's timezone
 const Av = ({ e, size=30 }) => <div className="avatar" style={{width:size,height:size,fontSize:size*0.36,...(e.signedPhoto?{backgroundImage:`url(${e.signedPhoto})`,backgroundSize:'cover',backgroundPosition:'center'}:{background:oc(e.full_name)})}}>{e.signedPhoto?'':ini(e.full_name)}</div>
 
 export default function PeopleAttendance() {

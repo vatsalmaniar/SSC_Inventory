@@ -45,6 +45,12 @@ export function currentFyLabel(d = new Date()) {
   return String(start % 100).padStart(2, '0') + '-' + String((start + 1) % 100).padStart(2, '0')
 }
 
+// FY date range for a label like "26-27" → { start:'2026-04-01', end:'2027-03-31' }
+export function fyRange(fyLabel = currentFyLabel()) {
+  const startYr = 2000 + parseInt(fyLabel.split('-')[0], 10)
+  return { start: `${startYr}-04-01`, end: `${startYr + 1}-03-31` }
+}
+
 // FY months: April → March (12 months) starting from FY label like "26-27"
 export function fyMonths(fyLabel) {
   const startYr = 2000 + parseInt(fyLabel.split('-')[0], 10)
