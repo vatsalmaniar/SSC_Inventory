@@ -5,6 +5,7 @@ import { computeDay, isWeekOff, fmtTime, minToHrs, STATUS_META, DEFAULT_CFG, eff
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
 import { toast } from '../lib/toast'
+import { friendlyError } from '../lib/errorMsg'
 import AttendanceTabs from '../components/AttendanceTabs'
 import { Spinner } from '../components/PeopleLoaders'
 import PeopleAvatar from '../components/PeopleAvatar'
@@ -56,6 +57,8 @@ export default function PeopleMuster() {
   const [markStatus, setMarkStatus] = useState('present')
   const [markNote, setMarkNote] = useState('')
   const markGuard = useRef(false)
+  const [showFinalise, setShowFinalise] = useState(false)
+  const finalising = useRef(false)
 
   useEffect(() => { init() }, [cursor]) // eslint-disable-line
   useEffect(() => { if (emps.length && !emps.find(e=>e.id===personId)) setPersonId(emps[0].id) }, [emps]) // eslint-disable-line
@@ -85,7 +88,7 @@ export default function PeopleMuster() {
       const [pu, lv, ad, rg] = await Promise.all([
         fetchAll((f,t) => sb.from('attendance_punches').select('employee_id,punch_at,direction').in('employee_id', ids).gte('punch_at', start.toISOString()).lt('punch_at', end.toISOString()).order('punch_at').order('id').range(f,t)),
         fetchAll((f,t) => sb.from('leave_requests').select('employee_id,from_date,to_date,is_half_day,half_period').eq('status','approved').in('employee_id', ids).order('from_date').order('id').range(f,t)),
-        fetchAll((f,t) => sb.from('attendance_days').select('employee_id,work_date,status,source_code').in('employee_id', ids).gte('work_date', ymd(start)).lt('work_date', ymd(end)).order('work_date').order('id').range(f,t)),
+        fetchAll((f,t) => sb.from('attendance_days').select('employee_id,work_date,status,source_code,source').in('employee_id', ids).gte('work_date', ymd(start)).lt('work_date', ymd(end)).order('work_date').order('id').range(f,t)),
         fetchAll((f,t) => sb.from('regularizations').select('id,employee_id,work_date,status,reason,requested_in,requested_out').in('employee_id', ids).gte('work_date', ymd(start)).lt('work_date', ymd(end)).order('work_date').order('id').range(f,t)),
       ])
       const loadErr = pu.error || lv.error || ad.error || rg.error
@@ -94,7 +97,7 @@ export default function PeopleMuster() {
       // store the request, not just a boolean — the half-day flag decides whether the day
       // costs 0.5 or a full paid day
       const lm={}; (lv.data||[]).forEach(r=>{ let d=new Date(r.from_date),e=new Date(r.to_date); while(d<=e){ lm[`${r.employee_id}|${ymd(d)}`]=r; d.setDate(d.getDate()+1) } }); setLeaveMap(lm)
-      const im={}; (ad.data||[]).forEach(r=>{ im[`${r.employee_id}|${r.work_date}`]={ s:r.status, c:r.source_code } }); setImported(im)
+      const im={}; (ad.data||[]).forEach(r=>{ im[`${r.employee_id}|${r.work_date}`]={ s:r.status, c:r.source_code, src:r.source } }); setImported(im)
       const rm={}; (rg.data||[]).forEach(r=>{ rm[`${r.employee_id}|${r.work_date}`]=r }); setRegMap(rm)
     } else { setPunchMap({}); setLeaveMap({}); setImported({}); setRegMap({}) }
     setLoading(false)
@@ -128,15 +131,76 @@ export default function PeopleMuster() {
       const dt = new Date(cursor.getFullYear(), cursor.getMonth(), dd)
       const cc = cell(e, dd)
       const status = mapStatus(cc.status)
-      const reg = regMap[`${e.id}|${ymd(dt)}`] || null
-      return { day: dd, dow: dt.getDay(), we: isWeekOff(dt), status,
-        late: (cc.late_min||0) > 0, reg, inM: cc.first_in || null, outM: cc.last_out || null,
-        worked: cc.worked_min || 0, code: cc.code || null, declared: cc.declared || null }
+      const key = ymd(dt)
+      const regRow = regMap[`${e.id}|${key}`] || null
+      // raw is carried through so "Finalise month" can persist the payroll figures
+      // (is_lop / leave_deducted) rather than recomputing them somewhere else.
+      return { day: dd, date: key, dow: dt.getDay(), we: isWeekOff(key), status,
+        late: (cc.late_min||0) > 0, reg: regRow, inM: cc.first_in || null, outM: cc.last_out || null,
+        worked: cc.worked_min || 0, code: cc.code || null, declared: cc.declared || null,
+        raw: cc, imported: !!imported[`${e.id}|${key}`] }
     })
     const c = { present:0, half:0, absent:0, leave:0, holiday:0, weekoff:0, reg:0, late:0 }
     days.forEach(d => { if (d.status!=='future' && c[d.status]!=null) c[d.status]++; if (d.reg) c.reg++; if (d.late) c.late++ })
     return { emp: e, days, c }
   }), [emps, dayNums, cursor, punchMap, leaveMap, imported, regMap, cfg, holidays, decls]) // eslint-disable-line
+
+  // ── Finalise month → persist the payroll figures (ATT-3) ──────────────────────
+  // Until now is_lop and leave_deducted were computed and thrown away: attendance_days
+  // was only ever written by the sheet import, and leave_deducted summed to zero across
+  // every half-day in the table. Payroll had nothing to read.
+  //
+  // The engine stays in ONE place (computeDay) and its output is written here, rather than
+  // reimplementing the grace / lone-punch / exemption / half-day rules in SQL where the two
+  // copies would drift — which is how four disagreeing status engines happened in the first place.
+  const FINALISE_SOURCE = 'app_computed'
+  const finalisePlan = useMemo(() => {
+    const rows = [], protectedDays = []
+    for (const { emp, days } of musterData) {
+      for (const d of days) {
+        if (d.status === 'future') continue
+        const imp = imported[`${emp.id}|${d.date}`]
+        // Anything this feature did not write is frozen: the sheet import (Apr–Jul) and any
+        // HR manual override both stay exactly as they are.
+        if (imp && imp.src !== FINALISE_SOURCE) { protectedDays.push(d); continue }
+        const r = d.raw || {}
+        rows.push({
+          employee_id: emp.id, work_date: d.date,
+          status: r.status === 'upcoming' ? 'absent' : (r.status || 'absent'),
+          first_in: r.first_in ? new Date(r.first_in).toISOString() : null,
+          last_out: r.last_out ? new Date(r.last_out).toISOString() : null,
+          worked_minutes: r.worked_min ?? null,
+          late_minutes: r.late_min || 0, early_minutes: r.early_min || 0, ot_minutes: r.ot_min || 0,
+          leave_deducted: r.leave_deducted || 0, is_lop: !!r.is_lop,
+          source: FINALISE_SOURCE, source_code: r.code || null,
+          computed_at: new Date().toISOString(),
+        })
+      }
+    }
+    const byStatus = {}, lopDays = rows.filter(r => r.is_lop).length
+    rows.forEach(r => byStatus[r.status] = (byStatus[r.status]||0)+1)
+    const leaveDeducted = rows.reduce((s,r) => s + Number(r.leave_deducted||0), 0)
+    return { rows, protected: protectedDays.length, byStatus, lopDays, leaveDeducted }
+  }, [musterData, imported])
+
+  async function finaliseMonth() {
+    if (finalising.current) return
+    const { rows, protected: prot } = finalisePlan
+    if (!rows.length) { toast('Nothing to finalise — every day this month is already frozen.', 'error'); return }
+    if (!window.confirm(`Write ${rows.length} day(s) to the payroll record for ${monthKey(cursor)}?\n\n${prot} day(s) from the imported sheet or HR overrides will be left untouched.`)) return
+    finalising.current = true
+    try {
+      for (let i = 0; i < rows.length; i += 200) {
+        const { error } = await sb.from('attendance_days')
+          .upsert(rows.slice(i, i+200), { onConflict: 'employee_id,work_date' })
+        if (error) throw error
+      }
+      toast(`Finalised — ${rows.length} day(s) written, ${prot} left frozen.`, 'success')
+      setShowFinalise(false)
+      await init()
+    } catch (e) { toast(e?.message || friendlyError(e), 'error') }
+    finally { finalising.current = false }
+  }
 
   const depts = useMemo(() => { const s=[]; emps.forEach(e=>{ if(e.department && s.indexOf(e.department)<0) s.push(e.department) }); return s }, [emps])
   const branches = useMemo(() => { const s=[]; emps.forEach(e=>{ if(e.branch && s.indexOf(e.branch)<0) s.push(e.branch) }); return s }, [emps])
@@ -247,6 +311,7 @@ export default function PeopleMuster() {
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <button className="btn btn-primary btn-sm" onClick={()=>setShowDecl(true)} title="Declare a special day (rainfall / WFH / calamity)">+ Declare day</button>
+            {canMark && <button className="btn btn-neutral btn-sm" onClick={()=>setShowFinalise(true)} title="Write this month's attendance to the payroll record">Finalise month</button>}
             <button className="btn btn-neutral btn-sm" onClick={downloadMuster} title="Download detailed muster (Excel)">
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download
@@ -402,6 +467,54 @@ export default function PeopleMuster() {
             </div>
           )
         })()}
+
+        {showFinalise && (
+          <div style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(11,27,48,0.55)',display:'grid',placeItems:'center',padding:16}} onClick={()=>setShowFinalise(false)}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,width:'min(520px,96vw)',maxHeight:'92vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.35)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'16px 20px',borderBottom:'1px solid var(--line-2)'}}>
+                <div>
+                  <div style={{fontWeight:600,fontSize:16,color:'var(--ink)'}}>Finalise {monthLabel}</div>
+                  <div style={{fontSize:12,color:'var(--muted)',marginTop:2}}>Writes this month's attendance — including LOP — to the payroll record</div>
+                </div>
+                <button onClick={()=>setShowFinalise(false)} style={{border:0,background:'none',fontSize:20,cursor:'pointer',color:'var(--muted)',lineHeight:1}}>✕</button>
+              </div>
+              <div style={{padding:'16px 20px',display:'flex',flexDirection:'column',gap:14}}>
+                <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                  <div style={{flex:'1 1 130px',border:'1px solid var(--line)',borderRadius:10,padding:'10px 12px'}}>
+                    <div style={{fontSize:11,color:'var(--muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>Will write</div>
+                    <div style={{fontSize:22,fontWeight:600,color:'var(--ink)'}}>{finalisePlan.rows.length}</div>
+                    <div style={{fontSize:11.5,color:'var(--muted)'}}>employee-days</div>
+                  </div>
+                  <div style={{flex:'1 1 130px',border:'1px solid var(--line)',borderRadius:10,padding:'10px 12px'}}>
+                    <div style={{fontSize:11,color:'var(--muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>Left frozen</div>
+                    <div style={{fontSize:22,fontWeight:600,color:'var(--ink)'}}>{finalisePlan.protected}</div>
+                    <div style={{fontSize:11.5,color:'var(--muted)'}}>imported / HR-set</div>
+                  </div>
+                  <div style={{flex:'1 1 130px',border:'1px solid var(--line)',borderRadius:10,padding:'10px 12px'}}>
+                    <div style={{fontSize:11,color:'var(--muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>LOP days</div>
+                    <div style={{fontSize:22,fontWeight:600,color:'var(--st-absent, #D64545)'}}>{finalisePlan.lopDays}</div>
+                    <div style={{fontSize:11.5,color:'var(--muted)'}}>{finalisePlan.leaveDeducted} leave deducted</div>
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',color:'var(--muted)',margin:'2px 0 6px'}}>Breakdown</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                    {Object.entries(finalisePlan.byStatus).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
+                      <span key={k} style={{fontSize:12,padding:'4px 9px',borderRadius:999,background:STATUS_META[k]?.bg||'var(--surface-2)',color:STATUS_META[k]?.color||'var(--ink)',fontWeight:600}}>{STATUS_META[k]?.label||k} · {v}</span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.5,borderTop:'1px solid var(--line-2)',paddingTop:12}}>
+                  Days already recorded from the imported sheet or set by hand stay exactly as they are — only days this screen computed are written. Re-running is safe; it overwrites its own previous result.
+                </div>
+              </div>
+              <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'14px 20px',borderTop:'1px solid var(--line-2)'}}>
+                <button className="btn btn-neutral btn-sm" onClick={()=>setShowFinalise(false)}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={finaliseMonth} disabled={!finalisePlan.rows.length}>Write {finalisePlan.rows.length} days</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showDecl && (
           <div style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(11,27,48,0.55)',display:'grid',placeItems:'center',padding:16}} onClick={()=>setShowDecl(false)}>
