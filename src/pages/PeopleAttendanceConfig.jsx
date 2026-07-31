@@ -52,7 +52,8 @@ export default function PeopleAttendanceConfig({ embed = false }) {
     savingCfg.current = true
     try {
       const p = { office_start:cfg.office_start, grace_until:cfg.grace_until, half_day_cutoff:cfg.half_day_cutoff, office_end:cfg.office_end,
-        birthday_leave_at:cfg.birthday_leave_at, annual_leave_quota:cfg.annual_leave_quota, max_carry_forward:cfg.max_carry_forward,
+        early_grace_min:cfg.early_grace_min, birthday_leave_at:cfg.birthday_leave_at,
+        annual_leave_quota:cfg.annual_leave_quota, max_carry_forward:cfg.max_carry_forward,
         hr_approver_employee_id:cfg.hr_approver_employee_id || null }
       const { error } = await sb.from('attendance_config').update(p).eq('id', cfg.id)
       if (error) throw error
@@ -122,6 +123,7 @@ export default function PeopleAttendanceConfig({ embed = false }) {
           {T('Grace until','grace_until')}
           {T('Half-day cutoff','half_day_cutoff')}
           {T('Office end','office_end')}
+          <Field label="Early-out grace (min)"><input className="exp-cfg-input" style={{ width:110 }} type="number" min="0" max="120" value={cfg.early_grace_min??''} onChange={e=>setCfg({...cfg,early_grace_min:e.target.value})} /></Field>
           {T('Birthday leave at','birthday_leave_at')}
           <Field label="Annual leave quota"><input className="exp-cfg-input" style={{ width:110 }} type="number" min="0" value={cfg.annual_leave_quota??''} onChange={e=>setCfg({...cfg,annual_leave_quota:e.target.value})} /></Field>
           <Field label="Max carry-forward"><input className="exp-cfg-input" style={{ width:110 }} type="number" min="0" value={cfg.max_carry_forward??''} onChange={e=>setCfg({...cfg,max_carry_forward:e.target.value})} /></Field>

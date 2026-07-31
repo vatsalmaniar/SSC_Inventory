@@ -84,14 +84,16 @@ export default function PeopleMuster() {
       // a day with no punches scores as absent + LOP — i.e. truncation reads as unpaid leave.
       const [pu, lv, ad, rg] = await Promise.all([
         fetchAll((f,t) => sb.from('attendance_punches').select('employee_id,punch_at,direction').in('employee_id', ids).gte('punch_at', start.toISOString()).lt('punch_at', end.toISOString()).order('punch_at').order('id').range(f,t)),
-        fetchAll((f,t) => sb.from('leave_requests').select('employee_id,from_date,to_date').eq('status','approved').in('employee_id', ids).order('from_date').order('id').range(f,t)),
+        fetchAll((f,t) => sb.from('leave_requests').select('employee_id,from_date,to_date,is_half_day,half_period').eq('status','approved').in('employee_id', ids).order('from_date').order('id').range(f,t)),
         fetchAll((f,t) => sb.from('attendance_days').select('employee_id,work_date,status,source_code').in('employee_id', ids).gte('work_date', ymd(start)).lt('work_date', ymd(end)).order('work_date').order('id').range(f,t)),
         fetchAll((f,t) => sb.from('regularizations').select('id,employee_id,work_date,status,reason,requested_in,requested_out').in('employee_id', ids).gte('work_date', ymd(start)).lt('work_date', ymd(end)).order('work_date').order('id').range(f,t)),
       ])
       const loadErr = pu.error || lv.error || ad.error || rg.error
       if (loadErr) toast(`Could not load the full month — figures may be incomplete. ${loadErr.message || ''}`, 'error')
       const pm={}; (pu.data||[]).forEach(p=>{ const k=`${p.employee_id}|${ymd(p.punch_at)}`; (pm[k]||=[]).push(p) }); setPunchMap(pm)
-      const lm={}; (lv.data||[]).forEach(r=>{ let d=new Date(r.from_date),e=new Date(r.to_date); while(d<=e){ lm[`${r.employee_id}|${ymd(d)}`]=true; d.setDate(d.getDate()+1) } }); setLeaveMap(lm)
+      // store the request, not just a boolean — the half-day flag decides whether the day
+      // costs 0.5 or a full paid day
+      const lm={}; (lv.data||[]).forEach(r=>{ let d=new Date(r.from_date),e=new Date(r.to_date); while(d<=e){ lm[`${r.employee_id}|${ymd(d)}`]=r; d.setDate(d.getDate()+1) } }); setLeaveMap(lm)
       const im={}; (ad.data||[]).forEach(r=>{ im[`${r.employee_id}|${r.work_date}`]={ s:r.status, c:r.source_code } }); setImported(im)
       const rm={}; (rg.data||[]).forEach(r=>{ rm[`${r.employee_id}|${r.work_date}`]=r }); setRegMap(rm)
     } else { setPunchMap({}); setLeaveMap({}); setImported({}); setRegMap({}) }
@@ -111,7 +113,8 @@ export default function PeopleMuster() {
     if (key > todayY) return { status:'upcoming' }
     // always compute from live swipes first, so we have real in/out/worked times…
     const punches = punchMap[`${emp.id}|${key}`]
-    const computed = computeDay({ date:key, punches: punches||[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!leaveMap[`${emp.id}|${key}`], isFC:(emp.branch||'').startsWith('FC'), exempt:emp.attendance_exempt, probation:emp.lifecycle_status==='probation' })
+    const lv = leaveMap[`${emp.id}|${key}`]
+    const computed = computeDay({ date:key, punches: punches||[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!lv, leaveHalf:!!lv?.is_half_day, leavePeriod:lv?.half_period||'first', isFC:(emp.branch||'').startsWith('FC'), exempt:emp.attendance_exempt, probation:emp.lifecycle_status==='probation' })
     // …but the official muster status (imported/synced) wins for the status/code shown.
     const imp = imported[`${emp.id}|${key}`]
     const result = imp ? { ...computed, status: imp.s, code: imp.c != null ? imp.c : computed.code } : computed

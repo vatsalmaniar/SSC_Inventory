@@ -32,7 +32,7 @@ export default function PeopleMyAttendance() {
   const [policy, setPolicy] = useState(false)
   const [holidays, setHolidays] = useState(new Set())
   const [punches, setPunches] = useState([])
-  const [leaveDates, setLeaveDates] = useState(new Set())
+  const [leaveDates, setLeaveDates] = useState({})   // date -> approved leave_requests row
   const [imported, setImported] = useState({})   // work_date -> imported muster status
   const [decls, setDecls] = useState([])         // special-day declarations covering this month
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d })
@@ -84,8 +84,9 @@ export default function PeopleMyAttendance() {
       sb.from('attendance_declarations').select('*').lt('from_date', ymd(end)).gte('to_date', ymd(start)),
     ])
     setCfg(c?.data || DEFAULT_CFG); setHolidays(new Set((hol?.data||[]).map(h=>h.holiday_date))); setPunches(p?.data||[]); setDecls(dc?.data||[])
-    const ld = new Set()
-    ;(lv?.data||[]).forEach(r => { let d=new Date(r.from_date), e=new Date(r.to_date); while(d<=e){ ld.add(ymd(d)); d.setDate(d.getDate()+1) } })
+    // keep the request itself — is_half_day decides whether the day costs 0.5 or a full paid day
+    const ld = {}
+    ;(lv?.data||[]).forEach(r => { let d=new Date(r.from_date), e=new Date(r.to_date); while(d<=e){ ld[ymd(d)]=r; d.setDate(d.getDate()+1) } })
     setLeaveDates(ld)
     const im={}; (ad?.data||[]).forEach(r => { im[r.work_date]=r.status }); setImported(im)
   }
@@ -101,9 +102,11 @@ export default function PeopleMyAttendance() {
       if (key > todayY) { out.push({ date:key, dd, status:'upcoming' }); continue }
       const pch = byDate[key]
       let res
-      if (pch && pch.length) res = { date:key, dd, ...computeDay({ date:key, punches:pch, config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC, exempt:emp?.attendance_exempt, probation:emp?.lifecycle_status==='probation' }) }
+      const lvr = leaveDates[key]
+      const dayArgs = { config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!lvr, leaveHalf:!!lvr?.is_half_day, leavePeriod:lvr?.half_period||'first', isFC, exempt:emp?.attendance_exempt, probation:emp?.lifecycle_status==='probation' }
+      if (pch && pch.length) res = { date:key, dd, ...computeDay({ date:key, punches:pch, ...dayArgs }) }
       else if (imported[key]) res = { date:key, dd, status: imported[key] }
-      else res = { date:key, dd, ...computeDay({ date:key, punches:[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:leaveDates.has(key), isFC, exempt:emp?.attendance_exempt, probation:emp?.lifecycle_status==='probation' }) }
+      else res = { date:key, dd, ...computeDay({ date:key, punches:[], ...dayArgs }) }
       out.push(applyDeclaration(res, declarationFor(decls, emp?.branch, key)))
     }
     return out

@@ -30,6 +30,7 @@ export default function PeopleAttendance() {
   const [cfg, setCfg] = useState(DEFAULT_CFG)
   const [offices, setOffices] = useState([])
   const [holidays, setHolidays] = useState(new Set())
+  const [leaveMap, setLeaveMap] = useState({})   // date -> approved leave_requests row
   const [punches, setPunches] = useState([])          // my punches (last ~45d)
   const [bal, setBal] = useState(null)
   const [pending, setPending] = useState(0)
@@ -65,13 +66,18 @@ export default function PeopleAttendance() {
 
   async function load(emp, roleStr) {
     const since = new Date(); since.setDate(since.getDate() - 45)
-    const [c, off, hol, bl, lr] = await Promise.all([
+    const [c, off, hol, bl, lr, alv] = await Promise.all([
       sb.from('attendance_config').select('*').maybeSingle(),
       sb.from('office_locations').select('*').eq('is_active', true),
       sb.from('holidays').select('holiday_date').eq('is_active', true),
       emp ? sb.from('leave_balances').select('*').eq('employee_id', emp.id).eq('fy_label', currentFyLabel()).maybeSingle() : Promise.resolve({data:null}),
       emp ? sb.from('leave_requests').select('id,status').eq('employee_id', emp.id).eq('status','pending') : Promise.resolve({data:[]}),
+      emp ? sb.from('leave_requests').select('from_date,to_date,is_half_day,half_period').eq('employee_id', emp.id).eq('status','approved') : Promise.resolve({data:[]}),
     ])
+    // date -> approved leave row, so a leave day is not scored as an absence
+    const lmap = {}
+    ;(alv?.data||[]).forEach(r => { let d=new Date(r.from_date), e=new Date(r.to_date); while(d<=e){ lmap[ymd(d)]=r; d.setDate(d.getDate()+1) } })
+    setLeaveMap(lmap)
     const config = c?.data || DEFAULT_CFG
     setCfg(config); setOffices(off?.data || [])
     setHolidays(new Set((hol?.data || []).map(h => h.holiday_date))); setBal(bl?.data || null)
@@ -136,19 +142,28 @@ export default function PeopleAttendance() {
   const myCfg = useMemo(() => effShift(me, cfg), [me, cfg])
   const meExempt = me?.attendance_exempt, meProb = me?.lifecycle_status==='probation'
   const canWebPunch = ['sales','admin','management'].includes(role)   // others must use the biometric device
-  const todayComputed = useMemo(() => computeDay({ date: today, punches: byDate[today]||[], config: myCfg, isHoliday: holidays.has(today), isFC, exempt: meExempt, probation: meProb }), [byDate, today, myCfg, holidays, isFC, meExempt, meProb])
+  const dayArgs = useMemo(() => (dt) => { const lv = leaveMap[dt]
+    return { config: myCfg, isHoliday: holidays.has(dt), onLeave: !!lv, leaveHalf: !!lv?.is_half_day, leavePeriod: lv?.half_period || 'first', isFC, exempt: meExempt, probation: meProb } },
+    [leaveMap, myCfg, holidays, isFC, meExempt, meProb])
+  const todayComputed = useMemo(() => computeDay({ date: today, punches: byDate[today]||[], ...dayArgs(today) }), [byDate, today, dayArgs])
   const todayPunches = byDate[today] || []
   // Must match PunchButton exactly — raw parity here vs debounced state there made the two
   // controls disagree on screen after a double-scan, so one of them wrote the wrong direction.
   const nextDir = currentlyIn(todayPunches) ? 'out' : 'in'
 
   // recent history (last 14 days with punches)
-  const history = useMemo(() => Object.keys(byDate).sort().reverse().slice(0,14).map(dt => ({ date: dt, ...computeDay({ date: dt, punches: byDate[dt], config: myCfg, isHoliday: holidays.has(dt), isFC, exempt: meExempt, probation: meProb }) })), [byDate, myCfg, holidays, isFC, meExempt, meProb])
+  const history = useMemo(() => Object.keys(byDate).sort().reverse().slice(0,14).map(dt => ({ date: dt, ...computeDay({ date: dt, punches: byDate[dt], ...dayArgs(dt) }) })), [byDate, dayArgs])
 
   // this-month stats + donut
   const monthStats = useMemo(() => {
     const mk = today.slice(0,7)
-    const days = Object.keys(byDate).filter(d => d.startsWith(mk)).map(d => computeDay({ date: d, punches: byDate[d], config: myCfg, isHoliday: holidays.has(d), isFC, exempt: meExempt, probation: meProb }))
+    const [yy, mm] = mk.split('-').map(Number)
+    const lastDay = Math.min(new Date(yy, mm, 0).getDate(), Number(today.slice(8,10)))
+    const days = []
+    for (let i = 1; i <= lastDay; i++) {
+      const d = `${mk}-${String(i).padStart(2,'0')}`
+      days.push(computeDay({ date: d, punches: byDate[d] || [], ...dayArgs(d) }))
+    }
     const c = { present:0, half_day:0, absent:0, leave:0, holiday:0 }
     let inMins=[], workMins=[], ontime=0, tot=0
     days.forEach(d => { c[d.status] = (c[d.status]||0)+1
@@ -156,7 +171,7 @@ export default function PeopleAttendance() {
       if (d.worked_min) workMins.push(d.worked_min) })
     const avg = a => a.length ? Math.round(a.reduce((s,x)=>s+x,0)/a.length) : null
     return { c, avgInMin: avg(inMins), avgWork: avg(workMins), onTimePct: tot ? Math.round(ontime/tot*100) : null }
-  }, [byDate, myCfg, holidays, isFC, today])
+  }, [byDate, dayArgs, today])
 
   // ── who's on leave / not in yet (dashboard-wide) ──
   const { onLeaveToday, notInYet, inCount } = useMemo(() => {

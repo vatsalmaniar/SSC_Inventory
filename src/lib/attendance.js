@@ -1,7 +1,12 @@
 // Attendance policy engine — computes a day's status from raw punches + config,
 // so the dashboard/muster work on-demand (no nightly job needed on Micro).
 
-export const DEFAULT_CFG = { office_start:'10:00', grace_until:'10:15', half_day_cutoff:'14:30', office_end:'18:30', birthday_leave_at:'17:00' }
+// early_grace_min is how many minutes before your shift ENDS you may leave and still keep
+// the afternoon half — 15 by default, matching the policy shown to staff (LeavePolicyDrawer:
+// "Out by 6:30 PM (grace 6:15)"). It is minutes rather than a clock time on purpose: staff on
+// a custom shift (e.g. 10:00–16:30) get the same 15-minute allowance against THEIR end time.
+// A fixed 18:15 would have demanded they stay two hours past their shift.
+export const DEFAULT_CFG = { office_start:'10:00', grace_until:'10:15', half_day_cutoff:'14:30', office_end:'18:30', early_grace_min:15, birthday_leave_at:'17:00' }
 
 // Accidental double-scans (biometric or web) create spurious In/Out pairs — e.g. a second
 // scan at entry looks like an immediate check-out. Collapse any punch that lands within this
@@ -75,37 +80,64 @@ export function distanceM(a, b) {
 // the device's in/out flag is unreliable, so it is ignored.
 //   exempt    → non-punching admins: never absent from no-punch (always Present)
 //   probation → probation/notice: leave & absence are unpaid (is_lop)
-export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday = false, onLeave = false, isFC = false, exempt = false, probation = false }) {
+export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday = false, onLeave = false, leaveHalf = false, leavePeriod = 'first', isFC = false, exempt = false, probation = false }) {
   const d = new Date(date)
   if (isHoliday) return { status: 'holiday' }
   if (isWeekOff(d)) return { status: 'weekoff' }
-  if (onLeave) return { status: 'leave', is_lop: probation }   // probation leave = unpaid
+  if (onLeave) {
+    // Half-day leave: the request stores is_half_day/half_period and charges the balance 0.5,
+    // but this used to collapse to a full 'leave' day — so the company paid 1.0 for a 0.5
+    // deduction and the half actually worked became invisible.
+    if (leaveHalf) return { status: 'half_day', code: leavePeriod === 'second' ? 'P:L' : 'L:P', leave_deducted: 0.5, is_lop: probation, half_leave: true }
+    return { status: 'leave', leave_deducted: 1, is_lop: probation }   // probation leave = unpaid
+  }
 
   // Derive In/Out purely from time order — ignore any device direction flag.
   // Debounce first, so an accidental double-scan can't become a spurious In/Out.
   const times = dedupeTimes(punches.map(p => new Date(p.punch_at)).filter(t => !isNaN(+t)).sort((a,b)=>a-b))
-  if (!times.length) {
-    if (exempt) return { status: 'present', code: 'EX' }        // admin non-puncher — stays Present
-    return { status: 'absent', is_lop: true }                   // uninformed absence → LOP
-  }
-  const firstIn = times[0]
+  const firstIn = times[0] || null
   const lastOut = times.length > 1 ? times[times.length-1] : null
+
+  // Exempt (non-punching admins) are Present regardless of what the device recorded. This
+  // used to apply only to the zero-punch branch, so one stray scan by an exempt admin made
+  // them late/half-day/absent — the opposite of what the exemption is for.
+  if (exempt) return { status: 'present', code: 'EX', first_in: firstIn, last_out: lastOut, exempt: true }
+
+  if (!times.length) return { status: 'absent', is_lop: true }   // uninformed absence → LOP
+
   const inMin  = firstIn.getHours()*60 + firstIn.getMinutes()
   const startMin = toMin(config.office_start), graceMin = toMin(config.grace_until)
   const cutoffMin = toMin(config.half_day_cutoff), endMin = toMin(config.office_end)
-  const outCutoff = config.early_grace ? toMin(config.early_grace) : endMin   // must stay till this for the PM half
+  // Grace is measured back from THIS employee's shift end, so custom shifts keep the same
+  // allowance rather than being held to the general office hours.
+  const graceMins = Number.isFinite(+config.early_grace_min) ? +config.early_grace_min : 15
+  const outCutoff = endMin - graceMins
+
+  // A lone punch proves presence but not a full day. The old code treated the two cases
+  // wildly differently: in-with-no-out skipped the early-out check and paid a FULL day, while
+  // out-with-no-in was read as a late arrival and marked Absent + LOP — a full day's pay lost
+  // even though the person had demonstrably been in the building.
+  // Only the harmful case is corrected here: a lone punch never means Absent. It stays
+  // Present and is flagged so HR can regularize. Whether a missing out-punch SHOULD cost half
+  // a day is a policy decision, not a bug fix — on July data that would have moved 81
+  // employee-days to half_day, i.e. ~40 days of pay, mostly from device misses.
+  if (times.length === 1) {
+    return { status: 'present', first_in: firstIn, last_out: null, worked_min: null,
+             late_min: inMin > graceMin ? inMin - startMin : 0, early_min: 0, ot_min: 0,
+             leave_deducted: 0, missing_punch: true }
+  }
 
   let status = 'present', late = 0, early = 0, code = null
-  if (inMin > cutoffMin) return { status: 'absent', first_in: firstIn, is_lop: true }   // arrived too late → absent (LOP)
+  if (inMin > cutoffMin) return { status: 'absent', first_in: firstIn, last_out: lastOut, is_lop: true }   // arrived too late → absent (LOP)
   if (inMin > graceMin) { status = 'half_day'; late = inMin - startMin; code = 'A:P' }   // late in → lost AM half
 
-  const outMin = lastOut ? lastOut.getHours()*60 + lastOut.getMinutes() : null
-  if (outMin != null && outMin < outCutoff) { early = outCutoff - outMin; if (status === 'present') { status = 'half_day'; code = 'P:A' } }   // left early → lost PM half
+  const outMin = lastOut.getHours()*60 + lastOut.getMinutes()
+  if (outMin < outCutoff) { early = outCutoff - outMin; if (status === 'present') { status = 'half_day'; code = 'P:A' } }   // left early → lost PM half
 
-  const worked = lastOut ? Math.round((lastOut - firstIn) / 60000) : null
-  const ot = (isFC && outMin != null && outMin > endMin) ? (outMin - endMin) : 0
+  const worked = Math.round((lastOut - firstIn) / 60000)
+  const ot = (isFC && outMin > endMin) ? (outMin - endMin) : 0
   const leaveDeducted = status === 'half_day' ? 0.5 : 0
-  return { status, code, first_in: firstIn, last_out: lastOut, worked_min: worked, late_min: late, early_min: early, ot_min: ot, leave_deducted: leaveDeducted, missing_punch: times.length === 1 }
+  return { status, code, first_in: firstIn, last_out: lastOut, worked_min: worked, late_min: late, early_min: early, ot_min: ot, leave_deducted: leaveDeducted, missing_punch: false }
 }
 
 // Soothing, light palette (eye-friendly) — used across attendance (badges, strips, dots)
