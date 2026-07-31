@@ -9,6 +9,7 @@ import AttendanceTabs from '../components/AttendanceTabs'
 import { Spinner } from '../components/PeopleLoaders'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { adminEmpIds } from '../lib/attScope'
+import { fetchAll } from '../lib/fetchAll'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
 
@@ -78,12 +79,17 @@ export default function PeopleMuster() {
     setEmps(list); setCfg(c?.data || DEFAULT_CFG); setHolidays(new Set((hol?.data||[]).map(h=>h.holiday_date))); setDecls(decl?.data || [])
     const ids = list.map(e=>e.id)
     if (ids.length) {
+      // A full month exceeds PostgREST's 1000-row cap at this headcount (~1300 punches,
+      // ~1150 attendance_days), so these must page. A capped query drops rows silently and
+      // a day with no punches scores as absent + LOP — i.e. truncation reads as unpaid leave.
       const [pu, lv, ad, rg] = await Promise.all([
-        sb.from('attendance_punches').select('employee_id,punch_at,direction').in('employee_id', ids).gte('punch_at', start.toISOString()).lt('punch_at', end.toISOString()),
-        sb.from('leave_requests').select('employee_id,from_date,to_date').eq('status','approved').in('employee_id', ids),
-        sb.from('attendance_days').select('employee_id,work_date,status,source_code').in('employee_id', ids).gte('work_date', ymd(start)).lt('work_date', ymd(end)),
-        sb.from('regularizations').select('id,employee_id,work_date,status,reason,requested_in,requested_out').in('employee_id', ids).gte('work_date', ymd(start)).lt('work_date', ymd(end)),
+        fetchAll((f,t) => sb.from('attendance_punches').select('employee_id,punch_at,direction').in('employee_id', ids).gte('punch_at', start.toISOString()).lt('punch_at', end.toISOString()).order('punch_at').order('id').range(f,t)),
+        fetchAll((f,t) => sb.from('leave_requests').select('employee_id,from_date,to_date').eq('status','approved').in('employee_id', ids).order('from_date').order('id').range(f,t)),
+        fetchAll((f,t) => sb.from('attendance_days').select('employee_id,work_date,status,source_code').in('employee_id', ids).gte('work_date', ymd(start)).lt('work_date', ymd(end)).order('work_date').order('id').range(f,t)),
+        fetchAll((f,t) => sb.from('regularizations').select('id,employee_id,work_date,status,reason,requested_in,requested_out').in('employee_id', ids).gte('work_date', ymd(start)).lt('work_date', ymd(end)).order('work_date').order('id').range(f,t)),
       ])
+      const loadErr = pu.error || lv.error || ad.error || rg.error
+      if (loadErr) toast(`Could not load the full month — figures may be incomplete. ${loadErr.message || ''}`, 'error')
       const pm={}; (pu.data||[]).forEach(p=>{ const k=`${p.employee_id}|${ymd(p.punch_at)}`; (pm[k]||=[]).push(p) }); setPunchMap(pm)
       const lm={}; (lv.data||[]).forEach(r=>{ let d=new Date(r.from_date),e=new Date(r.to_date); while(d<=e){ lm[`${r.employee_id}|${ymd(d)}`]=true; d.setDate(d.getDate()+1) } }); setLeaveMap(lm)
       const im={}; (ad.data||[]).forEach(r=>{ im[`${r.employee_id}|${r.work_date}`]={ s:r.status, c:r.source_code } }); setImported(im)

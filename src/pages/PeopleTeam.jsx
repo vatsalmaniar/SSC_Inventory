@@ -19,7 +19,18 @@ const autoUsername = (name='') => {
   return p.length === 0 ? '' : p.length === 1 ? p[0] : `${p[0]}.${p[p.length-1]}`
 }
 const genPassword = () => 'Ssc@' + Math.floor(1000 + Math.random() * 9000)
-const today = () => new Date().toISOString().slice(0, 10)
+// Local date, NOT toISOString().slice(0,10) — that yields UTC, so between 00:00 and
+// 05:30 IST it returns yesterday and back-dates the salary effective_from by a day.
+const today = () => new Date().toLocaleDateString('en-CA')
+// Money must reach the DB at paise precision; computeStructure works in JS floats.
+const round2 = n => Math.round((Number(n) || 0) * 100) / 100
+// Statutory IDs: blank and placeholder text ("NA", "-", "N/A") must land as NULL, never as
+// a literal value — a stored 'NA' collides across employees and breaks PF/ESI filing.
+const statutory = (v, upper = false) => {
+  const s = String(v ?? '').trim()
+  if (!s || /^(na|n\/a|nil|none|-+)$/i.test(s)) return null
+  return upper ? s.toUpperCase() : s
+}
 
 function Drawer({ title, sub, onClose, children, footer }) {
   return createPortal(
@@ -176,8 +187,8 @@ export default function PeopleTeam() {
           const { error: e2 } = await sb.from('employee_private').upsert({
             employee_id: empId, gender: f.gender || null, marital_status: f.marital_status || null,
             date_of_birth: f.date_of_birth || null, personal_phone: f.personal_phone || null, personal_email: f.personal_email || null,
-            emergency_contact: f.emergency_contact || null, pan: f.pan?.trim().toUpperCase() || null, aadhaar: f.aadhaar?.trim() || null,
-            uan_no: f.uan_no?.trim() || null, esic_no: f.esic_no?.trim() || null,
+            emergency_contact: f.emergency_contact || null, pan: statutory(f.pan, true), aadhaar: statutory(f.aadhaar),
+            uan_no: statutory(f.uan_no), esic_no: statutory(f.esic_no),
             spouse_name: f.spouse_name || null, spouse_phone: f.spouse_phone || null, spouse_dob: f.spouse_dob || null,
             is_permanent: f.is_permanent,
           }, { onConflict: 'employee_id' })
@@ -189,15 +200,19 @@ export default function PeopleTeam() {
       const ctc = parseFloat(f.annual_ctc) || 0
       if (isMgmt && ctc > 0) {
         const s = computeStructure({ annualCtc: ctc, ratio: f.salary_ratio, regime: f.tax_regime, pfApplicable: f.pf_applicable, professionalTax: parseFloat(f.professional_tax) || 0, accidentalInsurance: parseFloat(f.accidental_insurance) || 0 })
+        // Every money value is rounded to paise here: computeStructure works in JS floats and
+        // its output has never been reconciled against the payroll sheet, so these rows are
+        // tagged 'computed_unverified' — payroll must treat them as needing sign-off, unlike
+        // the 'sheet_june_2026' rows which came from the real sheet.
         const { error: e3 } = await sb.from('employee_compensation').insert({
-          employee_id: empId, fy_label: FY, annual_ctc_inr: ctc, effective_from: f.join_date || today(),
+          employee_id: empId, fy_label: FY, annual_ctc_inr: round2(ctc), effective_from: f.join_date || today(),
           source: 'onboarding', revision_reason: 'Onboarding', is_current: true,
-          monthly_ctc: s.monthlyCtc, monthly_gross: s.gross, basic: s.basic, hra: s.hra,
-          travel_allowance: s.travelAllowance, special_allowance: s.specialAllowance, salary_ratio: f.salary_ratio,
-          pf_employer: s.employerPf, esic_employer: s.employerEsic, pf_employee: s.pfEmployee, esic_employee: s.esicEmployee,
-          professional_tax: s.professionalTax, accidental_insurance: s.accidentalInsurance,
-          gratuity: s.gratuity, bonus: s.bonus, tds: s.tds, total_deductions: s.totalDeductions,
-          net_payable: s.netPayable, breakup_source: 'computed', updated_at: new Date().toISOString(),
+          monthly_ctc: round2(s.monthlyCtc), monthly_gross: round2(s.gross), basic: round2(s.basic), hra: round2(s.hra),
+          travel_allowance: round2(s.travelAllowance), special_allowance: round2(s.specialAllowance), salary_ratio: f.salary_ratio,
+          pf_employer: round2(s.employerPf), esic_employer: round2(s.employerEsic), pf_employee: round2(s.pfEmployee), esic_employee: round2(s.esicEmployee),
+          professional_tax: round2(s.professionalTax), accidental_insurance: round2(s.accidentalInsurance),
+          gratuity: round2(s.gratuity), bonus: round2(s.bonus), tds: round2(s.tds), total_deductions: round2(s.totalDeductions),
+          net_payable: round2(s.netPayable), breakup_source: 'computed_unverified', updated_at: new Date().toISOString(),
         })
         if (e3) throw e3
       }

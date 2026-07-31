@@ -25,3 +25,22 @@ supabase/functions/request-password-reset/
 
 # Handoff / archive bundles — never commit
 *.zip
+
+# Security assessments — these describe unpatched holes and list real employee
+# addresses. A `git add -A` would publish the attack surface along with the fix.
+VAPT_Remediation_Report.txt
+_Vulnerability Assessment and Penetration Testing.txt
+ERP_Audit_SAP_Gaps.md
+
+# Working files at repo root: standalone page captures, customer quotations and UI
+# screenshots. The People screenshots render real names and salary figures.
+/*.html
+/*.png
+muster/
+Schnider BOM/
+
+# macOS cruft
+.DS_Store
+
+# On-prem connector — deployed by hand to the office PC, has its own release story
+connector/

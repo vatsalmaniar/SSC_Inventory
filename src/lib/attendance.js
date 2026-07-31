@@ -3,6 +3,22 @@
 
 export const DEFAULT_CFG = { office_start:'10:00', grace_until:'10:15', half_day_cutoff:'14:30', office_end:'18:30', birthday_leave_at:'17:00' }
 
+// Accidental double-scans (biometric or web) create spurious In/Out pairs — e.g. a second
+// scan at entry looks like an immediate check-out. Collapse any punch that lands within this
+// window of the previously-kept one → we keep the FIRST of a rapid burst and drop the repeat.
+export const PUNCH_DEBOUNCE_MS = 120000   // 2 minutes
+export function dedupeTimes(times) {       // expects ascending Date[]; returns debounced Date[]
+  const out = []
+  for (const t of times) if (!out.length || (t - out[out.length - 1]) >= PUNCH_DEBOUNCE_MS) out.push(t)
+  return out
+}
+// Current in/out state from a day's raw punches (debounced): odd count = checked-in, even = out.
+// Used by the web check-in button so a biometric scan (or an accidental double) reflects correctly.
+export function currentlyIn(punches = []) {
+  const times = dedupeTimes(punches.map(p => new Date(p.punch_at)).filter(t => !isNaN(+t)).sort((a, b) => a - b))
+  return times.length % 2 === 1
+}
+
 // Effective shift for an employee: their own shift_start/shift_end if set,
 // else the general shift from attendance_config. Grace / half-day cutoff stay from config.
 export const effShift = (emp, cfg = DEFAULT_CFG) => ({ ...cfg, office_start: emp?.shift_start || cfg.office_start, office_end: emp?.shift_end || cfg.office_end })
@@ -66,7 +82,8 @@ export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday
   if (onLeave) return { status: 'leave', is_lop: probation }   // probation leave = unpaid
 
   // Derive In/Out purely from time order — ignore any device direction flag.
-  const times = punches.map(p => new Date(p.punch_at)).filter(t => !isNaN(+t)).sort((a,b)=>a-b)
+  // Debounce first, so an accidental double-scan can't become a spurious In/Out.
+  const times = dedupeTimes(punches.map(p => new Date(p.punch_at)).filter(t => !isNaN(+t)).sort((a,b)=>a-b))
   if (!times.length) {
     if (exempt) return { status: 'present', code: 'EX' }        // admin non-puncher — stays Present
     return { status: 'absent', is_lop: true }                   // uninformed absence → LOP

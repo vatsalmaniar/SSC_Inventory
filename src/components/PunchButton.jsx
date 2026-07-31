@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
-import { distanceM } from '../lib/attendance'
+import { distanceM, currentlyIn } from '../lib/attendance'
 
 // Compact attendance punch for the top header: selfie + location, feeds attendance_punches.
 export default function PunchButton() {
@@ -37,8 +37,9 @@ export default function PunchButton() {
       (async () => { const t=new Date(); t.setHours(0,0,0,0); return sb.from('attendance_punches').select('direction,punch_at').eq('employee_id', emp.id).gte('punch_at', t.toISOString()).order('punch_at') })(),
     ])
     setOffices(off || [])
-    const last = (tp || []).slice(-1)[0]
-    setNextDir(last && last.direction === 'in' ? 'out' : 'in')
+    // Reflect the REAL current state from all of today's punches (biometric + web), debounced —
+    // so a biometric check-in flips the button to "Check out", and an accidental double doesn't.
+    setNextDir(currentlyIn(tp || []) ? 'out' : 'in')
   }
 
   // Ask for location as soon as the punch opens (not at the end) so the browser

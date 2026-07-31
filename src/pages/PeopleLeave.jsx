@@ -89,7 +89,20 @@ export default function PeopleLeave() {
     if (!form.from || !form.to) { toast('Pick dates.', 'error'); return }
     if (form.to < form.from) { toast('End date is before start.', 'error'); return }
     if (days <= 0) { toast('No working days in that range.', 'error'); return }
-    if (balNum != null && days > balNum) { toast(`Only ${balNum} leave left — this will run into LOP.`, 'error') }
+    // Overlap: an already-live request covering any of these dates would be double-counted
+    // against the balance on approval, since leave_decide adds days without checking overlap.
+    const clash = mine.find(r => ['pending','mgr_approved','approved'].includes(r.status)
+      && r.from_date <= form.to && r.to_date >= form.from)
+    if (clash) { toast(`You already have a ${clash.status.replace('_',' ')} request covering ${clash.from_date} to ${clash.to_date}.`, 'error'); return }
+    if (form.from < ymd(new Date())) {
+      if (!window.confirm(`${form.from} is in the past. Apply anyway?`)) return
+    }
+    // Over-quota used to warn and submit regardless — the balance would silently go negative.
+    // Now it needs an explicit acknowledgement that the excess is unpaid.
+    if (balNum != null && days > balNum) {
+      const excess = Math.round((days - balNum) * 10) / 10
+      if (!window.confirm(`You have ${balNum} leave left but are applying for ${days}. The extra ${excess} day(s) will be treated as loss of pay. Continue?`)) return
+    }
     guard.current = true
     try {
       const { error } = await sb.from('leave_requests').insert({ employee_id: meId, from_date: form.from, to_date: form.to, days, is_half_day: form.is_half, half_period: form.is_half?form.half_period:null, reason: form.reason.trim()||null })
@@ -102,20 +115,35 @@ export default function PeopleLeave() {
   }
 
   async function decide(req, step, approve) {
+    // Guarded: leave_decide adds r.days to leave_balances.used, so a double-click
+    // deducts the leave twice.
+    if (guard.current) return
     let note = null
     if (!approve) { note = window.prompt('Reason for rejection (optional):') ?? null }
+    guard.current = true
     try {
       const { error } = await sb.rpc('leave_decide', { p_id: req.id, p_step: step, p_approve: approve, p_note: note })
       if (error) throw error
       toast(approve ? (step==='hr'?'Approved.':'Sent to HR.') : 'Rejected.', 'success')
       await load(meId, role)
     } catch (e) { toast(e?.message||friendlyError(e),'error') }
+    finally { guard.current = false }
   }
 
   async function cancelMine(req) {
     if (!window.confirm('Cancel this leave request?')) return
-    try { await sb.from('leave_requests').update({ status:'cancelled' }).eq('id', req.id); toast('Cancelled.','success'); await load(meId, role) }
+    if (guard.current) return
+    guard.current = true
+    try {
+      // .select() is what makes this honest: an RLS denial returns zero rows and NO error,
+      // so the old code reported "Cancelled." while the row was untouched.
+      const { data, error } = await sb.from('leave_requests').update({ status:'cancelled' }).eq('id', req.id).select('id')
+      if (error) throw error
+      if (!data?.length) throw new Error('Could not cancel — the request may already be approved, or you may not have permission.')
+      toast('Cancelled.','success'); await load(meId, role)
+    }
     catch (e) { toast(e?.message||friendlyError(e),'error') }
+    finally { guard.current = false }
   }
 
   if (loading) return <Layout pageKey="people" pageTitle="Leave"><div className="people-app"><Spinner /></div></Layout>

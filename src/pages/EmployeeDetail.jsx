@@ -26,6 +26,14 @@ function ageFrom(d) { if(!d) return '—'; const b=new Date(d),n=new Date(); let
 function inr(n) { return n==null?'—':'₹'+Number(n).toLocaleString('en-IN',{maximumFractionDigits:0}) }
 function maskPan(v){ return v?v.slice(0,3)+'••••'+v.slice(-1):'—' }
 function maskAad(v){ return v?'•••• •••• '+String(v).replace(/\s/g,'').slice(-4):'—' }
+// Must match PeopleTeam's onboarding normalization — the two forms edit the same statutory
+// fields, and previously only the create path uppercased PAN. Placeholders land as NULL so
+// they can't collide across employees and break PF/ESI filing.
+function statutory(v, upper = false) {
+  const s = String(v ?? '').trim()
+  if (!s || /^(na|n\/a|nil|none|-+)$/i.test(s)) return null
+  return upper ? s.toUpperCase() : s
+}
 const Avatar = ({ name, cls, exited, photo }) => (
   <div className={'avatar '+cls} style={photo
     ? { backgroundImage:`url(${photo})`, backgroundSize:'cover', backgroundPosition:'center', filter:exited?'grayscale(.5)':'none' }
@@ -130,7 +138,7 @@ export default function EmployeeDetail() {
       sb.from('employee_private').select('*').eq('employee_id', id).maybeSingle(),
       e.profile_id ? sb.from('profiles').select('id,username,role').eq('id', e.profile_id).maybeSingle() : Promise.resolve({data:null}),
       sb.from('employees').select('id,full_name,designation,department,reporting_manager_id,profile_id,lifecycle_status').eq('is_test', false),
-      sb.from('employee_compensation').select('*').eq('employee_id', id).order('fy_label',{ascending:false}),
+      sb.from('employee_compensation').select('*').eq('employee_id', id).order('is_current',{ascending:false}).order('effective_from',{ascending:false}).order('fy_label',{ascending:false}),
       sb.from('asset_assignments').select('*').eq('employee_id', id).is('assigned_to', null),
       sb.from('employee_documents').select('*').eq('employee_id', id),
       sb.from('leave_balances').select('*').eq('employee_id', id).eq('fy_label', currentFyLabel()).maybeSingle(),
@@ -164,7 +172,10 @@ export default function EmployeeDetail() {
   const mgr = useMemo(() => emp?.reporting_manager_id ? allEmps.find(x=>x.id===emp.reporting_manager_id) : null, [emp, allEmps])
   const reports = useMemo(() => emp ? allEmps.filter(x=>x.reporting_manager_id===emp.id && x.lifecycle_status!=='exited') : [], [emp, allEmps])
   const mgrOptions = useMemo(() => allEmps.filter(x=>x.id!==emp?.id && x.lifecycle_status!=='exited').sort((a,b)=>a.full_name.localeCompare(b.full_name)), [allEmps, emp])
-  const fyComp = comp[0] || null
+  // Pick the CURRENT row explicitly. comp[0] alone relies on there being exactly one row per
+  // FY — true only while a second same-FY insert is blocked by uq_comp_current. Once salary
+  // revisions exist, ties in fy_label order arbitrarily and this could show a superseded figure.
+  const fyComp = comp.find(c => c.is_current) || comp[0] || null
   const [taxHelp, setTaxHelp] = useState(null)
   const regime = emp?.tax_regime || 'new'
   const taxCalc = useMemo(() => {
@@ -238,18 +249,19 @@ export default function EmployeeDetail() {
     if (!editForm.full_name.trim()) { toast('Full name is required.', 'error'); return }
     guard.current = true
     try {
-      await sb.from('employees').update({
+      const { error: eEmp } = await sb.from('employees').update({
         full_name: editForm.full_name.trim(), employee_code: editForm.employee_code.trim() || null,
         designation: editForm.designation.trim() || null, department: editForm.department.trim() || null,
         branch: editForm.branch.trim() || null, join_date: editForm.join_date || null,
         lifecycle_status: editForm.lifecycle_status, is_active: editForm.lifecycle_status !== 'exited',
       }).eq('id', emp.id)
+      if (eEmp) throw eEmp
       if (isMgmt) {
         const { error } = await sb.from('employee_private').upsert({
           employee_id: emp.id, gender: editForm.gender || null, date_of_birth: editForm.date_of_birth || null,
           personal_phone: editForm.personal_phone || null, personal_email: editForm.personal_email || null,
-          emergency_contact: editForm.emergency_contact || null, pan: editForm.pan || null, aadhaar: editForm.aadhaar || null,
-          uan_no: editForm.uan_no?.trim() || null, esic_no: editForm.esic_no?.trim() || null,
+          emergency_contact: editForm.emergency_contact || null, pan: statutory(editForm.pan, true), aadhaar: statutory(editForm.aadhaar),
+          uan_no: statutory(editForm.uan_no), esic_no: statutory(editForm.esic_no),
           spouse_name: editForm.spouse_name || null, spouse_phone: editForm.spouse_phone || null,
           spouse_dob: editForm.spouse_dob || null, is_permanent: editForm.is_permanent,
         }, { onConflict: 'employee_id' })

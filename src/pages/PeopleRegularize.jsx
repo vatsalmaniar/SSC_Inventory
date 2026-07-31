@@ -76,6 +76,10 @@ export default function PeopleRegularize() {
     const t = form.side === 'in' ? form.requested_in : form.requested_out
     if (!t) { toast(`Enter the correct ${form.side === 'in' ? 'in' : 'out'}-time.`, 'error'); return }
     if (form.reason_type === 'other' && !form.note.trim()) { toast('Add a note describing the reason.', 'error'); return }
+    // One live request per day: reg_decide inserts a correction punch per approval with no
+    // duplicate check, so two approved requests for the same date create two punches.
+    const dup = mine.find(r => r.work_date === form.work_date && ['pending','mgr_approved','approved'].includes(r.status))
+    if (dup) { toast(`You already have a ${dup.status.replace('_',' ')} regularization for ${form.work_date}.`, 'error'); return }
     const reason = [REG_LABEL[form.reason_type], form.note.trim()].filter(Boolean).join(' — ')
     guard.current = true
     try {
@@ -94,20 +98,34 @@ export default function PeopleRegularize() {
   }
 
   async function decide(req, step, approve) {
+    // Guarded: approving at the HR step inserts correction punches, so a double-click
+    // writes duplicate punches that silently widen the working day.
+    if (guard.current) return
     let note = null
     if (!approve) { note = window.prompt('Reason for rejection (optional):') ?? null }
+    guard.current = true
     try {
       const { error } = await sb.rpc('reg_decide', { p_id: req.id, p_step: step, p_approve: approve, p_note: note })
       if (error) throw error
       toast(approve ? (step==='hr'?'Approved — punch corrected.':'Sent to HR.') : 'Rejected.', 'success')
       await load(meId)
     } catch (e) { toast(e?.message||friendlyError(e),'error') }
+    finally { guard.current = false }
   }
 
   async function cancelMine(req) {
     if (!window.confirm('Cancel this request?')) return
-    try { await sb.from('regularizations').update({ status:'cancelled' }).eq('id', req.id); toast('Cancelled.','success'); await load(meId) }
+    if (guard.current) return
+    guard.current = true
+    try {
+      // .select() so an RLS denial (zero rows, no error) can't report success.
+      const { data, error } = await sb.from('regularizations').update({ status:'cancelled' }).eq('id', req.id).select('id')
+      if (error) throw error
+      if (!data?.length) throw new Error('Could not cancel — the request may already be decided, or you may not have permission.')
+      toast('Cancelled.','success'); await load(meId)
+    }
     catch (e) { toast(e?.message||friendlyError(e),'error') }
+    finally { guard.current = false }
   }
 
   if (loading) return <Layout pageKey="people" pageTitle="Regularize"><div className="people-app"><Spinner /></div></Layout>

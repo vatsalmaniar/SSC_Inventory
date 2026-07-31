@@ -5,7 +5,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
-import { computeDay, isWeekOff, distanceM, minToHrs, fmtTime, toMin, STATUS_META, DEFAULT_CFG, effShift } from '../lib/attendance'
+import { computeDay, isWeekOff, distanceM, minToHrs, fmtTime, toMin, STATUS_META, DEFAULT_CFG, effShift, currentlyIn } from '../lib/attendance'
 import { signPhotos } from '../lib/photos'
 import { adminEmpIds } from '../lib/attScope'
 import Layout from '../components/Layout'
@@ -138,7 +138,9 @@ export default function PeopleAttendance() {
   const canWebPunch = ['sales','admin','management'].includes(role)   // others must use the biometric device
   const todayComputed = useMemo(() => computeDay({ date: today, punches: byDate[today]||[], config: myCfg, isHoliday: holidays.has(today), isFC, exempt: meExempt, probation: meProb }), [byDate, today, myCfg, holidays, isFC, meExempt, meProb])
   const todayPunches = byDate[today] || []
-  const nextDir = todayPunches.length % 2 === 1 ? 'out' : 'in'   // derived: 1st in, 2nd out, …
+  // Must match PunchButton exactly — raw parity here vs debounced state there made the two
+  // controls disagree on screen after a double-scan, so one of them wrote the wrong direction.
+  const nextDir = currentlyIn(todayPunches) ? 'out' : 'in'
 
   // recent history (last 14 days with punches)
   const history = useMemo(() => Object.keys(byDate).sort().reverse().slice(0,14).map(dt => ({ date: dt, ...computeDay({ date: dt, punches: byDate[dt], config: myCfg, isHoliday: holidays.has(dt), isFC, exempt: meExempt, probation: meProb }) })), [byDate, myCfg, holidays, isFC, meExempt, meProb])
