@@ -245,6 +245,7 @@ def _find_device_table(conn):
         return _DEVCACHE["table"], _DEVCACHE["cols"]
     _DEVCACHE["checked"] = True
     try:
+        best = None                                        # (score, table, cols)
         for table, cols in _tables_cols(conn).items():
             if "devicelog" in table.lower():
                 continue                                   # punch tables, not the device list
@@ -255,16 +256,25 @@ def _find_device_table(conn):
             pick = lambda *names: next((low[n] for n in names if n in low), None)
             found = {
                 "id":     idc,
-                "name":   pick("devicename", "device_name", "name"),
-                "serial": pick("serialnumber", "serialno", "serial_no", "machineno"),
-                "loc":    pick("location", "locationname", "branch"),
-                "ping":   pick("lastping", "last_ping", "lastseen", "lastactivity", "lastonline"),
-                "status": pick("status", "isactive", "connectionstatus"),
+                "name":   pick("devicename", "device_name", "name", "devicealias"),
+                "serial": pick("serialnumber", "serialno", "serial_no", "machineno", "sn"),
+                "loc":    pick("location", "locationname", "branch", "locationid"),
+                "ping":   pick("lastping", "last_ping", "lastseen", "lastactivity", "lastonline",
+                               "lastconnected", "lastpingtime"),
+                "status": pick("status", "isactive", "connectionstatus", "isconnected"),
             }
-            if found["name"] or found["ping"]:             # looks like the device list
-                _DEVCACHE["table"], _DEVCACHE["cols"] = table, found
-                log.info("device table: %s %s", table, {k: v for k, v in found.items() if v})
-                return table, found
+            # A NAME is required. Matching on a date column alone picked up unrelated tables
+            # that merely carry a DeviceId — the first run reported 7 "devices" with null names
+            # and ping dates of 31 Dec and 14 Aug. Score the rest so the richest table wins.
+            if not found["name"]:
+                continue
+            score = sum(1 for k in ("serial", "loc", "ping", "status") if found[k])
+            if best is None or score > best[0]:
+                best = (score, table, found)
+        if best:
+            _DEVCACHE["table"], _DEVCACHE["cols"] = best[1], best[2]
+            log.info("device table: %s %s", best[1], {k: v for k, v in best[2].items() if v})
+            return best[1], best[2]
     except Exception as e:
         log.warning("device table lookup failed (ignored): %s", e)
     log.info("device table: not found - device health will not be reported")
