@@ -50,7 +50,7 @@ export default function PeopleSyncStatus() {
       const [st, up, dv] = await Promise.all([
         sb.rpc('sync_status'),
         sb.rpc('sync_uptime_daily', { p_days: 30 }),
-        sb.from('sync_devices').select('*').order('name'),
+        sb.from('sync_devices').select('*').order('last_ping', { ascending: false, nullsFirst: false }),
       ])
       if (st.error) throw st.error
       setStatus((st.data || [])[0] || null)
@@ -69,8 +69,17 @@ export default function PeopleSyncStatus() {
     ? { bg: 'var(--st-absent, #D64545)', text: `Attendance sync is down — no contact for ${ago(status?.last_beat_at)}` }
     : { bg: 'var(--st-present, #2E9E63)', text: 'Attendance sync is operational' }
 
-  // A device is considered reachable if the eSSL server pinged it within the last 30 minutes.
-  const devLive = (d) => d.last_ping && (Date.now() - new Date(d.last_ping)) < 30 * 60000
+  // Three states, not two. eSSL lists virtual readers ("Manual Entry (Attendance)") and
+  // long-decommissioned sites alongside the live ones; showing those as red "Offline" implies
+  // something is broken and buries the reader that actually went down this morning.
+  const devState = (d) => {
+    if (!d.last_ping) return 'unused'
+    const age = Date.now() - new Date(d.last_ping)
+    if (age < 30 * 60000) return 'online'                 // pinged within the poll window
+    if (age > 30 * 24 * 3600 * 1000) return 'unused'      // silent for a month = not in service
+    return 'offline'                                       // was recently alive, now is not
+  }
+  const DEV_LABEL = { online: 'Online', offline: 'Offline', unused: 'Not in use' }
 
   return (
     <Layout pageKey="people" pageTitle="Sync status">
@@ -137,10 +146,10 @@ export default function PeopleSyncStatus() {
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13,
-                              color: devLive(d) ? 'var(--st-present, #2E9E63)' : 'var(--st-absent, #D64545)' }}>
-                  {devLive(d) ? 'Online' : 'Offline'}
-                </div>
+                {(() => { const s = devState(d)
+                  const col = s === 'online' ? 'var(--st-present, #2E9E63)'
+                            : s === 'offline' ? 'var(--st-absent, #D64545)' : 'var(--muted)'
+                  return <div style={{ fontWeight: 600, fontSize: 13, color: col }}>{DEV_LABEL[s]}</div> })()}
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>Last ping {ago(d.last_ping)}</div>
               </div>
             </div>
