@@ -11,6 +11,7 @@ export default function AttendanceTabs({ role, isManager }) {
     { k: '/people/attendance/regularize', l: 'Regularize' },
     { k: '/people/attendance/swipes', l: 'Swipes' },
     ...(isMgmt ? [{ k: '/people/attendance/muster', l: 'Muster' }] : []),
+    ...(isMgmt ? [{ k: '/people/attendance/status', l: 'Sync' }] : []),
     ...(isMgmt ? [{ k: '/people/config?tab=attendance', l: 'Config' }] : []),
   ]
   const active = tabs.find(t => loc.pathname === t.k) || (loc.pathname.startsWith('/people/attendance/me') ? tabs[1] : null)

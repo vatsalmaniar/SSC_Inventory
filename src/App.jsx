@@ -69,6 +69,7 @@ const Handbook = lazy(() => import('./pages/Handbook'))
 const PeopleRegularize = lazy(() => import('./pages/PeopleRegularize'))
 const PeopleMuster = lazy(() => import('./pages/PeopleMuster'))
 const PeopleSwipes = lazy(() => import('./pages/PeopleSwipes'))
+const PeopleSyncStatus = lazy(() => import('./pages/PeopleSyncStatus'))
 const PurchaseInvoiceList = lazy(() => import('./pages/PurchaseInvoiceList'))
 const PurchaseInvoiceDetail = lazy(() => import('./pages/PurchaseInvoiceDetail'))
 const FCDashboard = lazy(() => import('./pages/FCDashboard'))
@@ -158,6 +159,7 @@ export default function App() {
           <Route path="/people/attendance/regularize" element={<PeopleRegularize />} />
           <Route path="/people/attendance/muster" element={<PeopleMuster />} />
           <Route path="/people/attendance/swipes" element={<PeopleSwipes />} />
+          <Route path="/people/attendance/status" element={<PeopleSyncStatus />} />
           <Route path="/people/kpi" element={<PeopleKpi />} />
           <Route path="/people/kpi/config" element={<PeopleKpiConfig />} />
           <Route path="/people/expenses" element={<PeopleExpenses />} />

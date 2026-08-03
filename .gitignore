@@ -42,5 +42,8 @@ Schnider BOM/
 # macOS cruft
 .DS_Store
 
-# On-prem connector — deployed by hand to the office PC, has its own release story
-connector/
+# The on-prem connector IS version-controlled: it is payroll-critical, it holds no secrets
+# (everything comes from environment variables), and an untracked copy on one PC is how a
+# three-day outage went unnoticed. Only its local runtime state is ignored.
+connector/essl_state.json
+connector/*.log

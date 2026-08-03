@@ -20,6 +20,26 @@ const json = (obj: unknown, status = 200) =>
 // YYYY-MM-DD in IST (work date)
 const istDate = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 
+// Mirror the reader states the connector read out of eTimeTrackLite, so device health is
+// visible in the app instead of only in the eSSL console. Best-effort: a connector that
+// cannot find the device table simply sends nothing, and sync must never fail over this.
+async function recordDevices(sb: any, devices: unknown) {
+  if (!Array.isArray(devices) || devices.length === 0) return
+  const rows = devices.slice(0, 50).map((d: any) => ({
+    device_id: String(d?.device_id ?? '').trim(),
+    name: d?.name ?? null,
+    serial_no: d?.serial_no ?? null,
+    location: d?.location ?? null,
+    last_ping: d?.last_ping ?? null,
+    status: d?.status ?? null,
+    seen_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })).filter((d: any) => d.device_id)
+  if (!rows.length) return
+  try { await sb.from('sync_devices').upsert(rows, { onConflict: 'device_id' }) }
+  catch (_) { /* never let device telemetry break punch ingestion */ }
+}
+
 Deno.serve(async (req) => {
   // simple health check (no data, no secret needed)
   if (req.method === 'GET') return json({ ok: true, service: 'essl-sync' })
@@ -52,7 +72,19 @@ Deno.serve(async (req) => {
       ref: p.external_ref, dir: p.direction === 'in' || p.direction === 'out' ? p.direction : null,
     })
   })
-  if (rows.length === 0) return json({ received: punches.length, inserted: 0, duplicates: 0, errors }, 200)
+  if (rows.length === 0) {
+    // Heartbeat. The connector now posts an empty batch on every idle poll, so "alive with
+    // nothing to send" is distinguishable from "stopped" — previously the two were identical
+    // from here, which is why a stop on 31 Jul went unnoticed until payroll needed the data.
+    // Only last_run_at moves; the punch watermark is untouched so an idle ping can never be
+    // mistaken for ingestion.
+    await sb.from('biometric_sync_state').upsert({
+      source, last_run_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }, { onConflict: 'source' })
+    await sb.rpc('sync_record_beat', { p_source: source, p_punches: 0 })
+    await recordDevices(sb, body?.devices)
+    return json({ received: punches.length, inserted: 0, duplicates: 0, heartbeat: true, errors }, 200)
+  }
 
   // bulk resolve employees — tolerant to zero-padding (021 == 21). An exact code always wins.
   // A stripped code that two different employees share ('010' and '10') is left OUT of the map
@@ -160,6 +192,9 @@ Deno.serve(async (req) => {
       }, 500)
     }
   }
+
+  await sb.rpc('sync_record_beat', { p_source: source, p_punches: inserted })
+  await recordDevices(sb, body?.devices)
 
   // advance the watermark
   const { data: st } = await sb.from('biometric_sync_state').select('rows_ingested').eq('source', source).maybeSingle()
