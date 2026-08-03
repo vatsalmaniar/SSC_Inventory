@@ -15,7 +15,7 @@ export default function ChangePassword() {
   const navigate = useNavigate()
   const [session, setSession]               = useState(null)
   const [profile, setProfile]               = useState(null)
-  const [step, setStep]                     = useState('form') // 'form' | 'confirm'
+  const [step, setStep]                     = useState('form') // 'form' | 'confirm' | 'mfa'
   const [newPwd, setNewPwd]                 = useState('')
   const [confirmPwd, setConfirmPwd]         = useState('')
   const [showNew, setShowNew]               = useState(false)
@@ -23,6 +23,13 @@ export default function ChangePassword() {
   const [submitting, setSubmitting]         = useState(false)
   const [savedAck, setSavedAck]             = useState(false)
   const [copied, setCopied]                 = useState(false)
+  // Inline MFA step-up: everyone has a TOTP factor, so a password change needs aal2. Rather
+  // than dead-ending with "log out and log in again" (which stranded the whole 90-day wave),
+  // we prompt for the 6-digit code right here, verify it → aal2, then complete the update.
+  const [mfaFactorId, setMfaFactorId]       = useState(null)
+  const [mfaCode, setMfaCode]               = useState('')
+  const [mfaError, setMfaError]             = useState('')
+  const [mfaBusy, setMfaBusy]               = useState(false)
   const submittingRef = useRef(false)
 
   useEffect(() => {
@@ -88,12 +95,40 @@ export default function ChangePassword() {
 
     await sb.auth.refreshSession()
     const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel()
+    submittingRef.current = false
+    setSubmitting(false)
+
+    // Needs step-up to aal2. Instead of dead-ending, ask for the 6-digit code inline.
     if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
-      setError('Your MFA session has expired. Please log out and log in again.')
-      setSubmitting(false)
-      submittingRef.current = false
+      const { data: factors } = await sb.auth.mfa.listFactors()
+      const verified = (factors?.totp || []).find(f => f.status === 'verified')
+      if (!verified) { setError('Your MFA session has expired. Please log out and log in again.'); return }
+      setMfaFactorId(verified.id); setMfaCode(''); setMfaError(''); setStep('mfa')
+      setTimeout(() => document.getElementById('cp-mfa-code')?.focus(), 100)
       return
     }
+
+    await doUpdate()
+  }
+
+  // Verify the TOTP code → elevates the session to aal2 → then complete the password change.
+  async function submitMfaCode() {
+    if (mfaBusy) return
+    if (mfaCode.length !== 6) { setMfaError('Enter the 6-digit code from your authenticator app.'); return }
+    setMfaBusy(true); setMfaError('')
+    const { data: challenge, error: chalErr } = await sb.auth.mfa.challenge({ factorId: mfaFactorId })
+    if (chalErr) { setMfaError(chalErr.message || 'Could not start verification. Try again.'); setMfaBusy(false); return }
+    const { error: verErr } = await sb.auth.mfa.verify({ factorId: mfaFactorId, challengeId: challenge.id, code: mfaCode })
+    if (verErr) { setMfaError('Invalid code. Try again.'); setMfaCode(''); setMfaBusy(false); return }
+    setMfaBusy(false)
+    await doUpdate()
+  }
+
+  async function doUpdate() {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    setSubmitting(true)
+    setError('')
 
     const { error: updateErr } = await sb.auth.updateUser({ password: newPwd })
 
@@ -318,6 +353,48 @@ export default function ChangePassword() {
             <div className="right-footer">
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
               <span>Once saved, this password will be required for every login.</span>
+            </div>
+          </div>
+        )}
+
+        {step === 'mfa' && (
+          <div className="right-inner">
+            <div className="right-eyebrow">Verify it's you</div>
+            <div className="right-title">Enter your 6-digit code</div>
+            <div className="right-sub">Open your authenticator app and enter the current code to confirm the password change.</div>
+
+            {mfaError && (
+              <div className="error-msg show">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                <span>{mfaError}</span>
+              </div>
+            )}
+
+            <div className="field">
+              <label className="field-label">Authenticator code</label>
+              <div className="input-wrap">
+                <span className="input-icon">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                </span>
+                <input id="cp-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+                  value={mfaCode}
+                  onChange={e => { setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setMfaError('') }}
+                  onKeyDown={e => e.key === 'Enter' && mfaCode.length === 6 && submitMfaCode()}
+                  placeholder="000000"
+                  style={{ letterSpacing:'0.35em', textAlign:'center', fontWeight:600 }} />
+              </div>
+            </div>
+
+            <button className="submit-btn" onClick={submitMfaCode} disabled={mfaCode.length !== 6 || mfaBusy}>
+              {mfaBusy ? <><div className="spinner"/><span>Verifying…</span></> : <span>Verify &amp; update password</span>}
+            </button>
+
+            <button style={{marginTop:12,width:'100%',background:'none',border:'none',color:'var(--gray-400)',fontSize:13,cursor:'pointer'}}
+              onClick={() => { setStep('confirm'); setMfaError('') }} disabled={mfaBusy}>← Back</button>
+
+            <div className="right-footer">
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              <span>This extra step keeps your account secure.</span>
             </div>
           </div>
         )}
