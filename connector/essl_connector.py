@@ -256,9 +256,11 @@ def _find_device_table(conn):
             pick = lambda *names: next((low[n] for n in names if n in low), None)
             found = {
                 "id":     idc,
-                "name":   pick("devicename", "device_name", "name", "devicealias"),
+                # eSSL eTimeTrackLite names these DeviceFName / DeviceLocation — not the
+                # DeviceName / Location the first guess assumed, which is why nothing matched.
+                "name":   pick("devicefname", "devicesname", "devicename", "device_name", "name", "devicealias"),
                 "serial": pick("serialnumber", "serialno", "serial_no", "machineno", "sn"),
-                "loc":    pick("location", "locationname", "branch", "locationid"),
+                "loc":    pick("devicelocation", "location", "locationname", "branch", "locationid"),
                 "ping":   pick("lastping", "last_ping", "lastseen", "lastactivity", "lastonline",
                                "lastconnected", "lastpingtime"),
                 "status": pick("status", "isactive", "connectionstatus", "isconnected"),
