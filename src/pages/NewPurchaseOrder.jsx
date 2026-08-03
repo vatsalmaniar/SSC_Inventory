@@ -26,6 +26,7 @@ export default function NewPurchaseOrder() {
   const [user, setUser]         = useState({ name: '', avatar: '', role: '', id: '' })
   const [submitting, setSubmitting] = useState(false)
   const submitGuard = useRef(false)
+  const addingCoRef = useRef(new Set())   // CO ids claimed by addCO — see the note there
 
   // Vendor
   const [vendorText, setVendorText] = useState('')
@@ -116,11 +117,24 @@ export default function NewPurchaseOrder() {
   }
 
   async function addCO(coId) {
-    if (coOrders.some(c => c.id === coId)) { toast('This CO is already on the PO'); return }
+    // Claim the CO id SYNCHRONOUSLY, before any await. The coOrders check below
+    // reads a closure that is still stale for a second call fired before the
+    // first commits — React StrictMode double-invokes the init effect in dev,
+    // and a double-click does the same in production. Both calls used to pass
+    // and each appended its own copy of the lines: a PO for double the qty
+    // against ONE order line, both rows sharing the same order_item_id.
+    if (addingCoRef.current.has(coId)) {
+      if (coOrders.some(c => c.id === coId)) toast('This CO is already on the PO')
+      return
+    }
+    addingCoRef.current.add(coId)
     const { data: order } = await sb.from('orders')
-      .select('id,order_number,customer_name,order_items(id,item_code,description,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty,dispatched_qty,procurement_source)')
+      // stock_qty MUST be selected here — without it coverage falls back to the
+      // legacy whole-line rule and a partly stock-allocated line looks fully
+      // unprocured (offered for re-purchase) or fully closed (unfixable ghost).
+      .select('id,order_number,customer_name,order_items(id,item_code,description,qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,line_status,cancelled_qty,dispatched_qty,stock_qty,procurement_source)')
       .eq('id', coId).single()
-    if (!order) return
+    if (!order) { addingCoRef.current.delete(coId); return }   // release so a retry can work
 
     // Find which CO items already have POs (active POs only — shared helper)
     const coveredByPo = await fetchActivePoCoveredQty((order.order_items || []).map(oi => oi.id))
@@ -174,6 +188,7 @@ export default function NewPurchaseOrder() {
         _line_qty: oi.qty,
         _cancelled: oi.cancelled_qty || 0,
         _dispatched: oi.dispatched_qty || 0,
+        _prior_stock: Number(oi.stock_qty) || 0,   // so allocations accumulate, never overwrite
         lp_unit_price: String(oi.lp_unit_price || ''),
         discount_pct: String(oi.discount_pct || '0'),
         unit_price_after_disc: String(oi.unit_price_after_disc || ''),
@@ -182,14 +197,19 @@ export default function NewPurchaseOrder() {
         item_type: typeByCode.get(oi.item_code) || '',
       }
     })
-    // First CO replaces the blank starter rows; further COs append below
+    // First CO replaces the blank starter rows; further COs append below.
+    // Dedupe by order_item_id inside the functional update — belt-and-braces so
+    // no CO line can ever appear twice even if two adds slip through.
     setItems(prev => {
       const kept = prev.filter(it => it.item_code.trim() || it.co_id)
-      return [...kept, ...prefilled]
+      const already = new Set(kept.map(it => it.order_item_id).filter(Boolean))
+      const fresh = prefilled.filter(p => !already.has(p.order_item_id))
+      return [...kept, ...fresh]
     })
   }
 
   function removeCO(coId) {
+    addingCoRef.current.delete(coId)   // allow re-adding after removal
     const nextCOs = coOrders.filter(c => c.id !== coId)
     setCoOrders(nextCOs)
     setSscCoNo(nextCOs.map(c => c.order_number).join(', '))
@@ -207,6 +227,7 @@ export default function NewPurchaseOrder() {
   function handlePoTypeChange(type) {
     setPoType(type)
     if (type !== 'CO') {
+      addingCoRef.current.clear()   // switching away clears the claimed-CO set
       setCoOrders([])
       setCOText('')
       setSscCoNo('')
@@ -326,7 +347,13 @@ export default function NewPurchaseOrder() {
       const lineQty     = parseFloat(s._line_qty) || 0
       const cancelled   = parseFloat(s._cancelled) || 0
       const dispatched  = parseFloat(s._dispatched) || 0
-      const stored = Math.min(sq + dispatched, Math.max(0, lineQty - cancelled))
+      const priorStock  = parseFloat(s._prior_stock) || 0
+      // ACCUMULATE onto what this line already had. max(prior, dispatched) is the
+      // existing stock-sourced base: prior already folds in any dispatched units
+      // counted at an earlier close, so adding dispatched again would double-count;
+      // on a first close prior is 0 and the dispatched units ARE stock-sourced
+      // (they shipped with no PO behind them). Capped at the line's live qty.
+      const stored = Math.min(Math.max(priorStock, dispatched) + sq, Math.max(0, lineQty - cancelled))
       const patch = full ? { stock_qty: stored, procurement_source: 'stock' } : { stock_qty: stored }
       const { error } = await sb.from('order_items').update(patch).eq('id', s.order_item_id)
       if (error) return error

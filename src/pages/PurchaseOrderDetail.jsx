@@ -111,6 +111,7 @@ export default function PurchaseOrderDetail() {
   // from several COs while the header stores only the first one.
   const [linkedOrders, setLinkedOrders] = useState([])
   const [oiOrderMap, setOiOrderMap] = useState({})   // order_item_id -> order_id
+  const [overCoveredLines, setOverCoveredLines] = useState([])  // PO qty > what the CO still needs
   const isMultiCO = linkedOrders.length > 1
   const cancelledLinked = linkedOrders.filter(o => o.status === 'cancelled')
   const shortCO = n => (n || '').replace(/^(Temp|SSC)\//, '').replace(/\/\d{2}-\d{2}$/, '')
@@ -195,12 +196,32 @@ export default function PurchaseOrderDetail() {
       const lineOiIds = [...new Set((itemsRes.data || []).map(pi => pi.order_item_id).filter(Boolean))]
       let oiRows = []
       if (lineOiIds.length) {
-        const { data } = await sb.from('order_items').select('id,order_id').in('id', lineOiIds)
+        const { data } = await sb.from('order_items').select('id,order_id,qty,cancelled_qty,stock_qty,line_status').in('id', lineOiIds)
         oiRows = data || []
       }
       const omap = {}
       for (const r of oiRows) omap[r.id] = r.order_id
       setOiOrderMap(omap)
+
+      // Over-cover detection: the customer reduced qty (or closed part from stock)
+      // after this PO was raised, so the PO now commits the vendor to more than
+      // the customer needs. Derived at read time — cannot go stale.
+      const oiById = {}
+      for (const r of oiRows) oiById[r.id] = r
+      const over = []
+      for (const pi of (itemsRes.data || [])) {
+        const oi = oiById[pi.order_item_id]
+        if (!oi) continue
+        const stillNeeded = (oi.line_status || 'active') !== 'active'
+          ? 0
+          : Math.max(0, (Number(oi.qty) || 0) - (Number(oi.cancelled_qty) || 0) - (Number(oi.stock_qty) || 0))
+        const onThisPo = Number(pi.qty) || 0
+        if (onThisPo > stillNeeded) {
+          over.push({ po_item_id: pi.id, item_code: pi.item_code, po_qty: onThisPo, still_needed: stillNeeded,
+                      excess: onThisPo - stillNeeded, received: Number(pi.received_qty) || 0, order_id: oi.order_id })
+        }
+      }
+      setOverCoveredLines(over)
       const orderIds = [...new Set([...(poRes.data.order_id ? [poRes.data.order_id] : []), ...oiRows.map(r => r.order_id).filter(Boolean)])]
       if (orderIds.length) {
         const [{ data: ords }, { data: stockRows }] = await Promise.all([
@@ -1158,11 +1179,71 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
   async function saveEdit() {
     if (saveGuard.current) return
-    saveGuard.current = true
     const filled = editItems.filter(i => i.item_code?.trim())
-    if (!filled.length) { saveGuard.current = false; toast('Add at least one line item'); return }
-    setSaving(true)
+    if (!filled.length) { toast('Add at least one line item'); return }
     const total = filled.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0)
+
+    // ── Build a field-level diff BEFORE writing anything ──────────────────────
+    // "Purchase Order edited" told us nothing. Every changed field is now named
+    // with its before/after so an amended PO can be reconstructed from the log.
+    const num = v => Number(v) || 0
+    const headerFields = [
+      ['Expected delivery', po.expected_delivery || '', editForm.expected_delivery || ''],
+      ['Delivery to', po.fulfilment_center || '', editForm.fulfilment_center || ''],
+      ['Delivery address', po.delivery_address || '', editForm.delivery_address?.trim() || ''],
+      ['Payment terms', po.payment_terms || '', editForm.payment_terms?.trim() || ''],
+      ['Purchase requisition', po.purchase_requisition || '', editForm.purchase_requisition?.trim() || ''],
+      ['Notes (vendor)', po.notes || '', editForm.notes?.trim() || ''],
+      ['Notes (internal)', po.ssc_notes || '', editForm.ssc_notes?.trim() || ''],
+    ]
+    const changes = headerFields
+      .filter(([, before, after]) => String(before) !== String(after))
+      .map(([label, before, after]) => `${label}: "${before || '—'}" → "${after || '—'}"`)
+
+    const beforeById = new Map(items.map(i => [i.id, i]))
+    const keptIds = new Set(filled.map(i => i.id).filter(Boolean))
+    let qtyOrPriceChanged = false
+    for (const it of filled) {
+      const b = it.id ? beforeById.get(it.id) : null
+      if (!b) { changes.push(`Line ADDED: ${it.item_code} × ${num(it.qty)} @ ${fmtINR(num(it.unit_price_after_disc))}`); qtyOrPriceChanged = true; continue }
+      const lineDiff = []
+      if (num(b.qty) !== num(it.qty)) { lineDiff.push(`qty ${num(b.qty)} → ${num(it.qty)}`); qtyOrPriceChanged = true }
+      if (num(b.lp_unit_price) !== num(it.lp_unit_price)) { lineDiff.push(`LP ${fmtINR(num(b.lp_unit_price))} → ${fmtINR(num(it.lp_unit_price))}`); qtyOrPriceChanged = true }
+      if (num(b.discount_pct) !== num(it.discount_pct)) { lineDiff.push(`disc ${num(b.discount_pct)}% → ${num(it.discount_pct)}%`); qtyOrPriceChanged = true }
+      if ((b.delivery_date || '') !== (it.delivery_date || '')) lineDiff.push(`delivery ${b.delivery_date || '—'} → ${it.delivery_date || '—'}`)
+      if ((b.item_code || '') !== (it.item_code || '').trim()) { lineDiff.push(`code ${b.item_code} → ${it.item_code}`); qtyOrPriceChanged = true }
+      if (lineDiff.length) changes.push(`Line ${b.item_code}: ${lineDiff.join(', ')}`)
+    }
+    const removed = items.filter(i => !keptIds.has(i.id))
+    for (const r of removed) {
+      if ((Number(r.received_qty) || 0) > 0) {
+        toast(`${r.item_code} already has ${r.received_qty} received via GRN — it cannot be removed. Reduce the qty instead.`, 'error')
+        return
+      }
+      changes.push(`Line REMOVED: ${r.item_code} × ${num(r.qty)}`)
+      qtyOrPriceChanged = true
+    }
+    if (num(po.total_amount) !== num(total)) changes.push(`PO total: ${fmtINR(num(po.total_amount))} → ${fmtINR(total)}`)
+    if (!changes.length) { toast('No changes to save'); setEditMode(false); return }
+
+    // ── Post-approval amendments go back for re-approval ──────────────────────
+    // An approval must vouch for the numbers it approved. Commercial changes
+    // (qty / price / lines) after approval reset the approval; admin/text-only
+    // changes (address, notes, dates) do not.
+    const wasApproved = !['draft','pending_approval'].includes(po.status)
+    const needsReapproval = wasApproved && qtyOrPriceChanged
+    if (needsReapproval) {
+      const ok = window.confirm(
+        `This PO is ${PO_STATUS_LABELS[po.status] || po.status} and you are changing quantity/price/lines:\n\n` +
+        changes.slice(0, 8).join('\n') +
+        `\n\nIt will return to PENDING APPROVAL and must be approved again before it can proceed.` +
+        `\n\nThe vendor already holds the previous version — agree the amendment with them.\n\nContinue?`
+      )
+      if (!ok) return
+    }
+
+    saveGuard.current = true
+    setSaving(true)
 
     const { error: poErr } = await sb.from('purchase_orders').update({
       expected_delivery: editForm.expected_delivery || null,
@@ -1175,15 +1256,21 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
       purchase_requisition: editForm.purchase_requisition?.trim() || null,
       total_amount: total,
       updated_at: new Date().toISOString(),
+      // Re-approval required: clear the stamp so it can never vouch for numbers
+      // it did not approve.
+      ...(needsReapproval ? { status: 'pending_approval', approved_by: null, approved_at: null } : {}),
     }).eq('id', id)
 
     if (poErr) { toast(friendlyError(poErr, "Save failed. Please try again.")); setSaving(false); saveGuard.current = false; return }
 
-    const { error: delErr } = await sb.from('po_items').delete().eq('po_id', id)
-    if (delErr) { toast('Failed to update items: ' + delErr.message); setSaving(false); saveGuard.current = false; return }
-    if (filled.length) {
-      const rows = filled.map((item, idx) => ({
-        po_id: id, sr_no: idx + 1,
+    // Update existing lines in place; insert only new ones; delete only removed.
+    // The old delete-all + reinsert wiped received_qty and description and broke
+    // grn_items.po_item_id / po_delivery_dates.po_item_id links on every edit.
+    let lineErr = null
+    for (let idx = 0; idx < filled.length; idx++) {
+      const item = filled[idx]
+      const payload = {
+        sr_no: idx + 1,
         item_code: item.item_code.trim(),
         qty: parseFloat(item.qty) || 0,
         lp_unit_price: parseFloat(item.lp_unit_price) || 0,
@@ -1192,13 +1279,28 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
         total_price: parseFloat(item.total_price) || 0,
         delivery_date: item.delivery_date || null,
         order_item_id: item.order_item_id || null,
-      }))
-      const { error: insErr } = await sb.from('po_items').insert(rows)
-      if (insErr) { toast(friendlyError(insErr, "PO updated but items failed. Please try again.")); setSaving(false); saveGuard.current = false; await loadPO(); return }
+      }
+      const { error } = item.id
+        ? await sb.from('po_items').update(payload).eq('id', item.id)
+        : await sb.from('po_items').insert({ ...payload, po_id: id })
+      if (error) { lineErr = error; break }
+    }
+    if (!lineErr) {
+      for (const r of removed) {
+        const { error } = await sb.from('po_items').delete().eq('id', r.id)
+        if (error) { lineErr = error; break }
+      }
+    }
+    if (lineErr) {
+      toast(friendlyError(lineErr, "PO header saved but a line failed — please review the lines."))
+      setSaving(false); saveGuard.current = false; await loadPO(); return
     }
 
-    await logActivity('Purchase Order edited')
-    toast('Purchase Order updated', 'success')
+    await logActivity(
+      (needsReapproval ? 'PO AMENDED after approval — sent back for re-approval. ' : 'Purchase Order edited. ') +
+      changes.join(' | ')
+    )
+    toast(needsReapproval ? 'PO amended — returned to Pending Approval' : 'Purchase Order updated', 'success')
     setEditMode(false); setSaving(false); saveGuard.current = false
     await loadPO()
   }
@@ -1348,6 +1450,38 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div>
               <div className="od-pending-banner-label">Awaiting Approval</div>
               <div>Submitted as {po.po_number}. Once approved, it can be placed with the vendor.</div>
+            </div>
+          </div>
+        )}
+
+        {/* Customer reduced qty after this PO was raised — the PO over-commits the
+            vendor. Partial cancellations leave the order ACTIVE, so none of the
+            cancelled-CO banners below would ever fire for this case. */}
+        {overCoveredLines.length > 0 && !isCancelled && (
+          <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderLeft:'4px solid #ea580c', borderRadius:10, padding:'14px 18px', marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+              <svg fill="none" stroke="#ea580c" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}>
+                <path d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/>
+              </svg>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'#9a3412', marginBottom:3 }}>
+                  PO covers more than the customer now needs
+                </div>
+                <div style={{ fontSize:12, color:'#7c2d12', marginBottom:8 }}>
+                  The customer order was reduced (or part closed from stock) after this PO was raised.
+                  {['draft','pending_approval'].includes(po.status)
+                    ? ' Edit the PO to match before it goes to the vendor.'
+                    : ' This PO is already with the vendor — agree the reduction with them before amending.'}
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {overCoveredLines.map(l => (
+                    <span key={l.po_item_id} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'#9a3412', background:'white', border:'1px solid #fed7aa', padding:'3px 8px', borderRadius:6 }}>
+                      {l.item_code}: PO {l.po_qty} · needed {l.still_needed} · <span style={{ color:'#b91c1c' }}>excess {l.excess}</span>
+                      {l.received > 0 && <span style={{ fontSize:9, fontWeight:700, color:'#92400e' }} title="Goods already received against this line">GRN {l.received}</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}

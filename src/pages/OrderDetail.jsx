@@ -161,7 +161,7 @@ export default function OrderDetail() {
   const [batches, setBatches]                     = useState([])
   const [linkedPOs, setLinkedPOs]                 = useState([])
   const [poEarliestDelivery, setPoEarliestDelivery] = useState({})
-  const [poCoveredItemIds, setPoCoveredItemIds]   = useState(new Set())
+  const [poCoveredItemIds, setPoCoveredItemIds]   = useState(new Map())
   const [custCode, setCustCode]                   = useState('')
 
   // Stock status (inventory check)
@@ -255,7 +255,7 @@ export default function OrderDetail() {
         pos.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
         setLinkedPOs(pos)
         const poIds = pos.map(p => p.id)
-        if (!poIds.length) { setPoCoveredItemIds(new Set()); setPoEarliestDelivery({}); return }
+        if (!poIds.length) { setPoCoveredItemIds(new Map()); setPoEarliestDelivery({}); return }
         // Pull line-level coverage + earliest pending delivery date per PO.
         // Pending = qty > received_qty. We want the soonest arrival per PO.
         // Cancelled POs stay in the linked list (visibility) but their lines
@@ -263,7 +263,14 @@ export default function OrderDetail() {
         const cancelledPoIds = new Set(pos.filter(p => p.status === 'cancelled').map(p => p.id))
         const { data: pis } = await sb.from('po_items').select('po_id, order_item_id, delivery_date, qty, received_qty').in('po_id', poIds)
         const activePis = (pis || []).filter(pi => !cancelledPoIds.has(pi.po_id))
-        setPoCoveredItemIds(new Set(activePis.filter(pi => pi.order_item_id).map(pi => pi.order_item_id)))
+        // QUANTITY-aware coverage: a Map of order_item_id → covered qty, not a
+        // Set. With a Set, one PO line for 1 of 100 units marked the whole line
+        // covered and the order read "Fully Covered" — see lib/coverage.js.
+        const coveredQty = new Map()
+        activePis.filter(pi => pi.order_item_id).forEach(pi => {
+          coveredQty.set(pi.order_item_id, (coveredQty.get(pi.order_item_id) || 0) + (Number(pi.qty) || 0))
+        })
+        setPoCoveredItemIds(coveredQty)
         const earliest = {}
         activePis.forEach(pi => {
           const pending = (pi.qty || 0) > (pi.received_qty || 0)
@@ -275,7 +282,7 @@ export default function OrderDetail() {
       })())
     } else {
       setLinkedPOs([])
-      setPoCoveredItemIds(new Set())
+      setPoCoveredItemIds(new Map())
       setPoEarliestDelivery({})
     }
     Promise.all(bg)
@@ -929,9 +936,22 @@ if (match) {
       const cq = parseFloat(l.cancel_qty)
       if (!cq || cq <= 0) { toast(`${l.item_code}: enter a cancel qty greater than 0`); return }
       if (cq > l.pending) { toast(`${l.item_code}: cancel qty (${cq}) exceeds pending (${l.pending})`); return }
-      linesToCancel.push({ item_id: l.item_id, cancel_qty: cq })
+      linesToCancel.push({ item_id: l.item_id, cancel_qty: cq, item_code: l.item_code })
     }
     if (!linesToCancel.length) { toast('Select at least one line and enter qty to cancel'); return }
+
+    // Does this cancellation resolve EVERY active line? If yes it is effectively a
+    // full cancellation (the RPC will close/cancel the header) and ops should be
+    // told to cancel/relink the PO. If not, the order lives on with less qty and
+    // the PO merely over-covers — a different instruction entirely.
+    const cancelByItem = new Map(linesToCancel.map(l => [l.item_id, l.cancel_qty]))
+    const resolvesEverything = (order?.order_items || [])
+      .filter(oi => (oi.line_status || 'active') === 'active')
+      .every(oi => {
+        const after = (Number(oi.posted_qty) || 0) + (Number(oi.cancelled_qty) || 0) + (cancelByItem.get(oi.id) || 0)
+        return after >= (Number(oi.qty) || 0)
+      })
+    const cancelDetail = linesToCancel.map(l => `${l.item_code} −${l.cancel_qty}`).join(', ')
     cancelGuardRef.current = true
     setSaving(true)
     const { error } = await sb.rpc('cancel_order_lines', {
@@ -947,7 +967,7 @@ if (match) {
       setSaving(false)
       return
     }
-    await notifyOpsForLinkedPOs()
+    await notifyOpsForLinkedPOs(resolvesEverything ? 'full' : 'partial', cancelDetail)
     toast('Lines cancelled', 'success')
     closeCancelDrawer()
     await loadOrder()
@@ -956,7 +976,10 @@ if (match) {
   }
 
   // ── Notify ops/admin about linked POs when a CO is cancelled ──
-  async function notifyOpsForLinkedPOs() {
+  // `scope`: 'full' = whole order cancelled · 'partial' = some qty/lines reduced.
+  // The distinction matters — a partial reduction must NOT tell ops to relink or
+  // cancel the PO; the order is still live and only the quantity shrank.
+  async function notifyOpsForLinkedPOs(scope = 'full', detail = '') {
     try {
       const { data: headerPos } = await sb.from('purchase_orders').select('id,po_number,status').eq('order_id', id)
       let linkedPos = headerPos || []
@@ -981,10 +1004,17 @@ if (match) {
       const rows = []
       for (const po of linkedPos) {
         let msg = null
-        if (PRE_APPROVAL.includes(po.status)) {
+        if (scope === 'partial') {
+          // Order still live — the PO now over-covers what the customer needs.
+          msg = `${order.order_number} quantity reduced${detail ? ` (${detail})` : ''} — PO ${po.po_number} (${po.status}) still covers the ORIGINAL qty. Reduce it with the vendor if the balance is no longer needed. Do NOT cancel or relink the PO.`
+        } else if (PRE_APPROVAL.includes(po.status)) {
           msg = `${order.order_number} cancelled — cancel draft PO ${po.po_number} (${po.status})`
         } else if (POST_APPROVAL.includes(po.status)) {
           msg = `${order.order_number} cancelled — relink PO ${po.po_number} (${po.status}) to a new CO`
+        } else {
+          // material_received / closed / cancelled — previously fell through with
+          // NO alert at all, so goods bought for a dead order went unnoticed.
+          msg = `${order.order_number} cancelled — PO ${po.po_number} is already ${po.status}. Material was purchased for this order; confirm where it goes.`
         }
         if (!msg) continue
         for (const t of targets) {

@@ -143,7 +143,24 @@ export default function NewGRN() {
 
   async function selectPOForRow(idx, po) {
     // Load pending items for this PO
-    const { data: poItems } = await sb.from('po_items').select('id,item_code,qty,received_qty,sr_no').eq('po_id', po.id).order('sr_no')
+    const { data: poItems } = await sb.from('po_items').select('id,item_code,qty,received_qty,sr_no,order_item_id').eq('po_id', po.id).order('sr_no')
+
+    // Which customer each PO line belongs to. On a clubbed PO the same item can
+    // appear for two customers — without this the receiver picks blind and the
+    // material gets pegged to whoever happens to be first in the list.
+    const oiIds = [...new Set((poItems || []).map(pi => pi.order_item_id).filter(Boolean))]
+    const custByOi = {}
+    if (oiIds.length) {
+      const { data: oiRows } = await sb.from('order_items').select('id,order_id').in('id', oiIds)
+      const orderIds = [...new Set((oiRows || []).map(r => r.order_id).filter(Boolean))]
+      const custByOrder = {}
+      if (orderIds.length) {
+        const { data: ords } = await sb.from('orders').select('id,order_number,customer_name').in('id', orderIds)
+        for (const o of (ords || [])) custByOrder[o.id] = o
+      }
+      for (const r of (oiRows || [])) if (custByOrder[r.order_id]) custByOi[r.id] = custByOrder[r.order_id]
+    }
+
     const pending = (poItems || []).filter(pi => pi.qty > (pi.received_qty || 0)).map(pi => ({
       po_item_id: pi.id,
       item_code: pi.item_code,
@@ -151,7 +168,10 @@ export default function NewGRN() {
       ordered_qty: pi.qty,
       received_qty_so_far: pi.received_qty || 0,
       pending_qty: pi.qty - (pi.received_qty || 0),
+      customer_name: custByOi[pi.order_item_id]?.customer_name || '',
+      co_number: custByOi[pi.order_item_id]?.order_number || '',
     }))
+    const multiCust = new Set(pending.map(p => p.customer_name).filter(Boolean)).size > 1
 
     setItems(prev => {
       const next = [...prev]
@@ -161,6 +181,7 @@ export default function NewGRN() {
         _poId: po.id,
         _poNumber: po.po_number,
         _poItems: pending,
+        _multiCust: multiCust,
         item_code: '',
         po_item_id: '',
         ordered_qty: 0,
@@ -569,6 +590,16 @@ export default function NewGRN() {
               </svg>
               GRN Items
             </div>
+            {items.some(i => i._multiCust) && (
+              <div style={{ margin: '0 0 10px', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <svg fill="none" stroke="#b45309" strokeWidth="2" viewBox="0 0 24 24" style={{ width: 18, height: 18, flexShrink: 0, marginTop: 1 }}>
+                  <path d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/>
+                </svg>
+                <div style={{ fontSize: 12, color: '#92400e' }}>
+                  <b>Clubbed PO — lines belong to different customers.</b> Each line shows its customer. If the vendor short-shipped, receive against the correct customer's line — the quantity you enter is pegged to that customer's order and drives their delivery.
+                </div>
+              </div>
+            )}
             <div className="no-items-table-wrap">
               <table className="no-items-table">
                 <thead>
@@ -627,7 +658,7 @@ export default function NewGRN() {
                               const taken = usedElsewhere.has(pi.po_item_id) && pi.po_item_id !== item.po_item_id
                               return (
                               <option key={pi.po_item_id} value={pi.po_item_id} disabled={taken}>
-                                {pi.item_code}{pi.sr_no ? ` · Line ${pi.sr_no}` : ''} (Pending: {pi.pending_qty}){taken ? ' — already added' : ''}
+                                {pi.item_code}{pi.sr_no ? ` · Line ${pi.sr_no}` : ''}{pi.customer_name ? ` — ${pi.customer_name}${pi.co_number ? ` (${pi.co_number})` : ''}` : ''} (Pending: {pi.pending_qty}){taken ? ' — already added' : ''}
                               </option>
                             )})}
                           </select>
