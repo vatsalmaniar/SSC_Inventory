@@ -65,7 +65,7 @@ export default function ProcurementDashboard() {
     if (coList.length) {
       // Coverage by po_items.order_item_id (active POs only) — shared helper.
       const allItemIds = coList.flatMap(o => (o.order_items || []).map(oi => oi.id))
-      const coveredSet = await fetchActivePoCoveredQty(allItemIds)
+      const coveredSet = await fetchActivePoCoveredQty(allItemIds, false)  // dashboard is live-only
       coList = coList.map(o => {
         const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
         const total = activeItems.length

@@ -230,7 +230,10 @@ BEGIN
   ) VALUES (
     p_order_id,
     COALESCE(v_user_name, 'system'),
-    'Partial cancellation — ' || v_total_cancel::text || ' units (₹' ||
+    -- Label by what actually happened. This said 'Partial cancellation' even for
+    -- a full-order cancel, so the audit trail contradicted the event.
+    CASE WHEN v_active_lines = 0 THEN 'Order cancellation — ' ELSE 'Partial cancellation — ' END
+      || v_total_cancel::text || ' units (₹' ||
       to_char(v_total_value, 'FM999,999,999.00') || ')'
       || ' · Initiated by ' ||
       CASE

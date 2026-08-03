@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmtShort, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
-import { lineIsHandled } from '../lib/coverage'
+import { lineIsHandled, COVERING_PO_STATUSES } from '../lib/coverage'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -17,7 +17,13 @@ const STATUS_LABELS = { inv_check:'Order Approved', inventory_check:'Inventory C
 const STATUS_COLORS = { inv_check:'#1a73e8', inventory_check:'#0EA5E9', dispatch:'#06B6D4', cancelled:'#EF4444' }
 
 const PRE_APPROVAL_PO_STATUSES = ['draft', 'pending_approval']
+// PO is live with the vendor while its customer order is dead → relink or stop it.
 const ORPHAN_PO_STATUSES = ['approved','placed','acknowledged','delivery_confirmation','partially_received']
+// PO already landed while its customer order is dead → the MATERIAL exists and
+// needs a home. Previously excluded from the orphan tab entirely, so goods
+// bought for cancelled orders were invisible in every worklist (audit F-17).
+// Kept separate from ORPHAN_PO_STATUSES because the required action is different.
+const DELIVERED_PO_STATUSES = ['material_received','closed']
 
 export default function ProcurementOrders() {
   const navigate = useNavigate()
@@ -55,7 +61,7 @@ export default function ProcurementOrders() {
         .neq('status', 'pending')
         .gte('created_at', FY_START)
         .order('created_at', { ascending: false }),
-      sb.from('purchase_orders').select('id,order_id,status').in('status', ORPHAN_PO_STATUSES).eq('is_test', testMode),
+      sb.from('purchase_orders').select('id,order_id,status').in('status', [...ORPHAN_PO_STATUSES, ...DELIVERED_PO_STATUSES]).eq('is_test', testMode),
     ])
 
     // Chunk .in() lookups — once we cross ~150 UUIDs the URL exceeds PostgREST's
@@ -114,22 +120,37 @@ export default function ProcurementOrders() {
         if (!posByCo[coId].some(x => x.id === poId)) posByCo[coId].push({ id: poId, status })
       }
       const linkedPos = await chunkedFetch(
-        (slice) => sb.from('purchase_orders').select('id,order_id,status').in('order_id', slice),
+        // is_test must match the page mode — without it a test PO supplies
+        // coverage/orphan state to a LIVE customer order, and vice versa.
+        (slice) => sb.from('purchase_orders').select('id,order_id,status').in('order_id', slice).eq('is_test', testMode),
         coIds
       )
       for (const p of linkedPos) addPo(p.order_id, p.id, p.status)
       // Coverage by po_items.order_item_id directly — not via the PO header's
       // order_id — so lines on a PO clubbing multiple COs still count.
-      // Cancelled POs do NOT count (their items need procuring again).
+      // Only COVERING_PO_STATUSES count (cancelled and DRAFT do not) — the
+      // status list is owned by lib/coverage.js so this query and the helper
+      // can never drift apart.
       const allItemIds = coOrders.flatMap(o => (o.order_items || []).map(oi => oi.id))
       const poItems = await chunkedFetch(
         (slice) => sb.from('po_items').select('order_item_id, qty, po_id, purchase_orders!inner(status)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
         allItemIds
       )
-      // Map of order_item_id -> covered qty (quantity-precise, shared helper).
+      // Map of order_item_id -> covered qty. Drafts are tracked separately so a
+      // requirement is visible AND the buyer is told a draft already exists,
+      // rather than silently hidden (old behaviour) or silently duplicated.
       const coveredSet = new Map()
-      for (const pi of poItems) coveredSet.set(pi.order_item_id, (coveredSet.get(pi.order_item_id) || 0) + (Number(pi.qty) || 0))
-      for (const pi of poItems) addPo(oiToCo[pi.order_item_id], pi.po_id, pi.purchase_orders?.status)
+      const draftPoByCo = {}
+      for (const pi of poItems) {
+        const st = pi.purchase_orders?.status
+        if (COVERING_PO_STATUSES.includes(st)) {
+          coveredSet.set(pi.order_item_id, (coveredSet.get(pi.order_item_id) || 0) + (Number(pi.qty) || 0))
+        } else if (st === 'draft') {
+          const coId = oiToCo[pi.order_item_id]
+          if (coId) (draftPoByCo[coId] = draftPoByCo[coId] || new Set()).add(pi.po_id)
+        }
+        addPo(oiToCo[pi.order_item_id], pi.po_id, st)
+      }
       coOrders = coOrders.map(o => {
         // Only count active (non-cancelled / non-short-closed) lines for coverage
         const activeItems = (o.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
@@ -140,8 +161,10 @@ export default function ProcurementOrders() {
         const stockClosed = activeItems.filter(oi => oi.procurement_source === 'stock').length
         const linkedPosList = posByCo[o.id] || []
         const orphanPOs = linkedPosList.filter(p => ORPHAN_PO_STATUSES.includes(p.status))
+        const deliveredOrphanPOs = linkedPosList.filter(p => DELIVERED_PO_STATUSES.includes(p.status))
         const hasPostApprovalPO = linkedPosList.some(p => !PRE_APPROVAL_PO_STATUSES.includes(p.status))
-        return { ...o, _totalItems: total, _coveredItems: covered, _stockClosed: stockClosed, _hasPostApprovalPO: hasPostApprovalPO, _orphanPOs: orphanPOs }
+        const draftPOs = linkedPosList.filter(p => (draftPoByCo[o.id] || new Set()).has(p.id))
+        return { ...o, _totalItems: total, _coveredItems: covered, _stockClosed: stockClosed, _hasPostApprovalPO: hasPostApprovalPO, _orphanPOs: orphanPOs, _deliveredOrphanPOs: deliveredOrphanPOs, _draftPOs: draftPOs }
       })
     }
     setOrders(coOrders)
@@ -154,7 +177,10 @@ export default function ProcurementOrders() {
     if (o.status === 'cancelled') return !o._hasPostApprovalPO
     return o._coveredItems < o._totalItems
   })
-  const orphanOrders = timelineOrders.filter(o => o.status === 'cancelled' && (o._orphanPOs?.length > 0))
+  // Orphans = a cancelled CO whose PO is either still live with the vendor, or
+  // already landed (material bought for an order that no longer exists).
+  const orphanOrders = timelineOrders.filter(o => o.status === 'cancelled' &&
+    ((o._orphanPOs?.length > 0) || (o._deliveredOrphanPOs?.length > 0)))
 
   const visible = tab === 'orphan' ? orphanOrders : pendingOrders
   const q = search.trim().toLowerCase()
@@ -293,8 +319,26 @@ export default function ProcurementOrders() {
                             style={{ fontSize: 11, padding: '5px 12px', fontWeight: 600, border: 'none', borderRadius: 6, background: '#EA580C', color: 'white', cursor: 'pointer' }}>
                             Relink PO →{o._orphanPOs.length > 1 ? ` (${o._orphanPOs.length})` : ''}
                           </button>
+                        ) : tab === 'orphan' && isCancelled && o._deliveredOrphanPOs?.length > 0 ? (
+                          // Material already arrived for a dead order — different problem,
+                          // different action: find out where the goods went.
+                          <button onClick={(e) => { e.stopPropagation(); navigate('/procurement/po/' + o._deliveredOrphanPOs[0].id) }}
+                            title="Goods were received against this PO but the customer order was cancelled — trace where the material went"
+                            style={{ fontSize: 11, padding: '5px 12px', fontWeight: 600, border: 'none', borderRadius: 6, background: '#7C2D12', color: 'white', cursor: 'pointer' }}>
+                            Material received — trace →{o._deliveredOrphanPOs.length > 1 ? ` (${o._deliveredOrphanPOs.length})` : ''}
+                          </button>
                         ) : isCancelled ? (
                           <span style={{ fontSize: 11, fontWeight: 600, color: '#B91C1C' }}>Cancel draft PO</span>
+                        ) : o._draftPOs?.length > 0 ? (
+                          // A draft PO already covers some of this CO. Drafts no longer
+                          // count as coverage (an abandoned one used to hide the
+                          // requirement forever) — so send the buyer to the existing
+                          // draft instead of letting them raise a duplicate.
+                          <button onClick={(e) => { e.stopPropagation(); navigate('/procurement/po/' + o._draftPOs[0].id) }}
+                            title="A draft PO already exists for this order — open it instead of creating another"
+                            style={{ fontSize: 11, padding: '5px 12px', fontWeight: 600, border: '1px solid #FDE68A', borderRadius: 6, background: '#FEF3C7', color: '#92400E', cursor: 'pointer' }}>
+                            Open draft PO →{o._draftPOs.length > 1 ? ` (${o._draftPOs.length})` : ''}
+                          </button>
                         ) : (
                           <button onClick={(e) => { e.stopPropagation(); navigate('/procurement/po/new?order_id=' + o.id) }}
                             style={{ fontSize: 11, padding: '5px 12px', fontWeight: 600, border: 'none', borderRadius: 6, background: 'var(--ssc-deep)', color: 'white', cursor: 'pointer' }}>

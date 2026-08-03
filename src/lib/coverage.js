@@ -20,17 +20,36 @@
 
 import { sb } from './supabase'
 
-// Map of order_item_id -> total qty on NON-cancelled PO lines.
+// PO statuses that COUNT as covering a customer requirement.
+//
+// 'draft' is deliberately excluded: a draft is one person's unsubmitted work
+// and can sit forever, and while it counted as coverage it hid a real
+// requirement from the procurement queue and the clubbing picker indefinitely.
+// 'pending_approval' DOES count — the buying decision is made, it is only
+// awaiting a signature. 'cancelled' never counts.
+//
+// Excluding drafts creates the opposite risk (a second buyer raising a
+// duplicate PO for a line that already has a draft), so the queue and the
+// New-PO picker BOTH surface "a draft PO already exists" — see
+// ProcurementOrders (_draftPOs) and NewPurchaseOrder (addCO warning).
+export const COVERING_PO_STATUSES = [
+  'pending_approval', 'approved', 'placed', 'acknowledged',
+  'delivery_confirmation', 'partially_received', 'material_received', 'closed',
+]
+
+// Map of order_item_id -> total qty on PO lines whose PO actually covers.
 // Chunked: >~150 UUIDs in one .in() exceeds PostgREST's 8 KB URL cap.
-// Cancelled POs are excluded in the same round-trip so they never count.
-export async function fetchActivePoCoveredQty(itemIds) {
+// `isTest` scopes to the matching PO mode — a test PO must never mark a LIVE
+// requirement covered (and vice versa). Defaults to live.
+export async function fetchActivePoCoveredQty(itemIds, isTest = false) {
   const map = new Map()
   const ids = [...new Set((itemIds || []).filter(Boolean))]
   for (let i = 0; i < ids.length; i += 150) {
     const { data, error } = await sb.from('po_items')
-      .select('order_item_id, qty, purchase_orders!inner(status)')
+      .select('order_item_id, qty, purchase_orders!inner(status,is_test)')
       .in('order_item_id', ids.slice(i, i + 150))
-      .neq('purchase_orders.status', 'cancelled')
+      .in('purchase_orders.status', COVERING_PO_STATUSES)
+      .eq('purchase_orders.is_test', isTest)
     if (error) { console.error('fetchActivePoCoveredQty:', error); continue }
     for (const r of (data || [])) {
       if (!r.order_item_id) continue

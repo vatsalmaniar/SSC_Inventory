@@ -68,6 +68,7 @@ export default function PurchaseOrderDetail() {
   const [saving, setSaving]       = useState(false)
   const [activeTab, setActiveTab] = useState('overview')  // overview | items | delivery
   const [userRole, setUserRole]   = useState('')
+  const [userId, setUserId]       = useState('')
   const [userName, setUserName]   = useState('')
 
   // Edit mode
@@ -142,8 +143,9 @@ export default function PurchaseOrderDetail() {
     if (!['ops','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
     setUserRole(profile?.role || '')
     setUserName(profile?.name || '')
+    setUserId(session.user.id)
     setSenderEmail(profile?.email || (profile?.username ? profile.username + '@ssccontrol.com' : ''))
-    const { data: users } = await sb.from('profiles').select('id,name,username')
+    const { data: users } = await sb.from('profiles').select('id,name,username,role')
     setAllUsers(users || [])
     await loadPO()
   }
@@ -1062,7 +1064,34 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   async function handleCancel() {
     if (!cancelReason.trim()) { toast('Please enter a cancellation reason'); return }
     setSaving(true)
+    const wasPlacedWithVendor = !['draft','pending_approval'].includes(po.status)
     await updateStatus('cancelled', { cancelled_reason: cancelReason.trim(), cancelled_at: new Date().toISOString() })
+
+    // Cancelling a PO used to be a completely silent event: no notification to
+    // anyone, and nothing written on the customer order whose procurement it
+    // was. Both are fixed here — the CO's own timeline must show that its
+    // supply was killed, or Sales finds out only by chance.
+    try {
+      const targets = (allUsers || []).filter(p => ['ops','admin','management'].includes(p.role) && p.id !== userId)
+      if (targets.length) {
+        const msg = `${po.po_number} cancelled${wasPlacedWithVendor ? ' (was already with the vendor — confirm cancellation with them)' : ''}. Reason: ${cancelReason.trim()}`
+        const { error: nErr } = await sb.from('notifications').insert(targets.map(t => ({
+          user_name: t.name, user_id: t.id, message: msg,
+          po_id: id, order_number: po.po_number,
+          from_name: userName, email_type: 'po_cancelled',
+        })))
+        if (nErr) console.error('PO cancel notify failed:', nErr)
+      }
+      // Write it on every customer order this PO was procuring for.
+      const coIds = [...new Set([...(linkedOrders || []).map(o => o.id), ...(po.order_id ? [po.order_id] : [])])]
+      for (const coId of coIds) {
+        await sb.from('order_comments').insert({
+          order_id: coId, author_name: userName, is_activity: true,
+          message: `Procurement PO ${po.po_number} was CANCELLED. Reason: ${cancelReason.trim()}. These lines need a new PO or to be closed from stock.`,
+        })
+      }
+    } catch (e) { console.error('PO cancel side-effects:', e) }
+
     setShowCancelModal(false); setCancelReason('')
   }
 

@@ -60,9 +60,15 @@ RETURNS numeric LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
                 WHEN oi.procurement_source = 'stock'
                   THEN GREATEST(0, oi.qty - COALESCE(oi.cancelled_qty,0))
                 ELSE 0 END)
+        -- Only COVERING_PO_STATUSES count (lib/coverage.js): cancelled and DRAFT
+        -- do not, and a test PO never covers a live requirement.
         - COALESCE((SELECT SUM(pi.qty) FROM po_items pi
                     JOIN purchase_orders po ON po.id = pi.po_id
-                    WHERE pi.order_item_id = oi.id AND po.status <> 'cancelled'), 0),
+                    WHERE pi.order_item_id = oi.id
+                      AND po.status IN ('pending_approval','approved','placed','acknowledged',
+                                        'delivery_confirmation','partially_received',
+                                        'material_received','closed')
+                      AND po.is_test = false), 0),
       -- by shipped: can never need more than is still unshipped
       oi.qty - COALESCE(oi.cancelled_qty,0) - COALESCE(oi.dispatched_qty,0)
     )) END

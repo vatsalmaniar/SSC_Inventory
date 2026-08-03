@@ -102,7 +102,7 @@ export default function NewPurchaseOrder() {
 
     // Show only COs that still have at least one line needing a PO (shared helper)
     const allItemIds = matches.flatMap(o => (o.order_items || []).map(oi => oi.id))
-    const coveredByPo = await fetchActivePoCoveredQty(allItemIds)
+    const coveredByPo = await fetchActivePoCoveredQty(allItemIds, isTest)
 
     return matches.filter(o => {
       if (coOrders.some(c => c.id === o.id)) return false // already on this PO
@@ -137,7 +137,7 @@ export default function NewPurchaseOrder() {
     if (!order) { addingCoRef.current.delete(coId); return }   // release so a retry can work
 
     // Find which CO items already have POs (active POs only — shared helper)
-    const coveredByPo = await fetchActivePoCoveredQty((order.order_items || []).map(oi => oi.id))
+    const coveredByPo = await fetchActivePoCoveredQty((order.order_items || []).map(oi => oi.id), isTest)
 
     // Only active (non-cancelled, non-short-closed) lines are candidates for procurement
     const allItems = (order.order_items || []).filter(oi => (oi.line_status || 'active') === 'active')
@@ -170,6 +170,21 @@ export default function NewPurchaseOrder() {
       toast(`All items on ${order.order_number} already have POs or are closed from stock`)
       return
     }
+
+    // Drafts no longer count as coverage (an abandoned draft used to hide the
+    // requirement forever), so a line here may already sit on someone's draft
+    // PO. Say so — otherwise excluding drafts just trades a hidden requirement
+    // for a duplicate order.
+    try {
+      const { data: draftLines } = await sb.from('po_items')
+        .select('po_id, order_item_id, purchase_orders!inner(po_number,status)')
+        .in('order_item_id', uncovered.map(oi => oi.id))
+        .eq('purchase_orders.status', 'draft')
+      const draftNos = [...new Set((draftLines || []).map(d => d.purchase_orders?.po_number).filter(Boolean))]
+      if (draftNos.length) {
+        toast(`Heads up: ${draftNos.join(', ')} is already a DRAFT PO covering some of these lines. Check it before creating another.`, 'error')
+      }
+    } catch (e) { console.error('draft PO check:', e) }
 
     const prefilled = uncovered.map(oi => {
       // PO qty defaults to what's still left to procure (quantity-precise),
