@@ -22,20 +22,41 @@ import { sb } from './supabase'
 
 // PO statuses that COUNT as covering a customer requirement.
 //
-// 'draft' is deliberately excluded: a draft is one person's unsubmitted work
-// and can sit forever, and while it counted as coverage it hid a real
-// requirement from the procurement queue and the clubbing picker indefinitely.
-// 'pending_approval' DOES count — the buying decision is made, it is only
-// awaiting a signature. 'cancelled' never counts.
+// A requirement is covered only by a FIRM commitment — one the vendor actually
+// holds. Coverage therefore starts at 'placed'. Everything before that is
+// intent, not supply:
+//   draft            — one person's unsubmitted work
+//   pending_approval — waiting on an approver
+//   approved         — approved but never sent to the vendor
+// Measured 2026-08-04: 13 POs had been approved 74-99 days earlier and never
+// placed (₹4.5L), and every one of those customer orders read as "covered".
+// Nothing was on order anywhere.
 //
-// Excluding drafts creates the opposite risk (a second buyer raising a
-// duplicate PO for a line that already has a draft), so the queue and the
-// New-PO picker BOTH surface "a draft PO already exists" — see
-// ProcurementOrders (_draftPOs) and NewPurchaseOrder (addCO warning).
+// This mirrors how an ERP treats firm vs planned receipts: an untransmitted
+// order does not cover demand. Excluding these creates the opposite risk (a
+// second buyer raising a duplicate), so every unplaced PO stays VISIBLE
+// against its customer order with its state and age — see UNPLACED_PO_STATUSES,
+// ProcurementOrders (_unplacedPOs) and the NewPurchaseOrder addCO warning.
 export const COVERING_PO_STATUSES = [
-  'pending_approval', 'approved', 'placed', 'acknowledged',
-  'delivery_confirmation', 'partially_received', 'material_received', 'closed',
+  'placed', 'acknowledged', 'delivery_confirmation',
+  'partially_received', 'material_received', 'closed',
 ]
+
+// A PO exists for the line but the vendor does not have it yet. Shown on the
+// customer order so the requirement is never silently hidden AND never
+// duplicated — the row tells you exactly where the PO is stuck.
+export const UNPLACED_PO_STATUSES = ['draft', 'pending_approval', 'approved']
+
+// Days an unplaced PO may sit before it is treated as stuck rather than in
+// flight. Under this it is normal work; over it, something has been forgotten.
+export const UNPLACED_PO_STALE_DAYS = 14
+
+export function unplacedPoLabel(status) {
+  if (status === 'draft')            return 'Open draft PO'
+  if (status === 'pending_approval') return 'PO awaiting approval'
+  if (status === 'approved')         return 'Approved — place it'
+  return 'PO not placed'
+}
 
 // Map of order_item_id -> total qty on PO lines whose PO actually covers.
 // Chunked: >~150 UUIDs in one .in() exceeds PostgREST's 8 KB URL cap.

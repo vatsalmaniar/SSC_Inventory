@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmtShort, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
-import { lineIsHandled, COVERING_PO_STATUSES } from '../lib/coverage'
+import { isDeliveredish } from '../lib/orderStatus'
+import { lineIsHandled, COVERING_PO_STATUSES, UNPLACED_PO_STATUSES, UNPLACED_PO_STALE_DAYS, unplacedPoLabel } from '../lib/coverage'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -114,18 +115,21 @@ export default function ProcurementOrders() {
       const oiToCo = {}
       for (const o of coOrders) for (const oi of (o.order_items || [])) oiToCo[oi.id] = o.id
       const posByCo = {}
-      const addPo = (coId, poId, status) => {
+      const addPo = (coId, poId, status, meta) => {
         if (!coId || !poId) return
         if (!posByCo[coId]) posByCo[coId] = []
-        if (!posByCo[coId].some(x => x.id === poId)) posByCo[coId].push({ id: poId, status })
+        const existing = posByCo[coId].find(x => x.id === poId)
+        if (existing) { if (meta && !existing.po_number) Object.assign(existing, meta); return }
+        posByCo[coId].push({ id: poId, status, ...(meta || {}) })
       }
       const linkedPos = await chunkedFetch(
         // is_test must match the page mode — without it a test PO supplies
         // coverage/orphan state to a LIVE customer order, and vice versa.
-        (slice) => sb.from('purchase_orders').select('id,order_id,status').in('order_id', slice).eq('is_test', testMode),
+        // po_number + dates come along so an unplaced PO can be named and aged.
+        (slice) => sb.from('purchase_orders').select('id,order_id,status,po_number,approved_at,created_at').in('order_id', slice).eq('is_test', testMode),
         coIds
       )
-      for (const p of linkedPos) addPo(p.order_id, p.id, p.status)
+      for (const p of linkedPos) addPo(p.order_id, p.id, p.status, { po_number: p.po_number, approved_at: p.approved_at, created_at: p.created_at })
       // Coverage by po_items.order_item_id directly — not via the PO header's
       // order_id — so lines on a PO clubbing multiple COs still count.
       // Only COVERING_PO_STATUSES count (cancelled and DRAFT do not) — the
@@ -133,23 +137,25 @@ export default function ProcurementOrders() {
       // can never drift apart.
       const allItemIds = coOrders.flatMap(o => (o.order_items || []).map(oi => oi.id))
       const poItems = await chunkedFetch(
-        (slice) => sb.from('po_items').select('order_item_id, qty, po_id, purchase_orders!inner(status)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
+        (slice) => sb.from('po_items').select('order_item_id, qty, po_id, purchase_orders!inner(status,po_number,approved_at,created_at)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
         allItemIds
       )
-      // Map of order_item_id -> covered qty. Drafts are tracked separately so a
-      // requirement is visible AND the buyer is told a draft already exists,
-      // rather than silently hidden (old behaviour) or silently duplicated.
+      // Map of order_item_id -> FIRM covered qty (placed onwards). POs that
+      // exist but are not yet with the vendor are tracked separately so the
+      // requirement stays visible AND the buyer is told exactly where the PO is
+      // stuck — never silently hidden, never silently duplicated.
       const coveredSet = new Map()
-      const draftPoByCo = {}
+      const unplacedPoByCo = {}
       for (const pi of poItems) {
-        const st = pi.purchase_orders?.status
+        const po = pi.purchase_orders || {}
+        const st = po.status
         if (COVERING_PO_STATUSES.includes(st)) {
           coveredSet.set(pi.order_item_id, (coveredSet.get(pi.order_item_id) || 0) + (Number(pi.qty) || 0))
-        } else if (st === 'draft') {
+        } else if (UNPLACED_PO_STATUSES.includes(st)) {
           const coId = oiToCo[pi.order_item_id]
-          if (coId) (draftPoByCo[coId] = draftPoByCo[coId] || new Set()).add(pi.po_id)
+          if (coId) (unplacedPoByCo[coId] = unplacedPoByCo[coId] || new Set()).add(pi.po_id)
         }
-        addPo(oiToCo[pi.order_item_id], pi.po_id, st)
+        addPo(oiToCo[pi.order_item_id], pi.po_id, st, { po_number: po.po_number, approved_at: po.approved_at, created_at: po.created_at })
       }
       coOrders = coOrders.map(o => {
         // Only count active (non-cancelled / non-short-closed) lines for coverage
@@ -163,8 +169,13 @@ export default function ProcurementOrders() {
         const orphanPOs = linkedPosList.filter(p => ORPHAN_PO_STATUSES.includes(p.status))
         const deliveredOrphanPOs = linkedPosList.filter(p => DELIVERED_PO_STATUSES.includes(p.status))
         const hasPostApprovalPO = linkedPosList.some(p => !PRE_APPROVAL_PO_STATUSES.includes(p.status))
-        const draftPOs = linkedPosList.filter(p => (draftPoByCo[o.id] || new Set()).has(p.id))
-        return { ...o, _totalItems: total, _coveredItems: covered, _stockClosed: stockClosed, _hasPostApprovalPO: hasPostApprovalPO, _orphanPOs: orphanPOs, _deliveredOrphanPOs: deliveredOrphanPOs, _draftPOs: draftPOs }
+        // Unplaced POs on this CO, oldest first — the oldest is the one that
+        // needs chasing, and its age drives the colour.
+        const unplacedPOs = linkedPosList
+          .filter(p => (unplacedPoByCo[o.id] || new Set()).has(p.id))
+          .map(p => ({ ...p, _daysWaiting: Math.floor((Date.now() - new Date(p.approved_at || p.created_at).getTime()) / 86400000) }))
+          .sort((a, b) => b._daysWaiting - a._daysWaiting)
+        return { ...o, _totalItems: total, _coveredItems: covered, _stockClosed: stockClosed, _hasPostApprovalPO: hasPostApprovalPO, _orphanPOs: orphanPOs, _deliveredOrphanPOs: deliveredOrphanPOs, _unplacedPOs: unplacedPOs }
       })
     }
     setOrders(coOrders)
@@ -177,12 +188,30 @@ export default function ProcurementOrders() {
     if (o.status === 'cancelled') return !o._hasPostApprovalPO
     return o._coveredItems < o._totalItems
   })
+  // Customer orders whose only PO has not reached the vendor yet, and how many
+  // of those have gone stale — the "approved and forgotten" measure.
+  const staleUnplaced = timelineOrders.reduce((acc, o) => {
+    const top = o._unplacedPOs?.[0]
+    if (!top) return acc
+    acc.count++
+    if (top._daysWaiting >= UNPLACED_PO_STALE_DAYS) acc.stale++
+    return acc
+  }, { count: 0, stale: 0 })
+
   // Orphans = a cancelled CO whose PO is either still live with the vendor, or
   // already landed (material bought for an order that no longer exists).
   const orphanOrders = timelineOrders.filter(o => o.status === 'cancelled' &&
     ((o._orphanPOs?.length > 0) || (o._deliveredOrphanPOs?.length > 0)))
 
-  const visible = tab === 'orphan' ? orphanOrders : pendingOrders
+  // Every CO whose PO has not reached the vendor — INCLUDING ones already
+  // delivered from stock, which never appear in Pending (nothing left to
+  // procure) yet still hold a live PO that must be cancelled, not placed.
+  // Oldest first: that is the cleanup order.
+  const unplacedOrders = timelineOrders
+    .filter(o => o._unplacedPOs?.length > 0)
+    .sort((a, b) => (b._unplacedPOs[0]._daysWaiting || 0) - (a._unplacedPOs[0]._daysWaiting || 0))
+
+  const visible = tab === 'orphan' ? orphanOrders : tab === 'unplaced' ? unplacedOrders : pendingOrders
   const q = search.trim().toLowerCase()
   const filtered = !q ? visible : visible.filter(o =>
     (o.order_number||'').toLowerCase().includes(q) || (o.customer_name||'').toLowerCase().includes(q)
@@ -218,6 +247,12 @@ export default function ProcurementOrders() {
           <KpiTile variant="hero" tone="deep" label="Pending Coverage" value={pendingOrders.length} sub={`${totalUncovered} items`} chart="bars" onClick={() => setTab('pending')}/>
           <KpiTile variant="hero" tone="forest" label="Total CO Value" value={fmtCr(totalValue)} sub="across pending COs" chart="line"/>
           <KpiTile variant="hero" tone="teal" label="Orphan POs" value={orphanOrders.length} sub="post-approval · CO cancelled" chart="bars" onClick={() => setTab('orphan')}/>
+          {/* PO exists but the vendor does not have it — the failure that hid 13 POs
+              for 74-99 days. Counted so it can be managed, not just noticed. */}
+          <KpiTile label="PO Not Placed" value={staleUnplaced.count}
+            sub={staleUnplaced.stale > 0 ? `${staleUnplaced.stale} over ${UNPLACED_PO_STALE_DAYS} days` : 'awaiting despatch to vendor'}
+            accent={staleUnplaced.stale > 0 ? 'amber' : null}
+            onClick={() => setTab('unplaced')}/>
           <KpiTile label="Fully Covered" value={timelineOrders.filter(o => o.status !== 'cancelled' && o._coveredItems >= o._totalItems).length} sub="all items linked"/>
           <KpiTile label="Cancelled COs" value={timelineOrders.filter(o => o.status === 'cancelled').length} sub="this FY"/>
         </div>
@@ -261,11 +296,31 @@ export default function ProcurementOrders() {
             Pending POs
             {pendingOrders.length > 0 && <span className="o-chip-n">{pendingOrders.length}</span>}
           </button>
+          <button className={`o-chip ${tab === 'unplaced' ? 'on' : ''} ${staleUnplaced.stale > 0 ? 'warn' : ''}`} onClick={() => { setTab('unplaced'); setPage(1) }}>
+            PO Not Placed
+            {unplacedOrders.length > 0 && <span className="o-chip-n">{unplacedOrders.length}</span>}
+          </button>
           <button className={`o-chip ${tab === 'orphan' ? 'on' : ''} danger`} onClick={() => { setTab('orphan'); setPage(1) }}>
             Orphan POs
             {orphanOrders.length > 0 && <span className="o-chip-n">{orphanOrders.length}</span>}
           </button>
         </div>
+
+        {tab === 'unplaced' && (
+          <div style={{ margin: '0 0 12px', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, color: '#92400e' }}>
+            A purchase order exists for these customer orders but the <b>vendor does not have it yet</b> — so nothing is on order.
+            Each one needs one of three decisions:
+            <div style={{ marginTop: 6, lineHeight: 1.7 }}>
+              <b>1 · Place it</b> — the customer is still waiting, or the price was negotiated and you want the material
+              (e.g. the order shipped from old stock and this replenishes it).<br/>
+              <b>2 · Material already received?</b> Common for older POs raised before the GRN module existed — the goods came in
+              but the receipt was never recorded. Mark the PO <b>Placed</b>, then create the <b>GRN</b> to close it properly.<br/>
+              <b>3 · Cancel it</b> — genuinely not needed and nothing was received.
+            </div>
+            Orders marked <b>Delivered</b> have already reached the customer — on its own that does <b>not</b> mean cancel;
+            it usually means option 2 or 1. Rows past {UNPLACED_PO_STALE_DAYS} days are shown in red.
+          </div>
+        )}
 
         {loading ? (
           <div className="o-loading">Loading…</div>
@@ -282,7 +337,7 @@ export default function ProcurementOrders() {
             </div>
             {filtered.length === 0 ? (
               <div className="ol-empty">
-                <div className="ol-empty-title">{search ? `No orders match "${search}"` : tab === 'orphan' ? 'No orphan POs — all clean' : 'All COs covered'}</div>
+                <div className="ol-empty-title">{search ? `No orders match "${search}"` : tab === 'orphan' ? 'No orphan POs — all clean' : tab === 'unplaced' ? 'Every PO has reached its vendor' : 'All COs covered'}</div>
               </div>
             ) : (
               <div className="ol-table">
@@ -298,7 +353,15 @@ export default function ProcurementOrders() {
                       <div className="ol-cell">
                         <div className="ol-num" style={{ color: isCancelled ? '#B91C1C' : 'var(--ssc-blue)', textDecoration: isCancelled ? 'line-through' : 'none' }} onClick={() => navigate('/orders/' + o.id)}>{o.order_number}</div>
                       </div>
-                      <div className="ol-cell ol-cust" title={o.customer_name}>{o.customer_name}</div>
+                      <div className="ol-cell ol-cust" title={o.customer_name}>
+                        {o.customer_name}
+                        {tab === 'unplaced' && isDeliveredish(o) && (
+                          <span title="Delivered to the customer — usually served from stock. Do NOT assume the PO should be cancelled: the material may already have been received without a GRN (common for POs raised before the GRN module), in which case mark the PO Placed and create the GRN. Or the price was negotiated and you still want the material."
+                            style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#dcfce7', color: '#166534' }}>
+                            DELIVERED
+                          </span>
+                        )}
+                      </div>
                       <div className="ol-cell">
                         <span className="ol-status-pill" style={{ '--stage-color': statusColor }}>
                           <span className="ol-status-dot"/>
@@ -327,19 +390,28 @@ export default function ProcurementOrders() {
                             style={{ fontSize: 11, padding: '5px 12px', fontWeight: 600, border: 'none', borderRadius: 6, background: '#7C2D12', color: 'white', cursor: 'pointer' }}>
                             Material received — trace →{o._deliveredOrphanPOs.length > 1 ? ` (${o._deliveredOrphanPOs.length})` : ''}
                           </button>
-                        ) : isCancelled ? (
+                        ) : isCancelled && tab !== 'unplaced' ? (
                           <span style={{ fontSize: 11, fontWeight: 600, color: '#B91C1C' }}>Cancel draft PO</span>
-                        ) : o._draftPOs?.length > 0 ? (
-                          // A draft PO already covers some of this CO. Drafts no longer
-                          // count as coverage (an abandoned one used to hide the
-                          // requirement forever) — so send the buyer to the existing
-                          // draft instead of letting them raise a duplicate.
-                          <button onClick={(e) => { e.stopPropagation(); navigate('/procurement/po/' + o._draftPOs[0].id) }}
-                            title="A draft PO already exists for this order — open it instead of creating another"
-                            style={{ fontSize: 11, padding: '5px 12px', fontWeight: 600, border: '1px solid #FDE68A', borderRadius: 6, background: '#FEF3C7', color: '#92400E', cursor: 'pointer' }}>
-                            Open draft PO →{o._draftPOs.length > 1 ? ` (${o._draftPOs.length})` : ''}
-                          </button>
-                        ) : (
+                        ) : o._unplacedPOs?.length > 0 ? (() => {
+                          // A PO exists but the vendor does not have it yet, so this
+                          // requirement is NOT firm coverage. Name where it is stuck and
+                          // how long it has waited — red once stale — so it gets chased
+                          // instead of duplicated. (13 POs sat approved-but-unplaced for
+                          // 74-99 days before this existed.)
+                          const top = o._unplacedPOs[0]
+                          const stale = top._daysWaiting >= UNPLACED_PO_STALE_DAYS
+                          return (
+                            <button onClick={(e) => { e.stopPropagation(); navigate('/procurement/po/' + top.id) }}
+                              title={`${top.po_number || 'PO'} — ${unplacedPoLabel(top.status)} · waiting ${top._daysWaiting} day${top._daysWaiting === 1 ? '' : 's'}. The vendor does not have this order yet.`}
+                              style={{ fontSize: 11, padding: '5px 12px', fontWeight: 600, borderRadius: 6, cursor: 'pointer',
+                                border: stale ? 'none' : '1px solid #FDE68A',
+                                background: stale ? '#B91C1C' : '#FEF3C7',
+                                color: stale ? 'white' : '#92400E' }}>
+                              {unplacedPoLabel(top.status)} →{o._unplacedPOs.length > 1 ? ` (${o._unplacedPOs.length})` : ''}
+                              {stale ? ` · ${top._daysWaiting}d` : ''}
+                            </button>
+                          )
+                        })() : (
                           <button onClick={(e) => { e.stopPropagation(); navigate('/procurement/po/new?order_id=' + o.id) }}
                             style={{ fontSize: 11, padding: '5px 12px', fontWeight: 600, border: 'none', borderRadius: 6, background: 'var(--ssc-deep)', color: 'white', cursor: 'pointer' }}>
                             {hasPartial ? 'Add PO →' : 'Create PO →'}

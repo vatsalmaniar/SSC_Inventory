@@ -13,7 +13,7 @@ import { usePeopleDir } from '../components/PeopleAvatar'
 import '../styles/orderdetail.css'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
-import { lineNeedsProcurement } from '../lib/coverage'
+import { lineNeedsProcurement, COVERING_PO_STATUSES } from '../lib/coverage'
 
 
 const ORDER_MODULE_STAGES = [
@@ -266,8 +266,15 @@ export default function OrderDetail() {
         // QUANTITY-aware coverage: a Map of order_item_id → covered qty, not a
         // Set. With a Set, one PO line for 1 of 100 units marked the whole line
         // covered and the order read "Fully Covered" — see lib/coverage.js.
+        //
+        // Counted only from FIRM POs (COVERING_PO_STATUSES). Computing this
+        // locally instead of via the shared helper is how this page used to
+        // disagree with the procurement queue; the status list is now shared so
+        // the two cannot drift. Unplaced POs still appear in the linked-PO list
+        // below — they are visible, they just do not count as supply.
+        const firmPoIds = new Set(pos.filter(p => COVERING_PO_STATUSES.includes(p.status)).map(p => p.id))
         const coveredQty = new Map()
-        activePis.filter(pi => pi.order_item_id).forEach(pi => {
+        activePis.filter(pi => pi.order_item_id && firmPoIds.has(pi.po_id)).forEach(pi => {
           coveredQty.set(pi.order_item_id, (coveredQty.get(pi.order_item_id) || 0) + (Number(pi.qty) || 0))
         })
         setPoCoveredItemIds(coveredQty)

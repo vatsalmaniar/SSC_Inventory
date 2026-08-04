@@ -7,7 +7,7 @@ import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
-import { fetchActivePoCoveredQty, lineNeedsProcurement, lineToProcureQty } from '../lib/coverage'
+import { fetchActivePoCoveredQty, lineNeedsProcurement, lineToProcureQty, UNPLACED_PO_STATUSES, unplacedPoLabel } from '../lib/coverage'
 
 const FC_ADDRESSES = {
   Kaveri: 'SSC Control Pvt Ltd, 17(A) Ashwamegh Warehouse, Behind New Ujala Hotel, Sarkhej Bavla Highway, Sarkhej, Ahmedabad, Gujarat 382210',
@@ -171,20 +171,26 @@ export default function NewPurchaseOrder() {
       return
     }
 
-    // Drafts no longer count as coverage (an abandoned draft used to hide the
-    // requirement forever), so a line here may already sit on someone's draft
-    // PO. Say so — otherwise excluding drafts just trades a hidden requirement
-    // for a duplicate order.
+    // Only a PLACED PO counts as coverage, so a line offered here may already
+    // sit on a PO that simply has not reached the vendor yet (draft, awaiting
+    // approval, or approved-but-never-placed). Name it — otherwise tightening
+    // coverage just trades a hidden requirement for a duplicate order.
+    // Marked PER LINE (not a dismissible toast) and re-checked at submit — a
+    // toast is missable, and the exposure here is a duplicate PO to a vendor.
+    const existingPoByLine = new Map()
     try {
-      const { data: draftLines } = await sb.from('po_items')
-        .select('po_id, order_item_id, purchase_orders!inner(po_number,status)')
+      const { data: unplacedLines } = await sb.from('po_items')
+        .select('po_id, order_item_id, purchase_orders!inner(po_number,status,is_test)')
         .in('order_item_id', uncovered.map(oi => oi.id))
-        .eq('purchase_orders.status', 'draft')
-      const draftNos = [...new Set((draftLines || []).map(d => d.purchase_orders?.po_number).filter(Boolean))]
-      if (draftNos.length) {
-        toast(`Heads up: ${draftNos.join(', ')} is already a DRAFT PO covering some of these lines. Check it before creating another.`, 'error')
+        .in('purchase_orders.status', UNPLACED_PO_STATUSES)
+        .eq('purchase_orders.is_test', isTest)
+      for (const d of (unplacedLines || [])) {
+        const po = d.purchase_orders
+        if (po?.po_number && !existingPoByLine.has(d.order_item_id)) {
+          existingPoByLine.set(d.order_item_id, { po_id: d.po_id, po_number: po.po_number, status: po.status })
+        }
       }
-    } catch (e) { console.error('draft PO check:', e) }
+    } catch (e) { console.error('unplaced PO check:', e) }
 
     const prefilled = uncovered.map(oi => {
       // PO qty defaults to what's still left to procure (quantity-precise),
@@ -204,6 +210,7 @@ export default function NewPurchaseOrder() {
         _cancelled: oi.cancelled_qty || 0,
         _dispatched: oi.dispatched_qty || 0,
         _prior_stock: Number(oi.stock_qty) || 0,   // so allocations accumulate, never overwrite
+        _existingPo: existingPoByLine.get(oi.id) || null,  // a PO already covers this line but isn't with the vendor
         lp_unit_price: String(oi.lp_unit_price || ''),
         discount_pct: String(oi.discount_pct || '0'),
         unit_price_after_disc: String(oi.unit_price_after_disc || ''),
@@ -406,6 +413,22 @@ export default function NewPurchaseOrder() {
       const ok = window.confirm(`This clubbed PO covers ${coOrders.length} customer orders (${coOrders.map(c => c.order_number).join(', ')}), and ALL goods will be delivered to one customer address:\n\n${deliveryCustName}\n\nContinue?`)
       if (!ok) return
     }
+    // HARD GATE: a line already sitting on a PO the vendor hasn't received yet.
+    // Coverage now starts at 'placed', so these lines legitimately reappear as
+    // pending — but ordering them again means TWO POs to a vendor for one
+    // requirement. Measured exposure when this rule shipped: 104 lines across
+    // 37 customer orders, ₹39.2L. Must be an explicit decision, never a slip.
+    const dupLines = poLines.filter(i => i._existingPo && (parseFloat(i.qty) || 0) > 0)
+    if (dupLines.length) {
+      const list = dupLines.map(i => `• ${i.item_code} × ${i.qty} — already on ${i._existingPo.po_number} (${unplacedPoLabel(i._existingPo.status).toLowerCase()})`).join('\n')
+      const ok = window.confirm(
+        `These lines are already on a purchase order that has NOT yet been sent to the vendor:\n\n${list}\n\n` +
+        `Raising this PO will order them a SECOND time.\n\n` +
+        `Normally you should open the existing PO and place it instead. Continue anyway?`
+      )
+      if (!ok) return
+    }
+
     for (const item of poLines) {
       if (!item.qty || parseFloat(item.qty) <= 0) { toast(`Qty is required for item: ${item.item_code}`); return }
       if (item.lp_unit_price === '' || item.lp_unit_price === undefined || parseFloat(item.lp_unit_price) < 0) { toast(`LP Price is required for item: ${item.item_code}`); return }
@@ -839,6 +862,14 @@ export default function NewPurchaseOrder() {
                             style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:4, flexShrink:0,
                               background: isCI ? '#fef3c7' : '#dcfce7', color: isCI ? '#92400e' : '#166534' }}>
                             {item.item_type}
+                          </span>
+                        )}
+                        {item._existingPo && (
+                          <span title={`${item._existingPo.po_number} already covers this line (${unplacedPoLabel(item._existingPo.status).toLowerCase()}) but the vendor does not have it yet. Place that PO instead of raising a duplicate.`}
+                            onClick={e => { e.stopPropagation(); window.open('/procurement/po/' + item._existingPo.po_id, '_blank') }}
+                            style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, flexShrink:0, cursor:'pointer',
+                                     background:'#fef2f2', color:'#b91c1c', border:'1px solid #fecaca' }}>
+                            ⚠ on {item._existingPo.po_number.replace(/^(Temp|SSC)\//,'').replace(/\/\d{2}-\d{2}$/,'')}
                           </span>
                         )}
                         {isCO && coOrders.length > 1 && item.co_number && (
