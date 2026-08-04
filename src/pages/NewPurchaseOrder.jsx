@@ -418,9 +418,38 @@ export default function NewPurchaseOrder() {
     // pending — but ordering them again means TWO POs to a vendor for one
     // requirement. Measured exposure when this rule shipped: 104 lines across
     // 37 customer orders, ₹39.2L. Must be an explicit decision, never a slip.
-    const dupLines = poLines.filter(i => i._existingPo && (parseFloat(i.qty) || 0) > 0)
+    //
+    // Re-queried HERE rather than trusting the marker captured when the CO was
+    // added: a colleague can raise a PO for the same line while this form sits
+    // open, and the stale snapshot would not know about it.
+    const gateLines = poLines.filter(i => i.order_item_id && (parseFloat(i.qty) || 0) > 0)
+    let liveExisting = new Map()
+    // Chunked at 150 — a clubbed PO can carry more line ids than PostgREST's
+    // 8 KB URL cap allows, and a truncated check would silently pass.
+    const gateIds = gateLines.map(i => i.order_item_id)
+    for (let i = 0; i < gateIds.length; i += 150) {
+      const { data: liveRows, error: liveErr } = await sb.from('po_items')
+        .select('order_item_id, purchase_orders!inner(po_number,status,is_test)')
+        .in('order_item_id', gateIds.slice(i, i + 150))
+        .in('purchase_orders.status', UNPLACED_PO_STATUSES)
+        .eq('purchase_orders.is_test', isTest)
+      if (liveErr) {
+        // Fail closed: if we cannot verify, do not quietly allow a duplicate.
+        toast(friendlyError(liveErr, 'Could not verify existing POs for these lines. Please retry.'), 'error')
+        return
+      }
+      for (const r of (liveRows || [])) {
+        if (r.purchase_orders?.po_number && !liveExisting.has(r.order_item_id)) {
+          liveExisting.set(r.order_item_id, r.purchase_orders)
+        }
+      }
+    }
+    const dupLines = gateLines.filter(i => liveExisting.has(i.order_item_id))
     if (dupLines.length) {
-      const list = dupLines.map(i => `• ${i.item_code} × ${i.qty} — already on ${i._existingPo.po_number} (${unplacedPoLabel(i._existingPo.status).toLowerCase()})`).join('\n')
+      const list = dupLines.map(i => {
+        const po = liveExisting.get(i.order_item_id)
+        return `• ${i.item_code} × ${i.qty} — already on ${po.po_number} (${unplacedPoLabel(po.status).toLowerCase()})`
+      }).join('\n')
       const ok = window.confirm(
         `These lines are already on a purchase order that has NOT yet been sent to the vendor:\n\n${list}\n\n` +
         `Raising this PO will order them a SECOND time.\n\n` +

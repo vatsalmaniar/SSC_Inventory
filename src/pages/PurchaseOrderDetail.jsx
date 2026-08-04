@@ -112,7 +112,8 @@ export default function PurchaseOrderDetail() {
   // from several COs while the header stores only the first one.
   const [linkedOrders, setLinkedOrders] = useState([])
   const [oiOrderMap, setOiOrderMap] = useState({})   // order_item_id -> order_id
-  const [overCoveredLines, setOverCoveredLines] = useState([])  // PO qty > what the CO still needs
+  const [overCoveredLines, setOverCoveredLines] = useState([])  // requirement shrank after the PO was raised
+  const [bulkBuyLines, setBulkBuyLines] = useState([])          // PO qty above the original requirement (MOQ/bulk)
   const isMultiCO = linkedOrders.length > 1
   const cancelledLinked = linkedOrders.filter(o => o.status === 'cancelled')
   const shortCO = n => (n || '').replace(/^(Temp|SSC)\//, '').replace(/\/\d{2}-\d{2}$/, '')
@@ -205,25 +206,34 @@ export default function PurchaseOrderDetail() {
       for (const r of oiRows) omap[r.id] = r.order_id
       setOiOrderMap(omap)
 
-      // Over-cover detection: the customer reduced qty (or closed part from stock)
-      // after this PO was raised, so the PO now commits the vendor to more than
-      // the customer needs. Derived at read time — cannot go stale.
+      // Two DIFFERENT facts, both derived at read time so neither can go stale.
+      // Keeping them apart matters: buying above the customer requirement is a
+      // deliberate business practice here (minimum order quantities — vendors
+      // reject small POs), NOT an error. Measured 2026-08-04: 86 POs buy above
+      // requirement vs 19 where the customer shrank afterwards. Lumping them
+      // together told ops the customer had reduced an order that never changed.
       const oiById = {}
       for (const r of oiRows) oiById[r.id] = r
-      const over = []
+      const bulk = []      // PO qty exceeds the ORIGINAL requirement — MOQ / bulk buy
+      const reduced = []   // requirement shrank AFTER the PO was raised
       for (const pi of (itemsRes.data || [])) {
         const oi = oiById[pi.order_item_id]
         if (!oi) continue
+        const ordered = Number(oi.qty) || 0
         const stillNeeded = (oi.line_status || 'active') !== 'active'
           ? 0
-          : Math.max(0, (Number(oi.qty) || 0) - (Number(oi.cancelled_qty) || 0) - (Number(oi.stock_qty) || 0))
+          : Math.max(0, ordered - (Number(oi.cancelled_qty) || 0) - (Number(oi.stock_qty) || 0))
         const onThisPo = Number(pi.qty) || 0
-        if (onThisPo > stillNeeded) {
-          over.push({ po_item_id: pi.id, item_code: pi.item_code, po_qty: onThisPo, still_needed: stillNeeded,
-                      excess: onThisPo - stillNeeded, received: Number(pi.received_qty) || 0, order_id: oi.order_id })
+        const row = { po_item_id: pi.id, item_code: pi.item_code, po_qty: onThisPo, ordered,
+                      still_needed: stillNeeded, received: Number(pi.received_qty) || 0, order_id: oi.order_id }
+        if (onThisPo > ordered) {
+          bulk.push({ ...row, excess: onThisPo - ordered })
+        } else if (onThisPo > stillNeeded) {
+          reduced.push({ ...row, excess: onThisPo - stillNeeded })
         }
       }
-      setOverCoveredLines(over)
+      setBulkBuyLines(bulk)
+      setOverCoveredLines(reduced)
       const orderIds = [...new Set([...(poRes.data.order_id ? [poRes.data.order_id] : []), ...oiRows.map(r => r.order_id).filter(Boolean)])]
       if (orderIds.length) {
         const [{ data: ords }, { data: stockRows }] = await Promise.all([
@@ -1479,6 +1489,35 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div>
               <div className="od-pending-banner-label">Awaiting Approval</div>
               <div>Submitted as {po.po_number}. Once approved, it can be placed with the vendor.</div>
+            </div>
+          </div>
+        )}
+
+        {/* Bought ABOVE the customer requirement. This is normal here — vendors
+            reject small quantities, so buying a minimum/bulk lot is deliberate.
+            Stated neutrally: a fact to confirm, never an error to fix. */}
+        {bulkBuyLines.length > 0 && !isCancelled && (
+          <div style={{ background:'#f8fafc', border:'1px solid #cbd5e1', borderLeft:'4px solid #475569', borderRadius:10, padding:'14px 18px', marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+              <svg fill="none" stroke="#475569" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}>
+                <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+              </svg>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'#0f172a', marginBottom:3 }}>
+                  Ordered above the customer requirement
+                </div>
+                <div style={{ fontSize:12, color:'#334155', marginBottom:8 }}>
+                  Usually deliberate — a minimum order quantity or a bulk buy, with the surplus going to stock.
+                  Shown so it is a conscious decision rather than a typo. No action needed if intended.
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {bulkBuyLines.map(l => (
+                    <span key={l.po_item_id} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'#334155', background:'white', border:'1px solid #cbd5e1', padding:'3px 8px', borderRadius:6 }}>
+                      {l.item_code}: PO {l.po_qty} · customer needs {l.ordered} · <span style={{ color:'#0f172a' }}>+{l.excess} to stock</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
