@@ -429,6 +429,10 @@ export default function PurchaseOrderDetail() {
     setExcludePoPdf(false)
     setExcludeSupportingIdx(new Set())
 
+    // The vendor's first contact with an email — used both to greet them by name
+    // and to prefill the To field below.
+    const primaryContact = contactsList.find(c => c.email)
+
     // Pre-fill subject + body
     setEmailSubject(`Purchase Order ${po.po_number} — SSC Control Pvt. Ltd.`)
     const primaryName  = primaryContact?.name || vendorDetail?.poc_name || ''
