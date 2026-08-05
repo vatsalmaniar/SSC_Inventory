@@ -681,19 +681,37 @@ SSC Control Pvt. Ltd.`
   // ── Stage 2: PO Approved — generate PO number + PDF ──
   async function handleApprove() {
     setSaving(true)
-    // Generate PO number at approval
-    const isCO = po.po_number?.startsWith('Temp/PCO') || po.order_id
-    const { data: poNum, error: rpcErr } = await sb.rpc('next_po_number', { p_is_co: !!isCO })
-    if (rpcErr) { toast(friendlyError(rpcErr, "Generating PO number failed. Please try again.")); setSaving(false); return }
 
-    // Generate PO PDF
+    // A PO number is minted ONCE, on first approval, and is permanent after that.
+    // This used to call next_po_number() unconditionally. Amending an approved PO
+    // sends it back to pending_approval, so approving it again renamed the PO and
+    // overwrote approved_at / placed_at. Five live POs were silently renumbered on
+    // 2026-08-04 — SSC/PO0185 became SSC/PO0232 — after the vendor already held
+    // the original number. Restored in sql/po_number_restore.sql and now blocked
+    // at the database by trg_po_number_immutable (sql/po_number_immutable.sql).
+    const isFirstApproval = !po.po_number || po.po_number.startsWith('Temp/')
+    let poNum = po.po_number
+    if (isFirstApproval) {
+      const isCO = po.po_number?.startsWith('Temp/PCO') || po.order_id
+      const { data, error: rpcErr } = await sb.rpc('next_po_number', { p_is_co: !!isCO })
+      if (rpcErr) { toast(friendlyError(rpcErr, "Generating PO number failed. Please try again.")); setSaving(false); return }
+      poNum = data
+    }
+
+    // Regenerate the document either way — an amended PO needs paperwork that
+    // matches the new figures, but under the SAME PO number as before.
     let poPdfUrl = null
     try { poPdfUrl = await generatePoPdf(poNum) } catch (err) { console.error('PDF generation failed:', err) }
 
     await updateStatus('approved', {
-      po_number: poNum,
-      approved_by: userName,
-      approved_at: new Date().toISOString(),
+      // Stamped on first approval only. Re-approval of an amendment is already
+      // recorded in po_comments, which keeps the full who/when trail without
+      // destroying the original approval date that PO aging is measured from.
+      ...(isFirstApproval ? {
+        po_number:   poNum,
+        approved_by: userName,
+        approved_at: new Date().toISOString(),
+      } : {}),
       ...(poPdfUrl && { po_pdf_url: poPdfUrl }),
     })
     setSaving(false)
@@ -972,8 +990,10 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   }
 
   // ── Stage 3: Order Placed ──
+  // Stamps once, like approval: re-placing an amended PO must not overwrite the
+  // date it originally went to the vendor.
   async function handlePlace() {
-    await updateStatus('placed', { placed_at: new Date().toISOString() })
+    await updateStatus('placed', po.placed_at ? {} : { placed_at: new Date().toISOString() })
   }
 
   // ── Stage 4: Acknowledgement — optional vendor document ──
