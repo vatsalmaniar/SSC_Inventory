@@ -138,6 +138,8 @@ export default function PurchaseOrderDetail() {
   const [emailTo,  setEmailTo]  = useState([])
   const [emailCc,  setEmailCc]  = useState([])
   const [emailBcc, setEmailBcc] = useState([])
+  const [emailMin, setEmailMin] = useState(false)   // Gmail: collapse to the title bar
+  const [emailMax, setEmailMax] = useState(false)
   const [vendorContacts, setVendorContacts]   = useState([])
   const [vendorDetail,   setVendorDetail]     = useState(null)
   const [senderEmail,    setSenderEmail]      = useState('')
@@ -2594,18 +2596,25 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
       }
       const selectedCount = emailTo.length + emailCc.length + emailBcc.length
       return (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
-          onClick={() => !sendingEmail && setShowEmailModal(false)}>
-          <div style={{ background:'white', borderRadius:14, width:'100%', maxWidth:640, maxHeight:'92vh', overflow:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
-            onClick={e => e.stopPropagation()}>
+        <div className={'gcompose' + (emailMin ? ' is-min' : '') + (emailMax && !emailMin ? ' is-max' : '')}
+          role="dialog" aria-label="Send purchase order to vendor">
 
-            <div style={{ padding:'18px 24px 14px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'white', zIndex:2 }}>
-              <div>
-                <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Send PO to Vendor</div>
-                <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Email the PO to the vendor with attachments</div>
-              </div>
-              <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#94a3b8', padding:0, width:28, height:28 }}>✕</button>
+            {/* Title bar — click anywhere on it to collapse, exactly like Gmail */}
+            <div className="gcompose-head" onClick={() => setEmailMin(m => !m)}>
+              <span className="gcompose-title">
+                {emailMin && emailTo.length ? `${po.po_number} → ${emailTo[0]}` : `New Message · ${po.po_number}`}
+              </span>
+              <button className="gcompose-btn" title={emailMin ? 'Expand' : 'Minimise'}
+                onClick={e => { e.stopPropagation(); setEmailMin(m => !m) }}>–</button>
+              <button className="gcompose-btn" title={emailMax ? 'Exit full screen' : 'Full screen'}
+                onClick={e => { e.stopPropagation(); setEmailMax(m => !m); setEmailMin(false) }}>
+                {emailMax ? '⤡' : '⤢'}
+              </button>
+              <button className="gcompose-btn" title="Discard" disabled={sendingEmail}
+                onClick={e => { e.stopPropagation(); if (!sendingEmail) setShowEmailModal(false) }}>✕</button>
             </div>
+
+            <div className="gcompose-body">
 
             {/* Meta info */}
             <div style={{ padding:'16px 24px 0' }}>
@@ -2684,29 +2693,33 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               </label>
             </div>
 
-            {/* Actions */}
-            <div style={{ padding:'18px 24px 20px', display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', borderTop:'1px solid #f1f5f9', marginTop:18, position:'sticky', bottom:0, background:'white' }}>
-              <div style={{ fontSize:12, color:'#64748b' }}>
-                {emailTo.length === 0 ? 'Add a recipient' : `${selectedCount} recipient${selectedCount !== 1 ? 's' : ''}` + (emailBcc.length ? ` · ${emailBcc.length} Bcc` : '')}
-              </div>
-              <div style={{ display:'flex', gap:10 }}>
-                <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail || previewingPdf}
-                  style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--font)' }}>Cancel</button>
-                {!excludePoPdf && (
-                  <button onClick={previewPoPdf} disabled={previewingPdf || sendingEmail}
-                    title="Open the PDF in a new tab to verify before sending — uses the same renderer the email does"
-                    style={{ padding:'10px 18px', border:'1px solid #1a73e8', borderRadius:8, background:'white', color:'#1a73e8', fontSize:13, fontWeight:700, cursor: previewingPdf || sendingEmail ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: previewingPdf || sendingEmail ? 0.5 : 1, display:'inline-flex', alignItems:'center', gap:6 }}>
-                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    {previewingPdf ? 'Generating…' : 'Preview PDF'}
-                  </button>
-                )}
-                <button onClick={sendEmailToVendor} disabled={sendingEmail || previewingPdf || emailTo.length === 0}
-                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a73e8', color:'white', fontSize:13, fontWeight:700, cursor: sendingEmail || previewingPdf || emailTo.length === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: sendingEmail || previewingPdf || emailTo.length === 0 ? 0.5 : 1 }}>
-                  {sendingEmail ? 'Sending…' : 'Send Email'}
+            </div>{/* end gcompose-body */}
+
+            {/* Action bar — Send sits bottom-left, as in Gmail */}
+            <div className="gcompose-foot">
+              <button onClick={sendEmailToVendor} disabled={sendingEmail || previewingPdf || emailTo.length === 0}
+                style={{ padding:'10px 26px', border:'none', borderRadius:20, background:'#1a73e8', color:'white', fontSize:14, fontWeight:600,
+                         cursor: sendingEmail || previewingPdf || emailTo.length === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)',
+                         opacity: sendingEmail || previewingPdf || emailTo.length === 0 ? 0.5 : 1 }}>
+                {sendingEmail ? 'Sending…' : 'Send'}
+              </button>
+              {!excludePoPdf && (
+                <button onClick={previewPoPdf} disabled={previewingPdf || sendingEmail}
+                  title="Open the PDF in a new tab to check it before sending — same renderer the email uses"
+                  className="gcompose-btn" style={{ width:'auto', padding:'0 10px', height:34, gap:6, fontSize:12.5, fontWeight:600, color:'#1a73e8' }}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  {previewingPdf ? 'Generating…' : 'Preview PDF'}
                 </button>
-              </div>
+              )}
+              <span style={{ flex:1 }} />
+              <span style={{ fontSize:11.5, color:'var(--gray-500)' }}>
+                {emailTo.length === 0 ? 'Add a recipient' : `${selectedCount} recipient${selectedCount !== 1 ? 's' : ''}` + (emailBcc.length ? ` · ${emailBcc.length} Bcc` : '')}
+              </span>
+              <button onClick={() => !sendingEmail && setShowEmailModal(false)} disabled={sendingEmail}
+                className="gcompose-btn" title="Discard this email">
+                <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{width:15,height:15}}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+              </button>
             </div>
-          </div>
         </div>
       )
     })()}

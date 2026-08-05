@@ -639,3 +639,75 @@ html:not([data-theme="dark"]) .od-page {
     white-space: nowrap;
   }
 }
+
+/* ── Gmail-style docked compose window ───────────────────────────────────────
+   Docks bottom-right instead of taking the screen. No scrim: the PO stays
+   readable and usable behind it, which is the point — you often need to check
+   a line or a price while writing to the vendor.
+   Under 560px it becomes a full-screen sheet, because a 540px panel on a
+   390px phone is not a panel, it is a broken modal.                         */
+.gcompose {
+  position: fixed;
+  right: 24px;
+  bottom: 0;
+  z-index: 9000;
+  width: min(540px, calc(100vw - 48px));
+  max-height: min(88vh, 700px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  box-shadow: 0 -2px 12px rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.28);
+  animation: gcompose-rise .18s ease-out;
+}
+@keyframes gcompose-rise { from { transform: translateY(14px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+.gcompose-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 10px 10px 16px;
+  background: var(--gray-100);
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid var(--gray-200);
+  cursor: pointer;                 /* click the bar to minimise, like Gmail */
+  flex-shrink: 0;
+}
+.gcompose-title { font-size: 13.5px; font-weight: 600; color: var(--gray-800); flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gcompose-btn {
+  border: none; background: none; cursor: pointer; color: var(--gray-600);
+  width: 30px; height: 30px; border-radius: 6px; line-height: 1; font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.gcompose-btn:hover { background: var(--gray-200); }
+
+.gcompose-body { overflow-y: auto; overflow-x: hidden; flex: 1; -webkit-overflow-scrolling: touch; }
+.gcompose-foot {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; border-top: 1px solid var(--gray-200); background: #fff;
+  border-radius: 0; flex-shrink: 0;
+}
+
+/* Minimised: just the title bar sitting on the bottom edge */
+.gcompose.is-min { max-height: none; }
+.gcompose.is-min .gcompose-body,
+.gcompose.is-min .gcompose-foot { display: none; }
+
+/* Expanded: centred and large, for writing a long note */
+.gcompose.is-max {
+  right: 50%; transform: translateX(50%);
+  width: min(900px, calc(100vw - 48px));
+  max-height: 92vh; bottom: 4vh; border-radius: 10px; border-bottom: 1px solid var(--gray-200);
+}
+
+@media (max-width: 560px) {
+  .gcompose, .gcompose.is-max {
+    right: 0; left: 0; bottom: 0; top: 0;
+    transform: none;
+    width: 100%; max-height: 100%; height: 100%;
+    border-radius: 0; border: none;
+  }
+  .gcompose.is-min { top: auto; height: auto; }
+  .gcompose-foot { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+}
