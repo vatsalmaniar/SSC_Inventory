@@ -25,8 +25,8 @@ function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+
 function initials(name) { return (name||'').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?' }
 
 const GRN_TYPE_LABELS = { po_inward:'PO Inward', customer_rejection:'Customer Rejection', sample_return:'Sample Return', cancellation_return:'Cancellation Return' }
-const GRN_STATUS_LABELS = { draft:'GRN Created', checking:'Checking', confirmed:'Confirmed', invoice_matched:'Invoice Matched', inward_posted:'Inward Posted' }
-const GRN_STATUS_COLORS = { draft:'#94A3B8', checking:'#F59E0B', confirmed:'#1a73e8', invoice_matched:'#0F766E', inward_posted:'#22C55E' }
+const GRN_STATUS_LABELS = { draft:'GRN Created', checking:'Checking', confirmed:'Confirmed', invoice_matched:'Invoice Matched', inward_posted:'Inward Posted', cancelled:'Voided' }
+const GRN_STATUS_COLORS = { draft:'#94A3B8', checking:'#F59E0B', confirmed:'#1a73e8', invoice_matched:'#0F766E', inward_posted:'#22C55E', cancelled:'#DC2626' }
 
 const FILTERS = [
   { key:'all',             label:'All' },
@@ -35,6 +35,7 @@ const FILTERS = [
   { key:'confirmed',       label:'Confirmed' },
   { key:'invoice_matched', label:'Invoice Matched' },
   { key:'inward_posted',   label:'Inward Posted' },
+  { key:'cancelled',       label:'Voided',            tone:'danger' },
 ]
 const TYPE_FILTERS = [
   { key:'all', label:'All Types' },

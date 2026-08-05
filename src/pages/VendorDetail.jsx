@@ -255,7 +255,7 @@ export default function VendorDetail() {
     const grnsHTML = grns.map((g,i) => `<tr>
       <td class="mono">${esc(g.grn_number)}</td>
       <td>${esc(g.grn_type||'—')}</td>
-      <td><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#f0fdf4;color:#15803d">${esc(g.status||'—')}</span></td>
+      <td><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;${g.status === 'cancelled' ? 'background:#fef2f2;color:#b91c1c' : 'background:#f0fdf4;color:#15803d'}">${esc(g.status === 'cancelled' ? 'VOIDED' : (g.status||'—'))}</span></td>
       <td style="text-align:right">${fmtD(g.received_at)}</td>
       <td style="text-align:right;font-size:11px">${esc(g.invoice_number||'—')}</td>
       <td style="text-align:right;font-weight:600">${g.invoice_amount ? '₹'+fmtMoney(g.invoice_amount) : '—'}</td>
@@ -802,7 +802,10 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                           <td className="mono" style={{ color:'#1a73e8', fontWeight:700 }}>{g.grn_number}</td>
                           <td style={{ fontSize:12 }}>{g.grn_type?.replace(/_/g,' ')||'—'}</td>
                           <td>
-                            <span className={'od-status-badge '+(g.status==='confirmed'?'active':'pending')} style={{ fontSize:10 }}>{g.status}</span>
+                            <span className={'od-status-badge '+(g.status==='confirmed'?'active':'pending')}
+                              style={{ fontSize:10, ...(g.status === 'cancelled' ? { background:'#fef2f2', color:'#b91c1c', borderColor:'#fecaca' } : {}) }}>
+                              {g.status === 'cancelled' ? 'voided' : g.status}
+                            </span>
                           </td>
                           <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmt(g.received_at)}</td>
                           <td style={{ fontSize:12 }}>{g.invoice_number||'—'}</td>

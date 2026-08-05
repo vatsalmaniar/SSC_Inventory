@@ -137,6 +137,9 @@ export default function ItemDetail() {
         .select('id,received_qty,accepted_qty,rejected_qty,grn:grn_id!inner(id,grn_number,grn_type,status,received_at,vendor_name,is_test)')
         .eq('item_code', itemData.item_code)
         .eq('grn.is_test', false)
+        // A voided GRN is paperwork that was withdrawn — it never moved stock,
+        // so it must not appear in this item's receipt history.
+        .neq('grn.status', 'cancelled')
         .order('id', { ascending: false })
         .range(from, to)),
       fetchAll((from, to) => sb.from('stock_transfer_items')

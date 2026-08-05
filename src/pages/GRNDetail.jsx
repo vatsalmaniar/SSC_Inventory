@@ -20,7 +20,7 @@ const GRN_TYPE_COLORS = {
   po_inward: { bg:'#eff6ff', color:'#1d4ed8' }, customer_rejection: { bg:'#fef2f2', color:'#dc2626' },
   sample_return: { bg:'#faf5ff', color:'#7e22ce' }, cancellation_return: { bg:'#fffbeb', color:'#b45309' },
 }
-const GRN_STATUS_LABELS = { draft:'GRN Created', checking:'Checking Goods', confirmed:'GRN Confirmed', invoice_matched:'Invoice Matched', inward_posted:'Inward Posted' }
+const GRN_STATUS_LABELS = { draft:'GRN Created', checking:'Checking Goods', confirmed:'GRN Confirmed', invoice_matched:'Invoice Matched', inward_posted:'Inward Posted', cancelled:'Voided' }
 
 const GRN_PIPELINE = [
   { key: 'draft',    label: 'GRN Created' },
@@ -65,6 +65,8 @@ export default function GRNDetail() {
   const [orderInfo, setOrderInfo] = useState(null)  // source order (owner/customer) for returns
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
+  const [showVoid, setShowVoid] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
   const [activeTab, setActiveTab] = useState('overview')  // overview | items
   const [userRole, setUserRole] = useState('')
   const [userName, setUserName] = useState('')
@@ -255,6 +257,22 @@ export default function GRNDetail() {
     await loadGRN()
   }
 
+  // A GRN that cannot be confirmed had no way out: no void path existed for a
+  // po_inward GRN, so a stale draft was stranded forever (4 were, the oldest for
+  // 6 weeks). This is a reversal, not a delete — the GRN keeps its number and
+  // lines and becomes 'cancelled' with who/when/why.
+  async function handleVoid() {
+    const reason = voidReason.trim()
+    if (!reason) { toast('Please give a reason for voiding this GRN.', 'error'); return }
+    setSaving(true)
+    const { error } = await sb.rpc('void_grn', { p_grn_id: id, p_reason: reason })
+    setSaving(false)
+    if (error) { toast(friendlyError(error, 'Could not void this GRN.'), 'error'); return }
+    toast('GRN voided', 'success')
+    setShowVoid(false); setVoidReason('')
+    await loadGRN()
+  }
+
   async function handleConfirm() {
     // Build delivery details
     let deliveryFields = {}
@@ -267,6 +285,35 @@ export default function GRNDetail() {
     }
 
     setSaving(true)
+
+    // Re-read the PO lines NOW. NewGRN filtered them to "still pending" when this
+    // draft was CREATED; if another GRN was confirmed since, that snapshot is
+    // stale and confirm_grn will refuse. Catching it here means we can say what
+    // changed and offer the fix, rather than failing with a raw database error
+    // after the delivery fields have already been written.
+    if (grn.grn_type === 'po_inward') {
+      const poItemIds = grnItems.map(i => i.po_item_id).filter(Boolean)
+      if (poItemIds.length) {
+        const { data: live, error: liveErr } = await sb.from('po_items')
+          .select('id,item_code,qty,received_qty').in('id', poItemIds)
+        if (liveErr) { toast(friendlyError(liveErr, 'Could not re-check the PO. Please retry.')); setSaving(false); return }
+        const byId = Object.fromEntries((live || []).map(r => [r.id, r]))
+        const clashes = grnItems.map(gi => {
+          const pl = byId[gi.po_item_id]
+          if (!pl) return null
+          const mine = Number(gi.accepted_qty ?? gi.received_qty ?? 0)
+          const pending = Number(pl.qty) - Number(pl.received_qty || 0)
+          return mine > pending ? { code: pl.item_code, mine, pending } : null
+        }).filter(Boolean)
+
+        if (clashes.length) {
+          const detail = clashes.map(c => `• ${c.code}: this GRN has ${c.mine}, only ${c.pending} still pending`).join('\n')
+          toast(`This GRN is out of date — another GRN was confirmed for the same PO line(s) in the meantime.\n\n${detail}\n\nEdit the quantities to match, or void this GRN if the goods were already booked.`, 'error')
+          setSaving(false)
+          return
+        }
+      }
+    }
 
     // Save delivery details first
     const { error: deliveryErr } = await sb.from('grn').update({
@@ -473,7 +520,7 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
   const fmt = fmtShort
   const fmtTs = fmtDateTime
   const tc = GRN_TYPE_COLORS[grn.grn_type] || GRN_TYPE_COLORS.po_inward
-  const sc = grn.status === 'confirmed' ? { bg:'#f0fdf4', color:'#15803d' } : grn.status === 'checking' ? { bg:'#fef3c7', color:'#b45309' } : { bg:'#f1f5f9', color:'#475569' }
+  const sc = grn.status === 'cancelled' ? { bg:'#fef2f2', color:'#b91c1c' } : grn.status === 'confirmed' ? { bg:'#f0fdf4', color:'#15803d' } : grn.status === 'checking' ? { bg:'#fef3c7', color:'#b45309' } : { bg:'#f1f5f9', color:'#475569' }
   const totalAccepted = grnItems.reduce((s, i) => s + (i.accepted_qty || 0), 0)
   const totalRejected = grnItems.reduce((s, i) => s + (i.rejected_qty || 0), 0)
 
@@ -485,6 +532,18 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
     <Layout pageTitle={grn.grn_number} pageKey="fc">
       <div className="od-page">
         <div className="od-body">
+
+          {grn.status === 'cancelled' && (
+            <div style={{ margin:'0 0 14px', padding:'12px 16px', borderRadius:10,
+                          background:'#fef2f2', border:'1px solid #fecaca', color:'#991b1b', fontSize:13, lineHeight:1.6 }}>
+              <strong>This GRN was voided{grn.voided_by ? ` by ${grn.voided_by}` : ''}
+                {grn.voided_at ? ` on ${fmt(grn.voided_at)}` : ''}.</strong>
+              {grn.void_reason ? <> Reason: {grn.void_reason}</> : null}
+              <div style={{ marginTop:4, fontSize:12, color:'#b91c1c' }}>
+                No stock or PO quantity was affected — it was withdrawn before confirmation.
+              </div>
+            </div>
+          )}
 
           {/* Header */}
           <div className="od-header">
@@ -800,6 +859,16 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                     {grn.status === 'checking' && !showDeliveryForm && (
                       <div>
                         <p style={{fontSize:13,color:'var(--gray-600)',marginBottom:14}}>Verify all items, then confirm the GRN with delivery details.</p>
+                        {/* Explicit, labelled action — an unconfirmable GRN needs a
+                            visible way out, not a hidden one. Admin/management only,
+                            and only before confirmation. */}
+                        {['admin','management'].includes(userRole) && (
+                          <button className="od-btn" onClick={() => setShowVoid(true)} disabled={saving}
+                            title="Withdraw this GRN — use when the goods were already booked on another GRN"
+                            style={{ float:'right', color:'#B91C1C', borderColor:'#FECACA' }}>
+                            Void GRN
+                          </button>
+                        )}
                         <button className="od-btn od-btn-approve" onClick={() => setShowDeliveryForm(true)} disabled={saving}>
                           Confirm GRN
                         </button>
@@ -992,6 +1061,35 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
           </div>
         </div>
       </div>
+
+      {showVoid && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(11,27,48,0.45)', zIndex:1000,
+                      display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={e => { if (e.target === e.currentTarget && !saving) setShowVoid(false) }}>
+          <div style={{ background:'#fff', borderRadius:12, padding:'22px 24px', width:'min(460px, 94vw)', boxShadow:'0 12px 44px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize:16, fontWeight:600, color:'var(--gray-800)', marginBottom:6 }}>Void {grn.grn_number}?</div>
+            <div style={{ fontSize:13, color:'var(--gray-600)', lineHeight:1.6, marginBottom:14 }}>
+              The GRN keeps its number and lines and is marked <b>Voided</b> — nothing is deleted.
+              No stock or PO quantity changes, because this GRN was never confirmed.
+              Use this when the goods were already booked on another GRN.
+            </div>
+            <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.05em' }}>Reason (required)</label>
+            <textarea value={voidReason} onChange={e => setVoidReason(e.target.value)} autoFocus
+              placeholder="e.g. Duplicate — material already received on SSC/GRN0455/KAV"
+              style={{ width:'100%', minHeight:80, marginTop:6, marginBottom:14, padding:'10px 12px', fontSize:16,
+                       border:'1px solid var(--gray-200)', borderRadius:8, fontFamily:'inherit', boxSizing:'border-box', resize:'vertical' }} />
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button className="od-btn" onClick={() => setShowVoid(false)} disabled={saving}>Cancel</button>
+              <button className="od-btn" onClick={handleVoid} disabled={saving || !voidReason.trim()}
+                style={{ background:'#B91C1C', color:'#fff', borderColor:'#B91C1C',
+                         opacity: saving || !voidReason.trim() ? 0.5 : 1 }}>
+                {saving ? 'Voiding…' : 'Void GRN'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </Layout>
   )
 }

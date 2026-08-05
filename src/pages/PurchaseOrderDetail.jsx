@@ -276,7 +276,9 @@ export default function PurchaseOrderDetail() {
 
     // Fetch GRNs linked to this PO via grn_items
     try {
-      const { data: grnItems } = await sb.from('grn_items').select('*,grn:grn_id(id,grn_number,grn_type,status,received_by,received_at)').eq('po_id', id)
+      // Voided GRNs are excluded: they were withdrawn before confirmation and
+      // never touched received_qty, so showing them here would overstate receipts.
+      const { data: grnItems } = await sb.from('grn_items').select('*,grn:grn_id!inner(id,grn_number,grn_type,status,received_by,received_at)').eq('po_id', id).neq('grn.status', 'cancelled')
       if (grnItems && grnItems.length) {
         // Unique GRNs
         const grnMap = {}
