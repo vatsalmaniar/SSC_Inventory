@@ -1606,6 +1606,23 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
           </div>
         </div>
 
+        {/* The header total is now derived from the lines by a database trigger
+            (trg_po_recalc_total). A surviving gap therefore means a LINE IS
+            MISSING — almost always a charge such as CUTOUT CHARGES — not a
+            rounding error. Four live POs were found this way, worth ₹2.85L. */}
+        {items.length > 0 && Math.abs((Number(po.total_amount) || 0) - grandTotal) > 0.01 && (
+          <div style={{ margin:'0 0 14px', padding:'12px 16px', borderRadius:10,
+                        background:'#fffbeb', border:'1px solid #fde68a', color:'#92400e', fontSize:13, lineHeight:1.6 }}>
+            <strong>This PO's total doesn't match its lines.</strong>{' '}
+            Header says <b>{fmtINR(po.total_amount)}</b>, the {items.length} lines add up to <b>{fmtINR(grandTotal)}</b>
+            {' '}— a difference of <b>{fmtINR(Math.abs((Number(po.total_amount) || 0) - grandTotal))}</b>.
+            <div style={{ marginTop:4, fontSize:12 }}>
+              This usually means a line was never added — often a charge like CUTOUT CHARGES.
+              Add the missing line rather than editing the total; it will then reconcile automatically.
+            </div>
+          </div>
+        )}
+
         {/* ── Pipeline Bar ── */}
         <div className={'od-pipeline-bar' + (isCancelled ? ' od-pipeline-cancelled' : '')}>
           <div className="od-pipeline-stages">
