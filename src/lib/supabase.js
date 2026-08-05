@@ -10,12 +10,14 @@ export const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
   },
 })
 
-// ── 24-hour forced re-login ──
+// ── 7-day forced re-login ──
 // Stamp written ONLY by Login.jsx after a fresh credential sign-in.
 // Do NOT stamp on onAuthStateChange('SIGNED_IN') — that event also fires when
 // Supabase restores a cached session (tab re-open, app boot), which would reset
-// the 24h clock without the user actually re-authenticating.
-export const LOGIN_MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 hours
+// the clock without the user actually re-authenticating.
+// Was 24h; widened to 7 days (2026-08-05) — the daily full re-login (password + MFA)
+// was locking out field staff constantly. MFA + 90-day rotation still enforced.
+export const LOGIN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 sb.auth.onAuthStateChange((event) => {
   if (event === 'SIGNED_OUT') {

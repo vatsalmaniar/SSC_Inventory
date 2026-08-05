@@ -211,7 +211,7 @@ export default function Layout({ children, pageTitle, pageKey }) {
   const [searchResults, setSearchResults] = useState({ orders: [], companies: [], leads: [], opportunities: [], vendors: [], purchaseOrders: [], grns: [], purchaseInvoices: [], items: [] })
 
   useEffect(() => {
-    // Force re-login after 24 hours
+    // Force re-login after LOGIN_MAX_AGE_MS (currently 7 days)
     if (!checkSessionAge()) { navigate('/login'); return }
 
     // Re-check periodically — Layout only mounts once for the SPA session, so

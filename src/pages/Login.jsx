@@ -127,7 +127,7 @@ export default function Login() {
       return
     }
 
-    // Fresh credential login succeeded — stamp the 24h clock.
+    // Fresh credential login succeeded — stamp the re-login clock (LOGIN_MAX_AGE_MS, 7 days).
     // (Stamping here instead of onAuthStateChange so cached-session restores
     // don't reset the clock — see src/lib/supabase.js for context.)
     stampLoginNow()
