@@ -425,13 +425,6 @@ export default function PurchaseOrderDetail() {
       setVendorContacts(contactsList)
     }
 
-    // Default recipient: vendor_contacts[0].email if present, else vendor.poc_email, else nothing.
-    const sel = {}
-    const primaryContact = contactsList.find(c => c.email)
-    if (primaryContact?.email) sel[primaryContact.email.toLowerCase()] = true
-    else if (vendorDetail?.poc_email) sel[vendorDetail.poc_email.toLowerCase()] = true
-    setRecipientSel(sel)
-    setOneOffEmail('')
     setExtraFiles([])
     setExcludePoPdf(false)
     setExcludeSupportingIdx(new Set())
@@ -461,7 +454,7 @@ SSC Control Pvt. Ltd.`
     // Bcc rather than Cc so the vendor never sees internal addresses and a
     // "reply all" from them cannot land in six inboxes. Every chip is removable.
     const contacts = []
-    vendorContacts.forEach(c => { if (c.email) contacts.push(c.email.toLowerCase()) })
+    contactsList.forEach(c => { if (c.email) contacts.push(c.email.toLowerCase()) })
     if (!contacts.length && vendorDetail?.poc_email) contacts.push(vendorDetail.poc_email.toLowerCase())
     setEmailTo(contacts.slice(0, 1))
     setEmailCc([])
