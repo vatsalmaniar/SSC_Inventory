@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmtShort, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { isDeliveredish } from '../lib/orderStatus'
-import { lineIsHandled, COVERING_PO_STATUSES, UNPLACED_PO_STATUSES, UNPLACED_PO_STALE_DAYS, unplacedPoLabel } from '../lib/coverage'
+import { lineIsHandled, COVERING_PO_STATUSES, UNPLACED_PO_STATUSES, unplacedPoLabel,
+         poSlaState, fmtSlaAge, fetchWorkflowOwners, SLA_APPROVE_HOURS, SLA_PLACE_HOURS } from '../lib/coverage'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -30,6 +31,9 @@ export default function ProcurementOrders() {
   const navigate = useNavigate()
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
+  // step -> { name, id, slaHours }. Who to chase for each SLA breach; read
+  // from po_workflow_owners so leave cover is a data change, not a deploy.
+  const [owners, setOwners] = useState({})
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [tab, setTab] = useState('pending')
@@ -49,6 +53,7 @@ export default function ProcurementOrders() {
     const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
     if (!['ops','admin','management','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
     setIsAdmin(profile?.role === 'admin')
+    fetchWorkflowOwners().then(setOwners)   // non-blocking: the list must render regardless
 
     const [coDataRes, orphanPosRes] = await Promise.all([
       sb.from('orders')
@@ -126,10 +131,10 @@ export default function ProcurementOrders() {
         // is_test must match the page mode — without it a test PO supplies
         // coverage/orphan state to a LIVE customer order, and vice versa.
         // po_number + dates come along so an unplaced PO can be named and aged.
-        (slice) => sb.from('purchase_orders').select('id,order_id,status,po_number,approved_at,created_at').in('order_id', slice).eq('is_test', testMode),
+        (slice) => sb.from('purchase_orders').select('id,order_id,status,po_number,approved_at,submitted_at,created_at').in('order_id', slice).eq('is_test', testMode),
         coIds
       )
-      for (const p of linkedPos) addPo(p.order_id, p.id, p.status, { po_number: p.po_number, approved_at: p.approved_at, created_at: p.created_at })
+      for (const p of linkedPos) addPo(p.order_id, p.id, p.status, { po_number: p.po_number, approved_at: p.approved_at, submitted_at: p.submitted_at, created_at: p.created_at })
       // Coverage by po_items.order_item_id directly — not via the PO header's
       // order_id — so lines on a PO clubbing multiple COs still count.
       // Only COVERING_PO_STATUSES count (cancelled and DRAFT do not) — the
@@ -137,7 +142,7 @@ export default function ProcurementOrders() {
       // can never drift apart.
       const allItemIds = coOrders.flatMap(o => (o.order_items || []).map(oi => oi.id))
       const poItems = await chunkedFetch(
-        (slice) => sb.from('po_items').select('order_item_id, qty, po_id, purchase_orders!inner(status,po_number,approved_at,created_at)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
+        (slice) => sb.from('po_items').select('order_item_id, qty, po_id, purchase_orders!inner(status,po_number,approved_at,submitted_at,created_at)').in('order_item_id', slice).neq('purchase_orders.status', 'cancelled'),
         allItemIds
       )
       // Map of order_item_id -> FIRM covered qty (placed onwards). POs that
@@ -173,8 +178,11 @@ export default function ProcurementOrders() {
         // needs chasing, and its age drives the colour.
         const unplacedPOs = linkedPosList
           .filter(p => (unplacedPoByCo[o.id] || new Set()).has(p.id))
-          .map(p => ({ ...p, _daysWaiting: Math.floor((Date.now() - new Date(p.approved_at || p.created_at).getTime()) / 86400000) }))
-          .sort((a, b) => b._daysWaiting - a._daysWaiting)
+          // Each PO is aged against ITS OWN clock — 24h if it is waiting on an
+          // approver, 48h if it is approved and waiting to be placed. Breaches
+          // sort to the top, then by how far over they are.
+          .map(p => ({ ...p, _sla: poSlaState(p) }))
+          .sort((a, b) => (b._sla?.overdueBy || 0) - (a._sla?.overdueBy || 0) || (b._sla?.hours || 0) - (a._sla?.hours || 0))
         return { ...o, _totalItems: total, _coveredItems: covered, _stockClosed: stockClosed, _hasPostApprovalPO: hasPostApprovalPO, _orphanPOs: orphanPOs, _deliveredOrphanPOs: deliveredOrphanPOs, _unplacedPOs: unplacedPOs }
       })
     }
@@ -194,7 +202,7 @@ export default function ProcurementOrders() {
     const top = o._unplacedPOs?.[0]
     if (!top) return acc
     acc.count++
-    if (top._daysWaiting >= UNPLACED_PO_STALE_DAYS) acc.stale++
+    if (top._sla?.breached) acc.stale++
     return acc
   }, { count: 0, stale: 0 })
 
@@ -209,7 +217,7 @@ export default function ProcurementOrders() {
   // Oldest first: that is the cleanup order.
   const unplacedOrders = timelineOrders
     .filter(o => o._unplacedPOs?.length > 0)
-    .sort((a, b) => (b._unplacedPOs[0]._daysWaiting || 0) - (a._unplacedPOs[0]._daysWaiting || 0))
+    .sort((a, b) => (b._unplacedPOs[0]._sla?.overdueBy || 0) - (a._unplacedPOs[0]._sla?.overdueBy || 0))
 
   const visible = tab === 'orphan' ? orphanOrders : tab === 'unplaced' ? unplacedOrders : pendingOrders
   const q = search.trim().toLowerCase()
@@ -250,7 +258,7 @@ export default function ProcurementOrders() {
           {/* PO exists but the vendor does not have it — the failure that hid 13 POs
               for 74-99 days. Counted so it can be managed, not just noticed. */}
           <KpiTile label="PO Not Placed" value={staleUnplaced.count}
-            sub={staleUnplaced.stale > 0 ? `${staleUnplaced.stale} over ${UNPLACED_PO_STALE_DAYS} days` : 'awaiting despatch to vendor'}
+            sub={staleUnplaced.stale > 0 ? `${staleUnplaced.stale} past SLA` : 'awaiting despatch to vendor'}
             accent={staleUnplaced.stale > 0 ? 'amber' : null}
             onClick={() => setTab('unplaced')}/>
           <KpiTile label="Fully Covered" value={timelineOrders.filter(o => o.status !== 'cancelled' && o._coveredItems >= o._totalItems).length} sub="all items linked"/>
@@ -318,7 +326,8 @@ export default function ProcurementOrders() {
               <b>3 · Cancel it</b> — genuinely not needed and nothing was received.
             </div>
             Orders marked <b>Delivered</b> have already reached the customer — on its own that does <b>not</b> mean cancel;
-            it usually means option 2 or 1. Rows past {UNPLACED_PO_STALE_DAYS} days are shown in red.
+            it usually means option 2 or 1. SLA: approve within <b>{SLA_APPROVE_HOURS}h</b>, place with the vendor within <b>{SLA_PLACE_HOURS}h</b> of approval —
+            rows past their own SLA are shown in red, with the person who owns that step.
           </div>
         )}
 
@@ -399,16 +408,27 @@ export default function ProcurementOrders() {
                           // instead of duplicated. (13 POs sat approved-but-unplaced for
                           // 74-99 days before this existed.)
                           const top = o._unplacedPOs[0]
-                          const stale = top._daysWaiting >= UNPLACED_PO_STALE_DAYS
+                          const sla = top._sla
+                          const stale = !!sla?.breached
+                          // Name the owner on the chip: a breach with no owner
+                          // is a complaint, a breach with a name is a task.
+                          const ownerName = sla?.owner && owners[sla.owner]?.name
                           return (
                             <button onClick={(e) => { e.stopPropagation(); navigate('/procurement/po/' + top.id) }}
-                              title={`${top.po_number || 'PO'} — ${unplacedPoLabel(top.status)} · waiting ${top._daysWaiting} day${top._daysWaiting === 1 ? '' : 's'}. The vendor does not have this order yet.`}
+                              title={`${top.po_number || 'PO'} — ${unplacedPoLabel(top.status)}\n`
+                                + (sla?.slaHours
+                                    ? `Waiting ${fmtSlaAge(sla.hours)} against a ${sla.slaHours}h SLA`
+                                      + (stale ? ` — ${fmtSlaAge(sla.overdueBy)} over` : '')
+                                      + (ownerName ? `\nOwner: ${ownerName}` : '')
+                                      + (sla.approximate ? '\n(Approximate — this PO predates submitted-time tracking)' : '')
+                                    : `Draft for ${fmtSlaAge(sla?.hours)} — not yet submitted`)
+                                + '\nThe vendor does not have this order yet.'}
                               style={{ fontSize: 11, padding: '5px 12px', fontWeight: 600, borderRadius: 6, cursor: 'pointer',
                                 border: stale ? 'none' : '1px solid #FDE68A',
                                 background: stale ? '#B91C1C' : '#FEF3C7',
                                 color: stale ? 'white' : '#92400E' }}>
                               {unplacedPoLabel(top.status)} →{o._unplacedPOs.length > 1 ? ` (${o._unplacedPOs.length})` : ''}
-                              {stale ? ` · ${top._daysWaiting}d` : ''}
+                              {stale ? ` · ${fmtSlaAge(sla.hours)}` : ''}
                             </button>
                           )
                         })() : (

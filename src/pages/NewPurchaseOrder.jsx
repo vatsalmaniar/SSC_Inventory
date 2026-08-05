@@ -509,6 +509,9 @@ export default function NewPurchaseOrder() {
         order_id:          coOrders[0]?.id || orderId || null,
         order_number:      coOrders[0]?.order_number || null,
         status:            submitForApproval ? 'pending_approval' : 'draft',
+        // Starts the approver's 24h clock. Null while it is still a draft —
+        // draft time belongs to the creator, not the approver.
+        submitted_at:      submitForApproval ? new Date().toISOString() : null,
         po_date:           poDate,
         expected_delivery: expectedDelivery || null,
         fulfilment_center: fulfilmentCenter === 'Customer' ? 'Customer' : fulfilmentCenter || null,

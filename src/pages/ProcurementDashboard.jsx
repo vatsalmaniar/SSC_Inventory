@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
-import { fetchActivePoCoveredQty, lineIsHandled } from '../lib/coverage'
+import { fetchActivePoCoveredQty, lineIsHandled, poSlaState, SLA_APPROVE_HOURS, SLA_PLACE_HOURS } from '../lib/coverage'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -45,7 +45,7 @@ export default function ProcurementDashboard() {
     setUser({ name: profile?.name || '', role })
 
     const [posRes, grnCountRes, inwardCountRes] = await Promise.all([
-      sb.from('purchase_orders').select('id,po_number,status,total_amount,vendor_name,created_at')
+      sb.from('purchase_orders').select('id,po_number,status,total_amount,vendor_name,created_at,submitted_at,approved_at,placed_at')
         .eq('is_test', false).gte('created_at', FY_START).order('created_at', { ascending: false }),
       sb.from('grn').select('id', { count:'exact', head:true }).in('status', ['draft','checking']).eq('is_test', false),
       sb.from('purchase_invoices').select('id', { count:'exact', head:true }).in('status', ['three_way_check','invoice_pending']).eq('is_test', false),
@@ -79,6 +79,45 @@ export default function ProcurementDashboard() {
 
   const openPos = pos.filter(p => !['material_received','closed','cancelled'].includes(p.status))
   const pendingAppr = pos.filter(p => p.status === 'pending_approval')
+
+  // ── PO turnaround SLA: approve in 24h, place in 48h ──
+  // Two clocks with two different owners, so a slow approval is never counted
+  // against the buyer. submitted_at only exists from 2026-08-05, so anything
+  // approved before that measures from created_at and is flagged approximate.
+  const slaScore = (() => {
+    const HOUR = 3600000
+    const within = (from, to, limit) => {
+      if (!from || !to) return null
+      return (new Date(to) - new Date(from)) / HOUR <= limit
+    }
+    const monthKey = (d) => { const x = new Date(d); return x.getFullYear() * 12 + x.getMonth() }
+    const nowKey = monthKey(new Date())
+
+    const bucket = (offset) => {
+      const appr = [], plac = []
+      for (const p of pos) {
+        if (p.approved_at && monthKey(p.approved_at) === nowKey - offset) {
+          const ok = within(p.submitted_at || p.created_at, p.approved_at, SLA_APPROVE_HOURS)
+          if (ok !== null) appr.push(ok)
+        }
+        if (p.placed_at && p.approved_at && monthKey(p.placed_at) === nowKey - offset) {
+          const ok = within(p.approved_at, p.placed_at, SLA_PLACE_HOURS)
+          if (ok !== null) plac.push(ok)
+        }
+      }
+      const pct = (a) => a.length ? Math.round(a.filter(Boolean).length / a.length * 100) : null
+      return { approve: pct(appr), place: pct(plac), apprN: appr.length, placN: plac.length }
+    }
+
+    // Open breaches right now — the actionable half of the scorecard.
+    const open = { approval: 0, placement: 0 }
+    for (const p of pos) {
+      const st = poSlaState(p)
+      if (st?.breached) open[st.step === 'approval' ? 'approval' : 'placement']++
+    }
+    return { now: bucket(0), prev: bucket(1), open }
+  })()
+
   const placedPos = pos.filter(p => ['placed','acknowledged'].includes(p.status))
   const partialPos = pos.filter(p => p.status === 'partially_received')
   const receivedPos = pos.filter(p => p.status === 'material_received')
@@ -231,6 +270,28 @@ export default function ProcurementDashboard() {
             </div>
 
             <div className="dash-row-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
+              <div className="card">
+                <div className="card-head">
+                  <div>
+                    <div className="card-eyebrow">Performance · This month</div>
+                    <div className="card-title">PO Turnaround SLA</div>
+                  </div>
+                  {(slaScore.open.approval + slaScore.open.placement) > 0 && (
+                    <span className="trend-pill mono" style={{ color: '#B91C1C' }}>
+                      {slaScore.open.approval + slaScore.open.placement} past SLA
+                    </span>
+                  )}
+                </div>
+                <div style={{ padding: '4px 0 2px' }}>
+                  <SlaRow label={`Approved within ${SLA_APPROVE_HOURS}h`} owner="Approver"
+                    pct={slaScore.now.approve} prev={slaScore.prev.approve} n={slaScore.now.apprN}
+                    openBreaches={slaScore.open.approval} />
+                  <SlaRow label={`Placed within ${SLA_PLACE_HOURS}h of approval`} owner="Placer"
+                    pct={slaScore.now.place} prev={slaScore.prev.place} n={slaScore.now.placN}
+                    openBreaches={slaScore.open.placement} last />
+                </div>
+              </div>
+
               <ListCard title="Pending Approval" eyebrow="Action · Now" badge={`${pendingAppr.length} POs`} badgeColor="#B45309"
                 items={pendingAppr.slice(0, 8)} emptyText="No POs pending approval"
                 renderItem={(o) => ({ left: o.po_number, leftColor: '#B45309', sub: o.vendor_name || '—', right: fmtCr(o.total_amount), status: 'pending_approval' })}
@@ -276,6 +337,38 @@ export default function ProcurementDashboard() {
         )}
       </div>
     </Layout>
+  )
+}
+
+
+// One SLA line: how we did this month, how that compares with last month, and
+// how many are breaching RIGHT NOW. The open count is the actionable half —
+// a percentage tells you the past, a breach count tells you what to chase.
+function SlaRow({ label, owner, pct, prev, n, openBreaches, last }) {
+  const good = pct != null && pct >= 90
+  const delta = (pct != null && prev != null) ? pct - prev : null
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 0',
+                  borderBottom: last ? 'none' : '1px solid var(--gray-100)' }}>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:13, color:'var(--gray-800)', fontWeight:500 }}>{label}</div>
+        <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>
+          {owner}{n ? ` · ${n} this month` : ' · none yet this month'}
+          {openBreaches > 0 && <span style={{ color:'#B91C1C', fontWeight:600 }}> · {openBreaches} open past SLA</span>}
+        </div>
+      </div>
+      <div style={{ textAlign:'right', flexShrink:0 }}>
+        <div className="mono" style={{ fontSize:19, fontWeight:600,
+             color: pct == null ? 'var(--gray-400)' : good ? '#15803d' : '#B45309' }}>
+          {pct == null ? '—' : pct + '%'}
+        </div>
+        {delta != null && delta !== 0 && (
+          <div style={{ fontSize:10.5, color: delta > 0 ? '#15803d' : '#B91C1C' }}>
+            {delta > 0 ? '▲' : '▼'} {Math.abs(delta)} pts vs last month
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 

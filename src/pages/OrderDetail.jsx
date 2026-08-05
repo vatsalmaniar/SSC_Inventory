@@ -6,6 +6,7 @@ import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc, deliveryDateIssue, deliveryDateMax } from '../lib/fmt'
 import { FC_PIPELINE_STATUSES, TERMINAL_STATUSES } from '../lib/orderStatus'
+import { notify } from '../lib/notify'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
@@ -1005,10 +1006,7 @@ if (match) {
 
       const PRE_APPROVAL  = ['draft','pending_approval']
       const POST_APPROVAL = ['approved','placed','acknowledged','delivery_confirmation','partially_received']
-      const targets = profiles.filter(p => ['ops','admin','management'].includes(p.role) && p.id !== user.id)
-      if (!targets.length) return
-
-      const rows = []
+      const msgs = []
       for (const po of linkedPos) {
         let msg = null
         if (scope === 'partial') {
@@ -1024,19 +1022,15 @@ if (match) {
           msg = `${order.order_number} cancelled — PO ${po.po_number} is already ${po.status}. Material was purchased for this order; confirm where it goes.`
         }
         if (!msg) continue
-        for (const t of targets) {
-          rows.push({
-            user_name: t.name, user_id: t.id, message: msg,
-            po_id: po.id,
-            order_number: po.po_number,
-            from_name: user.name,
-            email_type: 'po_linked_co_cancelled',
-          })
-        }
+        msgs.push({ msg, po })
       }
-      if (rows.length) {
-        const { error: notifErr } = await sb.from('notifications').insert(rows)
-        if (notifErr) console.error('notifyOpsForLinkedPOs insert failed:', notifErr)
+      // One dispatch per affected PO; recipients come from notification_rules
+      // so this list can never drift from the other procurement events again.
+      for (const { msg, po } of msgs) {
+        await notify('po_linked_co_cancelled', {
+          message: msg, po_id: po.id, order_number: po.po_number,
+          actorId: user.id, actorName: user.name,
+        })
       }
     } catch (e) { console.error('notifyOpsForLinkedPOs:', e) }
   }

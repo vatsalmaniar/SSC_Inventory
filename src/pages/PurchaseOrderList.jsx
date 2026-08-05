@@ -35,13 +35,17 @@ const FILTERS = [
   { key:'placed', label:'Order Placed' },
   { key:'delivery', label:'Delivery Confirmation' },
   { key:'received', label:'Material Received' },
+  { key:'amended', label:'Amended · vendor not told', tone:'warn' },
   { key:'closed', label:'Closed' },
   { key:'cancelled', label:'Cancelled', tone:'danger' },
 ]
 const TIMELINES = TIMELINE_OPTIONS
 
-function matchFilter(po, f) {
+function matchFilter(po, f, amendedUnsent) {
   if (f === 'all') return true
+  // An amended PO whose latest revision was never sent: the vendor is
+  // working to superseded figures and nothing else in the app says so.
+  if (f === 'amended') return amendedUnsent?.has(po.id) || false
   if (f === 'po') return !isCPO(po)
   if (f === 'cpo') return isCPO(po)
   if (f === 'open') return !['material_received','closed','cancelled'].includes(po.status)
@@ -78,6 +82,7 @@ export default function PurchaseOrderList() {
   const location = useLocation()
   const [user, setUser] = useState({ name:'', role:'' })
   const [pos, setPos] = useState([])
+  const [amendedUnsent, setAmendedUnsent] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState(location.state?.filter || 'all')
   const [timeline, setTimeline] = useState(location.state?.timeline || 'all')
@@ -120,14 +125,27 @@ export default function PurchaseOrderList() {
       .range(from, to))
     if (error) console.error('PO list load error:', error)
     setPos(data || [])
+    // POs whose CURRENT revision is an amendment that never reached the vendor.
+    // Only the latest revision matters — an old Rev 1 that was superseded by a
+    // sent Rev 2 is not outstanding.
+    sb.from('po_revisions').select('po_id, rev_no, sent_to_vendor_at')
+      .order('rev_no', { ascending: false })
+      .then(({ data: revs, error: rErr }) => {
+        if (rErr) { console.error('revision load:', rErr); return }
+        const latest = new Map()
+        for (const r of (revs || [])) if (!latest.has(r.po_id)) latest.set(r.po_id, r)
+        const out = new Set()
+        for (const [poId, r] of latest) if (r.rev_no > 0 && !r.sent_to_vendor_at) out.add(poId)
+        setAmendedUnsent(out)
+      })
     setLoading(false)
   }
 
   const timelineOrders = pos.filter(po => inTimeline(po, timeline, customFrom, customTo, dateMode))
-  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = timelineOrders.filter(po => matchFilter(po, key)).length; return acc }, {})
+  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = timelineOrders.filter(po => matchFilter(po, key, amendedUnsent)).length; return acc }, {})
   const q = search.trim().toLowerCase()
   const filtered = timelineOrders
-    .filter(po => matchFilter(po, filter))
+    .filter(po => matchFilter(po, filter, amendedUnsent))
     .filter(po => !q || po.po_number?.toLowerCase().includes(q) || po.vendor_name?.toLowerCase().includes(q) || po.order_number?.toLowerCase().includes(q) || po.submitted_by_name?.toLowerCase().includes(q))
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))

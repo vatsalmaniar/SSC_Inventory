@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import { toast } from '../lib/toast'
 import { fmt } from '../lib/fmt'
+import { NotificationRulesAdmin } from '../components/NotificationRules'
 import '../styles/orders-redesign.css'
 
 const ROLE_LABELS = {
@@ -36,6 +37,8 @@ export default function UserManagement() {
   const [editingId, setEditingId] = useState(null)
   const [editEmail, setEditEmail] = useState('')
   const [busyId, setBusyId] = useState(null)
+  const [resetResult, setResetResult] = useState(null)   // { name, temp } after a real password reset
+  const [view, setView] = useState('users')              // 'users' | 'notifications'
 
   useEffect(() => { init() }, [])
 
@@ -94,6 +97,18 @@ export default function UserManagement() {
     if (error) { toast.error(error.message || 'Failed'); return }
     toast.success(turningOn ? `${u.name} suspended` : `${u.name} reactivated`)
     setUsers(prev => prev.map(x => x.id === u.id ? { ...x, is_suspended: turningOn } : x))
+  }
+
+  // Actually SETS a new temporary password (unlike "Force Password Change", which only flags).
+  async function resetPassword(u) {
+    if (!window.confirm(`Reset ${u.name}'s password to a new temporary one?\n\nA temporary password will be generated and shown to you once. ${u.name} must change it at next login. Their authenticator (2FA) is NOT affected.`)) return
+    const temp = 'Ssc@' + Math.floor(1000 + Math.random() * 9000)
+    setBusyId(u.id)
+    const { error } = await sb.rpc('admin_reset_password', { p_user_id: u.id, p_temp_password: temp })
+    setBusyId(null)
+    if (error) { toast.error(error.message || 'Failed to reset password'); return }
+    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, must_change_password: true } : x))
+    setResetResult({ name: u.name, temp })
   }
 
   async function resetAuthenticator(u) {
@@ -163,6 +178,23 @@ export default function UserManagement() {
             )}
           </div>
         </div>
+
+        {/* View switch */}
+        <div style={{ display:'flex', gap:4, padding:3, background:'var(--o-bg-2)', borderRadius:9, marginBottom:14, width:'fit-content' }}>
+          {[{ k:'users', l:'Users' }, { k:'notifications', l:'Notifications' }].map(v => (
+            <button key={v.k} onClick={() => setView(v.k)}
+              style={{
+                padding:'6px 16px', fontSize:12.5, fontWeight:600, borderRadius:7, cursor:'pointer', border:'none',
+                background: view === v.k ? 'var(--o-surface)' : 'transparent',
+                color:      view === v.k ? 'var(--o-ink)' : 'var(--o-muted)',
+                boxShadow:  view === v.k ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              }}>
+              {v.l}
+            </button>
+          ))}
+        </div>
+
+        {view === 'notifications' ? <NotificationRulesAdmin /> : <>
 
         {/* Filters */}
         <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:14, flexWrap:'wrap' }}>
@@ -330,21 +362,33 @@ export default function UserManagement() {
                   {/* Actions footer */}
                   <div style={{
                     padding:'10px 16px', borderTop:'1px solid var(--o-line)',
-                    display:'flex', gap:6, background:'var(--o-bg-2)', borderRadius:'0 0 var(--o-radius) var(--o-radius)',
+                    display:'flex', gap:6, flexWrap:'wrap', background:'var(--o-bg-2)', borderRadius:'0 0 var(--o-radius) var(--o-radius)',
                   }}>
+                    <button
+                      onClick={() => resetPassword(u)}
+                      disabled={busy || u.is_suspended}
+                      title={u.is_suspended ? 'Reactivate user first' : 'Set a new temporary password (shown once). They change it at next login.'}
+                      style={{
+                        flex:1, minWidth:130, padding:'7px 10px', fontSize:11.5, fontWeight:600, borderRadius:7,
+                        cursor: (busy || u.is_suspended) ? 'not-allowed' : 'pointer',
+                        background:'#1a73e8', color:'#fff', border:'1px solid #1a73e8',
+                        opacity: (busy || u.is_suspended) ? 0.5 : 1,
+                      }}>
+                      Reset Password
+                    </button>
                     <button
                       onClick={() => togglePasswordReset(u)}
                       disabled={busy || u.is_suspended}
-                      title={u.is_suspended ? 'Reactivate user first' : (u.must_change_password ? 'Clear force-password-change flag' : 'Force password change at next login')}
+                      title={u.is_suspended ? 'Reactivate user first' : (u.must_change_password ? 'Clear the force-change flag' : 'Only flag them to change their password (does NOT set a new one)')}
                       style={{
-                        flex:1, padding:'7px 10px', fontSize:11.5, fontWeight:600, borderRadius:7,
+                        padding:'7px 10px', fontSize:11.5, fontWeight:600, borderRadius:7,
                         cursor: (busy || u.is_suspended) ? 'not-allowed' : 'pointer',
                         background: u.must_change_password ? '#fef3c7' : 'var(--o-surface)',
                         color:      u.must_change_password ? '#b45309' : 'var(--o-ink)',
                         border:     '1px solid ' + (u.must_change_password ? '#fcd34d' : 'var(--o-line)'),
                         opacity: u.is_suspended ? 0.5 : 1,
                       }}>
-                      {u.must_change_password ? 'Clear Reset' : 'Force Password Change'}
+                      {u.must_change_password ? 'Clear Flag' : 'Force Change'}
                     </button>
                     <button
                       onClick={() => toggleSuspend(u)}
@@ -384,12 +428,34 @@ export default function UserManagement() {
             <strong>How this works:</strong>
             <ul style={{ margin:'6px 0 0 18px', padding:0 }}>
               <li><strong>Email</strong> — if blank, notifications go to <code style={{ background:'#fef3c7', padding:'1px 5px', borderRadius:4 }}>username@ssccontrol.com</code>.</li>
-              <li><strong>Force Password Change</strong> — user is redirected to <code style={{ background:'#fef3c7', padding:'1px 5px', borderRadius:4 }}>/change-password</code> on next login.</li>
+              <li><strong>Reset Password</strong> — <em>actually sets a new temporary password</em> and shows it to you once. Use this when someone can't log in / forgot their password. They must change it at next login.</li>
+              <li><strong>Force Change</strong> — only <em>flags</em> the user to change their password at next login. It does <strong>NOT</strong> set a new one — they still log in with their existing password first.</li>
+              <li><strong>Reset 2FA</strong> — clears their authenticator so they set up a fresh one at next login (password unchanged). Use for a lost/changed phone.</li>
               <li><strong>Suspend</strong> — instantly blocks the user from logging in. Existing sessions remain valid until they next refresh; click again to reactivate.</li>
             </ul>
           </div>
         </div>
+
+        </>}
       </div>
+
+      {resetResult && (
+        <div onClick={() => setResetResult(null)} style={{ position:'fixed', inset:0, background:'rgba(11,27,48,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:12, padding:'22px 24px', width:'min(430px, 94vw)', boxShadow:'0 12px 44px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize:16, fontWeight:600, color:'#0B1B30', marginBottom:6 }}>Temporary password set</div>
+            <div style={{ fontSize:13, color:'#5B6878', lineHeight:1.55, marginBottom:14 }}>
+              Share this with <b>{resetResult.name}</b> — it's shown <b>only once</b>. They'll be asked to change it at next login.
+            </div>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, border:'1px solid #E4E7EC', borderRadius:9, padding:'12px 14px', marginBottom:14 }}>
+              <span style={{ fontFamily:'var(--mono, monospace)', fontSize:19, fontWeight:600, color:'#0B1B30', userSelect:'all' }}>{resetResult.temp}</span>
+              <button onClick={() => { navigator.clipboard?.writeText(resetResult.temp); toast.success('Copied') }}
+                style={{ padding:'7px 14px', fontSize:12.5, fontWeight:600, borderRadius:7, cursor:'pointer', background:'#f1f5f9', color:'#0B1B30', border:'1px solid #E4E7EC' }}>Copy</button>
+            </div>
+            <button onClick={() => setResetResult(null)}
+              style={{ width:'100%', padding:'9px', fontSize:13, fontWeight:600, borderRadius:8, cursor:'pointer', background:'#1a73e8', color:'#fff', border:'1px solid #1a73e8' }}>Done</button>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }

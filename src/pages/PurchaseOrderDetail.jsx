@@ -3,6 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { writeDoc } from '../lib/printDoc'
 import { friendlyError } from '../lib/errorMsg'
+import { notify } from '../lib/notify'
+import { RecipientFields } from '../components/RecipientFields'
+
+// Mirrors INTERNAL_BCC in supabase/functions/send-po-to-vendor. Kept as a
+// prefill the user can edit — the server no longer forces any address on.
+const INTERNAL_BCC = ['purchase@ssccontrol.com', 'purchase.brd@ssccontrol.com',
+                      'ankit.dave@ssccontrol.com', 'hiral.patel@ssccontrol.com']
+import { SLA_APPROVE_HOURS, SLA_PLACE_HOURS } from '../lib/coverage'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
@@ -64,12 +72,17 @@ export default function PurchaseOrderDetail() {
   const [grnItemsByPOItem, setGrnItemsByPOItem] = useState({})
   const [purchaseInvoices, setPurchaseInvoices] = useState([])
   const [deliveryDates, setDeliveryDates] = useState([])
+  const [revisions, setRevisions] = useState([])   // newest first; [0] is current
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [activeTab, setActiveTab] = useState('overview')  // overview | items | delivery
   const [userRole, setUserRole]   = useState('')
   const [userId, setUserId]       = useState('')
   const [userName, setUserName]   = useState('')
+
+  // The revision the PO currently stands at. Rev 0 until it is amended.
+  const currentRevision = revisions[0] || null
+  const revLabel = currentRevision && currentRevision.rev_no > 0 ? `Rev ${currentRevision.rev_no}` : null
 
   // Edit mode
   const [editMode, setEditMode]   = useState(false)
@@ -120,11 +133,14 @@ export default function PurchaseOrderDetail() {
 
   // Send PO to Vendor
   const [showEmailModal, setShowEmailModal]   = useState(false)
+  // Gmail-style recipients. Internal copies default to BCC so the vendor
+  // never sees who we have on the thread and a reply-all cannot reach them.
+  const [emailTo,  setEmailTo]  = useState([])
+  const [emailCc,  setEmailCc]  = useState([])
+  const [emailBcc, setEmailBcc] = useState([])
   const [vendorContacts, setVendorContacts]   = useState([])
   const [vendorDetail,   setVendorDetail]     = useState(null)
   const [senderEmail,    setSenderEmail]      = useState('')
-  const [recipientSel,   setRecipientSel]     = useState({})   // { email: true }
-  const [oneOffEmail,    setOneOffEmail]      = useState('')
   const [emailSubject,   setEmailSubject]     = useState('')
   const [emailMessage,   setEmailMessage]     = useState('')
   const [extraFiles,     setExtraFiles]       = useState([])   // [{ url, filename }]
@@ -156,6 +172,10 @@ export default function PurchaseOrderDetail() {
     const poRes = await sb.from('purchase_orders').select('*').eq('id', id).single()
     if (poRes.error || !poRes.data) { setPo(null); setLoading(false); return }
     setPo(poRes.data)
+    // Revision history — newest first. Non-blocking: the PO must still open if
+    // this fails, it is supporting evidence rather than the record itself.
+    sb.from('po_revisions').select('*').eq('po_id', id).order('rev_no', { ascending: false })
+      .then(({ data: revs }) => setRevisions(revs || []))
     // Non-blocking vendor code + full vendor details + contacts lookup
     if (poRes.data?.vendor_id) {
       sb.from('vendors').select('*').eq('id', poRes.data.vendor_id).maybeSingle().then(({ data: v }) => {
@@ -437,12 +457,19 @@ Procurement Team
 SSC Control Pvt. Ltd.`
     )
 
-    setShowEmailModal(true)
-  }
+    // Prefill: vendor's primary contact in To, the standing internal list in Bcc.
+    // Bcc rather than Cc so the vendor never sees internal addresses and a
+    // "reply all" from them cannot land in six inboxes. Every chip is removable.
+    const contacts = []
+    vendorContacts.forEach(c => { if (c.email) contacts.push(c.email.toLowerCase()) })
+    if (!contacts.length && vendorDetail?.poc_email) contacts.push(vendorDetail.poc_email.toLowerCase())
+    setEmailTo(contacts.slice(0, 1))
+    setEmailCc([])
+    setEmailBcc([...INTERNAL_BCC, senderEmail].filter(Boolean)
+      .map(e => e.toLowerCase())
+      .filter((e, i, a) => a.indexOf(e) === i && !contacts.includes(e)))
 
-  function toggleRecipient(email) {
-    const key = email.toLowerCase()
-    setRecipientSel(p => ({ ...p, [key]: !p[key] }))
+    setShowEmailModal(true)
   }
 
   async function uploadExtraFile(file) {
@@ -563,9 +590,8 @@ SSC Control Pvt. Ltd.`
 
   async function sendEmailToVendor() {
     // Gather selected recipients
-    const toEmails = Object.entries(recipientSel).filter(([_, v]) => v).map(([k]) => k)
-    if (oneOffEmail.trim()) toEmails.push(oneOffEmail.trim().toLowerCase())
-    if (!toEmails.length) { toast('Select at least one recipient.'); return }
+    const toEmails = emailTo
+    if (!toEmails.length) { toast('Add at least one recipient.'); return }
     if (!emailSubject.trim()) { toast('Subject is required.'); return }
 
     // Build HTML body from message + PO summary card
@@ -594,7 +620,7 @@ SSC Control Pvt. Ltd.`
         let bin = ''; const bytes = new Uint8Array(buf)
         for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
         const b64 = btoa(bin)
-        attachments.push({ filename: `${po.po_number.split('/')[1] || po.po_number}.pdf`, content: b64 })
+        attachments.push({ filename: `${po.po_number.split('/')[1] || po.po_number}${currentRevision?.rev_no > 0 ? `-Rev${currentRevision.rev_no}` : ''}.pdf`, content: b64 })
       }
     } catch (err) {
       console.error('PDF generation failed:', err)
@@ -614,12 +640,20 @@ SSC Control Pvt. Ltd.`
     }
     extraFiles.forEach(f => attachments.push({ url: f.url, filename: f.filename }))
     try {
+      // The endpoint now requires a signed-in user with a procurement role — it
+      // used to accept anonymous calls, so anyone with the URL could send mail
+      // as no-reply@ssccontrol.com.
+      const { data: { session } } = await sb.auth.getSession()
+      if (!session) { toast('Session expired — please sign in again.'); setSendingEmail(false); return }
+
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL || 'https://kvjihrlbntxcdadogmhn.supabase.co'}/functions/v1/send-po-to-vendor`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           po_id: id,
-          to_emails: toEmails,
+          to_emails:  toEmails,
+          cc_emails:  emailCc,
+          bcc_emails: emailBcc,
           sender_name: userName,
           sender_email: senderEmail,
           subject: emailSubject,
@@ -629,6 +663,15 @@ SSC Control Pvt. Ltd.`
       })
       const data = await res.json()
       if (!data.ok) { toast('Send failed: ' + (data.error || 'Unknown')); setSendingEmail(false); return }
+      // Stamp WHICH revision the vendor now holds. Without this there is no way
+      // to tell an amended PO that was communicated from one that was not —
+      // exactly how four amendments reached 2026-08-05 unnoticed.
+      if (currentRevision?.id) {
+        const { error: stampErr } = await sb.from('po_revisions')
+          .update({ sent_to_vendor_at: new Date().toISOString(), sent_to: [...toEmails, ...emailCc, ...emailBcc] })
+          .eq('id', currentRevision.id)
+        if (stampErr) console.error('revision send-stamp failed:', stampErr)
+      }
       toast(`PO emailed to ${toEmails.length} recipient${toEmails.length > 1 ? 's' : ''}`, 'success')
       setShowEmailModal(false)
       setSendingEmail(false)
@@ -682,13 +725,12 @@ SSC Control Pvt. Ltd.`
   async function handleApprove() {
     setSaving(true)
 
-    // A PO number is minted ONCE, on first approval, and is permanent after that.
-    // This used to call next_po_number() unconditionally. Amending an approved PO
-    // sends it back to pending_approval, so approving it again renamed the PO and
-    // overwrote approved_at / placed_at. Five live POs were silently renumbered on
-    // 2026-08-04 — SSC/PO0185 became SSC/PO0232 — after the vendor already held
-    // the original number. Restored in sql/po_number_restore.sql and now blocked
-    // at the database by trg_po_number_immutable (sql/po_number_immutable.sql).
+    // A PO number is minted ONCE, on first approval, and is then permanent.
+    // This used to call next_po_number() unconditionally, so amending an
+    // already-approved PO (which sends it back to pending_approval) renamed it
+    // on re-approval and overwrote approved_at / placed_at. Five live POs were
+    // silently renumbered on 2026-08-04 — PO0185 became PO0232 — after the
+    // vendor already held the original number. See sql/po_number_restore.sql.
     const isFirstApproval = !po.po_number || po.po_number.startsWith('Temp/')
     let poNum = po.po_number
     if (isFirstApproval) {
@@ -698,21 +740,67 @@ SSC Control Pvt. Ltd.`
       poNum = data
     }
 
-    // Regenerate the document either way — an amended PO needs paperwork that
-    // matches the new figures, but under the SAME PO number as before.
+    // ── Freeze this state as a numbered revision ──
+    // The header can only describe ONE state, so without this every amendment
+    // destroys the previous one. Measured 2026-08-05: 91 edits landed on POs
+    // already placed with a vendor, across 77 POs, with no record of what the
+    // vendor held.
+    //
+    // The revision number is resolved BEFORE the document is rendered, so the
+    // printed PO carries its own revision marker. Reading it back from the DB
+    // (not from `revisions` state) keeps it correct even if two approvals race.
+    let nextRev = 0
+    let changeSummary = null
+    try {
+      const { data: lastRev } = await sb.from('po_revisions')
+        .select('rev_no').eq('po_id', id).order('rev_no', { ascending: false }).limit(1).maybeSingle()
+      nextRev = isFirstApproval ? 0 : ((lastRev?.rev_no ?? -1) + 1)
+
+      // The amendment diff was already composed by saveEdit and logged; reuse it
+      // verbatim rather than recomputing, so the revision and the timeline agree.
+      if (!isFirstApproval) {
+        const { data: amendNote } = await sb.from('po_comments')
+          .select('message').eq('po_id', id).ilike('message', 'PO AMENDED after approval%')
+          .order('created_at', { ascending: false }).limit(1).maybeSingle()
+        changeSummary = amendNote?.message?.replace('PO AMENDED after approval — sent back for re-approval. ', '') || null
+      }
+    } catch (err) { console.error('revision number lookup failed:', err) }
+
+    // Regenerate the document every time — an amended PO needs paperwork that
+    // matches the new figures, under the SAME PO number, marked with its revision.
     let poPdfUrl = null
-    try { poPdfUrl = await generatePoPdf(poNum) } catch (err) { console.error('PDF generation failed:', err) }
+    try { poPdfUrl = await generatePoPdf(poNum, nextRev) } catch (err) { console.error('PDF generation failed:', err) }
+
+    const { error: revErr } = await sb.from('po_revisions').insert({
+      po_id: id, rev_no: nextRev, po_number: poNum,
+      change_summary: changeSummary,
+      total_amount: items.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0),
+      approved_by: userName, approved_at: new Date().toISOString(),
+      doc_url: poPdfUrl, created_by: userId || null,
+    })
+    if (revErr) {
+      // Never block an approval on the history write — but make the gap loud,
+      // because an unrecorded revision is how the 2026-08-04 mess stayed hidden.
+      console.error('po_revisions insert failed:', revErr)
+      toast('PO approved, but the revision record failed to save. Tell IT before sending this PO.', 'error')
+    }
 
     await updateStatus('approved', {
-      // Stamped on first approval only. Re-approval of an amendment is already
-      // recorded in po_comments, which keeps the full who/when trail without
-      // destroying the original approval date that PO aging is measured from.
+      // Only stamped on first approval. Re-approval of an amendment is recorded
+      // in po_comments, which keeps the full who/when trail without destroying
+      // the original approval date the PO's age and SLA are measured from.
       ...(isFirstApproval ? {
         po_number:   poNum,
         approved_by: userName,
         approved_at: new Date().toISOString(),
       } : {}),
       ...(poPdfUrl && { po_pdf_url: poPdfUrl }),
+    })
+    // Tells the placer the PO is theirs now and starts the 48h clock.
+    await notify('po_approved', {
+      message: `${poNum} approved${isFirstApproval ? '' : ' (amended)'} — ${fmtINR(po.total_amount)} to ${po.vendor_name || 'vendor'}. Place with the vendor within ${SLA_PLACE_HOURS}h.`,
+      po_id: id, order_number: poNum, actorId: userId, actorName: userName,
+      alsoUserIds: [po.created_by],   // whoever raised it wants to know it cleared
     })
     setSaving(false)
   }
@@ -739,7 +827,9 @@ SSC Control Pvt. Ltd.`
     return dt.getDate().toString().padStart(2,'0') + '.' + (dt.getMonth()+1).toString().padStart(2,'0') + '.' + dt.getFullYear()
   }
 
-  function buildPoHtml(poNumber) {
+  // revNo: the revision this document represents. A printed PO that does not
+  // say which version it is cannot be reconciled with the vendor's copy.
+  function buildPoHtml(poNumber, revNo = currentRevision?.rev_no ?? 0) {
     const FC_ADDRESSES = {
       Kaveri: '17(A) Ashwamegh Warehouse, Behind New Ujala Hotel,\nSarkhej Bavla Highway, Sarkhej, Ahmedabad – 382 210',
       Godawari: '31 GIDC Estate, B/h Bank Of Baroda,\nMakarpura, Vadodara – 390 010',
@@ -752,7 +842,7 @@ SSC Control Pvt. Ltd.`
 
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/>
-<title>Purchase Order — ${poNumber}</title>
+<title>Purchase Order — ${poNumber}${revNo > 0 ? ` Rev ${revNo}` : ''}</title>
 <link href="${window.location.origin}/fonts/fonts.css" rel="stylesheet"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
@@ -872,7 +962,7 @@ SSC Control Pvt. Ltd.`
   <td style="padding-left:12px">
     <div class="meta-section-label">Reference</div>
     <table class="ref-table">
-      <tr><td>PO No.</td><td class="mono">${esc(poNumber)}</td></tr>
+      <tr><td>PO No.</td><td class="mono">${esc(poNumber)}${revNo > 0 ? ` <b>Rev ${revNo}</b>` : ''}</td></tr>
       <tr><td>PO Date</td><td>${poDate}</td></tr>
       ${linkedOrders.length > 1
         ? `<tr><td>Linked Orders</td><td class="mono" style="font-size:10px">${esc(linkedOrders.map(o => o.order_number).join(', '))}</td></tr>`
@@ -971,8 +1061,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 </body></html>`
   }
 
-  async function generatePoPdf(poNumber) {
-    const html = buildPoHtml(poNumber)
+  async function generatePoPdf(poNumber, revNo = 0) {
+    const html = buildPoHtml(poNumber, revNo)
     const blob = new Blob([html], { type: 'text/html' })
     const path = `po-pdfs/${id}/${Date.now()}.html`
     const { error } = await sb.storage.from('po-documents').upload(path, blob, { contentType: 'text/html', upsert: true })
@@ -981,19 +1071,64 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
     return publicUrl
   }
 
-  function viewPoPdf() {
-    const poNumber = po.po_number || po.temp_po_number || '—'
-    const html = buildPoHtml(poNumber)
+  // Serve the FROZEN document that was approved, not a fresh render of current
+  // data. Re-rendering was audit finding F-11: an amended PO displayed today's
+  // quantities under the original approver's signature. A draft has no frozen
+  // document yet, so it still renders live — clearly labelled as a preview.
+  async function viewPoPdf(rev) {
+    const target = rev || currentRevision
     const w = window.open('', '_blank')
     if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
-    writeDoc(w, html)
+
+    if (target?.doc_url) {
+      try {
+        const res = await fetch(target.doc_url)
+        if (!res.ok) throw new Error(String(res.status))
+        writeDoc(w, await res.text())
+        return
+      } catch (err) {
+        console.error('frozen PO document fetch failed:', err)
+        // Fall through to a live render rather than showing the user a blank tab.
+        toast('Archived document unavailable — showing a live preview instead.', 'error')
+      }
+    }
+    writeDoc(w, buildPoHtml(po.po_number || po.temp_po_number || '—'))
+  }
+
+  // ── Stage 2a: Submitted for approval — starts the 24h approval clock ──
+  // Stamped separately from created_at because a PO can sit as a draft for days
+  // before anyone sends it; charging that wait to the approver is wrong.
+  async function handleSubmitForApproval() {
+    await updateStatus('pending_approval', { submitted_at: new Date().toISOString() })
+    // The approver had no way of knowing a PO was waiting: procurement sent no
+    // lifecycle email at all, only @-mentions. This starts the 24h clock AND
+    // tells the person who owns it. Recipients come from notification_rules.
+    await notify('po_submitted', {
+      message: `${po.po_number || 'PO'} submitted for approval — ${fmtINR(po.total_amount)} to ${po.vendor_name || 'vendor'}. Approve within ${SLA_APPROVE_HOURS}h.`,
+      po_id: id, order_number: po.po_number, actorId: userId, actorName: userName,
+    })
   }
 
   // ── Stage 3: Order Placed ──
-  // Stamps once, like approval: re-placing an amended PO must not overwrite the
-  // date it originally went to the vendor.
+  // placed_by closes the 48h placement SLA: without it a breach has no owner.
+  // Like approval, this stamps ONCE. Re-placing after an amendment must not
+  // overwrite the date the PO originally went to the vendor.
   async function handlePlace() {
-    await updateStatus('placed', po.placed_at ? {} : { placed_at: new Date().toISOString() })
+    const firstPlacement = !po.placed_at
+    await updateStatus('placed', po.placed_at ? {} : {
+      placed_at: new Date().toISOString(),
+      placed_by: userId || null,
+      placed_by_name: userName || null,
+    })
+    // Closes both clocks. Only announced on FIRST placement — re-placing an
+    // amended PO is not news, and would otherwise spam on every amendment.
+    if (firstPlacement) {
+      await notify('po_placed', {
+        message: `${po.po_number} placed with ${po.vendor_name || 'vendor'} — ${fmtINR(po.total_amount)}. Remember to send the PO to the vendor if not already sent.`,
+        po_id: id, order_number: po.po_number, actorId: userId, actorName: userName,
+        alsoUserIds: [po.created_by],   // the only person told — see notification_rules_po_narrow.sql
+      })
+    }
   }
 
   // ── Stage 4: Acknowledgement — optional vendor document ──
@@ -1102,16 +1237,11 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
     // was. Both are fixed here — the CO's own timeline must show that its
     // supply was killed, or Sales finds out only by chance.
     try {
-      const targets = (allUsers || []).filter(p => ['ops','admin','management'].includes(p.role) && p.id !== userId)
-      if (targets.length) {
-        const msg = `${po.po_number} cancelled${wasPlacedWithVendor ? ' (was already with the vendor — confirm cancellation with them)' : ''}. Reason: ${cancelReason.trim()}`
-        const { error: nErr } = await sb.from('notifications').insert(targets.map(t => ({
-          user_name: t.name, user_id: t.id, message: msg,
-          po_id: id, order_number: po.po_number,
-          from_name: userName, email_type: 'po_cancelled',
-        })))
-        if (nErr) console.error('PO cancel notify failed:', nErr)
-      }
+      const msg = `${po.po_number} cancelled${wasPlacedWithVendor ? ' (was already with the vendor — confirm cancellation with them)' : ''}. Reason: ${cancelReason.trim()}`
+      await notify('po_cancelled', {
+        message: msg, po_id: id, order_number: po.po_number,
+        actorId: userId, actorName: userName,
+      })
       // Write it on every customer order this PO was procuring for.
       const coIds = [...new Set([...(linkedOrders || []).map(o => o.id), ...(po.order_id ? [po.order_id] : [])])]
       for (const coId of coIds) {
@@ -1171,18 +1301,16 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
     // Notify tagged users (in-app + email via po_mention type)
     if (tagged.length) {
+      // Mentions are explicitly targeted — the tagged people ARE the list, so
+      // roles never widen it. Exclusions on the rule still apply.
       const final = allUsers.filter(u => tagged.includes(u.name) && u.name !== userName)
       if (final.length) {
         const msg = `${userName} tagged you in PO ${po.po_number}: ${text.slice(0, 120)}${text.length > 120 ? '…' : ''}`
-        try {
-          await sb.from('notifications').insert(final.map(t => ({
-            user_name: t.name, user_id: t.id, message: msg,
-            po_id: id,
-            order_number: po.po_number,
-            from_name: userName,
-            email_type: 'po_mention',
-          })))
-        } catch (_) {}
+        await notify('po_mention', {
+          message: msg, po_id: id, order_number: po.po_number,
+          actorId: userId, actorName: userName,
+          toUserIds: final.map(u => u.id),
+        })
       }
     }
 
@@ -1317,7 +1445,9 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
       updated_at: new Date().toISOString(),
       // Re-approval required: clear the stamp so it can never vouch for numbers
       // it did not approve.
-      ...(needsReapproval ? { status: 'pending_approval', approved_by: null, approved_at: null } : {}),
+      // submitted_at restarts too: the approver's 24h clock runs from when the
+      // AMENDED numbers reached them, not from the original submission.
+      ...(needsReapproval ? { status: 'pending_approval', approved_by: null, approved_at: null, submitted_at: new Date().toISOString() } : {}),
     }).eq('id', id)
 
     if (poErr) { toast(friendlyError(poErr, "Save failed. Please try again.")); setSaving(false); saveGuard.current = false; return }
@@ -1398,7 +1528,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
   // Pipeline — determine primary action button
   const statusActions = {
-    draft: { label: 'Submit for Approval', next: 'pending_approval' },
+    draft: { label: 'Submit for Approval', fn: handleSubmitForApproval },
     pending_approval: ['admin','management'].includes(userRole) ? { label: 'Approve PO', fn: handleApprove } : null,
     approved: { label: 'Mark as Placed', fn: handlePlace },
     placed: { label: 'Record Acknowledgement', fn: handleAcknowledge },
@@ -1787,7 +1917,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 ) : (
                   <>
                   <div className="od-detail-grid">
-                    <div className="od-detail-field"><label>PO Number</label><div className="val" style={{ fontFamily:'var(--mono)', fontWeight:700 }}>{po.po_number}</div></div>
+                    <div className="od-detail-field"><label>PO Number</label><div className="val" style={{ fontFamily:'var(--mono)', fontWeight:700, display:'flex', alignItems:'center', gap:7 }}>{po.po_number}{revLabel && <span title="This PO has been amended since it was first approved" style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:5, background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe' }}>{revLabel.toUpperCase()}</span>}</div></div>
                     <div className="od-detail-field">
                       <label>Vendor</label>
                       <div className="val">
@@ -1833,7 +1963,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       <div className="od-detail-field">
                         <label>PO Document</label>
                         <div className="val">
-                          <span onClick={viewPoPdf}
+                          <span onClick={() => viewPoPdf()}
                             style={{ fontSize:12, color:'#1a73e8', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, cursor:'pointer' }}>
                             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View PO
@@ -2134,6 +2264,50 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
           {/* ── RIGHT SIDEBAR ── */}
           <div className="od-sidebar">
 
+            {/* Revision history — only once the PO has actually been amended.
+                A PO that has never changed shows nothing, so this stays quiet
+                for the ~94% of POs that only ever have Rev 0. */}
+            {revisions.length > 1 && (
+              <div className="od-side-card">
+                <div className="od-side-card-title">Revisions</div>
+                <div style={{ padding:'4px 0 2px' }}>
+                  {revisions.map(r => (
+                    <div key={r.id} style={{
+                      display:'flex', gap:10, padding:'9px 0',
+                      borderBottom:'1px solid var(--gray-100)',
+                    }}>
+                      <span style={{
+                        flexShrink:0, alignSelf:'flex-start', padding:'2px 7px', borderRadius:5,
+                        fontSize:10.5, fontWeight:700, fontFamily:'var(--mono)',
+                        background: r.rev_no === currentRevision?.rev_no ? '#eff6ff' : 'var(--gray-100)',
+                        color:      r.rev_no === currentRevision?.rev_no ? '#1d4ed8' : 'var(--gray-500)',
+                        border: '1px solid ' + (r.rev_no === currentRevision?.rev_no ? '#bfdbfe' : 'var(--gray-200)'),
+                      }}>REV {r.rev_no}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, color:'var(--gray-800)', lineHeight:1.45 }}>
+                          {r.change_summary || 'Original approved PO'}
+                        </div>
+                        <div style={{ fontSize:10.5, color:'var(--gray-400)', marginTop:3 }}>
+                          {r.approved_by || '—'} · {fmtTs(r.approved_at)} · {fmtINR(r.total_amount)}
+                        </div>
+                        <div style={{ display:'flex', gap:10, marginTop:4, alignItems:'center', flexWrap:'wrap' }}>
+                          {r.doc_url && (
+                            <span onClick={() => viewPoPdf(r)}
+                              style={{ fontSize:11, color:'#1a73e8', fontWeight:600, cursor:'pointer' }}>
+                              View this version
+                            </span>
+                          )}
+                          {r.sent_to_vendor_at
+                            ? <span style={{ fontSize:10.5, color:'#15803d' }}>✓ Sent {fmtTs(r.sent_to_vendor_at)}</span>
+                            : <span style={{ fontSize:10.5, color:'#b45309', fontWeight:600 }}>Not sent to vendor</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Activity & Notes */}
             <div className="od-side-card od-activity-card">
               <div className="od-side-card-title">Activity & Notes</div>
@@ -2421,7 +2595,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
       if (vendorDetail?.director_email && !allContactEmails.find(x => x.email.toLowerCase() === vendorDetail.director_email.toLowerCase())) {
         allContactEmails.push({ email: vendorDetail.director_email, name: vendorDetail.director_name || 'Director', role: 'Director' })
       }
-      const selectedCount = Object.values(recipientSel).filter(Boolean).length + (oneOffEmail.trim() ? 1 : 0)
+      const selectedCount = emailTo.length + emailCc.length + emailBcc.length
       return (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
           onClick={() => !sendingEmail && setShowEmailModal(false)}>
@@ -2441,39 +2615,24 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 14px', fontSize:11, color:'#475569', lineHeight:1.7 }}>
                 <div><strong style={{ color:'#0f172a' }}>From:</strong> SSC Procurement &lt;no-reply@ssccontrol.com&gt;</div>
                 <div><strong style={{ color:'#0f172a' }}>Reply-To:</strong> {senderEmail || '—'}</div>
-                <div><strong style={{ color:'#0f172a' }}>Cc (auto):</strong> purchase@, purchase.brd@, ankit.dave@, hiral.patel@ + sender (dedup)</div>
+                <div><strong style={{ color:'#0f172a' }}>Bcc:</strong> the internal team is Bcc'd, so the vendor never sees their addresses</div>
               </div>
             </div>
 
-            {/* Recipients */}
-            <div style={{ padding:'16px 24px 0' }}>
-              <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>To (select recipients)</div>
-              {allContactEmails.length === 0 && (
-                <div style={{ padding:'10px 14px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, fontSize:12, color:'#92400e' }}>
-                  No contacts with email found for this vendor. Add them in <button onClick={() => vendorDetail?.id && navigate('/procurement/vendors/' + vendorDetail.id)} style={{ background:'none', border:'none', color:'#92400e', fontWeight:700, cursor:'pointer', textDecoration:'underline', fontFamily:'var(--font)', fontSize:12, padding:0 }}>Vendor 360 → Contacts</button>, or use the one-off email below.
+            {/* Recipients — Gmail-style To / Cc / Bcc */}
+            <div style={{ padding:'12px 24px 0' }}>
+              {allContactEmails.length === 0 && emailTo.length === 0 && (
+                <div style={{ padding:'10px 14px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, fontSize:12, color:'#92400e', marginBottom:10 }}>
+                  No contacts with email found for this vendor. Add them in <button onClick={() => vendorDetail?.id && navigate('/procurement/vendors/' + vendorDetail.id)} style={{ background:'none', border:'none', color:'#92400e', fontWeight:700, cursor:'pointer', textDecoration:'underline', fontFamily:'var(--font)', fontSize:12, padding:0 }}>Vendor 360 → Contacts</button>, or just type an address below.
                 </div>
               )}
-              {allContactEmails.map(c => {
-                const key = c.email.toLowerCase()
-                const checked = !!recipientSel[key]
-                return (
-                  <label key={key} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:8, border:'1px solid', borderColor: checked ? '#1a73e8' : '#e2e8f0', background: checked ? '#eff6ff' : 'white', cursor:'pointer', marginBottom:6 }}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleRecipient(c.email)} style={{ accentColor:'#1a73e8', width:15, height:15 }} />
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:600, color:'#0f172a' }}>{c.name} <span style={{ fontSize:10, fontWeight:600, padding:'1px 6px', borderRadius:10, background:'#f1f5f9', color:'#64748b', marginLeft:4 }}>{c.role}</span></div>
-                      <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{c.email}</div>
-                    </div>
-                  </label>
-                )
-              })}
-              <div style={{ marginTop:8 }}>
-                <input value={oneOffEmail} onChange={e => setOneOffEmail(e.target.value)}
-                  placeholder="+ Add another email (one-off)"
-                  style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'9px 12px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
-              </div>
+              <RecipientFields
+                to={emailTo} cc={emailCc} bcc={emailBcc}
+                setTo={setEmailTo} setCc={setEmailCc} setBcc={setEmailBcc}
+                suggestions={allContactEmails}
+                disabled={sendingEmail} />
             </div>
 
-            {/* Subject */}
             <div style={{ padding:'16px 24px 0' }}>
               <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>Subject</div>
               <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
@@ -2531,7 +2690,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             {/* Actions */}
             <div style={{ padding:'18px 24px 20px', display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', borderTop:'1px solid #f1f5f9', marginTop:18, position:'sticky', bottom:0, background:'white' }}>
               <div style={{ fontSize:12, color:'#64748b' }}>
-                {selectedCount === 0 ? 'No recipients selected' : `${selectedCount} recipient${selectedCount !== 1 ? 's' : ''} selected`}
+                {emailTo.length === 0 ? 'Add a recipient' : `${selectedCount} recipient${selectedCount !== 1 ? 's' : ''}` + (emailBcc.length ? ` · ${emailBcc.length} Bcc` : '')}
               </div>
               <div style={{ display:'flex', gap:10 }}>
                 <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail || previewingPdf}
@@ -2544,8 +2703,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     {previewingPdf ? 'Generating…' : 'Preview PDF'}
                   </button>
                 )}
-                <button onClick={sendEmailToVendor} disabled={sendingEmail || previewingPdf || selectedCount === 0}
-                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a73e8', color:'white', fontSize:13, fontWeight:700, cursor: sendingEmail || previewingPdf || selectedCount === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: sendingEmail || previewingPdf || selectedCount === 0 ? 0.5 : 1 }}>
+                <button onClick={sendEmailToVendor} disabled={sendingEmail || previewingPdf || emailTo.length === 0}
+                  style={{ padding:'10px 22px', border:'none', borderRadius:8, background:'#1a73e8', color:'white', fontSize:13, fontWeight:700, cursor: sendingEmail || previewingPdf || emailTo.length === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)', opacity: sendingEmail || previewingPdf || emailTo.length === 0 ? 0.5 : 1 }}>
                   {sendingEmail ? 'Sending…' : 'Send Email'}
                 </button>
               </div>

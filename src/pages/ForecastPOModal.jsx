@@ -126,6 +126,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
         vendor_id:            vendorId,
         vendor_name:          vendorName,
         status:               submitForApproval ? 'pending_approval' : 'draft',
+        submitted_at:         submitForApproval ? new Date().toISOString() : null,
         po_date:              poDate,
         expected_delivery:    expectedDelivery || null,
         fulfilment_center:    fulfilmentCenter,

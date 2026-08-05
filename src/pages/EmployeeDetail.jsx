@@ -11,6 +11,7 @@ import PhotoCropper from '../components/PhotoCropper'
 import SalaryHelpDrawer from '../components/SalaryHelpDrawer'
 import Layout from '../components/Layout'
 import { ProfileSkeleton } from '../components/PeopleLoaders'
+import { PersonNotifications } from '../components/NotificationRules'
 import '../styles/people.css'
 
 const DEPT_HEX = { 'Management':'#6D28D9','Sales':'#1E54B7','Operation & Support':'#0E7C6B','Opeartion & Support':'#0E7C6B','Account':'#C2255C','Back Office':'#8C99A8','People & Culture':'#C2255C' }
@@ -100,7 +101,21 @@ export default function EmployeeDetail() {
   const [uploading, setUploading] = useState(false)
   const [photoSigned, setPhotoSigned] = useState('')
   const [cropSrc, setCropSrc] = useState('')
+  const [editingEmail, setEditingEmail] = useState(false)
+  const [emailDraft, setEmailDraft] = useState('')
+  const [tempPw, setTempPw] = useState(null)      // { name, temp } — shown once
   const guard = useRef(false)
+
+  // Same write as User Management: profiles.email is where every notification
+  // is addressed; blank falls back to username@ssccontrol.com.
+  async function saveUserEmail() {
+    const val = emailDraft.trim() || null
+    const { error } = await sb.from('profiles').update({ email: val }).eq('id', emp.profile_id)
+    if (error) { toast('Failed to update email', 'error'); return }
+    toast('Email updated', 'success')
+    setEditingEmail(false)
+    load(role)
+  }
 
   const isAdmin = role === 'admin'
   const isMgmt = ['admin','management'].includes(role)
@@ -550,20 +565,45 @@ export default function EmployeeDetail() {
             )}
 
             {tab==='security' && isAdmin && emp.profile_id && (
+              <>
               <PCard icon={IC.lock} title="Security & Login">
                 {!secUser ? <div className="e-empty" style={{padding:'20px 0'}}>Loading login…</div> : (
                   <>
                     <Spec l="Username"><span className="mono">{secUser.username}</span></Spec>
-                    <Spec l="Email">{secUser.email||secUser.username+'@ssccontrol.com'}</Spec>
+                    <Spec l="Email">
+                      {editingEmail ? (
+                        <span style={{display:'flex',gap:6,alignItems:'center'}}>
+                          <input type="email" value={emailDraft} autoFocus
+                            onChange={e=>setEmailDraft(e.target.value)}
+                            onKeyDown={e=>{if(e.key==='Enter')saveUserEmail();if(e.key==='Escape')setEditingEmail(false)}}
+                            placeholder={secUser.username+'@ssccontrol.com'}
+                            style={{flex:1,minWidth:0,padding:'5px 9px',fontSize:12.5,border:'1.5px solid var(--ssc-deep)',borderRadius:7,outline:'none',fontFamily:'inherit'}} />
+                          <button className="btn btn-primary btn-sm" onClick={saveUserEmail}>Save</button>
+                          <button className="btn btn-neutral btn-sm" onClick={()=>setEditingEmail(false)}>×</button>
+                        </span>
+                      ) : (
+                        <span style={{display:'flex',gap:8,alignItems:'center'}}>
+                          {secUser.email||secUser.username+'@ssccontrol.com'}{!secUser.email&&<span style={{fontSize:11,color:'var(--muted-2)'}}>(default)</span>}
+                          <button className="btn btn-neutral btn-sm" onClick={()=>{setEmailDraft(secUser.email||'');setEditingEmail(true)}}>Edit</button>
+                        </span>
+                      )}
+                    </Spec>
                     <Spec l="Status">{secUser.is_suspended?'Suspended':'Active'}</Spec>
                     <Spec l="2FA">{secUser.has_mfa?'Enabled':'Not set'}</Spec>
+                    {secUser.must_change_password && <Spec l="Password">Reset pending — must change at next login</Spec>}
                     <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}>
+                      <button className="btn btn-primary btn-sm" disabled={secUser.is_suspended} title={secUser.is_suspended?'Reactivate first':'Sets a new temporary password, shown once'} onClick={async()=>{if(!window.confirm(`Reset ${emp.full_name}'s password to a new temporary one?\n\nIt will be shown to you once. They must change it at next login. Their authenticator (2FA) is NOT affected.`))return;const temp='Ssc@'+Math.floor(1000+Math.random()*9000);const{error}=await sb.rpc('admin_reset_password',{p_user_id:emp.profile_id,p_temp_password:temp});if(error){toast(error.message||'Failed to reset password','error');return}setTempPw({name:emp.full_name,temp});load(role)}}>Reset Password</button>
+                      <button className="btn btn-neutral btn-sm" disabled={secUser.is_suspended} title={secUser.must_change_password?'Clear the force-change flag':'Only flags them to change password — does NOT set a new one'} onClick={async()=>{const on=!secUser.must_change_password;if(!window.confirm(on?`Force ${emp.full_name} to change password at next login?`:`Clear force-password-change flag for ${emp.full_name}?`))return;const{error}=await sb.from('profiles').update({must_change_password:on}).eq('id',emp.profile_id);if(error){toast('Failed to update','error');return}toast(on?'User will be forced to change password':'Flag cleared','success');load(role)}}>{secUser.must_change_password?'Clear Flag':'Force Change'}</button>
                       <button className="btn btn-neutral btn-sm" onClick={async()=>{const on=!secUser.is_suspended;if(!window.confirm(on?`Suspend ${emp.full_name}?`:`Reactivate ${emp.full_name}?`))return;const{error}=await sb.rpc('admin_set_user_suspended',{p_user_id:emp.profile_id,p_suspend:on});if(error){toast(error.message,'error');return}toast(on?'Suspended':'Reactivated','success');load(role)}}>{secUser.is_suspended?'Reactivate':'Suspend'}</button>
                       <button className="btn btn-neutral btn-sm" onClick={async()=>{if(!window.confirm(`Reset ${emp.full_name}'s 2FA?`))return;const{error}=await sb.rpc('admin_reset_user_mfa',{p_user_id:emp.profile_id});if(error){toast(error.message,'error');return}toast('2FA reset','success');load(role)}}>Reset 2FA</button>
                     </div>
                   </>
                 )}
               </PCard>
+              <PCard icon={IC.lock} title="Notifications">
+                <PersonNotifications profileId={emp.profile_id} personName={emp.full_name} />
+              </PCard>
+              </>
             )}
           </div>
         </div>
@@ -613,6 +653,22 @@ export default function EmployeeDetail() {
       )}
 
       {cropSrc && <PhotoCropper src={cropSrc} onCancel={() => setCropSrc('')} onDone={uploadCropped} />}
+
+      {tempPw && (
+        <div onClick={()=>setTempPw(null)} style={{position:'fixed',inset:0,background:'rgba(11,27,48,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:12,padding:'22px 24px',width:'min(430px, 94vw)',boxShadow:'0 12px 44px rgba(0,0,0,0.25)'}}>
+            <div style={{fontSize:16,fontWeight:600,color:'#0B1B30',marginBottom:6}}>Temporary password set</div>
+            <div style={{fontSize:13,color:'#5B6878',lineHeight:1.55,marginBottom:14}}>
+              Share this with <b>{tempPw.name}</b> — it’s shown <b>only once</b>. They’ll be asked to change it at next login.
+            </div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,border:'1px solid #E4E7EC',borderRadius:9,padding:'12px 14px',marginBottom:14}}>
+              <span className="mono" style={{fontSize:19,fontWeight:600,color:'#0B1B30',userSelect:'all'}}>{tempPw.temp}</span>
+              <button className="btn btn-neutral btn-sm" onClick={()=>{navigator.clipboard?.writeText(tempPw.temp);toast('Copied','success')}}>Copy</button>
+            </div>
+            <button className="btn btn-primary" style={{width:'100%'}} onClick={()=>setTempPw(null)}>Done</button>
+          </div>
+        </div>
+      )}
 
       <SalaryHelpDrawer topic={taxHelp} data={{ calc: taxCalc, regime, basic: fyComp?.basic, bonus: fyComp?.bonus }} onClose={()=>setTaxHelp(null)} />
     </Layout>

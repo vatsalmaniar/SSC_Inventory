@@ -92,6 +92,36 @@ function subject(r: any): string {
   return `[SSC] ${on} — ${(r.message || '').slice(0, 60)}`
 }
 
+
+// Plain-text part, sent alongside the HTML. Clients that prefer text (and
+// anyone reading on a watch, a screen reader, or a stripped-down mail app) get
+// something readable instead of a wall of markup. Adding a text part changes
+// nothing visually for existing recipients — HTML clients still show the HTML.
+function buildEmailText(recipientName: string, r: any, extra: any): string {
+  const cfg = TYPE_CONFIG[r.email_type]
+  const lines: string[] = []
+  lines.push(`${greeting(recipientName)},`)
+  lines.push('')
+  if (cfg?.label) lines.push(cfg.label.toUpperCase())
+  lines.push(r.message || '')
+  lines.push('')
+  if (r.order_number)  lines.push(`Order      : ${r.order_number}`)
+  if (extra?.customer) lines.push(`Customer   : ${extra.customer}`)
+  if (extra?.dc)       lines.push(`DC No.     : ${extra.dc}`)
+  if (extra?.fc)       lines.push(`Fulfilment : ${extra.fc}`)
+  if (r.from_name)     lines.push(`By         : ${r.from_name}`)
+  if (r.created_at)    lines.push(`Time       : ${fmtTime(r.created_at)}`)
+
+  const link = r.po_id ? `${APP_URL}/procurement/po/${r.po_id}`
+             : r.order_id ? `${APP_URL}/orders/${r.order_id}` : null
+  if (link) { lines.push(''); lines.push(`Open in SSC ERP: ${link}`) }
+
+  lines.push('')
+  lines.push('—')
+  lines.push('SSC Control Pvt. Ltd. · This is an automated message.')
+  return lines.join('\n')
+}
+
 function fmtTime(dateStr: string): string {
   return new Date(dateStr).toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
@@ -318,6 +348,28 @@ async function handleNotification(sb: any, r: any) {
   const IN_APP_ONLY = ['sample_return_overdue', 'grn_credit_note']
   if (IN_APP_ONLY.includes(r.email_type)) return new Response('in-app only, skipped')
 
+  // Bell-vs-email is now DATA. notification_rules.email_enabled = false means the
+  // notification still appears in the app, but no mail is sent. That is how the
+  // PO lifecycle works: the team sees every step in the bell, while only
+  // placement and cancellations reach an inbox.
+  //
+  // Fails OPEN on purpose — if this lookup errors we still send, because losing
+  // a notification silently is worse than one extra email. Only an explicit
+  // `false` suppresses.
+  try {
+    const { data: rule } = await sb.from('notification_rules')
+      .select('email_enabled').eq('event_key', r.email_type).maybeSingle()
+    if (rule && rule.email_enabled === false) {
+      await sb.from('email_log').insert({
+        notification_id: r.id, recipient_email: '(bell only)',
+        email_type: r.email_type, status: 'skipped',
+      })
+      return new Response('bell only, skipped')
+    }
+  } catch (err) {
+    console.error('notification_rules lookup failed, sending anyway:', err)
+  }
+
   const { data: profile } = await sb.from('profiles').select('username,email,name').eq('id', r.user_id).single()
   if (!profile?.username) return new Response('no profile')
   const email = profile.email || (profile.username + '@ssccontrol.com')
@@ -346,7 +398,16 @@ async function handleNotification(sb: any, r: any) {
   }
 
   try {
-    const res = await resendSend({ from: FROM, to: [email], subject: subject(r), html: buildEmail(recipientName, r, extra) })
+    // The text part must never be able to stop an email going out. It is
+    // built inside its own try so a bug here degrades to HTML-only delivery
+    // instead of silently killing every notification in the system.
+    let textPart: string | undefined
+    try { textPart = buildEmailText(recipientName, r, extra) }
+    catch (err) { console.error('text part build failed:', err) }
+
+    const res = await resendSend({ from: FROM, to: [email], subject: subject(r),
+      html: buildEmail(recipientName, r, extra),
+      ...(textPart ? { text: textPart } : {}) })
     const data = await res.json()
 
     try {
