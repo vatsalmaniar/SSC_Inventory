@@ -37,6 +37,7 @@ const NAV_ITEMS = [
       { key: 'orders-dash', label: 'Dashboard',  path: '/orders' },
       { key: 'orders-list', label: 'All Orders',  path: '/orders/list' },
       { key: 'orders-waitlist', label: 'Waiting for Clearance', path: '/orders/waitlist' },
+      { key: 'orders-atp', label: 'Available to Promise', path: '/orders/atp', roles: ['ops', 'admin', 'management'] },
     ],
   },
   {
