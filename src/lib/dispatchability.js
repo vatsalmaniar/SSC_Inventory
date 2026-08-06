@@ -45,9 +45,14 @@ export const normCode = (c) => String(c || '').trim().replace(/\s+/g, ' ').toUpp
 //   freshness[loc] = { min, max } of updated_at among qty>0 rows (torn-upload probe)
 export function buildStockMap(invRows) {
   const stock = {}, normIndex = {}, ghost = new Set(), freshness = {}
+  // `known` = every code the sheet carries, INCLUDING qty-0 rows (the daily
+  // upload zeroes out-of-stock codes rather than deleting them). Known+empty
+  // must read "No Stock", not "Not in Sheet" — SPMNCSHT1804R5 lesson.
+  const known = new Set()
   for (const r of invRows || []) {
     const loc = (r.location || '').trim()
     if (!LOCATIONS.includes(loc)) { if (loc) ghost.add(loc); continue }
+    if (r.product_code) known.add(r.product_code)
     const qty = Number(r.quantity) || 0
     if (qty <= 0) continue
     const code = r.product_code
@@ -64,7 +69,7 @@ export function buildStockMap(invRows) {
       }
     }
   }
-  return { stock, ghostLocations: [...ghost].sort(), normIndex, freshness }
+  return { stock, known, ghostLocations: [...ghost].sort(), normIndex, freshness }
 }
 
 // Same formula as src/lib/orderStatus.js lineUndispatchedQty — dispatched_qty
@@ -150,8 +155,10 @@ export function allocateFifo(orders, stockMapResult) {
     const avail = pool[l.item_code] // EXACT key — the only lookup in the system
     if (!avail) {
       l.alloc = 0; l.from_kaveri = 0; l.from_godawari = 0
-      l.bucket = BUCKET.NOT_IN_SHEET
-      l.near_miss = !!stockMapResult.normIndex[normCode(l.item_code)]
+      // Sheet carries the code at qty 0 → "No Stock". Absent entirely → "Not in Sheet".
+      const knownEmpty = stockMapResult.known?.has(l.item_code)
+      l.bucket = knownEmpty ? BUCKET.NO_STOCK : BUCKET.NOT_IN_SHEET
+      l.near_miss = !knownEmpty && !!stockMapResult.normIndex[normCode(l.item_code)]
       continue
     }
     const other = l.preferred_loc === 'Kaveri' ? 'Godawari' : 'Kaveri'
