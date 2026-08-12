@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { searchItems } from '../lib/itemSearch'
 import { writeDoc } from '../lib/printDoc'
 import { friendlyError } from '../lib/errorMsg'
 import { notify } from '../lib/notify'
@@ -1346,7 +1347,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
   }
 
   async function fetchItems(q) {
-    const { data } = await sb.from('items').select('item_code').ilike('item_code', '%' + q + '%').limit(10)
+    const data = await searchItems(q, { limit: 20 })   // ranked — see lib/itemSearch.js
     return data || []
   }
 

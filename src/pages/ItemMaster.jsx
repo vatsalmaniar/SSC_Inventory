@@ -68,7 +68,10 @@ export default function ItemMaster() {
     // BROWSE path — server-side pagination (every item reachable, no cap).
     let query = sb.from('items')
       .select('id,item_no,item_code,brand,category,subcategory,series,type', { count: 'exact' })
-      .order('item_no', { ascending: true })
+      // item_seq, not item_no: item_no is text, so once numbering passes IN9999
+      // a text sort puts IN10000 ahead of IN9999. item_seq is the generated
+      // numeric part and stays in true numeric order forever.
+      .order('item_seq', { ascending: true })
     if (brand) query = query.eq('brand', brand)
     if (cat) query = query.eq('category', cat)
     if (type) query = query.eq('type', type)
