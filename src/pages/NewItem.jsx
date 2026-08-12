@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
-import { isCuratedBrand, taxonomyCategories, taxonomySubcategories, taxonomySeries } from '../lib/itemTaxonomy'
+import { isCuratedBrand, canonicalBrand, taxonomyCategories, taxonomySubcategories, taxonomySeries } from '../lib/itemTaxonomy'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -151,7 +151,9 @@ export default function NewItem() {
     // never be saved without the price it was meant to carry.
     const { data, error } = await sb.rpc('create_item_v3', {
       p_item_code:   form.item_code.trim(),
-      p_brand:       form.brand.trim(),
+      // Canonical spelling, always. Typing "connectwell" must not create a
+      // second brand — see canonicalBrand() in lib/itemTaxonomy.js.
+      p_brand:       canonicalBrand(form.brand),
       p_category:    form.category.trim(),
       p_subcategory: form.subcategory.trim(),
       p_type:        form.type,

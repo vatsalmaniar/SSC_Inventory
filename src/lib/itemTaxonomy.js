@@ -45,6 +45,81 @@ export const TAXONOMY = {
       'Contactor': ['Contactor'],
     },
   },
+
+  // ── nVent Hoffman and Connectwell ──────────────────────────────────────────
+  // Generated from what is actually loaded in the database, not typed by hand,
+  // so the dropdowns can only offer values that real items already use.
+  //
+  // These two were missed when their price books went in, which meant a curated
+  // brand offered NO categories at all and a new Hoffman or Connectwell item
+  // could not be created. Same failure as the LVS omission noted above — if you
+  // load a price book, add its taxonomy here in the same change.
+  'nVent Hoffman': {
+    'Cable Tray & Wire Way': {
+      'Cable Tray & Wire Way': ['CT'],
+    },
+    'Enclosure Accessories': {
+      'Accessories': ['Floor Stand', 'Inner Door', 'Mounting Plate', 'Plinth', 'Rain Hood'],
+    },
+    'Hazardous SS Enclosure': {
+      'Accessories': ['Floor Stand'],
+      'Hazardous Location': ['EXE'],
+      'Wall Mounted': ['EXE'],
+    },
+    'Mild Steel Enclosure': {
+      'Accessories': ['Floor Stand', 'Inner Door', 'Mounting Plate', 'Rain Hood'],
+      'Floor Standing': [
+        'EKSS', 'MCD', 'MCS', 'Mounting Plate', 'NCD', 'NCD-HT', 'NCS', 'NCS-HT', 'Plinth',
+      ],
+      'HMI Enclosure': ['Mounting Plate'],
+      'Junction Box': ['STB'],
+      'Terminal Box': ['SSTB', 'STB'],
+      'Wall Mounted': [
+        'Door Hardware', 'Inner Door', 'MAD', 'MAS', 'Mounting Plate', 'Plain Door',
+        'Rain Hood',
+      ],
+    },
+    'Stainless Steel Enclosure': {
+      'Floor Standing': ['EKDS', 'EKSS', 'MSC', 'Mounting Plate'],
+      'Hazardous Location': ['EXE'],
+      'Terminal Box': ['MSC', 'SSTB'],
+      'Wall Mounted': ['ADR', 'ASR', 'EXE', 'MSC'],
+    },
+    'Terminal Box': {
+      'Terminal Box': [],
+    },
+    'Thermal Management': {
+      'Thermal Management': [],
+    },
+  },
+  'Connectwell': {
+    'Terminal Block Accessories': {
+      'DIN Rail': ['CA', 'CDINS', 'CDS', 'ECAP'],
+      'End / Partition Plate': [
+        'CBDT', 'CBS', 'CDL', 'CM', 'CMB', 'CP', 'CSB', 'CSC', 'CSTS', 'CX', 'CY', 'DDFL',
+        'EP',
+      ],
+      'End Clamp': ['CA'],
+      'Marker': ['GMH', 'MC'],
+      'Mounting / Hardware': ['CA', 'CSB', 'DDFL', 'SCS'],
+      'Plug / Isolation': ['CX'],
+      'Shorting Link / Jumper': ['CA', 'CBDT', 'CP', 'JX'],
+      'Tool': ['SCM'],
+    },
+    'Terminal Blocks': {
+      'Component': ['CX'],
+      'Disconnect / Knife': ['CKT', 'CY', 'DDFL'],
+      'Feed Through': ['CBB', 'CBS', 'CM', 'CP', 'CSC', 'CTS', 'CX', 'CY'],
+      'Fuse': ['CF', 'CP', 'CX', 'CY', 'DDFL'],
+      'Grounding / Earth': ['CENC', 'CGT', 'CP', 'CSC', 'CTS', 'CX'],
+      'Panel Mount': ['CM', 'CMB'],
+      'Pluggable': ['CX'],
+      'Power Distribution': ['CDB', 'CMDB', 'CX', 'DB', 'PDB'],
+      'Stud / Heavy Duty': ['CSTS'],
+      'Three Level': ['CP', 'CTL'],
+      'Two Level': ['CDL', 'CP', 'CX'],
+    },
+  },
 }
 
 // Brand is free text elsewhere in the app, so match case-insensitively —
@@ -80,4 +155,19 @@ export function taxonomySeries(brand, category, subcategory) {
 /** True when this brand is standardised — the form should use dropdowns, not free text. */
 export function isCuratedBrand(brand) {
   return Boolean(brandKey(brand))
+}
+
+/**
+ * The one correct spelling of a brand.
+ *
+ * Matching case-insensitively (above) stops a typo escaping the taxonomy, but
+ * it does not stop the typo being SAVED — someone typing "connectwell" would
+ * create a second brand that every brand filter, discount-group lookup and
+ * report then treats as a different company. There is exactly one Connectwell.
+ *
+ * So anything that writes a brand runs it through here first: a curated brand
+ * is forced to its canonical spelling, and everything else is just trimmed.
+ */
+export function canonicalBrand(brand) {
+  return brandKey(brand) || (brand || '').trim()
 }
