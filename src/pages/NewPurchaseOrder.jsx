@@ -4,18 +4,33 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { FY_START } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
+import PriceSourceNote from '../components/PriceSourceNote'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
 import { fetchActivePoCoveredQty, lineNeedsProcurement, lineToProcureQty, UNPLACED_PO_STATUSES, unplacedPoLabel } from '../lib/coverage'
+import { resolvePurchasePrice, resolvePurchasePrices, priceLineFields, unitPriceFor } from '../lib/itemPricing'
+import { searchItems } from '../lib/itemSearch'
 
 const FC_ADDRESSES = {
   Kaveri: 'SSC Control Pvt Ltd, 17(A) Ashwamegh Warehouse, Behind New Ujala Hotel, Sarkhej Bavla Highway, Sarkhej, Ahmedabad, Gujarat 382210',
   Godawari: 'SSC Control Pvt Ltd, 31 GIDC Estate, B/h Bank Of, Makarpura, Vadodara, Gujarat 390010',
 }
 
+// Stable per-line identity. The pricing calls are ASYNC, so by the time one
+// returns the array position it was fired against may belong to a different
+// line — removeRow re-indexes everything below it. Guarding on item_code is not
+// enough: a clubbed PO routinely carries the SAME item twice (two customers,
+// two rates), and one line's price would land on the other's.
+//
+// Synchronous handlers deliberately keep using the index. They cannot go stale
+// mid-call, and rewriting them would risk the live partial-stock behaviour for
+// no gain.
+let RID = 0
+const nextRid = () => ++RID
+
 function emptyItem() {
-  return { item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', stock_qty: '0', co_remaining: 0, co_id: null, co_number: '' }
+  return { _rid: nextRid(), item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', stock_qty: '0', co_remaining: 0, co_id: null, co_number: '', _customer_id: null, _priceLabel: '', _priceShort: '', _priceSource: '', _priceState: '', _moq: null, _autoPriced: false, _fixedUnit: null, _priceRecordId: null, _listPriceAtEntry: null, _priceResolvedAt: null }
 }
 
 export default function NewPurchaseOrder() {
@@ -26,6 +41,8 @@ export default function NewPurchaseOrder() {
   const [user, setUser]         = useState({ name: '', avatar: '', role: '', id: '' })
   const [submitting, setSubmitting] = useState(false)
   const submitGuard = useRef(false)
+  const qtyPriceTimer = useRef({})
+  const priceTicket   = useRef({})   // line -> newest pricing request; older replies are dropped
   const addingCoRef = useRef(new Set())   // CO ids claimed by addCO — see the note there
 
   // Vendor
@@ -51,6 +68,11 @@ export default function NewPurchaseOrder() {
 
   // CO orders — one or more (clubbed PO: multiple COs for one supplier)
   const [coOrders, setCoOrders] = useState([])
+  // Customer behind this PO's linked CO(s). A hand-added line inherits it, so a
+  // buyer who types an item instead of pulling it off the CO still gets that
+  // customer's negotiated price. Null when the PO clubs several customers —
+  // then there is no single right answer and we must not guess one.
+  const [coCustomerId, setCoCustomerId] = useState(null)
   const [coText, setCOText] = useState('')
   const [sscNotes, setSscNotes] = useState('')
 
@@ -59,6 +81,9 @@ export default function NewPurchaseOrder() {
 
   // Items
   const [items, setItems] = useState([emptyItem(), emptyItem(), emptyItem()])
+  // Latest lines, readable from a timer without going through a state updater.
+  const itemsRef = useRef(items)
+  itemsRef.current = items
 
   useEffect(() => { init() }, [])
 
@@ -198,6 +223,7 @@ export default function NewPurchaseOrder() {
       const remaining = lineToProcureQty(oi, coveredByPo)
       const unit = Number(oi.unit_price_after_disc) || 0
       return {
+        _rid: nextRid(),
         order_item_id: oi.id,
         co_id: order.id,
         co_number: order.order_number,
@@ -222,6 +248,27 @@ export default function NewPurchaseOrder() {
     // First CO replaces the blank starter rows; further COs append below.
     // Dedupe by order_item_id inside the functional update — belt-and-braces so
     // no CO line can ever appear twice even if two adds slip through.
+    // orders store customer_name, not a customer id — resolve it once so the
+    // line can pick up a customer-specific purchase price. 12 of 2,694 orders
+    // don't match a customer row by name; those simply fall back to standard.
+    const { data: cust } = await sb.from('customers')
+      .select('id').eq('customer_name', order.customer_name).maybeSingle()
+    prefilled.forEach(p => { p._customer_id = cust?.id || null })
+    setCoCustomerId(prev => {
+      if (cust?.id == null) return prev
+      if (prev == null && coOrders.length === 0) return cust.id
+      return prev === cust.id ? prev : null      // clubbed across customers
+    })
+
+    // Re-price the CO lines on the PURCHASE side BEFORE they go into state.
+    // They arrive carrying the CO's sell price, which is not what we pay the
+    // vendor. One round of reads for the whole order — this used to fire three
+    // requests per line from inside the state updater (120 for a 40-line CO).
+    const priced = await resolvePurchasePrices(
+      prefilled.map(p => ({ itemCode: p.item_code, qty: Number(p.qty) || 1, customerId: p._customer_id, vendorId }))
+    )
+    prefilled.forEach((p, i) => Object.assign(p, priceLineFields(p, priced[i])))
+
     setItems(prev => {
       const kept = prev.filter(it => it.item_code.trim() || it.co_id)
       const already = new Set(kept.map(it => it.order_item_id).filter(Boolean))
@@ -233,6 +280,7 @@ export default function NewPurchaseOrder() {
   function removeCO(coId) {
     addingCoRef.current.delete(coId)   // allow re-adding after removal
     const nextCOs = coOrders.filter(c => c.id !== coId)
+    if (!nextCOs.length) setCoCustomerId(null)
     setCoOrders(nextCOs)
     setSscCoNo(nextCOs.map(c => c.order_number).join(', '))
     setSscNotes(coNotesFor(nextCOs))
@@ -268,6 +316,7 @@ export default function NewPurchaseOrder() {
   function selectVendor(v) {
     setVendorText(v.vendor_name)
     setVendorId(v.id)
+    repriceForVendor(v.id)
     setVendorName(v.vendor_name)
     setVendorPaymentTerms(v.credit_terms || '')
   }
@@ -300,27 +349,76 @@ export default function NewPurchaseOrder() {
     setDeliveryAddress(c.shipping_address || '')
   }
 
+  // A rate negotiated with one vendor must not be paid to another, so choosing
+  // (or changing) the vendor re-resolves every line the system priced. Lines the
+  // buyer priced by hand are left alone.
+  function repriceForVendor(vId) {
+    itemsRef.current.forEach(l => {
+      if (l._autoPriced && l.item_code) {
+        applyPricing(l._rid, { itemCode: l.item_code, qty: l.qty || 1, customerId: l._customer_id, vendorId: vId })
+      }
+    })
+  }
+
+  // Ranked search — see lib/itemSearch.js. The old alphabetical ilike could
+  // hide an exact match behind longer codes that merely contained the text.
   async function fetchItems(q) {
-    const { data } = await sb.from('items')
-      .select('item_code,brand,category')
-      .or(`item_code.ilike.%${q}%,brand.ilike.%${q}%`)
-      .order('item_code')
-      .limit(15)
-    return data || []
+    return searchItems(q, { limit: 20 })
   }
 
   function selectItemCode(idx, item) {
+    const rid = items[idx]?._rid
     setItems(prev => {
       const next = [...prev]
-      next[idx] = { ...next[idx], item_code: item.item_code }
+      next[idx] = { ...next[idx], item_code: item.item_code, _customer_id: coCustomerId }
+      return next
+    })
+    // Purchase price, description and MOQ come off the item — see lib/itemPricing.js
+    // for the precedence. Everything it fills stays editable.
+    applyPricing(rid, { itemCode: item.item_code, qty: 1, customerId: coCustomerId, vendorId })
+  }
+
+  // Fills list price, purchase discount, description (only when the line has
+  // none) and MOQ. Silently does nothing for the ~9,600 items with no price on
+  // file, so the line simply stays manual as it is today.
+  // Keyed by _rid, never by array position — see the note on nextRid().
+  async function applyPricing(rid, { itemCode, qty, customerId, vendorId: vId }) {
+    if (!itemCode || !rid) return
+    // Every request takes a ticket. Only the newest one for this line may write:
+    // a quantity typed as 5 → 50 → 5000 issues overlapping reads, and Supabase
+    // does not promise they come back in order. Without this, a slow response
+    // for qty 500 can land on top of the correct qty-5000 rung and quietly
+    // price the line at the wrong quantity break.
+    const ticket = (priceTicket.current[rid] = (priceTicket.current[rid] || 0) + 1)
+    let res
+    try { res = await resolvePurchasePrice({ itemCode, qty: Number(qty) || 1, customerId, vendorId: vId ?? vendorId }) }
+    catch { return }                       // pricing must never block writing a PO
+    if (priceTicket.current[rid] !== ticket) return   // superseded while we waited
+    setItems(prev => {
+      const i = prev.findIndex(l => l._rid === rid)
+      if (i < 0) return prev                                   // row deleted while we waited
+      const line = prev[i]
+      if (line.item_code !== itemCode) return prev             // item changed while we waited
+      const next = [...prev]
+      next[i] = { ...line, ...priceLineFields(line, res) }
       return next
     })
   }
 
   function updateItem(idx, field, value) {
+    // Touching the price by hand takes the line off auto-pricing, so a later
+    // quantity change can't quietly overwrite what the buyer negotiated.
+    const manualPrice = field === 'lp_unit_price' || field === 'discount_pct'
     setItems(prev => {
       const next = [...prev]
-      next[idx] = { ...next[idx], [field]: value }
+      // A hand-typed price also drops _fixedUnit: from here the line is list ×
+      // (1 − discount), exactly as the buyer sees it.
+      // An override is RECORDED, never blocked — a vendor giving a one-off rate
+      // on the phone is normal, and a PO that can't be raised moves to Excel.
+      // _priceSource keeps the scope that was overridden so the PO can say what
+      // the system had proposed.
+      const wasResolved = manualPrice && next[idx]._autoPriced
+      next[idx] = { ...next[idx], [field]: value, ...(manualPrice ? { _autoPriced: false, _priceLabel: '', _priceShort: wasResolved ? 'Overridden by buyer' : '', _priceState: '', _fixedUnit: null, _overridden: wasResolved || next[idx]._overridden } : {}) }
       const item = next[idx]
       // Partial-stock link: when the buyer enters "from stock" qty on a CO line,
       // the PO qty auto-reduces to the remainder (ordered − stock). Clamped to
@@ -330,14 +428,30 @@ export default function NewPurchaseOrder() {
         next[idx].stock_qty = String(sq)
         next[idx].qty = String(item.co_remaining - sq)
       }
-      const lp   = parseFloat(next[idx].lp_unit_price) || 0
-      const disc = parseFloat(next[idx].discount_pct)  || 0
       const qty  = parseFloat(next[idx].qty)            || 0
-      const unit = lp * (1 - disc / 100)
+      // A negotiated special is a rupee figure, not a percentage. Rebuilding it
+      // from the rounded discount loses money (₹1,500 came back as ₹1,499.17),
+      // so unitPriceFor() returns the exact amount while the line stays on it.
+      const unit = unitPriceFor(next[idx], { manualPriceEdit: manualPrice })
       next[idx].unit_price_after_disc = unit ? unit.toFixed(2) : ''
       next[idx].total_price = (unit && qty) ? (unit * qty).toFixed(2) : ''
       return next
     })
+    // A special can be quantity-scaled (better rate from 50 up), so a qty change
+    // has to re-resolve — but only while the line is still auto-priced.
+    if (field === 'qty') {
+      const rid = items[idx]?._rid
+      if (!rid) return
+      clearTimeout(qtyPriceTimer.current[rid])
+      qtyPriceTimer.current[rid] = setTimeout(() => {
+        // Read through the ref, not a state updater: firing a request from
+        // inside setItems makes the updater impure (React re-runs it in dev).
+        const l = itemsRef.current.find(x => x._rid === rid)
+        if (l && l._autoPriced && l.item_code) {
+          applyPricing(rid, { itemCode: l.item_code, qty: value, customerId: l._customer_id, vendorId })
+        }
+      }, 400)
+    }
   }
 
   function addRow()       { setItems(prev => [...prev, emptyItem()]) }
@@ -544,6 +658,14 @@ export default function NewPurchaseOrder() {
         total_price:      parseFloat(item.total_price),
         delivery_date:    item.delivery_date || null,
         order_item_id:    item.order_item_id || null,
+        // Provenance — so this price can still be explained in six months.
+        // MANUAL means the buyer typed it and the system never had a price;
+        // price_overridden means the system HAD one and the buyer changed it.
+        price_source:        item._autoPriced ? item._priceSource : 'MANUAL',
+        price_record_id:     item._autoPriced ? (item._priceRecordId || null) : null,
+        list_price_at_entry: item._listPriceAtEntry ?? null,
+        price_resolved_at:   item._priceResolvedAt || null,
+        price_overridden:    Boolean(item._overridden),
       }))
 
       const { error: itemsErr } = await sb.from('po_items').insert(lineItems)
@@ -867,8 +989,10 @@ export default function NewPurchaseOrder() {
                   // A split line (stock + PO) keeps its PO inputs editable.
                   const stocked = isCO && stockQty > 0 && poQty === 0
                   const rowStyle = stocked ? { opacity: 0.55, background: 'var(--gray-50)' } : {}
+                  // Keyed by _rid, not position: removing a row must not make
+                  // React reuse the deleted row's inputs for the one below.
                   return (
-                  <Fragment key={idx}>
+                  <Fragment key={item._rid}>
                   <tr className={item.item_code ? 'row-filled' : ''} style={rowStyle}>
                     <td className="col-sr">{idx + 1}</td>
                     <td className="col-code">
@@ -917,6 +1041,7 @@ export default function NewPurchaseOrder() {
                     </td>
                     <td className="col-lp">
                       <input type="number" value={item.lp_unit_price} onChange={e => updateItem(idx, 'lp_unit_price', e.target.value)} placeholder="0.00" min="0" step="0.01" disabled={stocked} />
+                      <PriceSourceNote line={item} />
                     </td>
                     <td className="col-disc">
                       <input type="number" value={item.discount_pct} onChange={e => updateItem(idx, 'discount_pct', e.target.value)} placeholder="0" min="0" max="100" disabled={stocked} />

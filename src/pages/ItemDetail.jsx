@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { toast } from '../lib/toast'
+import { friendlyError } from '../lib/errorMsg'
+import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
 import { useHistoryFilter, HistoryFilterBar, HistoryPager } from '../components/HistoryFilter'
@@ -86,6 +89,28 @@ function inr(v) {
   return '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })
 }
 
+// toISOString() is UTC — in IST that reads as yesterday until 05:30, so an
+// Active special rendered as Future and closing one back-dated it by a day.
+// This is the local calendar date.
+function localToday() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Scopes a special price can be created against.
+//
+// PROJECT is deliberately absent. The rules, the DB constraint and the resolver
+// all support it, but no document carries a project reference yet — `orders`
+// and `purchase_orders` have no such column — so a project special could be
+// saved and would then never apply to anything. Offering it would be a trap.
+// Add a project_ref to orders, then add ['PROJECT', 'Project'] back here; the
+// pricing side already handles it and is covered by tests.
+const SPECIAL_SCOPES = [['CUSTOMER', 'Customer'], ['STOCK', 'All — every customer & stock']]
+
+// 16px on the inputs keeps iOS from zooming the page when a field is focused.
+const SP_LABEL = { fontSize: 10, fontWeight: 600, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4, display: 'block' }
+const SP_INPUT = { padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 8, fontSize: 13, fontFamily: 'var(--font)', background: 'white', outline: 'none', width: '100%', boxSizing: 'border-box' }
+
 export default function ItemDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -99,6 +124,21 @@ export default function ItemDetail() {
   const [grns, setGrns]         = useState([])
   const [kpi, setKpi]           = useState({ totalOrders: 0, pendingOrders: 0, deliveredOrders: 0, totalPos: 0, pendingPos: 0, receivedPos: 0, totalGrns: 0 })
   const [transfers, setTransfers] = useState([])
+  // Commercials: list price + partner discount. RLS on item_prices means sales
+  // simply get no rows, so this stays null and the tab never renders for them.
+  const [commercials, setCommercials] = useState(null)
+  const [specials, setSpecials]       = useState([])
+  const [role, setRole]               = useState('')
+  const [spOpen, setSpOpen]           = useState(false)
+  const [spSaving, setSpSaving]       = useState(false)
+  const spGuard                       = useRef(false)
+  // A special case can fix what we PAY, what we SELL at, or both — they are
+  // separate condition records sharing one scope + validity, so margin is
+  // always SALES − PURCHASE and can never be computed off the wrong side.
+  const blankSpecial = { price_scope: 'CUSTOMER', price_kind: 'PURCHASE', customer_id: '', customer_name: '',
+    buy_pct: '', buy_amount: '', sell_pct: '', sell_amount: '', min_qty: '1',
+    valid_from: '', valid_to: '', project_ref: '', notes: '' }
+  const [sp, setSp]                   = useState(blankSpecial)
 
   useEffect(() => { init() }, [id])
 
@@ -118,6 +158,13 @@ export default function ItemDetail() {
       const map = {}; (profs || []).forEach(p => { map[p.id] = p.name })
       setAuditNames(map)
     }
+
+    // One row per item at most; RLS decides whether the caller sees it at all.
+    const { data: comm } = await sb.from('v_item_commercials').select('*').eq('item_code', itemData.item_code).maybeSingle()
+    setCommercials(comm || null)
+    const { data: prof } = await sb.from('profiles').select('role').eq('id', session.user.id).maybeSingle()
+    setRole(prof?.role || '')
+    await loadSpecials(itemData.item_code)   // may exist even with no list price
 
     // fetchAll pages past PostgREST's 1000-row cap — these 360 tables are a decision
     // log, so a very active item must never silently drop line items past row 1000.
@@ -214,8 +261,159 @@ export default function ItemDetail() {
 
   const transferQty = transfers.reduce((s, t) => s + (t.qty || 0), 0)
 
+  const rupee = v => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+  // Editing prices is admin + management only. Accounts and ops can read, not write.
+  const canEditPrices = ['admin', 'management'].includes(role)
+
+  async function loadSpecials(code) {
+    const { data } = await sb.from('item_prices')
+      .select('id,price_type,price_scope,customer_id,vendor_id,amount,min_qty,valid_from,valid_to,project_ref,notes,price_status,approved_by_user,approved_at,created_by,vendors(vendor_name),customers(customer_name)')
+      .eq('item_code', code).in('price_type', ['PURCHASE', 'SALES'])
+      .order('valid_from', { ascending: false })
+    setSpecials(data || [])
+  }
+
+  // A special is quoted either way round — type a discount and the net follows,
+  // type a net and the discount follows. Same feel as an order line.
+  // `side` is 'buy' (what we pay) or 'sell' (what the customer pays).
+  function spSetPct(side, v) {
+    const lp = Number(commercials?.list_price || 0)
+    const pct = v === '' ? '' : Number(v)
+    setSp(p => ({ ...p, [side + '_pct']: v,
+      [side + '_amount']: (v === '' || !lp || isNaN(pct)) ? '' : String(Math.round(lp * (1 - pct / 100) * 100) / 100) }))
+  }
+  function spSetAmount(side, v) {
+    const lp = Number(commercials?.list_price || 0)
+    const amt = v === '' ? '' : Number(v)
+    setSp(p => ({ ...p, [side + '_amount']: v,
+      [side + '_pct']: (v === '' || !lp || isNaN(amt)) ? '' : String(Math.round((1 - amt / lp) * 1000) / 10) }))
+  }
+
+  // One visual row per negotiated case, with the buy and sell legs side by side.
+  function groupedSpecials() {
+    const g = new Map()
+    specials.forEach(r => {
+      const k = [r.price_scope, r.customer_id || '', r.vendor_id || '', r.project_ref || '', r.min_qty, r.valid_from, r.valid_to || ''].join('|')
+      if (!g.has(k)) g.set(k, { key: k, ...r, buy: null, sell: null })
+      const row = g.get(k)
+      if (r.price_type === 'PURCHASE') row.buy = r; else row.sell = r
+    })
+    return [...g.values()]
+  }
+
+  async function saveSpecial() {
+    if (spGuard.current) return
+    const wantsBuy  = sp.price_kind === 'PURCHASE' || sp.price_kind === 'BOTH'
+    const wantsSell = sp.price_kind === 'SALES'    || sp.price_kind === 'BOTH'
+    const hasBuy  = wantsBuy  && sp.buy_amount  !== '' && !isNaN(Number(sp.buy_amount))
+    const hasSell = wantsSell && sp.sell_amount !== '' && !isNaN(Number(sp.sell_amount))
+    if (sp.price_kind === 'BOTH' && (!hasBuy || !hasSell)) { toast('Enter both the purchase and the sales price'); return }
+    if (sp.price_scope === 'CUSTOMER' && !sp.customer_id)        { toast('Pick a customer'); return }
+    if (!hasBuy && !hasSell)        { toast('Enter a purchase price, a sales price, or both'); return }
+    if (!sp.valid_from)             { toast('Valid from is required'); return }
+    if (sp.valid_to && sp.valid_to < sp.valid_from) { toast('Valid to cannot be before valid from'); return }
+    if (sp.price_scope === 'STOCK' && hasSell) { toast('A stock-order special is a purchase price only'); return }
+    if (hasBuy && hasSell && Number(sp.sell_amount) < Number(sp.buy_amount)
+        && !window.confirm('The sales price is below the purchase price — that is a loss on every unit. Save anyway?')) return
+    spGuard.current = true; setSpSaving(true)
+    const { data: { session } } = await sb.auth.getSession()
+    const base = {
+      item_code:   item.item_code,
+      price_scope: sp.price_scope,
+      customer_id: sp.price_scope === 'CUSTOMER' ? sp.customer_id : null,
+      valid_from:  sp.valid_from,
+      valid_to:    sp.valid_to || null,
+      project_ref: sp.project_ref.trim() || null,
+      notes:       sp.notes.trim() || null,
+      min_qty:     sp.min_qty === '' ? 1 : Number(sp.min_qty),
+      // NOT approved_by: that column recorded whoever typed the price, so every
+      // rate approved itself. A new special is PENDING until a second person
+      // approves it, and the resolver ignores anything not approved.
+      price_status: 'pending',
+      created_by:  session?.user?.id || null,
+    }
+    const payload = []
+    if (hasBuy)  payload.push({ ...base, price_type: 'PURCHASE', amount: Number(sp.buy_amount) })
+    if (hasSell) payload.push({ ...base, price_type: 'SALES',    amount: Number(sp.sell_amount) })
+    const { error } = await sb.from('item_prices').insert(payload)
+    if (error) {
+      // the partial unique index rejects a second open special for the same customer
+      toast(error.code === '23505'
+        ? 'An open special price already exists for this — close it before adding another.'
+        : friendlyError(error, 'Could not save the special price'))
+      spGuard.current = false; setSpSaving(false); return
+    }
+    toast('Special price added', 'success')
+    setSp(blankSpecial); setSpOpen(false)
+    spGuard.current = false; setSpSaving(false)
+    await loadSpecials(item.item_code)
+  }
+
+  // Closing is never a delete — it end-dates the record so the history survives.
+  // Both legs of a case close together; a live sell price with no buy price
+  // behind it would quietly misreport margin.
+  async function closeSpecial(group) {
+    const today = localToday()
+    const ids = [group.buy?.id, group.sell?.id].filter(Boolean)
+    if (!ids.length) return
+    if (!window.confirm(`Close this special price from ${today}? The record is kept, not deleted.`)) return
+    const { error } = await sb.from('item_prices').update({ valid_to: today }).in('id', ids)
+    if (error) { toast(friendlyError(error, 'Could not close the special price')); return }
+    toast('Special price closed', 'success')
+    await loadSpecials(item.item_code)
+  }
+
+  // Approving is a SECOND person's act. The database refuses an approval by the
+  // record's own author (item_prices_approval_shape), which is the whole point:
+  // before this, `approved_by` was filled with the session of whoever typed the
+  // price, so every rate approved itself.
+  async function approveSpecial(group) {
+    const ids = [group.buy?.id, group.sell?.id].filter(Boolean)
+    if (!ids.length) return
+    const { data: { session } } = await sb.auth.getSession()
+    const me = session?.user?.id
+    if (group.created_by && group.created_by === me) {
+      toast('You entered this price — someone else has to approve it'); return
+    }
+    if (!window.confirm('Approve this price? Purchase orders will start using it.')) return
+    const { error } = await sb.from('item_prices')
+      .update({ price_status: 'approved', approved_by_user: me, approved_at: new Date().toISOString() })
+      .in('id', ids)
+    if (error) { toast(friendlyError(error, 'Could not approve — an approver must be a different person from the author')); return }
+    toast('Price approved', 'success')
+    await loadSpecials(item.item_code)
+  }
+
+  // Replacing a rate is one transaction, not "close the old, remember to add the
+  // new": the overlap constraint refuses two live records, so a half-done
+  // replacement would leave the item with no price at all.
+  async function supersedeSpecial(row) {
+    const amount = window.prompt(`New ${row.price_type === 'PURCHASE' ? 'purchase' : 'sales'} price for ${item.item_code} (current ₹${row.amount}):`)
+    if (amount == null || amount.trim() === '' || isNaN(Number(amount))) return
+    const from = window.prompt('Effective from (YYYY-MM-DD):', localToday())
+    if (!from) return
+    const { data, error } = await sb.rpc('supersede_item_price', {
+      p_old_id: row.id, p_amount: Number(amount), p_valid_from: from,
+    })
+    if (error) { toast(friendlyError(error, 'Could not supersede this price')); return }
+    toast(data ? 'New price recorded — it needs approving before POs use it' : 'Done', 'success')
+    await loadSpecials(item.item_code)
+  }
+
+  function specialStatus(r) {
+    const today = localToday()
+    // Approval outranks dates: an unapproved record cannot price anything, so
+    // calling it "Active" because its window is open would be a lie.
+    if (r.price_status === 'pending')    return { label: 'Awaiting approval', bg: '#fffbeb', fg: '#b45309' }
+    if (r.price_status === 'superseded') return { label: 'Superseded', bg: 'var(--gray-100)', fg: 'var(--gray-500)' }
+    if (r.valid_from > today) return { label: 'Future',  bg: '#eff6ff', fg: '#1d4ed8' }
+    if (r.valid_to && r.valid_to < today) return { label: 'Expired', bg: 'var(--gray-100)', fg: 'var(--gray-500)' }
+    return { label: 'Active', bg: '#f0fdf4', fg: '#166534' }
+  }
+
   const TABS = [
     { key: 'summary',  label: 'Summary' },
+    ...((commercials || specials.length) ? [{ key: 'commercials', label: 'Commercials' }] : []),
     { key: 'orders',   label: `Order History (${kpi.totalOrders})` },
     { key: 'pos',      label: `PO History (${kpi.totalPos})` },
     { key: 'grns',     label: `GRNs (${kpi.totalGrns})` },
@@ -250,6 +448,9 @@ export default function ItemDetail() {
                   {item.category && <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#f0fdf4', color: '#166534', fontWeight: 600 }}>{item.category}</span>}
                 </div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 800, color: 'var(--gray-900)', letterSpacing: '-0.3px', wordBreak: 'break-all' }}>{item.item_code}</div>
+                {item.description && (
+                  <div style={{ fontSize: 13, color: 'var(--gray-700)', marginTop: 5 }}>{item.description}</div>
+                )}
                 {(item.subcategory || item.series) && (
                   <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 3 }}>
                     {[item.subcategory, item.series].filter(Boolean).join(' · ')}
@@ -297,6 +498,8 @@ export default function ItemDetail() {
                   {[
                     { label: 'Item No',     val: <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{item.item_no || '—'}</span> },
                     { label: 'Item Code',   val: <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, wordBreak: 'break-all' }}>{item.item_code}</span> },
+                    { label: 'Description', val: item.description || '—' },
+                    { label: 'MOQ',         val: item.moq || '—' },
                     { label: 'Brand',       val: item.brand || '—' },
                     { label: 'Category',    val: item.category || '—' },
                     { label: 'Subcategory', val: item.subcategory || '—' },
@@ -324,6 +527,135 @@ export default function ItemDetail() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ── Commercials Tab ── */}
+          {tab === 'commercials' && (commercials || specials.length > 0) && (
+            <>
+              {/* Same stat tiles as the header KPI row, so the numbers read at the app's scale */}
+              {commercials && <div className="c360-stats" style={{ marginBottom: 14 }}>
+                <div className="c360-stat">
+                  <span className="c360-stat-label">List Price</span>
+                  <span className="c360-stat-value">{rupee(commercials.list_price)}</span>
+                </div>
+                <div className="c360-stat">
+                  <span className="c360-stat-label">Standard Discount</span>
+                  <span className="c360-stat-value">{commercials.standard_discount_pct != null ? Number(commercials.standard_discount_pct) + '%' : '—'}</span>
+                </div>
+                <div className="c360-stat">
+                  <span className="c360-stat-label">Purchase Price</span>
+                  <span className="c360-stat-value green">{commercials.standard_purchase_price != null ? rupee(commercials.standard_purchase_price) : '—'}</span>
+                </div>
+                <div className="c360-stat">
+                  <span className="c360-stat-label">Stock Status</span>
+                  <span className="c360-stat-value">{commercials.stock_indicator || '—'}</span>
+                </div>
+                <div className="c360-stat">
+                  <span className="c360-stat-label">MOQ</span>
+                  <span className="c360-stat-value">{item.moq || 1}</span>
+                </div>
+              </div>}
+
+              {commercials && <div className="c360-card" style={{ marginBottom: 14 }}>
+                <div className="c360-card-header"><span className="c360-card-title">Price Source</span></div>
+                <div className="c360-card-body">
+                  <div className="c360-field-grid" style={{ marginBottom: 0 }}>
+                    {[
+                      { label: 'Price List',     val: commercials.price_source || '—' },
+                      { label: 'Page',           val: commercials.page_ref ? 'p' + commercials.page_ref : '—' },
+                      { label: 'Effective From', val: commercials.price_valid_from },
+                      { label: 'Discount Group', val: commercials.discount_group || 'No partner discount — series superseded' },
+                      ...(commercials.model_as_printed && commercials.model_as_printed !== item.item_code
+                        ? [{ label: 'Listed As', val: <span style={{ fontFamily: 'var(--mono)' }}>{commercials.model_as_printed}</span> }]
+                        : []),
+                    ].map(f => (
+                      <div key={f.label}>
+                        <div style={{ fontSize: 10, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>{f.label}</div>
+                        <div style={{ fontSize: 13, color: 'var(--gray-800)' }}>{f.val}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>}
+
+              <div className="c360-card">
+                <div className="c360-card-header">
+                  <span className="c360-card-title">Special Prices ({specials.length})</span>
+                  {canEditPrices && (
+                    <button className="od-btn od-btn-approve" onClick={() => { setSp({ ...blankSpecial }); setSpOpen(true) }}>
+                      Add Special Price
+                    </button>
+                  )}
+                </div>
+                <div className="c360-card-body">
+                  {specials.length === 0 ? (
+                    <div style={{ fontSize: 13, color: 'var(--gray-400)' }}>
+                      No special prices.{commercials?.standard_discount_pct != null && <> The standard {Number(commercials.standard_discount_pct)}% partner rate applies.</>}
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="od-items-table">
+                        <thead>
+                          <tr>
+                            <th>For</th>
+                            <th style={{ textAlign: 'right' }}>From Qty</th>
+                            <th style={{ textAlign: 'right' }}>We Buy At</th>
+                            <th style={{ textAlign: 'right' }}>We Sell At</th>
+                            <th style={{ textAlign: 'right' }}>Margin</th>
+                            <th>Valid</th><th>Ref</th><th>Status</th>{canEditPrices && <th></th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groupedSpecials().map(g => {
+                            const st = specialStatus(g)
+                            const lp = Number(commercials?.list_price || 0)
+                            const off = a => (lp ? Math.round((1 - Number(a) / lp) * 1000) / 10 + '% off' : '')
+                            const margin = (g.buy && g.sell)
+                              ? Math.round((1 - Number(g.buy.amount) / Number(g.sell.amount)) * 1000) / 10
+                              : null
+                            const forWhom = g.price_scope === 'CUSTOMER' ? (g.customers?.customer_name || 'Customer')
+                                          : g.price_scope === 'PROJECT'  ? `Project · ${g.project_ref || '—'}`
+                                          : 'Our stock order'
+                            return (
+                              <tr key={g.key} style={{ opacity: st.label === 'Expired' ? 0.55 : 1 }}>
+                                <td>{forWhom}</td>
+                                <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{g.min_qty || 1}</td>
+                                <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>
+                                  {g.buy ? <>{rupee(g.buy.amount)}<div style={{ fontSize: 10.5, color: 'var(--gray-400)', fontFamily: 'var(--font)' }}>{off(g.buy.amount)}</div></> : '—'}
+                                </td>
+                                <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>
+                                  {g.sell ? <>{rupee(g.sell.amount)}<div style={{ fontSize: 10.5, color: 'var(--gray-400)', fontFamily: 'var(--font)' }}>{off(g.sell.amount)}</div></> : '—'}
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 600, color: margin == null ? 'var(--gray-300)' : margin < 0 ? '#b91c1c' : '#166534' }}>
+                                  {margin == null ? '—' : margin + '%'}
+                                </td>
+                                <td style={{ whiteSpace: 'nowrap' }}>{g.valid_from} → {g.valid_to || 'open'}</td>
+                                <td>{g.project_ref || '—'}</td>
+                                <td>
+                                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: st.bg, color: st.fg }}>{st.label}</span>
+                                </td>
+                                {canEditPrices && (
+                                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                    {/* Labelled actions, never a bare icon — these change what we pay. */}
+                                    {g.price_status === 'pending' && (
+                                      <button className="od-btn od-btn-approve" onClick={() => approveSpecial(g)}>Approve</button>
+                                    )}
+                                    {g.price_status === 'approved' && !g.valid_to && g.buy && (
+                                      <button className="od-btn" onClick={() => supersedeSpecial(g.buy)}>New rate</button>
+                                    )}
+                                    {!g.valid_to && <button className="od-btn" onClick={() => closeSpecial(g)}>Close</button>}
+                                  </td>
+                                )}
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
 
           {/* ── Order History Tab ── */}
@@ -534,6 +866,141 @@ export default function ItemDetail() {
 
         </div>
       </div>
+
+      {/* Add special price — docks bottom-right (same .gcompose chrome as the
+          PO compose window) so the list price stays readable while you type. */}
+      {spOpen && commercials && (
+        <div className="gcompose">
+          <div className="gcompose-head">
+            <span className="gcompose-title">Special price · {item.item_code}</span>
+            <button className="gcompose-btn" onClick={() => setSpOpen(false)} title="Close">✕</button>
+          </div>
+          <div className="gcompose-body" style={{ padding: 16 }}>
+            <div style={{ fontSize: 12, color: 'var(--gray-500)', marginBottom: 14 }}>
+              List price {rupee(commercials.list_price)}
+              {commercials.standard_discount_pct != null && <> · standard {Number(commercials.standard_discount_pct)}% = {rupee(commercials.standard_purchase_price)}</>}
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={SP_LABEL}>Special price for</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {SPECIAL_SCOPES.map(([v, l]) => (
+                  <button key={v} type="button"
+                    className={'od-btn' + (sp.price_scope === v ? ' od-btn-approve' : '')}
+                    onClick={() => setSp(p => ({ ...p, price_scope: v, customer_id: '', customer_name: '',
+                      // a stock-order special is a buy price by definition
+                      price_kind: v === 'STOCK' ? 'PURCHASE' : p.price_kind }))}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {sp.price_scope === 'CUSTOMER' && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={SP_LABEL}>Customer</label>
+                <Typeahead
+                  value={sp.customer_name}
+                  placeholder="Search customer"
+                  strictSelect
+                  onChange={v => setSp(p => ({ ...p, customer_name: v, customer_id: '' }))}
+                  onSelect={c => setSp(p => ({ ...p, customer_id: c.id, customer_name: c.customer_name }))}
+                  fetchFn={async q => {
+                    const { data } = await sb.from('customers').select('id,customer_name')
+                      .ilike('customer_name', '%' + q + '%').limit(10)
+                    return data || []
+                  }}
+                  renderItem={c => c.customer_name}
+                />
+              </div>
+            )}
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={SP_LABEL}>This price is</label>
+              <select style={SP_INPUT} value={sp.price_kind}
+                onChange={e => setSp(p => ({ ...p, price_kind: e.target.value }))}>
+                <option value="PURCHASE">Purchase price — what we pay</option>
+                {sp.price_scope !== 'STOCK' && <option value="SALES">Sales price — what the customer pays</option>}
+                {sp.price_scope !== 'STOCK' && <option value="BOTH">Both — fix the buy and the sell</option>}
+              </select>
+            </div>
+
+            {(sp.price_kind === 'PURCHASE' || sp.price_kind === 'BOTH') && (
+              <div style={{ marginBottom: 6 }}>
+                <label style={SP_LABEL}>What we buy at</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <input style={SP_INPUT} type="number" min="0" max="99.9" step="0.1" value={sp.buy_pct}
+                    onChange={e => spSetPct('buy', e.target.value)} placeholder="Discount % e.g. 72" />
+                  <input style={SP_INPUT} type="number" min="0" step="0.01" value={sp.buy_amount}
+                    onChange={e => spSetAmount('buy', e.target.value)} placeholder="or net ₹" />
+                </div>
+              </div>
+            )}
+
+            {(sp.price_kind === 'SALES' || sp.price_kind === 'BOTH') && sp.price_scope !== 'STOCK' && (
+              <div style={{ marginBottom: 6 }}>
+                <label style={SP_LABEL}>What we sell at</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <input style={SP_INPUT} type="number" min="0" max="99.9" step="0.1" value={sp.sell_pct}
+                    onChange={e => spSetPct('sell', e.target.value)} placeholder="Discount % e.g. 55" />
+                  <input style={SP_INPUT} type="number" min="0" step="0.01" value={sp.sell_amount}
+                    onChange={e => spSetAmount('sell', e.target.value)} placeholder="or net ₹" />
+                </div>
+              </div>
+            )}
+
+            {sp.price_kind === 'BOTH' && sp.buy_amount !== '' && sp.sell_amount !== '' && !isNaN(Number(sp.buy_amount)) && !isNaN(Number(sp.sell_amount)) && Number(sp.sell_amount) > 0 && (
+              <div style={{ fontSize: 12, marginBottom: 14, color: Number(sp.sell_amount) < Number(sp.buy_amount) ? '#b91c1c' : '#166534' }}>
+                Margin {Math.round((1 - Number(sp.buy_amount) / Number(sp.sell_amount)) * 1000) / 10}%
+                {' · '}{rupee(Number(sp.sell_amount) - Number(sp.buy_amount))} per unit
+              </div>
+            )}
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={SP_LABEL}>Applies from quantity (MOQ)</label>
+              <input style={SP_INPUT} type="number" min="1" step="1" value={sp.min_qty}
+                onChange={e => setSp(p => ({ ...p, min_qty: e.target.value }))}
+                placeholder="1 = from the first unit" />
+              <div style={{ fontSize: 10.5, color: 'var(--gray-400)', marginTop: 4 }}>
+                Add a second special at a higher quantity for a volume break.
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              <div>
+                <label style={SP_LABEL}>Valid from</label>
+                <input style={SP_INPUT} type="date" value={sp.valid_from}
+                  onChange={e => setSp(p => ({ ...p, valid_from: e.target.value }))} />
+              </div>
+              <div>
+                <label style={SP_LABEL}>Valid to</label>
+                <input style={SP_INPUT} type="date" value={sp.valid_to} min={sp.valid_from || undefined}
+                  onChange={e => setSp(p => ({ ...p, valid_to: e.target.value }))} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={SP_LABEL}>Approval / project reference</label>
+              <input style={SP_INPUT} value={sp.project_ref}
+                onChange={e => setSp(p => ({ ...p, project_ref: e.target.value }))}
+                placeholder="OEM approval ref (optional)" />
+            </div>
+
+            <div>
+              <label style={SP_LABEL}>Notes</label>
+              <textarea style={{ ...SP_INPUT, minHeight: 60, resize: 'vertical' }} value={sp.notes}
+                onChange={e => setSp(p => ({ ...p, notes: e.target.value }))} />
+            </div>
+          </div>
+          <div className="gcompose-foot">
+            <span style={{ flex: 1, fontSize: 11, color: 'var(--gray-400)' }}>Recorded and approved by you — only admin and management can add these.</span>
+            <button className="od-btn" onClick={() => setSpOpen(false)}>Cancel</button>
+            <button className="od-btn od-btn-approve" onClick={saveSpecial} disabled={spSaving}>
+              {spSaving ? 'Saving…' : 'Save special price'}
+            </button>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }

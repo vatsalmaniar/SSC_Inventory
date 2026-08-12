@@ -4,6 +4,15 @@ export function friendlyError(err, fallback = 'Something went wrong. Please try 
   const raw = err?.message || err?.error_description || err?.error || String(err || '')
   const msg = raw.toLowerCase()
 
+  // Two live prices for the same item, customer, vendor and quantity break. The
+  // supported way to change a rate is "New rate" (supersede_item_price), which
+  // closes the old record and opens the new one in one transaction. Without
+  // this line the buyer sees the raw "conflicting key value violates exclusion
+  // constraint" and reads a working rule as a broken screen.
+  if (msg.includes('item_prices_no_overlap') || msg.includes('uq_item_price_open'))
+    return 'A price for this item is already in force over these dates. Use "New rate" on the existing price instead of adding a second one.'
+  if (msg.includes('item_prices_approval_shape'))
+    return 'A price has to be approved by someone other than the person who entered it.'
   if (msg.includes('duplicate key') || msg.includes('unique constraint')) return 'This already exists.'
   if (msg.includes('schema cache') || msg.includes('does not exist'))     return 'System needs an update — please contact admin.'
   if (msg.includes('row-level security') || msg.includes('rls') || msg.includes('permission denied')) return "You don't have permission to do this."

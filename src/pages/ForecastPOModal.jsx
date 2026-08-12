@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
+import { resolvePurchasePrice, resolvePurchasePrices, priceLineFields, unitPriceFor } from '../lib/itemPricing'
+import { searchItems } from '../lib/itemSearch'
 import { friendlyError } from '../lib/errorMsg'
 import Typeahead from '../components/Typeahead'
+import PriceSourceNote from '../components/PriceSourceNote'
 import '../styles/neworder.css'
 
 const FC_ADDRESSES = {
@@ -10,12 +13,21 @@ const FC_ADDRESSES = {
   Godawari: 'SSC Control Pvt Ltd, 31 GIDC Estate, B/h Bank Of, Makarpura, Vadodara, Gujarat 390010',
 }
 
+// Stable per-line identity for the ASYNC pricing paths — see the same note in
+// NewPurchaseOrder.jsx. Array position is not safe to key an in-flight request
+// on; rows shift when one is removed.
+let RID = 0
+const nextRid = () => ++RID
+
 function emptyPOItem() {
-  return { item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', _pendingQty: 0 }
+  return { _rid: nextRid(), item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', _pendingQty: 0, _priceLabel: '', _priceShort: '', _priceSource: '', _priceState: '', _moq: null, _autoPriced: false, _fixedUnit: null, _priceRecordId: null, _listPriceAtEntry: null, _priceResolvedAt: null }
 }
 
 export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabel, userName, userId, userRole, navigate }) {
   const submitGuard = useRef(false)
+  const qtyPriceTimer = useRef({})
+  const priceTicket   = useRef({})   // line -> newest pricing request; older replies are dropped
+  const openSeq       = useRef(0)
   const [submitting, setSubmitting] = useState(false)
 
   const [vendorText, setVendorText]         = useState('')
@@ -32,6 +44,13 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
   const [isTest, setIsTest]                     = useState(false)
 
   const [items, setItems] = useState([emptyPOItem()])
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  // The vendor is usually chosen AFTER the lines are seeded, so pricing reads it
+  // through a ref and every auto-priced line is re-resolved when it changes —
+  // a vendor-specific rate is only correct once we know the vendor.
+  const vendorIdRef = useRef('')
+  vendorIdRef.current = vendorId
 
   useEffect(() => {
     if (!open) return
@@ -46,12 +65,25 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
     setIsTest(false)
 
     if (seedItems?.length) {
-      setItems(seedItems.map(s => ({
+      const seeded = seedItems.map(s => ({
         ...emptyPOItem(),
         item_code: s.item_code,
         qty: s.qty > 0 ? String(s.qty) : '',
         _pendingQty: s.pendingQty || 0,
-      })))
+      }))
+      setItems(seeded)
+      // One round of reads for the whole forecast, not three per line.
+      // openSeq guards a modal closed and reopened while this was in flight.
+      const seq = ++openSeq.current
+      resolvePurchasePrices(seeded.map(l => ({ itemCode: l.item_code, qty: Number(l.qty) || 1, customerId: null, vendorId: vendorIdRef.current })))
+        .then(res => {
+          if (seq !== openSeq.current) return
+          setItems(cur => cur.map(l => {
+            const i = seeded.findIndex(s => s._rid === l._rid)
+            return i < 0 ? l : { ...l, ...priceLineFields(l, res[i]) }
+          }))
+        })
+        .catch(() => {})   // pricing must never block raising a PO
     } else {
       setItems([emptyPOItem()])
     }
@@ -66,26 +98,66 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
     return (data || [])
   }
 
+  // Ranked search — see lib/itemSearch.js. The old alphabetical ilike could hide
+  // an exact match behind longer codes that merely contained the typed text.
   async function fetchItemCodes(q) {
-    const { data } = await sb.from('items')
-      .select('item_code,brand,category')
-      .or(`item_code.ilike.%${q}%,brand.ilike.%${q}%`)
-      .order('item_code').limit(15)
-    return (data || [])
+    return searchItems(q, { limit: 20 })
   }
 
   function updateItem(idx, field, value) {
+    const manualPrice = field === 'lp_unit_price' || field === 'discount_pct'
     setItems(prev => {
       const next = [...prev]
-      next[idx] = { ...next[idx], [field]: value }
+      // An override is recorded, not blocked — see NewPurchaseOrder.updateItem.
+      const wasResolved = manualPrice && next[idx]._autoPriced
+      next[idx] = { ...next[idx], [field]: value, ...(manualPrice ? { _autoPriced: false, _priceLabel: '', _priceShort: wasResolved ? 'Overridden by buyer' : '', _priceState: '', _fixedUnit: null, _overridden: wasResolved || next[idx]._overridden } : {}) }
       const item = next[idx]
-      const lp   = parseFloat(item.lp_unit_price) || 0
-      const disc = parseFloat(item.discount_pct)  || 0
       const qty  = parseFloat(item.qty)            || 0
-      const unit = lp * (1 - disc / 100)
+      // Exact negotiated amount when the line is on a special — see itemPricing.js.
+      const unit = unitPriceFor(item, { manualPriceEdit: manualPrice })
       next[idx].unit_price_after_disc = unit ? unit.toFixed(2) : ''
       next[idx].total_price = (unit && qty) ? (unit * qty).toFixed(2) : ''
       return next
+    })
+    if (field === 'qty') {
+      const rid = items[idx]?._rid
+      if (!rid) return
+      clearTimeout(qtyPriceTimer.current[rid])
+      qtyPriceTimer.current[rid] = setTimeout(() => {
+        const l = itemsRef.current.find(x => x._rid === rid)
+        if (l && l._autoPriced && l.item_code) applyPricing(rid, l.item_code, value)
+      }, 400)
+    }
+  }
+
+  // A forecast PO is a stock buy — no customer — so it resolves
+  // blanket special → standard partner discount. See lib/itemPricing.js.
+  async function applyPricing(rid, itemCode, qty) {
+    if (!itemCode || !rid) return
+    // Only the newest request for this line may write — see the note in
+    // NewPurchaseOrder.applyPricing. Quantity scales make out-of-order replies
+    // a wrong-price bug, not just a flicker.
+    const ticket = (priceTicket.current[rid] = (priceTicket.current[rid] || 0) + 1)
+    let res
+    try { res = await resolvePurchasePrice({ itemCode, qty: Number(qty) || 1, customerId: null, vendorId: vendorIdRef.current }) }
+    catch { return }
+    if (priceTicket.current[rid] !== ticket) return
+    setItems(prev => {
+      const i = prev.findIndex(l => l._rid === rid)
+      if (i < 0 || prev[i].item_code !== itemCode) return prev
+      const next = [...prev]
+      next[i] = { ...prev[i], ...priceLineFields(prev[i], res) }
+      return next
+    })
+  }
+
+  // A rate negotiated with one vendor must not be paid to another, so choosing
+  // (or changing) the vendor re-resolves every line the system priced. Lines the
+  // buyer priced by hand are left alone.
+  function repriceForVendor(vId) {
+    vendorIdRef.current = vId
+    itemsRef.current.forEach(l => {
+      if (l._autoPriced && l.item_code) applyPricing(l._rid, l.item_code, l.qty || 1)
     })
   }
 
@@ -151,6 +223,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
         po_id:         po.id,
         sr_no:         idx + 1,
         item_code:     item.item_code.trim(),
+        description:   item.description?.trim() || null,
         qty:           parseFloat(item.qty),
         lp_unit_price: parseFloat(item.lp_unit_price) || null,
         discount_pct:  parseFloat(item.discount_pct) || 0,
@@ -209,7 +282,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
                 <Typeahead
                   value={vendorText}
                   onChange={v => { setVendorText(v); if (!v.trim()) { setVendorId(''); setVendorName(''); setVendorPaymentTerms('') } }}
-                  onSelect={v => { setVendorText(v.vendor_name); setVendorId(v.id); setVendorName(v.vendor_name); setVendorPaymentTerms(v.credit_terms || '') }}
+                  onSelect={v => { setVendorText(v.vendor_name); setVendorId(v.id); setVendorName(v.vendor_name); setVendorPaymentTerms(v.credit_terms || ''); repriceForVendor(v.id) }}
                   placeholder="Search vendor by name or code…"
                   fetchFn={fetchVendors}
                   strictSelect
@@ -294,13 +367,13 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
                 </thead>
                 <tbody>
                   {items.map((item, idx) => (
-                    <tr key={idx} className={item.item_code ? 'row-filled' : ''}>
+                    <tr key={item._rid} className={item.item_code ? 'row-filled' : ''}>
                       <td className="col-sr">{idx + 1}</td>
                       <td className="col-code">
                         <Typeahead
                           value={item.item_code}
                           onChange={v => updateItem(idx, 'item_code', v)}
-                          onSelect={it => updateItem(idx, 'item_code', it.item_code)}
+                          onSelect={it => { updateItem(idx, 'item_code', it.item_code); applyPricing(item._rid, it.item_code, 1) }}
                           placeholder="Search item…"
                           fetchFn={fetchItemCodes}
                           strictSelect
@@ -323,6 +396,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
                       </td>
                       <td className="col-lp">
                         <input type="number" value={item.lp_unit_price} onChange={e => updateItem(idx, 'lp_unit_price', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                        <PriceSourceNote line={item} />
                       </td>
                       <td className="col-disc">
                         <input type="number" value={item.discount_pct} onChange={e => updateItem(idx, 'discount_pct', e.target.value)} placeholder="0" min="0" max="100" />
