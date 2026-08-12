@@ -5,7 +5,9 @@ import { writeDoc } from '../lib/printDoc'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc, deliveryDateIssue, deliveryDateMax } from '../lib/fmt'
-import { FC_PIPELINE_STATUSES, TERMINAL_STATUSES } from '../lib/orderStatus'
+import { lineDispatchedValue } from '../lib/orderValue'
+import { FC_PIPELINE_STATUSES, TERMINAL_STATUSES, lineIssuedQty,
+         linePendingQty, lineHeldInOpenBatch, lineUndispatchedQty } from '../lib/orderStatus'
 import { notify } from '../lib/notify'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
@@ -335,6 +337,13 @@ export default function OrderDetail() {
   // Used to decide whether Next Batch makes sense — if dispatched_qty + cancelled_qty == qty,
   // a full delivery has been created for every remaining unit, so no new batch is needed.
   const hasUndispatched  = (order?.order_items || []).some(i => (i.qty || 0) > ((i.dispatched_qty || 0) + (i.cancelled_qty || 0)))
+  // Units allocated into a batch that has NOT been goods-issued. On SO0503 this
+  // is 89 — the reason the order reads "partially dispatched" while nothing is
+  // available to put in a new batch.
+  const heldUnits = (order?.order_items || []).reduce((s, i) => s + lineHeldInOpenBatch(i), 0)
+  const oldestOpenBatch = (batches || [])
+    .filter(b => b.status !== 'cancelled' && !b.posted_qty_applied_at)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))[0] || null
   const hasAnyCancelled  = (order?.order_items || []).some(i => (i.cancelled_qty || 0) > 0)
   const cancelledValue   = (order?.order_items || []).reduce((s, i) => s + ((i.cancelled_qty || 0) * (i.unit_price_after_disc || i.unit_price || 0)), 0)
   const netOrderValue    = (order?.order_items || []).reduce((s, i) => s + (((i.qty || 0) - (i.cancelled_qty || 0)) * (i.unit_price_after_disc || i.unit_price || 0)), 0)
@@ -1198,7 +1207,17 @@ if (match) {
                 <div>
                   <div className="od-pending-banner-label">Delivery In Progress{order.fulfilment_center ? ` — ${order.fulfilment_center}` : ''}</div>
                   <div>
-                    {hasUndispatched ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, (i.qty || 0) - (i.dispatched_qty || 0) - (i.cancelled_qty || 0)), 0)} units pending next batch. ` : ''}
+                    {hasUndispatched
+                      ? `${(order.order_items || []).reduce((s, i) => s + lineUndispatchedQty(i), 0)} units pending next batch. `
+                      : ''}
+                    {/* The SO0503 case: nothing NEEDS a batch, yet the customer is still
+                        waiting — because the units sit in a delivery that never moved.
+                        Saying "needs a batch" there sends ops looking for work that does
+                        not exist; naming the stuck batch points them at the real blocker. */}
+                    {!hasUndispatched && heldUnits > 0 && (
+                      <>{heldUnits} units are in an open delivery that has not been despatched
+                        {oldestOpenBatch ? ` (batch ${oldestOpenBatch.batch_no}, ${fmt(oldestOpenBatch.created_at)})` : ''}. </>
+                    )}
                     Currently: {{'delivery_created':'Delivery Created','goods_issued':'Goods Issued','pending_billing':'Pending Billing','credit_check':'Credit Check','goods_issue_posted':'Goods Issue Posted','invoice_generated':'Invoice Generated','delivery_ready':'Delivery Ready','eway_pending':'Ready for E-Way Bill','eway_generated':'E-Way Bill Generated','partial_dispatch':'Partially Dispatched — remaining qty needs a batch'}[order.status] || order.status}
                   </div>
                   {batches.some(b => b.status === 'delivery_created' && b.credit_checked === false && b.credit_override === true) ? (
@@ -1583,9 +1602,10 @@ if (match) {
                 <>
                   {(() => {
                     const rows = (order.order_items || []).map(item => {
-                      const dispQty    = item.dispatched_qty || 0
+                      const dispQty    = lineIssuedQty(item)            // SHIPPED, not merely allocated
                       const cancQty    = item.cancelled_qty || 0
-                      const pendingQty = Math.max(0, item.qty - dispQty - cancQty)
+                      const pendingQty = linePendingQty(item)             // still owed to the customer
+                      const heldQty    = lineHeldInOpenBatch(item)        // allocated to a batch that has not moved
                       const terminal   = (item.line_status || 'active') !== 'active'
                       const itemBatch  = batches.find(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))
                       const status     = terminal ? 'cancelled' : (dispQty > 0 && pendingQty === 0) ? 'done' : (dispQty > 0) ? 'partial' : 'pending'
@@ -1666,7 +1686,7 @@ if (match) {
                         <span className="od-dispatch-tile-count">
                           {hasAnyPending
                             ? `${(order.order_items || []).reduce((s, i) => s + Math.max(0, i.qty - (i.posted_qty || 0) - (i.cancelled_qty || 0)), 0)} units pending`
-                            : `${(order.order_items || []).reduce((s, i) => s + (i.dispatched_qty || 0), 0)} units in transit`
+                            : `${(order.order_items || []).reduce((s, i) => s + lineIssuedQty(i), 0)} units dispatched`
                           }
                         </span>
                       </div>
@@ -1741,7 +1761,10 @@ if (match) {
                         </thead>
                         <tbody>
                           {(order.order_items || []).filter(item => batches.some(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))).map(item => {
-                            const dispQty    = batches.filter(b => b.status === 'dispatched_fc').reduce((s, b) => { const di = (b.dispatched_items || []).find(i => i.order_item_id === item.id); return s + (di?.qty || 0) }, 0)
+                            // posted_qty, not dispatched_fc batch JSON — same boundary the
+                            // DB enforces and the totals row uses, so the column and the
+                            // total can never disagree.
+                            const dispQty    = lineIssuedQty(item)
                             const pendingQty = Math.max(0, item.qty - dispQty - (item.cancelled_qty || 0))
                             const itemBatch  = batches.find(b => b.status === 'dispatched_fc' && (b.dispatched_items || []).some(di => di.order_item_id === item.id))
                             return (
@@ -1756,7 +1779,7 @@ if (match) {
                                   {pendingQty === 0 ? <span style={{ fontSize: 11 }}>✓ Done</span> : pendingQty}
                                 </td>
                                 <td>₹{item.unit_price_after_disc}</td>
-                                <td className="right" style={{ paddingRight: 16 }}>₹{((item.unit_price_after_disc || 0) * dispQty).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                                <td className="right" style={{ paddingRight: 16 }}>₹{lineDispatchedValue(item).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
                               </tr>
                             )
                           })}
@@ -1845,7 +1868,7 @@ if (match) {
                           <div className="od-totals-row"><span>Net Order Value</span><span style={{ fontWeight: 700 }}>₹{netOrderValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                         </>
                       )}
-                      <div className="od-totals-row"><span>Dispatched Value</span><span style={{ color: '#166534', fontWeight: 700 }}>₹{(order.order_items || []).reduce((s, i) => s + (i.unit_price_after_disc || 0) * (i.dispatched_qty || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+                      <div className="od-totals-row"><span>Dispatched Value</span><span style={{ color: '#166534', fontWeight: 700 }}>₹{(order.order_items || []).reduce((s, i) => s + lineDispatchedValue(i), 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                       <div className="od-totals-row"><span>Freight</span><span>₹{(order.freight||0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                       <div className="od-totals-row grand"><span>Grand Total</span><span>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                     </div>

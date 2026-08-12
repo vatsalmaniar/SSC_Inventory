@@ -31,3 +31,31 @@ export function orderNetValue(order) {
 export function ordersTotalValue(orders) {
   return (orders || []).reduce((s, o) => s + (o?.order_type === 'SAMPLE' ? 0 : orderNetValue(o)), 0)
 }
+
+// ── Dispatched (delivered) value — ONE definition ─────────────────────────────
+// The DATABASE has already chosen this boundary: enforce_order_status_integrity
+// refuses to let an order reach 'dispatched_fc'/'closed' unless
+//     COALESCE(posted_qty,0) + COALESCE(cancelled_qty,0) >= qty
+// so posted_qty IS the system's enforced definition of "delivered". Pending
+// (qty - posted - cancelled) already uses it, which is why these two must agree:
+// dispatched + pending + cancelled = ordered, on every screen.
+//
+// Before this, THREE different calculations existed and disagreed by up to
+// ₹43 lakh: the order-page total used dispatched_qty (ALLOCATED — counted goods
+// still sitting in the godown), while the dashboard and the order-items table
+// summed dispatched_fc batch JSON (a later milestone that excludes goods already
+// goods-issued but not yet stamped out of the FC).
+export function lineDispatchedValue(item) {
+  // Same price fallback as lineNetValue above. order_items has no `unit_price`
+  // column — the pair is unit_price_after_disc then lp_unit_price. 613 lines are
+  // genuinely zero-priced and have no lp either, so they contribute 0 correctly.
+  const unit = Number(item?.unit_price_after_disc) || Number(item?.lp_unit_price) || 0
+  return (Number(item?.posted_qty) || 0) * unit
+}
+export function orderDispatchedValue(order) {
+  if (!order || order.status === 'cancelled') return 0
+  return (order.order_items || []).reduce((s, i) => s + lineDispatchedValue(i), 0)
+}
+export function ordersDispatchedValue(orders) {
+  return (orders || []).reduce((s, o) => s + (o?.order_type === 'SAMPLE' ? 0 : orderDispatchedValue(o)), 0)
+}

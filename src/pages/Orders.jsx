@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { MO, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
-import { ordersTotalValue } from '../lib/orderValue'
+import { ordersTotalValue, ordersDispatchedValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -113,7 +113,7 @@ export default function Orders() {
     const [ordersData, repsRes] = await Promise.all([
       fetchAll((from, to) => {
         let q = sb.from('orders')
-          .select('id,order_number,customer_name,status,order_type,created_at,created_by,order_items(qty,dispatched_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
+          .select('id,order_number,customer_name,status,order_type,created_at,created_by,order_items(qty,dispatched_qty,posted_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
           .gte('created_at', FY_START).eq('is_test', role === 'demo')
           .order('created_at', { ascending: false })
           .order('id', { ascending: false })
@@ -133,14 +133,9 @@ export default function Orders() {
   // Canonical "Total Order Value" — net goods, cancelled orders excluded, no
   // freight (shared with /orders/list so the two headline numbers agree).
   const totalValue = ordersTotalValue(orders)
-  const dispatchedValue = orders.reduce((s, o) => {
-    if (o.order_type === 'SAMPLE') return s  // samples aren't revenue
-    const delivered = (o.order_dispatches || []).filter(b => b.status === 'dispatched_fc')
-    const v = delivered.reduce((bs, b) => bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)
-    if (v > 0) return s + v
-    if (o.status === 'dispatched_fc') return s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0)
-    return s
-  }, 0)
+  // Was: sum of dispatched_fc batch JSON — a later milestone than the boundary
+  // the DB enforces, so it disagreed with the order page. Now the shared helper.
+  const dispatchedValue = ordersDispatchedValue(orders)
   const pendingApproval = orders.filter(o => o.status === 'pending').length
   const activeOrders = orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length
   const todayDispatched = orders.filter(o => (o.order_dispatches || []).some(b => b.created_at?.slice(0,10) === today))

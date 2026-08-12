@@ -419,3 +419,12 @@
   }
   .orders-app:not(.olist-app) .ol-row.ol-data > :last-child button { padding: 8px 16px; }
 }
+
+/* Open Deliveries (delivery monitor) — same row chrome as the order list, its
+   own column set. Declared here rather than inline so it inherits every
+   .ol-head / .ol-num / .ol-cust font rule above instead of fighting them. */
+.orders-app .ol-row.od-open { grid-template-columns: 120px minmax(0, 1.3fr) 96px minmax(0, 150px) 80px 110px 74px; }
+@media (max-width: 820px) {
+  .orders-app .ol-row.od-open { grid-template-columns: 100px minmax(0, 1fr) 70px 90px; }
+  .orders-app .ol-row.od-open > .od-hide-sm { display: none; }
+}

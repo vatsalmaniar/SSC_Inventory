@@ -75,6 +75,7 @@ const PurchaseInvoiceList = lazy(() => import('./pages/PurchaseInvoiceList'))
 const PurchaseInvoiceDetail = lazy(() => import('./pages/PurchaseInvoiceDetail'))
 const FCDashboard = lazy(() => import('./pages/FCDashboard'))
 const FCModule = lazy(() => import('./pages/FCModule'))
+const OpenDeliveries = lazy(() => import('./pages/OpenDeliveries'))
 const FCOrderDetail = lazy(() => import('./pages/FCOrderDetail'))
 const BillingDashboard = lazy(() => import('./pages/BillingDashboard'))
 const BillingList = lazy(() => import('./pages/BillingList'))
@@ -141,6 +142,7 @@ export default function App() {
           <Route path="/procurement/invoices/:id" element={<PurchaseInvoiceDetail />} />
           <Route path="/fc" element={<FCDashboard />} />
           <Route path="/fc/list" element={<FCModule />} />
+          <Route path="/fc/open" element={<OpenDeliveries />} />
           <Route path="/fc/grn" element={<GRNList />} />
           <Route path="/fc/grn/new" element={<NewGRN />} />
           <Route path="/fc/grn/:id" element={<GRNDetail />} />

@@ -27,8 +27,38 @@ export const FC_PIPELINE_STATUSES = ['delivery_created', 'picking', 'packing', '
 export const ORDER_STATUSES = [...PRE_DISPATCH_STATUSES, ...PI_STAGES, ...FC_PIPELINE_STATUSES, 'partial_dispatch', ...TERMINAL_STATUSES]
 
 // ── Line-level helpers (quantities are the truth) ──
+//
+// ⚠️ TWO DIFFERENT QUANTITIES. Picking the wrong one is the single most
+// repeated bug in this system — it has been "fixed" 3-4 times. Read this before
+// writing `qty - something` by hand anywhere.
+//
+//   dispatched_qty = ALLOCATED. Set when a delivery BATCH IS CREATED
+//     (dispatch_order_batch -> increment_dispatched_qty, which also carries the
+//     over-allocation guard). The goods have NOT necessarily moved.
+//
+//   posted_qty     = ISSUED. Set by mark_batch_posted(), which refuses to run
+//     before status 'goods_issue_posted'. The goods HAVE left. This is SAP's
+//     Post Goods Issue boundary: stock moves, COGS books, billing opens.
+//
+// Which to use:
+//   "how much can still go into a NEW batch?"  -> lineUndispatchedQty (allocated)
+//        …used by the dispatch modals, ATP, waitlist, next-batch decisions.
+//        NEVER swap this for posted_qty: units sitting in an unshipped batch
+//        would look free and be allocated twice — goods ship twice.
+//   "how much has actually SHIPPED / is still owed to the customer?"
+//        -> lineIssuedQty / linePendingQty (posted)
+//        …used by every value, count and status shown to a human.
+//
+// The gap between them is real and visible: SSC/SO0503 had 100 units allocated
+// and 11 issued, because batch 1 stuck at credit_check on 9-Jun never moved.
+// Anything that reported 100 as "dispatched" was wrong by 89 units.
 export const linePendingQty      = (i) => Math.max(0, (i.qty || 0) - (i.posted_qty || 0) - (i.cancelled_qty || 0))
 export const lineUndispatchedQty = (i) => Math.max(0, (i.qty || 0) - (i.dispatched_qty || 0) - (i.cancelled_qty || 0))
+export const lineIssuedQty       = (i) => Math.max(0, i.posted_qty || 0)
+export const lineIssuedValue     = (i) => lineIssuedQty(i) * (i.unit_price_after_disc || i.unit_price || 0)
+// Units allocated into a batch that has NOT been goods-issued — i.e. sitting in
+// an open delivery. This is what SO0503's 89 units are.
+export const lineHeldInOpenBatch = (i) => Math.max(0, (i.dispatched_qty || 0) - (i.posted_qty || 0))
 export const lineResolved        = (i) => (i.posted_qty || 0) + (i.cancelled_qty || 0) >= (i.qty || 0)
 
 // ── Order-level questions pages actually ask ──
