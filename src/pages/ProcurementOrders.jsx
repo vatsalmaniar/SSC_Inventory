@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmtShort, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { isDeliveredish } from '../lib/orderStatus'
-import { lineIsHandled, COVERING_PO_STATUSES, UNPLACED_PO_STATUSES, unplacedPoLabel,
+import { lineIsHandled, lineToProcureQty, COVERING_PO_STATUSES, UNPLACED_PO_STATUSES, unplacedPoLabel,
          poSlaState, fmtSlaAge, fetchWorkflowOwners, SLA_APPROVE_HOURS, SLA_PLACE_HOURS } from '../lib/coverage'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
@@ -183,7 +183,13 @@ export default function ProcurementOrders() {
           // sort to the top, then by how far over they are.
           .map(p => ({ ...p, _sla: poSlaState(p) }))
           .sort((a, b) => (b._sla?.overdueBy || 0) - (a._sla?.overdueBy || 0) || (b._sla?.hours || 0) - (a._sla?.hours || 0))
-        return { ...o, _totalItems: total, _coveredItems: covered, _stockClosed: stockClosed, _hasPostApprovalPO: hasPostApprovalPO, _orphanPOs: orphanPOs, _deliveredOrphanPOs: deliveredOrphanPOs, _unplacedPOs: unplacedPOs }
+        // Units still needing a PO that have ALREADY left the building. Purchase no
+        // longer HIDES these (that was the byShipped bug — see lib/coverage.js), but
+        // the buyer must know: this is a replenishment decision at today's price, not
+        // a supply gap. Display only; it never affects coverage.
+        const shippedPending = activeItems.filter(oi =>
+          lineToProcureQty(oi, coveredSet) > 0 && (Number(oi.dispatched_qty) || 0) > 0).length
+        return { ...o, _totalItems: total, _coveredItems: covered, _shippedPending: shippedPending, _stockClosed: stockClosed, _hasPostApprovalPO: hasPostApprovalPO, _orphanPOs: orphanPOs, _deliveredOrphanPOs: deliveredOrphanPOs, _unplacedPOs: unplacedPOs }
       })
     }
     setOrders(coOrders)
@@ -364,6 +370,12 @@ export default function ProcurementOrders() {
                       </div>
                       <div className="ol-cell ol-cust" title={o.customer_name}>
                         {o.customer_name}
+                        {o._shippedPending > 0 && (
+                          <span title={`${o._shippedPending} line${o._shippedPending>1?'s':''} on this order already went out to the customer but still has no PO. It most likely shipped from stock — confirm whether you need to buy replacement stock at today's price, or close the line from stock.`}
+                            style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e' }}>
+                            ALREADY SHIPPED
+                          </span>
+                        )}
                         {tab === 'unplaced' && isDeliveredish(o) && (
                           <span title="Delivered to the customer — usually served from stock. Do NOT assume the PO should be cancelled: the material may already have been received without a GRN (common for POs raised before the GRN module), in which case mark the PO Placed and create the GRN. Or the price was negotiated and you still want the material."
                             style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#dcfce7', color: '#166534' }}>

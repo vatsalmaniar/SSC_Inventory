@@ -5,14 +5,31 @@
 // partly-dispatched order (header → dispatched_fc) hid its still-unprocured
 // lines from the queue AND the clubbing search. See [[clubbed-po-phase1]].
 //
-// Quantity-precise (Stage B). A line's remaining-to-procure is:
-//   to_procure = max(0, min(
-//        qty − cancelled − stock_qty − po_covered_qty,   ← not yet sourced
-//        qty − cancelled − dispatched_qty                ← can't need more than unshipped
-//   ))
-// The min() floor is essential: it stops stock/PO units that were ALSO already
-// dispatched from being subtracted twice (which would hide real demand, e.g. a
-// 6-from-stock / 4-on-PO line whose 6 stock units shipped).
+// Quantity-precise. A line's remaining-to-procure is:
+//   to_procure = max(0, qty − cancelled − stock_qty − po_covered_qty)
+//
+// PURCHASE DOES NOT READ DISPATCH. There used to be a second cap,
+//   min(…, qty − cancelled − dispatched_qty)   ← "can't need more than unshipped"
+// which encoded the assumption "if it shipped, it must have been sourced".
+// That is a guess, and it was wrong in both directions:
+//
+//   • dispatched_qty is incremented when a delivery BATCH IS CREATED
+//     (dispatch_order_batch → increment_dispatched_qty), not at goods issue. So
+//     a line was written off the moment someone made the paperwork — before any
+//     goods moved. SSC/CO1253 (Ammann, ₹2,28,980) was never bought, never
+//     shipped, and invisible to procurement for two weeks because of this.
+//   • Shipping from stock and needing a PO are DIFFERENT questions. Old stock
+//     can go out today and still need replacing at today's price — a purchasing
+//     decision the dispatch flow has no business making.
+//
+// Sourcing is now stated, never inferred: a line is covered because someone
+// ticked stock, or because a PO covers it. Nothing else. The 849 CO lines that
+// had genuinely shipped from stock without a record were backfilled first —
+// see sql/coverage_stock_backfill.sql — because deleting the cap without that
+// would have flooded the queue with 343 already-completed orders.
+//
+// dispatched_qty is still read for DISPLAY (ProcurementOrders annotates a line
+// that has already gone out) but it can never hide one.
 //
 // stock_qty fallback (Stage B migration-safety): a line's stock portion is
 // stock_qty when set, else — for the 585 legacy whole-line 'stock' rows that
@@ -178,10 +195,9 @@ export function lineToProcureQty(oi, covered) {
   if ((oi.line_status || 'active') !== 'active') return 0
   const qty = Number(oi.qty) || 0
   const cancelled = Number(oi.cancelled_qty) || 0
-  const dispatched = Number(oi.dispatched_qty) || 0
-  const bySource  = qty - cancelled - stockPortion(oi) - poCoveredQtyOf(oi, covered)
-  const byShipped = qty - cancelled - dispatched
-  return Math.max(0, Math.min(bySource, byShipped))
+  // Sourced = ticked from stock, or covered by a firm PO. Dispatch is NOT a
+  // source — see the header note.
+  return Math.max(0, qty - cancelled - stockPortion(oi) - poCoveredQtyOf(oi, covered))
 }
 
 // Does this line still need any procurement? `covered` = Map from
@@ -191,8 +207,9 @@ export function lineNeedsProcurement(oi, covered) {
 }
 
 // Inverse, for "X / Y covered" counts. A line is "handled" when nothing is left
-// to procure (covered by PO, from stock, or already dispatched). Inactive lines
-// are excluded from totals (return false).
+// to procure — i.e. covered by a firm PO or ticked from stock. Dispatch does
+// NOT make a line handled; see the header note. Inactive lines are excluded
+// from totals (return false).
 export function lineIsHandled(oi, covered) {
   if ((oi?.line_status || 'active') !== 'active') return false
   return lineToProcureQty(oi, covered) <= 0
