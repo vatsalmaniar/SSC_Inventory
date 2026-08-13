@@ -12,6 +12,8 @@ import { fetchAll } from '../lib/fetchAll'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import '../styles/drawer.css'
+import '../styles/orders-redesign.css'
+import { SpaDrawer } from '../components/SpaPanel'
 
 const ORDER_STATUS = {
   pending:              { label: 'Pending Approval',    bg: '#fef3c7', color: '#92400e' },
@@ -112,6 +114,12 @@ function localToday() {
 const SPECIAL_SCOPES = [['CUSTOMER', 'Customer'], ['STOCK', 'All — every customer & stock']]
 
 // 16px on the inputs keeps iOS from zooming the page when a field is focused.
+// Column layout for the special-price list, shared by the header and the rows
+// so they can never drift apart.
+const BTN_SM = { padding: '4px 9px', fontSize: 11.5, lineHeight: 1.2, whiteSpace: 'nowrap' }
+
+const SPA_COLS = 'minmax(190px,1.4fr) 74px 104px 104px 72px 152px 142px 132px 104px'
+
 const SP_LABEL = { fontSize: 10, fontWeight: 600, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4, display: 'block' }
 const SP_INPUT = { padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 8, fontSize: 13, fontFamily: 'var(--font)', background: 'white', outline: 'none', width: '100%', boxSizing: 'border-box' }
 
@@ -135,8 +143,6 @@ export default function ItemDetail() {
   const [role, setRole]               = useState('')
   const [spOpen, setSpOpen]           = useState(false)
   const [spaOpen, setSpaOpen]         = useState(null)   // agreement being viewed
-  const [spaDetail, setSpaDetail]     = useState(null)   // its rates + where it has been used
-  const [spaLoading, setSpaLoading]   = useState(false)
   const [spSaving, setSpSaving]       = useState(false)
   const spGuard                       = useRef(false)
   // A special case can fix what we PAY, what we SELL at, or both — they are
@@ -305,10 +311,18 @@ export default function ItemDetail() {
   function groupedSpecials() {
     const g = new Map()
     specials.forEach(r => {
-      const k = [r.price_scope, r.customer_id || '', r.vendor_id || '', r.spa_id || '', r.project_ref || '', r.min_qty, r.valid_from, r.valid_to || ''].join('|')
+      // Buy and sell are one negotiated case shown on one line. Within an
+      // agreement they pair on rung + validity — NOT on vendor: the purchase
+      // leg is vendor-locked and the sales leg has no vendor at all, so
+      // including it split every SPA into two rows.
+      const k = r.spa_id
+        ? ['spa', r.spa_id, r.min_qty, r.valid_from, r.valid_to || ''].join('|')
+        : [r.price_scope, r.customer_id || '', r.vendor_id || '', r.project_ref || '',
+           r.min_qty, r.valid_from, r.valid_to || ''].join('|')
       if (!g.has(k)) g.set(k, { key: k, ...r, buy: null, sell: null })
       const row = g.get(k)
-      if (r.price_type === 'PURCHASE') row.buy = r; else row.sell = r
+      if (r.price_type === 'PURCHASE') { row.buy = r; row.vendors = r.vendors || row.vendors }
+      else                             { row.sell = r }
     })
     return [...g.values()]
   }
@@ -373,28 +387,6 @@ export default function ItemDetail() {
     if (error) { toast(friendlyError(error, 'Could not close the special price')); return }
     toast('Special price closed', 'success')
     await loadSpecials(item.item_code)
-  }
-
-  // Everything the agreement covers, and everywhere it has been used. The PO
-  // side is read from po_items.spa_no, which is STAMPED at pricing time — so a
-  // superseded agreement still shows the documents it priced.
-  async function openSpa(spa) {
-    setSpaOpen(spa); setSpaDetail(null); setSpaLoading(true)
-    const [ratesRes, poRes] = await Promise.all([
-      sb.from('item_prices')
-        .select('item_code,price_type,amount,min_qty,valid_from,valid_to,price_status')
-        .eq('spa_id', spa.id).order('item_code'),
-      sb.from('po_items')
-        .select('item_code,qty,unit_price,po_id,purchase_orders(po_number,po_date,status)')
-        .eq('spa_no', spa.spa_no).limit(200),
-    ])
-    const byItem = new Map()
-    for (const r of (ratesRes.data || [])) {
-      if (!byItem.has(r.item_code)) byItem.set(r.item_code, { item_code: r.item_code })
-      byItem.get(r.item_code)[r.price_type === 'PURCHASE' ? 'buy' : 'sell'] = r
-    }
-    setSpaDetail({ items: [...byItem.values()], usedOn: poRes.data || [] })
-    setSpaLoading(false)
   }
 
   // Approving is a SECOND person's act. The database refuses an approval by the
@@ -636,19 +628,29 @@ export default function ItemDetail() {
                       No special prices.{commercials?.standard_discount_pct != null && <> The standard {Number(commercials.standard_discount_pct)}% partner rate applies.</>}
                     </div>
                   ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table className="od-items-table">
-                        <thead>
-                          <tr>
-                            <th>For</th>
-                            <th style={{ textAlign: 'right' }}>From Qty</th>
-                            <th style={{ textAlign: 'right' }}>We Buy At</th>
-                            <th style={{ textAlign: 'right' }}>We Sell At</th>
-                            <th style={{ textAlign: 'right' }}>Margin</th>
-                            <th>Valid</th><th>Ref</th><th>Status</th>{canEditPrices && <th></th>}
-                          </tr>
-                        </thead>
-                        <tbody>
+                    // The Orders list is the reference layout for any list in this
+                    // app (CLAUDE.md), so this uses the same .ol-* rows rather than
+                    // a table of its own. Those classes are scoped under
+                    // .orders-app, which also carries page chrome — background and
+                    // padding are neutralised so only the tokens and row styles
+                    // come through.
+                    <div className="orders-app" style={{ background: 'transparent', padding: 0 }}>
+                      {/* The row keeps its natural column widths and the CARD
+                          scrolls, rather than columns collapsing into each
+                          other — which is what made the headers overlap. */}
+                      <div className="ol-wrap" style={{ marginTop: 0, overflowX: 'auto' }}>
+                        <div className="ol-row ol-head" style={{ gridTemplateColumns: SPA_COLS }}>
+                          <div>For</div>
+                          <div className="num">From Qty</div>
+                          <div className="num">We Buy At</div>
+                          <div className="num">We Sell At</div>
+                          <div className="num">Margin</div>
+                          <div>Valid</div>
+                          <div>Agreement</div>
+                          <div>Status</div>
+                          {canEditPrices && <div></div>}
+                        </div>
+                        <div className="ol-table">
                           {groupedSpecials().map(g => {
                             const st = specialStatus(g)
                             const lp = Number(commercials?.list_price || 0)
@@ -660,53 +662,64 @@ export default function ItemDetail() {
                                           : g.price_scope === 'PROJECT'  ? `Project · ${g.project_ref || '—'}`
                                           : 'Our stock order'
                             return (
-                              <tr key={g.key} style={{ opacity: st.label === 'Expired' ? 0.55 : 1 }}>
-                                <td>{forWhom}</td>
-                                <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>{g.min_qty || 1}</td>
-                                <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>
-                                  {g.buy ? <>{rupee(g.buy.amount)}<div style={{ fontSize: 10.5, color: 'var(--gray-400)', fontFamily: 'var(--font)' }}>{off(g.buy.amount)}</div></> : '—'}
-                                </td>
-                                <td style={{ textAlign: 'right', fontFamily: 'var(--mono)' }}>
-                                  {g.sell ? <>{rupee(g.sell.amount)}<div style={{ fontSize: 10.5, color: 'var(--gray-400)', fontFamily: 'var(--font)' }}>{off(g.sell.amount)}</div></> : '—'}
-                                </td>
-                                <td style={{ textAlign: 'right', fontWeight: 600, color: margin == null ? 'var(--gray-300)' : margin < 0 ? '#b91c1c' : '#166534' }}>
+                              <div key={g.key} className="ol-row ol-data" style={{ gridTemplateColumns: SPA_COLS, cursor: 'default',
+                                                opacity: st.label === 'Expired' || st.label === 'Superseded' ? 0.55 : 1 }}>
+                                <div className="ol-cell" title={forWhom}>
+                                  <div style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{forWhom}</div>
+                                  {g.vendors?.vendor_name && (
+                                    <div title={g.vendors.vendor_name}
+                                      style={{ fontSize: 10.5, color: 'var(--o-muted-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      via {g.vendors.vendor_name}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="ol-cell num" style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>{g.min_qty || 1}</div>
+                                <div className="ol-cell num" style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                                  {g.buy ? <>{rupee(g.buy.amount)}<div style={{ fontSize: 10.5, color: 'var(--o-muted-2)', fontFamily: 'var(--font)' }}>{off(g.buy.amount)}</div></> : '—'}
+                                </div>
+                                <div className="ol-cell num" style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                                  {g.sell ? <>{rupee(g.sell.amount)}<div style={{ fontSize: 10.5, color: 'var(--o-muted-2)', fontFamily: 'var(--font)' }}>{off(g.sell.amount)}</div></> : '—'}
+                                </div>
+                                <div className="ol-cell num" style={{ textAlign: 'right', fontWeight: 'var(--fw-semibold)',
+                                     color: margin == null ? 'var(--o-muted-2)' : margin < 0 ? 'var(--o-bad)' : 'var(--green-text)' }}>
                                   {margin == null ? '—' : margin + '%'}
-                                </td>
-                                <td style={{ whiteSpace: 'nowrap' }}>{g.valid_from} → {g.valid_to || 'open'}</td>
-                                <td>
+                                </div>
+                                <div className="ol-cell" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{g.valid_from} → {g.valid_to || 'open'}</div>
+                                <div className="ol-cell">
                                   {/* The agreement this rate belongs to. Without it a
                                       negotiated price is a loose number with no document
                                       behind it — you can see WHAT we pay but not WHY. */}
                                   {g.special_price_agreements ? (
-                                    <button
-                                      onClick={() => openSpa({ ...g.special_price_agreements, id: g.spa_id })}
-                                      style={{ background:'none', border:'none', padding:0, cursor:'pointer',
-                                               fontFamily:'var(--mono)', fontSize:11.5, color:'#1a73e8',
-                                               fontWeight:'var(--fw-semibold)', textDecoration:'underline' }}>
+                                    <button onClick={() => setSpaOpen({ ...g.special_price_agreements, id: g.spa_id })}
+                                      style={{ background:'none', border:'none', padding:0, cursor:'pointer', textAlign:'left',
+                                               fontFamily:'var(--mono)', fontSize:11.5, color:'var(--ssc-blue)',
+                                               fontWeight:'var(--fw-semibold)' }}>
                                       {g.special_price_agreements.spa_no}
                                     </button>
-                                  ) : (g.project_ref || '—')}
-                                </td>
-                                <td>
-                                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: st.bg, color: st.fg }}>{st.label}</span>
-                                </td>
+                                  ) : <span style={{ color:'var(--o-muted-2)' }}>{g.project_ref || '—'}</span>}
+                                </div>
+                                <div className="ol-cell ol-status-cell">
+                                  <span className="ol-status-pill" style={{ '--stage-color': st.fg }}>
+                                    <span className="ol-status-dot"/>{st.label}
+                                  </span>
+                                </div>
                                 {canEditPrices && (
-                                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                  <div className="ol-cell" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                                     {/* Labelled actions, never a bare icon — these change what we pay. */}
                                     {g.price_status === 'pending' && (
-                                      <button className="od-btn od-btn-approve" onClick={() => approveSpecial(g)}>Approve</button>
+                                      <button className="od-btn od-btn-approve" style={BTN_SM} onClick={() => approveSpecial(g)}>Approve</button>
                                     )}
                                     {g.price_status === 'approved' && !g.valid_to && g.buy && (
-                                      <button className="od-btn" onClick={() => supersedeSpecial(g.buy)}>New rate</button>
+                                      <button className="od-btn" style={BTN_SM} onClick={() => supersedeSpecial(g.buy)}>New rate</button>
                                     )}
-                                    {!g.valid_to && <button className="od-btn" onClick={() => closeSpecial(g)}>Close</button>}
-                                  </td>
+                                    {!g.valid_to && <button className="od-btn" style={BTN_SM} onClick={() => closeSpecial(g)}>Close</button>}
+                                  </div>
                                 )}
-                              </tr>
+                              </div>
                             )
                           })}
-                        </tbody>
-                      </table>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -923,120 +936,12 @@ export default function ItemDetail() {
         </div>
       </div>
 
-      {/* Special Price Agreement — full document, in the app's shared drawer
-          (styles/drawer.css) rather than a one-off panel. Shows what the
-          agreement covers and, crucially, where it has actually been used:
-          a rate nobody can trace is how the spreadsheet era worked. */}
+      {/* Same drawer as Customer 360 and Vendor 360 — components/SpaPanel.jsx.
+          side="both" because this tab is already RLS-gated to the roles allowed
+          to see a purchase price. */}
       {spaOpen && (
-        <div className="od-drawer-scrim" onClick={() => setSpaOpen(null)}>
-          <div className="od-drawer" onClick={e => e.stopPropagation()}>
-            <div className="od-drawer-head">
-              <div style={{ minWidth: 0 }}>
-                <div className="od-drawer-eyebrow">Special Price Agreement</div>
-                <div className="od-drawer-title" style={{ fontFamily: 'var(--mono)' }}>{spaOpen.spa_no}</div>
-                <div className="od-drawer-sub">{spaOpen.title}</div>
-              </div>
-              <button className="od-drawer-close" onClick={() => setSpaOpen(null)}>✕</button>
-            </div>
-
-            <div className="od-drawer-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '128px 1fr', rowGap: 9, columnGap: 12, fontSize: 12.5 }}>
-                <span style={{ color: 'var(--gray-500)' }}>Agreement with</span>
-                <span>{spaOpen.counterparty_type === 'CUSTOMER' ? 'Customer' : 'Vendor'}</span>
-                <span style={{ color: 'var(--gray-500)' }}>Status</span>
-                <span>
-                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
-                    background: spaOpen.status === 'approved' ? '#f0fdf4' : '#fffbeb',
-                    color: spaOpen.status === 'approved' ? '#166534' : '#b45309' }}>
-                    {spaOpen.status === 'approved' ? 'Approved' : spaOpen.status === 'draft' ? 'Draft' : spaOpen.status}
-                  </span>
-                  {spaOpen.status !== 'approved' && (
-                    <span style={{ marginLeft: 8, fontSize: 11.5, color: 'var(--gray-500)' }}>
-                      rates are not applied until the agreement is approved
-                    </span>
-                  )}
-                </span>
-                <span style={{ color: 'var(--gray-500)' }}>Valid</span>
-                <span>{spaOpen.valid_from} → {spaOpen.valid_to || 'open'}</span>
-                {spaOpen.reference && (<><span style={{ color: 'var(--gray-500)' }}>Reference</span><span>{spaOpen.reference}</span></>)}
-                {spaOpen.source_file && (<><span style={{ color: 'var(--gray-500)' }}>Source</span><span style={{ wordBreak: 'break-all' }}>{spaOpen.source_file}</span></>)}
-              </div>
-
-              {spaOpen.notes && (
-                <div style={{ marginTop: 14, fontSize: 11.5, color: 'var(--gray-500)', lineHeight: 1.55,
-                              background: 'var(--gray-50)', padding: 10, borderRadius: 8 }}>
-                  {spaOpen.notes}
-                </div>
-              )}
-
-              {spaLoading ? <div style={{ marginTop: 18 }}><Loading /></div> : spaDetail && (
-                <>
-                  <div style={{ marginTop: 22, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
-                                textTransform: 'uppercase', color: 'var(--gray-500)' }}>
-                    Items covered ({spaDetail.items.length})
-                  </div>
-                  <div style={{ overflowX: 'auto', marginTop: 8 }}>
-                    <table className="od-items-table">
-                      <thead><tr>
-                        <th>Item</th>
-                        <th style={{ textAlign: 'right' }}>We buy at</th>
-                        <th style={{ textAlign: 'right' }}>We sell at</th>
-                        <th style={{ textAlign: 'right' }}>Margin</th>
-                      </tr></thead>
-                      <tbody>
-                        {spaDetail.items.map(r => {
-                          const m = (r.buy && r.sell) ? Math.round((1 - Number(r.buy.amount) / Number(r.sell.amount)) * 1000) / 10 : null
-                          const here = r.item_code === item.item_code
-                          return (
-                            <tr key={r.item_code} style={here ? { background: '#eff6ff' } : undefined}>
-                              <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: here ? 600 : 400 }}>{r.item_code}</td>
-                              <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>{r.buy ? rupee(r.buy.amount) : '—'}</td>
-                              <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>{r.sell ? rupee(r.sell.amount) : '—'}</td>
-                              <td style={{ textAlign: 'right', fontWeight: 600, color: m == null ? 'var(--gray-300)' : m < 0 ? '#b91c1c' : '#166534' }}>
-                                {m == null ? '—' : m + '%'}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div style={{ marginTop: 22, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
-                                textTransform: 'uppercase', color: 'var(--gray-500)' }}>
-                    Used on ({spaDetail.usedOn.length})
-                  </div>
-                  {!spaDetail.usedOn.length ? (
-                    <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 8, fontStyle: 'italic' }}>
-                      No purchase order has priced from this agreement yet.
-                    </div>
-                  ) : (
-                    <div style={{ overflowX: 'auto', marginTop: 8 }}>
-                      <table className="od-items-table">
-                        <thead><tr>
-                          <th>PO</th><th>Date</th><th>Item</th>
-                          <th style={{ textAlign: 'right' }}>Qty</th>
-                          <th style={{ textAlign: 'right' }}>Rate</th>
-                        </tr></thead>
-                        <tbody>
-                          {spaDetail.usedOn.map((u, i) => (
-                            <tr key={i} style={{ cursor: 'pointer' }} onClick={() => navigate('/purchase-orders/' + u.po_id)}>
-                              <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: '#1a73e8' }}>{u.purchase_orders?.po_number || '—'}</td>
-                              <td style={{ fontSize: 11.5 }}>{u.purchase_orders?.po_date ? fmt(u.purchase_orders.po_date) : '—'}</td>
-                              <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5 }}>{u.item_code}</td>
-                              <td style={{ textAlign: 'right' }}>{u.qty}</td>
-                              <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>{rupee(u.unit_price)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <SpaDrawer spa={spaOpen} side="both" highlightItem={item.item_code}
+                   onClose={() => setSpaOpen(null)} />
       )}
 
       {/* Add special price — docks bottom-right (same .gcompose chrome as the

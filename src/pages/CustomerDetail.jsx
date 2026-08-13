@@ -14,6 +14,7 @@ import { fetchAll } from '../lib/fetchAll'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
+import { SpaList, SpaDrawer, fetchAgreements } from '../components/SpaPanel'
 
 const SALES_REPS = [
   'Aarth Joshi','Akash Devda','Ankit Dave','Bhavesh Patel','Darsh Chauhan',
@@ -101,6 +102,10 @@ export default function CustomerDetail() {
   const [visits, setVisits]           = useState([])
   const [payments, setPayments]       = useState(null)  // { outstanding_inr, overdue_inr } | null
   const [activeTab, setActiveTab]     = useState('summary')
+  // Agreements with this customer — SALES side only. This page is used in front
+  // of the customer, so no purchase price and no margin appear on it.
+  const [spas, setSpas]       = useState([])
+  const [spaOpen, setSpaOpen] = useState(null)
   const [showContactModal, setShowContactModal] = useState(false)
   const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', phoneCC:'+91', whatsapp:'', whatsappCC:'+91', email:'' })
   const [savingContact, setSavingContact] = useState(false)
@@ -111,6 +116,15 @@ export default function CustomerDetail() {
   const [pdfInclude, setPdfInclude]   = useState({ orders: true, opportunities: true })
 
   useEffect(() => { init() }, [id])
+
+  // MUST sit with the other hooks: it was below the `if (loading) return` guard,
+  // which made the hook order change between renders and crashed the page with
+  // "Rendered more hooks than during the previous render".
+  useEffect(() => {
+    if (!customer?.id) return
+    if (!['admin','management','ops','accounts'].includes(userRole)) return
+    fetchAgreements({ customerId: customer.id }).then(setSpas)
+  }, [customer?.id, userRole])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -496,6 +510,11 @@ ${oppsHTML}
   const initials        = customer.customer_name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
   const avatarBg        = ownerColor(customer.customer_name)
 
+  // The roles RLS already lets read item_prices. A sales user currently gets
+  // zero rows, so the tab is hidden rather than shown empty — opening SALES
+  // rows to sales is a deliberate RLS decision, not a side effect of this tab.
+  const canSeePrices = ['admin','management','ops','accounts'].includes(userRole)
+
   const tabs = [
     { key:'summary',       label:'Summary' },
     { key:'contacts',      label:'Contacts',      count: contacts.length },
@@ -503,7 +522,9 @@ ${oppsHTML}
     { key:'orders',        label:'Orders',        count: nonCancelledOrders.length },
     { key:'visits',        label:'Visits',        count: visits.length },
     { key:'quotations',    label:'Quotations',    count: quotationOpps.length },
+    ...(canSeePrices ? [{ key:'commercials', label:'Commercials', count: spas.length }] : []),
   ]
+
 
   return (
     <Layout pageTitle="Customer 360" pageKey="customer360">
@@ -1053,6 +1074,18 @@ ${oppsHTML}
             )}
 
             {/* ══ QUOTATIONS ══ */}
+            {activeTab === 'commercials' && (
+              <div className="c360-card">
+                <div className="c360-card-header">
+                  <span className="c360-card-title">Special Price Agreements ({spas.length})</span>
+                </div>
+                <div className="c360-card-body">
+                  <SpaList agreements={spas} side="sales" onOpen={setSpaOpen}
+                    emptyText="No special price agreement with this customer. Orders are priced by the salesperson." />
+                </div>
+              </div>
+            )}
+
             {activeTab === 'quotations' && (
               <div className="c360-card">
                 <div className="c360-card-header">
@@ -1238,6 +1271,7 @@ ${oppsHTML}
         </div>
       )}
 
+      {spaOpen && <SpaDrawer spa={spaOpen} side="sales" onClose={() => setSpaOpen(null)} />}
     </Layout>
   )
 }

@@ -12,6 +12,7 @@ import { fetchAll } from '../lib/fetchAll'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
+import { SpaList, SpaDrawer, fetchAgreements } from '../components/SpaPanel'
 
 const VENDOR_TYPES = ['Manufacturer','Distributor','Agent']
 const CREDIT_TERMS = ['Against PI','Advance','7 Days','15 Days','30 Days','45 Days','60 Days','75 Days','90 Days','Against Delivery']
@@ -60,6 +61,21 @@ export default function VendorDetail() {
   const gstFileRef    = useRef(null)
   const msmeFileRef   = useRef(null)
   const [activeTab, setActiveTab] = useState('summary')
+  // Special price agreements with this vendor — PURCHASE side only. A vendor
+  // page must never show what our customer pays, or our margin.
+  const [spas, setSpas]     = useState([])
+  const [spaOpen, setSpaOpen] = useState(null)
+  // Which brands this vendor supplies us, and whether we buy them DIRECT.
+  const [vBrands, setVBrands]   = useState([])
+  const [allBrands, setAllBrands] = useState([])
+  const [addBrand, setAddBrand]   = useState('')
+  // Vendors had two hard-coded document slots (GST, MSME). Anything else — an
+  // MCA name-change certificate, a bank mandate, an MSA — had nowhere to live.
+  const [docs, setDocs]           = useState([])
+  const [nameHistory, setNameHistory] = useState([])
+  const [docUploading, setDocUploading] = useState(false)
+  const [docTitle, setDocTitle]   = useState('')
+  const [docType, setDocType]     = useState('Name change certificate')
   const [showContactModal, setShowContactModal] = useState(false)
   const [contactForm, setContactForm] = useState({ name:'', designation:'', phone:'', phoneCC:'+91', whatsapp:'', whatsappCC:'+91', email:'' })
   const [savingContact, setSavingContact] = useState(false)
@@ -67,6 +83,90 @@ export default function VendorDetail() {
   const [pdfInclude, setPdfInclude]       = useState({ pos: true, grns: true })
 
   useEffect(() => { init() }, [id])
+
+  // MUST sit with the other hooks: it was below the `if (loading) return` guard,
+  // which made the hook order change between renders and crashed the page with
+  // "Rendered more hooks than during the previous render".
+  useEffect(() => {
+    if (!vendor?.id) return
+    if (!['admin','management','ops','accounts'].includes(userRole)) return
+    fetchAgreements({ vendorId: vendor.id }).then(setSpas)
+  }, [vendor?.id, userRole])
+
+  useEffect(() => {
+    if (!vendor?.id) return
+    loadBrands()
+    loadDocs()
+    sb.rpc('get_all_brands').then(({ data }) => setAllBrands((data || []).map(r => r.brand).filter(Boolean)))
+  }, [vendor?.id])
+
+  async function loadDocs() {
+    const [d, h] = await Promise.all([
+      sb.from('party_documents').select('*').eq('party_type','VENDOR').eq('party_id', id).order('created_at', { ascending:false }),
+      sb.from('party_name_history').select('*').eq('party_type','VENDOR').eq('party_id', id).order('effective_on', { ascending:false }),
+    ])
+    setDocs(d.data || []); setNameHistory(h.data || [])
+  }
+
+  async function uploadPartyDoc(file) {
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { toast('File is too large (max 5 MB)'); return }
+    setDocUploading(true)
+    try {
+      const path = `party/${id}/${Date.now()}_${file.name.replace(/[^\w.\-]/g,'_')}`
+      const { error: upErr } = await sb.storage.from('vendor-docs').upload(path, file, { upsert: true })
+      if (upErr) throw upErr
+      const url = sb.storage.from('vendor-docs').getPublicUrl(path).data.publicUrl
+      const { error } = await sb.from('party_documents').insert({
+        party_type: 'VENDOR', party_id: id, doc_type: docType,
+        title: docTitle.trim() || file.name, file_url: url,
+        // tie it to the rename it evidences, when there is one
+        name_history_id: docType === 'Name change certificate' ? (nameHistory[0]?.id || null) : null,
+      })
+      if (error) throw error
+      toast('Document added', 'success'); setDocTitle(''); loadDocs()
+    } catch (e) {
+      toast(friendlyError(e, 'Upload failed'))
+    } finally { setDocUploading(false) }
+  }
+
+  async function removePartyDoc(d) {
+    if (!window.confirm(`Remove "${d.title}"?`)) return
+    const { error } = await sb.from('party_documents').delete().eq('id', d.id)
+    if (error) { toast(friendlyError(error, 'Could not remove')); return }
+    loadDocs()
+  }
+
+  async function loadBrands() {
+    const { data } = await sb.from('vendor_brands')
+      .select('id,brand,is_preferred,notes').eq('vendor_id', id).order('brand')
+    setVBrands(data || [])
+  }
+
+  async function addVendorBrand() {
+    const b = addBrand.trim()
+    if (!b) return
+    const { error } = await sb.from('vendor_brands').insert({ vendor_id: id, brand: b })
+    if (error) { toast(friendlyError(error, 'Could not add that brand')); return }
+    setAddBrand(''); loadBrands()
+  }
+
+  // PREFERRED = we buy this brand DIRECT from the principal. Traders are not
+  // preferred. A brand can have more than one preferred vendor — nVent has two
+  // Indian entities and both are direct — so there is no exclusivity to enforce.
+  async function toggleBrandPreferred(row) {
+    const { error } = await sb.from('vendor_brands')
+      .update({ is_preferred: !row.is_preferred }).eq('id', row.id)
+    if (error) { toast(friendlyError(error, 'Could not update')); return }
+    loadBrands()
+  }
+
+  async function removeVendorBrand(row) {
+    if (!window.confirm(`Remove ${row.brand} from this vendor?`)) return
+    const { error } = await sb.from('vendor_brands').delete().eq('id', row.id)
+    if (error) { toast(friendlyError(error, 'Could not remove')); return }
+    loadBrands()
+  }
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -377,12 +477,21 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
   const avatarBg     = ownerColor(vendor.vendor_name)
   const isActive     = vendor.account_status === 'Active' || vendor.status === 'active'
 
+  // Same roles that can read item_prices at all — sales get no rows from RLS,
+  // so the tab would be empty and misleading.
+  const canSeePrices  = ['admin','management','ops','accounts'].includes(userRole)
+  const canEditBrands = ['admin','management','ops'].includes(userRole)
+
   const tabs = [
     { key:'summary',  label:'Summary' },
     { key:'contacts', label:'Contacts', count: contacts.length },
     { key:'pos',      label:'Purchase Orders', count: nonCancelledPos.length },
     { key:'grns',     label:'GRNs', count: grns.length },
+    { key:'brands',   label:'Brands', count: vBrands.length },
+    { key:'documents', label:'Documents', count: docs.length },
+    ...(canSeePrices ? [{ key:'commercials', label:'Commercials', count: spas.length }] : []),
   ]
+
 
   return (
     <Layout pageTitle="Vendor 360" pageKey="vendor360">
@@ -401,6 +510,17 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                   <span className={'c360-badge ' + (isActive ? 'c360-badge-green' : 'c360-badge-amber')}>{isActive ? 'Active' : vendor.account_status || 'Inactive'}</span>
                   {vendor.credit_terms   && <span className="c360-badge c360-badge-gray">{vendor.credit_terms}</span>}
                   {vendor.approval_status === 'pending' && <span className="c360-badge c360-badge-amber">⏳ Pending Approval</span>}
+                  {/* Preferred = we buy direct from them. One badge, not one per
+                      brand — the hero is for status, and the per-brand detail
+                      lives on the Brands tab. Tooltip names the brands, because
+                      a vendor can be the principal for one and a trader for
+                      another. Uses the app's existing amber badge. */}
+                  {vBrands.some(b => b.is_preferred) && (
+                    <span className="c360-badge c360-badge-orange"
+                      title={'We buy direct from this vendor: ' + vBrands.filter(b => b.is_preferred).map(b => b.brand).join(', ')}>
+                      Preferred
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="c360-hero-actions">
@@ -632,6 +752,55 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                     </div>
                   </div>
 
+                  {/* Former name — a company that renamed is a compliance fact,
+                      not trivia: the GST is unchanged but 235 of our documents
+                      were issued under the old name. Shown to everyone who can
+                      see the vendor, not only to whoever can edit compliance. */}
+                  {(vendor.former_names?.length > 0 || nameHistory.length > 0) && (
+                    <div className="c360-side-card" style={{ marginTop:12 }}>
+                      <div className="c360-side-title">Former Name</div>
+                      {nameHistory.length ? nameHistory.map(h => (
+                        <div key={h.id} style={{ marginBottom:10 }}>
+                          <div style={{ fontSize:13, color:'var(--gray-600)', fontWeight:'var(--fw-medium)' }}>{h.old_name}</div>
+                          <div style={{ fontSize:10.5, color:'var(--gray-400)', marginTop:3 }}>
+                            changed{h.effective_on ? ` on ${h.effective_on}` : ''} · GST unchanged
+                          </div>
+                          {docs.filter(d => d.name_history_id === h.id || d.doc_type === 'Name change certificate' || d.doc_type === 'Vendor letter').map(d => (
+                            <a key={d.id} href={d.file_url} target="_blank" rel="noopener noreferrer"
+                               style={{ color:'#1a73e8', fontSize:12, display:'inline-flex', alignItems:'center', gap:4, marginTop:6 }}>
+                              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              {d.title}
+                            </a>
+                          ))}
+                        </div>
+                      )) : (
+                        <div style={{ fontSize:13, color:'var(--gray-400)' }}>{(vendor.former_names || []).join(', ')}</div>
+                      )}
+                      <div style={{ fontSize:10.5, color:'var(--gray-400)', marginTop:6, lineHeight:1.5 }}>
+                        Documents issued before the change still carry the old name — that is deliberate.
+                      </div>
+                      {/* The proof of the rename lives with the rename. Uploading
+                          here files it as a name-change certificate and links it
+                          to this history entry automatically. */}
+                      {canEditCompliance && (
+                        <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--gray-100)' }}>
+                          <label className="c360-btn" style={{ padding:'4px 10px', fontSize:11, cursor: docUploading ? 'wait' : 'pointer', display:'inline-block' }}>
+                            {docUploading ? 'Uploading…' : '+ Supporting document'}
+                            <input type="file" accept="application/pdf,image/*" hidden disabled={docUploading}
+                              onChange={e => {
+                                const f = e.target.files?.[0]
+                                if (f) { setDocType('Name change certificate'); setDocTitle(f.name.replace(/\.[^.]+$/,'')); uploadPartyDoc(f) }
+                                e.target.value = ''
+                              }} />
+                          </label>
+                          <span style={{ fontSize:10, color:'var(--gray-400)', marginLeft:8 }}>
+                            MCA certificate, vendor letter — PDF or image
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Compliance Documents — admin / management / jayshree.negi only */}
                   {canEditCompliance && (
                     <div className="c360-side-card" style={{ marginTop:12 }}>
@@ -686,6 +855,24 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
                             {cmpEdit && <input ref={msmeFileRef} type="file" accept="application/pdf" style={{ fontSize:11 }} />}
                           </div>
                         </div>
+                        {/* Everything else — MCA certificates, vendor letters,
+                            bank mandates. Uploaded on the Documents tab; shown
+                            here so all compliance paperwork reads in one place. */}
+                        {docs.length > 0 && (
+                          <div>
+                            <div style={{ fontSize:10, fontWeight:600, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>Other Documents</div>
+                            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                              {docs.map(d => (
+                                <a key={d.id} href={d.file_url} target="_blank" rel="noopener noreferrer"
+                                   style={{ color:'#1a73e8', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+                                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:12, height:12 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                  {d.title}
+                                  <span style={{ color:'var(--gray-400)' }}>· {d.doc_type}</span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -777,6 +964,147 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
             )}
 
             {/* ══ GRNs ══ */}
+            {activeTab === 'brands' && (
+              <div className="c360-card">
+                <div className="c360-card-header">
+                  <span className="c360-card-title">Brands Supplied ({vBrands.length})</span>
+                </div>
+                <div className="c360-card-body">
+                  {canEditBrands && (
+                    <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
+                      <select value={addBrand} onChange={e => setAddBrand(e.target.value)}
+                        style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8,
+                                 fontSize:13, fontFamily:'var(--font)', minWidth:220, background:'white' }}>
+                        <option value="">Add a brand…</option>
+                        {allBrands.filter(b => !vBrands.some(v => v.brand === b))
+                                  .map(b => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                      <button className="od-btn od-btn-approve" onClick={addVendorBrand} disabled={!addBrand}>Add</button>
+                    </div>
+                  )}
+                  {!vBrands.length ? (
+                    <div style={{ fontSize:13, color:'var(--gray-400)' }}>
+                      No brands recorded for this vendor yet.
+                    </div>
+                  ) : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {vBrands.map(b => (
+                        <div key={b.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px',
+                             border:'1px solid var(--gray-200)', borderRadius:10,
+                             background: b.is_preferred ? '#f0fdf4' : 'white' }}>
+                          <span style={{ fontSize:13.5, fontWeight:'var(--fw-medium)', flex:1, minWidth:0 }}>{b.brand}</span>
+                          {b.is_preferred && (
+                            <span style={{ fontSize:11, fontWeight:600, padding:'2px 9px', borderRadius:6,
+                                           background:'#dcfce7', color:'var(--green-text)', whiteSpace:'nowrap' }}>
+                              ★ Preferred — we buy direct
+                            </span>
+                          )}
+                          {b.notes && <span style={{ fontSize:11, color:'var(--gray-400)', whiteSpace:'nowrap' }}>{b.notes}</span>}
+                          {canEditBrands && (
+                            <>
+                              <button className="od-btn" style={{ padding:'4px 9px', fontSize:11.5 }}
+                                onClick={() => toggleBrandPreferred(b)}>
+                                {b.is_preferred ? 'Mark as trader' : 'Mark preferred'}
+                              </button>
+                              <button className="od-btn" style={{ padding:'4px 9px', fontSize:11.5 }}
+                                onClick={() => removeVendorBrand(b)}>Remove</button>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'documents' && (
+              <div className="c360-card">
+                <div className="c360-card-header">
+                  <span className="c360-card-title">Documents ({docs.length})</span>
+                </div>
+                <div className="c360-card-body">
+                  {/* A name change is a fact about the company, so it is shown
+                      with the evidence rather than buried in a field. */}
+                  {nameHistory.map(h => (
+                    <div key={h.id} style={{ background:'#f8fafc', border:'1px solid var(--gray-200)',
+                         borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
+                      <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.04em',
+                                    textTransform:'uppercase', color:'var(--gray-500)', marginBottom:6 }}>
+                        Name changed{h.effective_on ? ` · effective ${h.effective_on}` : ''}
+                      </div>
+                      <div style={{ fontSize:13 }}>
+                        <span style={{ color:'var(--gray-600)' }}>{h.old_name}</span>
+                        {'  →  '}
+                        <span style={{ fontWeight:'var(--fw-semibold)' }}>{h.new_name}</span>
+                      </div>
+                      {h.reason && <div style={{ fontSize:11.5, color:'var(--gray-500)', marginTop:6, lineHeight:1.5 }}>{h.reason}</div>}
+                    </div>
+                  ))}
+
+                  {canEditBrands && (
+                    <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', alignItems:'center' }}>
+                      <select value={docType} onChange={e => setDocType(e.target.value)}
+                        style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, background:'white' }}>
+                        <option>Name change certificate</option>
+                        <option>Vendor letter</option>
+                        <option>GST certificate</option>
+                        <option>MSME certificate</option>
+                        <option>Bank mandate</option>
+                        <option>Agreement</option>
+                        <option>Other</option>
+                      </select>
+                      <input value={docTitle} onChange={e => setDocTitle(e.target.value)} placeholder="Title (optional)"
+                        style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, minWidth:200 }} />
+                      <label className="od-btn" style={{ cursor: docUploading ? 'wait' : 'pointer' }}>
+                        {docUploading ? 'Uploading…' : 'Choose file'}
+                        <input type="file" accept="application/pdf,image/*" hidden disabled={docUploading}
+                          onChange={e => { uploadPartyDoc(e.target.files?.[0]); e.target.value = '' }} />
+                      </label>
+                      <span style={{ fontSize:10.5, color:'var(--gray-400)' }}>PDF or image, max 5 MB</span>
+                    </div>
+                  )}
+
+                  {!docs.length ? (
+                    <div style={{ fontSize:13, color:'var(--gray-400)' }}>No documents uploaded yet.</div>
+                  ) : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {docs.map(d => (
+                        <div key={d.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px',
+                             border:'1px solid var(--gray-200)', borderRadius:10 }}>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <a href={d.file_url} target="_blank" rel="noreferrer"
+                               style={{ fontSize:13, color:'var(--ssc-blue, #1a73e8)', textDecoration:'none', fontWeight:'var(--fw-medium)' }}>
+                              {d.title}
+                            </a>
+                            <div style={{ fontSize:10.5, color:'var(--gray-400)' }}>
+                              {d.doc_type}{d.effective_on ? ` · ${d.effective_on}` : ''}
+                            </div>
+                          </div>
+                          {canEditBrands && (
+                            <button className="od-btn" style={{ padding:'4px 9px', fontSize:11.5 }}
+                              onClick={() => removePartyDoc(d)}>Remove</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'commercials' && (
+              <div className="c360-card">
+                <div className="c360-card-header">
+                  <span className="c360-card-title">Special Price Agreements ({spas.length})</span>
+                </div>
+                <div className="c360-card-body">
+                  <SpaList agreements={spas} side="purchase" onOpen={setSpaOpen}
+                    emptyText="No special price agreement with this vendor. Purchases use the published price list and our standard partner discount." />
+                </div>
+              </div>
+            )}
+
             {activeTab === 'grns' && (
               <div className="c360-card">
                 <div className="c360-card-header">
@@ -898,6 +1226,7 @@ ${grns.length === 0 ? '<div style="font-size:12px;color:#94a3b8;font-style:itali
           </div>
         </div>
       )}
+      {spaOpen && <SpaDrawer spa={spaOpen} side="purchase" onClose={() => setSpaOpen(null)} />}
     </Layout>
   )
 }
