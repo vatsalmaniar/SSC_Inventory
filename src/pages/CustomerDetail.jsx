@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import { writeDoc } from '../lib/printDoc'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
-import { fmt } from '../lib/fmt'
+import { fmt, fmtMoneyFull } from '../lib/fmt'
 import { ordersTotalValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
@@ -324,7 +324,7 @@ export default function CustomerDetail() {
               ${o.po_number ? `<span>PO: <strong style="color:#0f172a">${esc(o.po_number)}</strong></span>` : ''}
               <span>Order Date: <strong style="color:#0f172a">${fmtD(o.created_at)}</strong></span>
               ${deliveredAt ? `<span>Delivered: <strong style="color:#15803d">${fmtD(deliveredAt)}</strong></span>` : ''}
-              <span style="font-size:12px;font-weight:700;color:#0f172a">₹${fmtMoney(orderTotal)}</span>
+              <span style="font-size:12px;font-weight:700;color:#0f172a">${fmtMoneyFull(orderTotal)}</span>
             </div>
           </div>
           ${items.length > 0 ? `
@@ -341,8 +341,8 @@ export default function CustomerDetail() {
                 <td style="color:#94a3b8">${i+1}</td>
                 <td class="mono">${esc(it.item_code)||'—'}</td>
                 <td style="text-align:right;font-weight:600">${it.qty||0}</td>
-                <td style="text-align:right">${fmtMoney(it.unit_price_after_disc)}</td>
-                <td style="text-align:right;font-weight:600">₹${fmtMoney(it.total_price)}</td>
+                <td style="text-align:right">${fmtMoneyFull(it.unit_price_after_disc)}</td>
+                <td style="text-align:right;font-weight:600">${fmtMoneyFull(it.total_price)}</td>
               </tr>`).join('')}
             </tbody>
           </table>` : '<div style="padding:8px 0;font-size:11px;color:#94a3b8;font-style:italic">No items recorded</div>'}

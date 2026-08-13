@@ -4,7 +4,7 @@ import { sb } from '../lib/supabase'
 import { writeDoc } from '../lib/printDoc'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
-import { fmtTs } from '../lib/fmt'
+import { fmtTs, fmtMoneyFull } from '../lib/fmt'
 import Layout from '../components/Layout'
 import Typeahead from '../components/Typeahead'
 import '../styles/neworder.css'
@@ -621,7 +621,7 @@ export default function CRMQuotations() {
                             {it.description && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>{it.description}</div>}
                           </td>
                           <td>{it.qty}</td>
-                          <td>{Number(it.unit_price||0).toLocaleString('en-IN')}</td>
+                          <td>{fmtMoneyFull(it.unit_price || 0)}</td>
                           <td>{it.discount_pct||0}%</td>
                           <td>{((parseFloat(it.unit_price)||0)*(1-(parseFloat(it.discount_pct)||0)/100)).toFixed(2)}</td>
                           <td style={{ fontWeight:600 }}>{Number(it.total_price||0).toLocaleString('en-IN')}</td>

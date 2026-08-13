@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
+import { fmtMoneyFull } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
@@ -10,6 +11,7 @@ import { useHistoryFilter, HistoryFilterBar, HistoryPager } from '../components/
 import { fetchAll } from '../lib/fetchAll'
 import '../styles/orderdetail.css'
 import '../styles/customer360.css'
+import '../styles/drawer.css'
 
 const ORDER_STATUS = {
   pending:              { label: 'Pending Approval',    bg: '#fef3c7', color: '#92400e' },
@@ -84,9 +86,11 @@ function fmt(d) {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// Unit prices on the order / PO history tables. Always two decimals: "₹13.3"
+// and "₹13.30" are the same number but the second is the one on the invoice.
 function inr(v) {
   if (v == null || v === '') return '—'
-  return '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+  return fmtMoneyFull(v)
 }
 
 // toISOString() is UTC — in IST that reads as yesterday until 05:30, so an
@@ -130,6 +134,9 @@ export default function ItemDetail() {
   const [specials, setSpecials]       = useState([])
   const [role, setRole]               = useState('')
   const [spOpen, setSpOpen]           = useState(false)
+  const [spaOpen, setSpaOpen]         = useState(null)   // agreement being viewed
+  const [spaDetail, setSpaDetail]     = useState(null)   // its rates + where it has been used
+  const [spaLoading, setSpaLoading]   = useState(false)
   const [spSaving, setSpSaving]       = useState(false)
   const spGuard                       = useRef(false)
   // A special case can fix what we PAY, what we SELL at, or both — they are
@@ -261,13 +268,18 @@ export default function ItemDetail() {
 
   const transferQty = transfers.reduce((s, t) => s + (t.qty || 0), 0)
 
-  const rupee = v => '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+  // Prices are shown to the PAISA, never rounded. A Connectwell terminal block
+  // lists at ₹13.30 and the next colour variant at ₹13.80 — rounded to whole
+  // rupees both read "₹13", so the page hid the only difference between them.
+  // At MOQ 500 that is ₹250 a line. Whole-rupee display is fine for an order
+  // VALUE; it is never fine for a unit price.
+  const rupee = fmtMoneyFull
   // Editing prices is admin + management only. Accounts and ops can read, not write.
   const canEditPrices = ['admin', 'management'].includes(role)
 
   async function loadSpecials(code) {
     const { data } = await sb.from('item_prices')
-      .select('id,price_type,price_scope,customer_id,vendor_id,amount,min_qty,valid_from,valid_to,project_ref,notes,price_status,approved_by_user,approved_at,created_by,vendors(vendor_name),customers(customer_name)')
+      .select('id,price_type,price_scope,customer_id,vendor_id,amount,min_qty,valid_from,valid_to,project_ref,notes,price_status,approved_by_user,approved_at,created_by,price_list_id,spa_id,price_lists(name),special_price_agreements(spa_no,title,counterparty_type,reference,valid_from,valid_to,status,source_file,notes),vendors(vendor_name),customers(customer_name)')
       .eq('item_code', code).in('price_type', ['PURCHASE', 'SALES'])
       .order('valid_from', { ascending: false })
     setSpecials(data || [])
@@ -293,7 +305,7 @@ export default function ItemDetail() {
   function groupedSpecials() {
     const g = new Map()
     specials.forEach(r => {
-      const k = [r.price_scope, r.customer_id || '', r.vendor_id || '', r.project_ref || '', r.min_qty, r.valid_from, r.valid_to || ''].join('|')
+      const k = [r.price_scope, r.customer_id || '', r.vendor_id || '', r.spa_id || '', r.project_ref || '', r.min_qty, r.valid_from, r.valid_to || ''].join('|')
       if (!g.has(k)) g.set(k, { key: k, ...r, buy: null, sell: null })
       const row = g.get(k)
       if (r.price_type === 'PURCHASE') row.buy = r; else row.sell = r
@@ -363,6 +375,28 @@ export default function ItemDetail() {
     await loadSpecials(item.item_code)
   }
 
+  // Everything the agreement covers, and everywhere it has been used. The PO
+  // side is read from po_items.spa_no, which is STAMPED at pricing time — so a
+  // superseded agreement still shows the documents it priced.
+  async function openSpa(spa) {
+    setSpaOpen(spa); setSpaDetail(null); setSpaLoading(true)
+    const [ratesRes, poRes] = await Promise.all([
+      sb.from('item_prices')
+        .select('item_code,price_type,amount,min_qty,valid_from,valid_to,price_status')
+        .eq('spa_id', spa.id).order('item_code'),
+      sb.from('po_items')
+        .select('item_code,qty,unit_price,po_id,purchase_orders(po_number,po_date,status)')
+        .eq('spa_no', spa.spa_no).limit(200),
+    ])
+    const byItem = new Map()
+    for (const r of (ratesRes.data || [])) {
+      if (!byItem.has(r.item_code)) byItem.set(r.item_code, { item_code: r.item_code })
+      byItem.get(r.item_code)[r.price_type === 'PURCHASE' ? 'buy' : 'sell'] = r
+    }
+    setSpaDetail({ items: [...byItem.values()], usedOn: poRes.data || [] })
+    setSpaLoading(false)
+  }
+
   // Approving is a SECOND person's act. The database refuses an approval by the
   // record's own author (item_prices_approval_shape), which is the whole point:
   // before this, `approved_by` was filled with the session of whoever typed the
@@ -372,12 +406,21 @@ export default function ItemDetail() {
     if (!ids.length) return
     const { data: { session } } = await sb.auth.getSession()
     const me = session?.user?.id
-    if (group.created_by && group.created_by === me) {
+    // A price backed by a published document (a price list or a vendor scheme
+    // flyer) needs no countersignature — anyone can re-check it against the
+    // source. Four eyes are for a rate typed from memory, which is the only
+    // kind a second person can meaningfully catch. Mirrors the DB constraint
+    // item_prices_approval_shape.
+    if (!group.price_list_id && group.created_by && group.created_by === me) {
       toast('You entered this price — someone else has to approve it'); return
     }
     if (!window.confirm('Approve this price? Purchase orders will start using it.')) return
     const { error } = await sb.from('item_prices')
-      .update({ price_status: 'approved', approved_by_user: me, approved_at: new Date().toISOString() })
+      .update({ price_status: 'approved',
+                // Document-backed prices record no approver: nobody vouched for
+                // the number, the source document does.
+                approved_by_user: group.price_list_id ? null : me,
+                approved_at: new Date().toISOString() })
       .in('id', ids)
     if (error) { toast(friendlyError(error, 'Could not approve — an approver must be a different person from the author')); return }
     toast('Price approved', 'success')
@@ -630,7 +673,20 @@ export default function ItemDetail() {
                                   {margin == null ? '—' : margin + '%'}
                                 </td>
                                 <td style={{ whiteSpace: 'nowrap' }}>{g.valid_from} → {g.valid_to || 'open'}</td>
-                                <td>{g.project_ref || '—'}</td>
+                                <td>
+                                  {/* The agreement this rate belongs to. Without it a
+                                      negotiated price is a loose number with no document
+                                      behind it — you can see WHAT we pay but not WHY. */}
+                                  {g.special_price_agreements ? (
+                                    <button
+                                      onClick={() => openSpa({ ...g.special_price_agreements, id: g.spa_id })}
+                                      style={{ background:'none', border:'none', padding:0, cursor:'pointer',
+                                               fontFamily:'var(--mono)', fontSize:11.5, color:'#1a73e8',
+                                               fontWeight:'var(--fw-semibold)', textDecoration:'underline' }}>
+                                      {g.special_price_agreements.spa_no}
+                                    </button>
+                                  ) : (g.project_ref || '—')}
+                                </td>
                                 <td>
                                   <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: st.bg, color: st.fg }}>{st.label}</span>
                                 </td>
@@ -866,6 +922,122 @@ export default function ItemDetail() {
 
         </div>
       </div>
+
+      {/* Special Price Agreement — full document, in the app's shared drawer
+          (styles/drawer.css) rather than a one-off panel. Shows what the
+          agreement covers and, crucially, where it has actually been used:
+          a rate nobody can trace is how the spreadsheet era worked. */}
+      {spaOpen && (
+        <div className="od-drawer-scrim" onClick={() => setSpaOpen(null)}>
+          <div className="od-drawer" onClick={e => e.stopPropagation()}>
+            <div className="od-drawer-head">
+              <div style={{ minWidth: 0 }}>
+                <div className="od-drawer-eyebrow">Special Price Agreement</div>
+                <div className="od-drawer-title" style={{ fontFamily: 'var(--mono)' }}>{spaOpen.spa_no}</div>
+                <div className="od-drawer-sub">{spaOpen.title}</div>
+              </div>
+              <button className="od-drawer-close" onClick={() => setSpaOpen(null)}>✕</button>
+            </div>
+
+            <div className="od-drawer-body">
+              <div style={{ display: 'grid', gridTemplateColumns: '128px 1fr', rowGap: 9, columnGap: 12, fontSize: 12.5 }}>
+                <span style={{ color: 'var(--gray-500)' }}>Agreement with</span>
+                <span>{spaOpen.counterparty_type === 'CUSTOMER' ? 'Customer' : 'Vendor'}</span>
+                <span style={{ color: 'var(--gray-500)' }}>Status</span>
+                <span>
+                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+                    background: spaOpen.status === 'approved' ? '#f0fdf4' : '#fffbeb',
+                    color: spaOpen.status === 'approved' ? '#166534' : '#b45309' }}>
+                    {spaOpen.status === 'approved' ? 'Approved' : spaOpen.status === 'draft' ? 'Draft' : spaOpen.status}
+                  </span>
+                  {spaOpen.status !== 'approved' && (
+                    <span style={{ marginLeft: 8, fontSize: 11.5, color: 'var(--gray-500)' }}>
+                      rates are not applied until the agreement is approved
+                    </span>
+                  )}
+                </span>
+                <span style={{ color: 'var(--gray-500)' }}>Valid</span>
+                <span>{spaOpen.valid_from} → {spaOpen.valid_to || 'open'}</span>
+                {spaOpen.reference && (<><span style={{ color: 'var(--gray-500)' }}>Reference</span><span>{spaOpen.reference}</span></>)}
+                {spaOpen.source_file && (<><span style={{ color: 'var(--gray-500)' }}>Source</span><span style={{ wordBreak: 'break-all' }}>{spaOpen.source_file}</span></>)}
+              </div>
+
+              {spaOpen.notes && (
+                <div style={{ marginTop: 14, fontSize: 11.5, color: 'var(--gray-500)', lineHeight: 1.55,
+                              background: 'var(--gray-50)', padding: 10, borderRadius: 8 }}>
+                  {spaOpen.notes}
+                </div>
+              )}
+
+              {spaLoading ? <div style={{ marginTop: 18 }}><Loading /></div> : spaDetail && (
+                <>
+                  <div style={{ marginTop: 22, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+                                textTransform: 'uppercase', color: 'var(--gray-500)' }}>
+                    Items covered ({spaDetail.items.length})
+                  </div>
+                  <div style={{ overflowX: 'auto', marginTop: 8 }}>
+                    <table className="od-items-table">
+                      <thead><tr>
+                        <th>Item</th>
+                        <th style={{ textAlign: 'right' }}>We buy at</th>
+                        <th style={{ textAlign: 'right' }}>We sell at</th>
+                        <th style={{ textAlign: 'right' }}>Margin</th>
+                      </tr></thead>
+                      <tbody>
+                        {spaDetail.items.map(r => {
+                          const m = (r.buy && r.sell) ? Math.round((1 - Number(r.buy.amount) / Number(r.sell.amount)) * 1000) / 10 : null
+                          const here = r.item_code === item.item_code
+                          return (
+                            <tr key={r.item_code} style={here ? { background: '#eff6ff' } : undefined}>
+                              <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: here ? 600 : 400 }}>{r.item_code}</td>
+                              <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>{r.buy ? rupee(r.buy.amount) : '—'}</td>
+                              <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>{r.sell ? rupee(r.sell.amount) : '—'}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 600, color: m == null ? 'var(--gray-300)' : m < 0 ? '#b91c1c' : '#166534' }}>
+                                {m == null ? '—' : m + '%'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div style={{ marginTop: 22, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+                                textTransform: 'uppercase', color: 'var(--gray-500)' }}>
+                    Used on ({spaDetail.usedOn.length})
+                  </div>
+                  {!spaDetail.usedOn.length ? (
+                    <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 8, fontStyle: 'italic' }}>
+                      No purchase order has priced from this agreement yet.
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', marginTop: 8 }}>
+                      <table className="od-items-table">
+                        <thead><tr>
+                          <th>PO</th><th>Date</th><th>Item</th>
+                          <th style={{ textAlign: 'right' }}>Qty</th>
+                          <th style={{ textAlign: 'right' }}>Rate</th>
+                        </tr></thead>
+                        <tbody>
+                          {spaDetail.usedOn.map((u, i) => (
+                            <tr key={i} style={{ cursor: 'pointer' }} onClick={() => navigate('/purchase-orders/' + u.po_id)}>
+                              <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: '#1a73e8' }}>{u.purchase_orders?.po_number || '—'}</td>
+                              <td style={{ fontSize: 11.5 }}>{u.purchase_orders?.po_date ? fmt(u.purchase_orders.po_date) : '—'}</td>
+                              <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5 }}>{u.item_code}</td>
+                              <td style={{ textAlign: 'right' }}>{u.qty}</td>
+                              <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>{rupee(u.unit_price)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add special price — docks bottom-right (same .gcompose chrome as the
           PO compose window) so the list price stays readable while you type. */}
