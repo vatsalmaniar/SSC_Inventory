@@ -218,5 +218,27 @@ console.log('\nCHEAPER-OPTION WARNING — specificity still decides, the buyer i
                  sp({ price_scope: 'CUSTOMER', customer_id: CUST_A, amount: 20000 })] }).cheaper.unitPrice, 36000)
 }
 
+console.log('\nPRICING DATE — the document decides, not the clock')
+{
+  // A scheme that ran Jul-Dec 2026. A PO dated 28-Dec but raised on 2-Jan must
+  // still price on it; one dated 2-Jan must not.
+  const scheme = sp({ amount: 630, min_qty: 1, valid_from: '2026-07-01', valid_to: '2026-12-31' })
+  const at = d => resolveFromRows({ commercials: comm, specials: [scheme], qty: 1, today: d })
+  t('inside the window  → scheme',   [at('2026-12-28').unitPrice, at('2026-12-28').source], [630, 'STOCK'])
+  t('day it ends        → scheme',   at('2026-12-31').unitPrice, 630)
+  t('day after it ends  → standard', [at('2027-01-01').unitPrice, at('2027-01-01').source], [36000, 'STANDARD'])
+  t('before it starts   → standard', at('2026-06-30').source, 'STANDARD')
+}
+
+console.log('\nUNIT OF MEASURE — carried through, never converted')
+{
+  const perPacket = { list_price: 1000.80, standard_discount_pct: 40, uom: 'PKT' }
+  const r = resolveFromRows({ commercials: perPacket, specials: [], qty: 5, today: TODAY })
+  t('uom reaches the caller', [r.uom, r.unitPrice], ['PKT', 600.48])
+  t('quantity is NOT scaled by the pack', r.unitPrice, 600.48)
+  t('missing uom is null, not guessed',
+    resolveFromRows({ commercials: comm, specials: [], qty: 1, today: TODAY }).uom, null)
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail ? 1 : 0)

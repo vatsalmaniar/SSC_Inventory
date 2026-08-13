@@ -30,7 +30,7 @@ let RID = 0
 const nextRid = () => ++RID
 
 function emptyItem() {
-  return { _rid: nextRid(), item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', stock_qty: '0', co_remaining: 0, co_id: null, co_number: '', _customer_id: null, _priceLabel: '', _priceShort: '', _priceSource: '', _priceState: '', _moq: null, _autoPriced: false, _fixedUnit: null, _priceRecordId: null, _listPriceAtEntry: null, _priceResolvedAt: null }
+  return { _rid: nextRid(), item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', stock_qty: '0', co_remaining: 0, co_id: null, co_number: '', _customer_id: null, _priceLabel: '', _priceShort: '', _priceSource: '', _priceState: '', _moq: null, _autoPriced: false, _fixedUnit: null, _uom: null, _spaNo: null, _priceRecordId: null, _listPriceAtEntry: null, _priceResolvedAt: null }
 }
 
 export default function NewPurchaseOrder() {
@@ -265,7 +265,7 @@ export default function NewPurchaseOrder() {
     // vendor. One round of reads for the whole order — this used to fire three
     // requests per line from inside the state updater (120 for a 40-line CO).
     const priced = await resolvePurchasePrices(
-      prefilled.map(p => ({ itemCode: p.item_code, qty: Number(p.qty) || 1, customerId: p._customer_id, vendorId }))
+      prefilled.map(p => ({ itemCode: p.item_code, qty: Number(p.qty) || 1, customerId: p._customer_id, vendorId, asOfDate: poDate }))
     )
     prefilled.forEach((p, i) => Object.assign(p, priceLineFields(p, priced[i])))
 
@@ -355,7 +355,7 @@ export default function NewPurchaseOrder() {
   function repriceForVendor(vId) {
     itemsRef.current.forEach(l => {
       if (l._autoPriced && l.item_code) {
-        applyPricing(l._rid, { itemCode: l.item_code, qty: l.qty || 1, customerId: l._customer_id, vendorId: vId })
+        applyPricing(l._rid, { itemCode: l.item_code, qty: l.qty || 1, customerId: l._customer_id, vendorId: vId, asOfDate: poDate })
       }
     })
   }
@@ -375,7 +375,7 @@ export default function NewPurchaseOrder() {
     })
     // Purchase price, description and MOQ come off the item — see lib/itemPricing.js
     // for the precedence. Everything it fills stays editable.
-    applyPricing(rid, { itemCode: item.item_code, qty: 1, customerId: coCustomerId, vendorId })
+    applyPricing(rid, { itemCode: item.item_code, qty: 1, customerId: coCustomerId, vendorId, asOfDate: poDate })
   }
 
   // Fills list price, purchase discount, description (only when the line has
@@ -391,7 +391,7 @@ export default function NewPurchaseOrder() {
     // price the line at the wrong quantity break.
     const ticket = (priceTicket.current[rid] = (priceTicket.current[rid] || 0) + 1)
     let res
-    try { res = await resolvePurchasePrice({ itemCode, qty: Number(qty) || 1, customerId, vendorId: vId ?? vendorId }) }
+    try { res = await resolvePurchasePrice({ itemCode, qty: Number(qty) || 1, customerId, vendorId: vId ?? vendorId, asOfDate: poDate }) }
     catch { return }                       // pricing must never block writing a PO
     if (priceTicket.current[rid] !== ticket) return   // superseded while we waited
     setItems(prev => {
@@ -448,7 +448,7 @@ export default function NewPurchaseOrder() {
         // inside setItems makes the updater impure (React re-runs it in dev).
         const l = itemsRef.current.find(x => x._rid === rid)
         if (l && l._autoPriced && l.item_code) {
-          applyPricing(rid, { itemCode: l.item_code, qty: value, customerId: l._customer_id, vendorId })
+          applyPricing(rid, { itemCode: l.item_code, qty: value, customerId: l._customer_id, vendorId, asOfDate: poDate })
         }
       }, 400)
     }
@@ -666,6 +666,15 @@ export default function NewPurchaseOrder() {
         list_price_at_entry: item._listPriceAtEntry ?? null,
         price_resolved_at:   item._priceResolvedAt || null,
         price_overridden:    Boolean(item._overridden),
+        // Which agreement priced this line. Stamped, not derived — the PO must
+        // still name it after the agreement is superseded.
+        spa_no:              item._autoPriced ? (item._spaNo || null) : null,
+        // Captured but NOT displayed anywhere — parked 2026-08-13 pending an
+        // auditor discussion. Tally was standardised on plain qty and the
+        // business already treats 1 qty = 1 packet for these items, so showing
+        // "PKT" could contradict an established convention. The column keeps
+        // filling so the history is there if the decision goes the other way.
+        uom:                 item._uom || null,
       }))
 
       const { error: itemsErr } = await sb.from('po_items').insert(lineItems)

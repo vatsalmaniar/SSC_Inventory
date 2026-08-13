@@ -20,7 +20,7 @@ let RID = 0
 const nextRid = () => ++RID
 
 function emptyPOItem() {
-  return { _rid: nextRid(), item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', _pendingQty: 0, _priceLabel: '', _priceShort: '', _priceSource: '', _priceState: '', _moq: null, _autoPriced: false, _fixedUnit: null, _priceRecordId: null, _listPriceAtEntry: null, _priceResolvedAt: null }
+  return { _rid: nextRid(), item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', _pendingQty: 0, _priceLabel: '', _priceShort: '', _priceSource: '', _priceState: '', _moq: null, _autoPriced: false, _fixedUnit: null, _uom: null, _priceRecordId: null, _listPriceAtEntry: null, _priceResolvedAt: null }
 }
 
 export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabel, userName, userId, userRole, navigate }) {
@@ -75,7 +75,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
       // One round of reads for the whole forecast, not three per line.
       // openSeq guards a modal closed and reopened while this was in flight.
       const seq = ++openSeq.current
-      resolvePurchasePrices(seeded.map(l => ({ itemCode: l.item_code, qty: Number(l.qty) || 1, customerId: null, vendorId: vendorIdRef.current })))
+      resolvePurchasePrices(seeded.map(l => ({ itemCode: l.item_code, qty: Number(l.qty) || 1, customerId: null, vendorId: vendorIdRef.current, asOfDate: poDate })))
         .then(res => {
           if (seq !== openSeq.current) return
           setItems(cur => cur.map(l => {
@@ -139,7 +139,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
     // a wrong-price bug, not just a flicker.
     const ticket = (priceTicket.current[rid] = (priceTicket.current[rid] || 0) + 1)
     let res
-    try { res = await resolvePurchasePrice({ itemCode, qty: Number(qty) || 1, customerId: null, vendorId: vendorIdRef.current }) }
+    try { res = await resolvePurchasePrice({ itemCode, qty: Number(qty) || 1, customerId: null, vendorId: vendorIdRef.current, asOfDate: poDate }) }
     catch { return }
     if (priceTicket.current[rid] !== ticket) return
     setItems(prev => {

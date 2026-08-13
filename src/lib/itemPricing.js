@@ -51,7 +51,7 @@ export async function fetchPricingData(itemCodes) {
       sb.from('v_item_commercials').select('*').in('item_code', slice),
       sb.from('items').select('item_code,description,moq').in('item_code', slice),
       sb.from('item_prices')
-        .select('id,item_code,price_scope,customer_id,vendor_id,project_ref,amount,min_qty,valid_from,valid_to,price_status')
+        .select('id,item_code,price_scope,customer_id,vendor_id,project_ref,amount,min_qty,valid_from,valid_to,price_status,spa_id,special_price_agreements(spa_no)')
         .eq('price_type', 'PURCHASE').in('item_code', slice),
     ])
     // A failed read is NOT the same as "no price". Flagged so the caller can
@@ -72,14 +72,18 @@ export async function fetchPricingData(itemCodes) {
 }
 
 /** Resolve one line against already-fetched data. Pure, no I/O. */
-export function resolveFromData(data, { itemCode, qty = 1, customerId = null, projectRef = null, vendorId = null }) {
+export function resolveFromData(data, { itemCode, qty = 1, customerId = null, projectRef = null, vendorId = null, asOfDate = null }) {
   const code = (itemCode || '').trim()
   const item = data.items.get(code)
   const resolved = resolveFromRows({
     commercials: data.commercials.get(code),
     specials:    data.specials.get(code) || [],
     qty, customerId, projectRef, vendorId,
-    today: localToday(),
+    // The DOCUMENT's date decides which records are in force, not the clock. A
+    // PO dated 28-Dec but raised on 2-Jan must price on the December scheme,
+    // and one dated forward must not pick up a rate that has not started. Falls
+    // back to today when the caller has no date yet.
+    today: asOfDate || localToday(),
   })
   const description = item?.description || null
   const moq = item?.moq ?? null
@@ -142,7 +146,7 @@ export function priceLineFields(line, res) {
       // price exists and must not claim there isn't one.
       _priceShort: res?.state === 'NO_PRICE' ? 'No list price on file' : '',
       _autoPriced: false,
-      _fixedUnit: null, _cheaper: '',
+      _fixedUnit: null, _cheaper: '', _uom: null, _spaNo: null,
       _priceRecordId: null, _listPriceAtEntry: null, _priceResolvedAt: null,
     }
   }
@@ -161,6 +165,8 @@ export function priceLineFields(line, res) {
       ? `₹${res.cheaper.unitPrice.toLocaleString('en-IN')} available on the ${res.cheaper.label} — ₹${res.cheaper.savingPerUnit.toLocaleString('en-IN')}/unit less`
       : '',
     // Provenance — written onto the PO line so the price can be explained later.
+    _uom: res.uom || null,
+    _spaNo: res.spaNo || null,
     _priceRecordId: res.recordId || null,
     _listPriceAtEntry: res.listPrice,
     _priceResolvedAt: new Date().toISOString(),

@@ -128,12 +128,15 @@ export function resolveFromRows({ commercials, specials, qty = 1, customerId = n
     const unitPrice = Number(best.amount)
     const forVendor = best.vendor_id ? ' (this vendor)' : ''
     return {
+      uom: commercials.uom || null,
       cheaper: findCheaperOption(
         specials, { today, qty, customerId, projectRef, vendorId },
         unitPrice, stdUnit,
         stdPct == null ? 'list price' : `standard ${stdPct}%`,
       ),
       recordId: best.id || null,
+      // The agreement this rate came from, so the PO line can name it.
+      spaNo: best.special_price_agreements?.spa_no || null,
       listPrice,
       discountPct: listPrice ? round1((1 - unitPrice / listPrice) * 100) : null,
       unitPrice,
@@ -156,7 +159,9 @@ export function resolveFromRows({ commercials, specials, qty = 1, customerId = n
     // Nothing to point at: the standard price is the least specific option
     // there is, so no eligible record can be "the cheaper one we skipped".
     cheaper: null,
+    uom: commercials.uom || null,
     recordId: null,          // a standard price comes from the book, not a record
+    spaNo: null,
     listPrice,
     discountPct: pct,
     unitPrice: stdUnit,
