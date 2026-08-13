@@ -81,7 +81,19 @@ export default function NewGRN() {
       .eq('id', poId).single()
     if (!po) return
     if (po.fulfilment_center) setFc(po.fulfilment_center)
-    if (po.vendor_name) { setVendorText(po.vendor_name); setVendorName(po.vendor_name); setVendorId(po.vendor_id || '') }
+    // The vendor comes from the PO by ID, but the NAME is read fresh from the
+    // vendor master — not copied from the PO. A PO raised in May under a name
+    // the company has since changed must not stamp that old name onto a receipt
+    // made today: the delivery challan and tax invoice arriving with the goods
+    // carry the CURRENT name, and the GRN has to match them for invoice
+    // matching to work. Each document snapshots the name as at ITS OWN date.
+    if (po.vendor_id) {
+      const { data: v } = await sb.from('vendors').select('vendor_name').eq('id', po.vendor_id).maybeSingle()
+      const name = v?.vendor_name || po.vendor_name || ''
+      setVendorText(name); setVendorName(name); setVendorId(po.vendor_id)
+    } else if (po.vendor_name) {
+      setVendorText(po.vendor_name); setVendorName(po.vendor_name)
+    }
 
     // Load pending items for this PO
     const { data: poItems } = await sb.from('po_items').select('id,item_code,qty,received_qty,sr_no').eq('po_id', poId).order('sr_no')

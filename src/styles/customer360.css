@@ -52,6 +52,7 @@
 .c360-badge-blue   { background: #e8f2fc; color: #1a73e8; }
 .c360-badge-green  { background: #d4f5e2; color: #14653a; }
 .c360-badge-amber  { background: #fef3c7; color: #7a4b00; }
+.c360-badge-orange { background: var(--orange-bg); color: var(--orange-text); }
 .c360-badge-red    { background: #fee2e2; color: #9b1c1c; }
 .c360-badge-gray   { background: var(--gray-100); color: var(--gray-600); }
 

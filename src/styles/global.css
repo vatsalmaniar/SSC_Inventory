@@ -14,6 +14,11 @@
   --green-bg:   #d4f5e2;
   --amber-text: #7a4b00;
   --amber-bg:   #fef3c7;
+  /* Orange is distinct from amber: amber means "needs attention" across the
+     app (pending approval, overdue). Orange is used for a positive standing
+     fact — a preferred vendor — so it must not read as a warning. */
+  --orange-text: #c2410c;
+  --orange-bg:   #ffedd5;
   --red-text:   #9b1c1c;
   --red-bg:     #fee2e2;
   --red-500:    #ef4444;
