@@ -64,6 +64,11 @@ do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'item_prices_approval_shape') then
     alter table public.item_prices add constraint item_prices_approval_shape check (
       price_type = 'LIST'                       -- book prices: no approver needed
+      -- A price backed by a published document (a price book or a vendor
+      -- scheme flyer) needs no countersignature either: anyone can re-check it
+      -- against the source. Four eyes exist to catch a rate typed from memory,
+      -- which is the only kind a second person can meaningfully verify.
+      or price_list_id is not null
       or price_status <> 'approved'
       -- Four eyes. created_by must be present too: `approved_by_user is
       -- distinct from created_by` would silently PASS when created_by is null,
@@ -182,3 +187,28 @@ revoke all on function public.supersede_item_price(uuid, numeric, date, date, te
 grant execute on function public.supersede_item_price(uuid, numeric, date, date, text) to authenticated;
 
 commit;
+
+
+-- ── 6 · UNIT OF MEASURE ON THE DOCUMENT (2026-08-13) ────────────────────────
+-- Measured first: of 1,241 price rows, 902 are NOS and 303 EA (both "each");
+-- only 8 are PKT. MC6WP is Rs 1,000.80 per PACKET of 72 tags. Those 8 items had
+-- been bought on 8 PO lines and every one used packet quantity against the
+-- packet price, so nothing is wrong in the data - the ambiguity was in the
+-- model. Hence NO conversion machinery: the document simply states the unit.
+-- If a book ever prices per 100 or per metre, build conversion then.
+alter table public.po_items add column if not exists uom text;
+comment on column public.po_items.uom is
+  'Unit the price is quoted in, copied from the price record at entry (EA/NOS/PKT). Stated, never converted. NULL on lines raised before this existed.';
+
+-- v_item_commercials gains a trailing `uom` so the resolver can carry it to the
+-- line. Appended at the END: create-or-replace can add trailing columns but
+-- cannot reorder existing ones, and dropping the view would mean re-applying
+-- security_invoker and every grant.
+--   (full definition re-issued in item_pricing_baseline.sql)
+
+-- Pricing date: the resolver now takes the DOCUMENT's date (asOfDate) instead
+-- of the clock, so a PO dated 28-Dec but raised on 2-Jan still prices on the
+-- December scheme. Code-side only - no schema change. Measured: of 1,308 POs in
+-- 12 months, 17 carry a po_date different from the day they were raised, the
+-- largest gap being 24 days, and none crossed a month boundary. Small today,
+-- wrong the first week of January.
