@@ -11,6 +11,7 @@ import { friendlyError } from '../lib/errorMsg'
 import { fetchActivePoCoveredQty, lineNeedsProcurement, lineToProcureQty, UNPLACED_PO_STATUSES, unplacedPoLabel } from '../lib/coverage'
 import { resolvePurchasePrice, resolvePurchasePrices, priceLineFields, unitPriceFor } from '../lib/itemPricing'
 import { searchItems } from '../lib/itemSearch'
+import { flagsForPo, reasonIsSufficient, wordCount, describeFlags, REASON_MIN_WORDS } from '../lib/vendorBrands'
 
 const FC_ADDRESSES = {
   Kaveri: 'SSC Control Pvt Ltd, 17(A) Ashwamegh Warehouse, Behind New Ujala Hotel, Sarkhej Bavla Highway, Sarkhej, Ahmedabad, Gujarat 382210',
@@ -50,6 +51,11 @@ export default function NewPurchaseOrder() {
   const [vendorId, setVendorId]     = useState('')
   const [vendorName, setVendorName] = useState('')
   const [vendorPaymentTerms, setVendorPaymentTerms] = useState('')
+  // Brands on this PO that we normally buy DIRECT from someone else. Buying a
+  // brand from a trader when a principal exists is a decision, so it is stated
+  // and recorded — same treatment as an order below Rs 8,000.
+  const [nonPreferredBrands, setNonPreferredBrands] = useState([])
+  const [nonPreferredReason, setNonPreferredReason] = useState('')
 
   // PO header
   const [poType, setPoType]                 = useState('SO')
@@ -86,6 +92,20 @@ export default function NewPurchaseOrder() {
   itemsRef.current = items
 
   useEffect(() => { init() }, [])
+
+  // The rule itself lives in lib/vendorBrands.js so Purchase Order Detail and
+  // the forecast modal enforce the same thing. Debounced: the line list changes
+  // on every keystroke in an item box and this is two queries.
+  useEffect(() => {
+    const codes = items.map(i => i.item_code).filter(Boolean)
+    if (!vendorId || !codes.length) { setNonPreferredBrands([]); return }
+    let live = true
+    const t = setTimeout(async () => {
+      const flags = await flagsForPo(sb, { itemCodes: codes, vendorId })
+      if (live) setNonPreferredBrands(flags)
+    }, 350)
+    return () => { live = false; clearTimeout(t) }
+  }, [vendorId, items.map(i => i.item_code).join('|')])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -504,7 +524,17 @@ export default function NewPurchaseOrder() {
 
     // Close-as-Stock path: every filled line is fully From Stock, no PO created
     if (closeOnly) {
-      submitGuard.current = true
+      // Non-preferred vendor check — same shape as the below-Rs 8,000 order rule:
+    // not a block, a stated reason. Only fires when the brand HAS a principal
+    // and this PO is not on one.
+    if (nonPreferredBrands.length) {
+      if (!reasonIsSufficient(nonPreferredReason)) {
+        toast(`${describeFlags(nonPreferredBrands)} — a reason of at least ${REASON_MIN_WORDS} words is required.`, 'error')
+        return
+      }
+    }
+
+    submitGuard.current = true
       setSubmitting(true)
       try {
         const err = await applyStockAllocs(stockLines)
@@ -638,6 +668,7 @@ export default function NewPurchaseOrder() {
         po_document_url:   poDocUrl,
         total_amount:      grandTotal,
         payment_terms:     vendorPaymentTerms || null,
+        non_preferred_reason: nonPreferredBrands.length ? nonPreferredReason.trim() : null,
         created_by:        user.id,
         created_by_name:   user.name,
         submitted_by_name: user.name,
@@ -1133,6 +1164,28 @@ export default function NewPurchaseOrder() {
             </div>
           </div>
         </div>
+
+        {/* ── Non-preferred vendor ── mirrors the below-Rs 8,000 reason on an order ── */}
+        {nonPreferredBrands.length > 0 && (
+          <div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:10,padding:'14px 16px',margin:'0 0 12px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <svg fill="none" stroke="#b45309" strokeWidth="2" viewBox="0 0 24 24" style={{width:16,height:16,flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span style={{fontSize:12,fontWeight:700,color:'#b45309'}}>
+                {describeFlags(nonPreferredBrands)} — reason required
+              </span>
+            </div>
+            <textarea
+              value={nonPreferredReason}
+              onChange={e => setNonPreferredReason(e.target.value)}
+              placeholder="Why is this going to a trader instead of the principal? Please explain in detail (minimum 7 words)..."
+              rows={2}
+              style={{width:'100%',border:'1px solid #fcd34d',borderRadius:8,padding:'8px 10px',fontSize:12,fontFamily:'var(--font)',color:'var(--gray-900)',resize:'none',outline:'none',boxSizing:'border-box',background:'white',lineHeight:1.5}}
+            />
+            <div style={{fontSize:10,color: reasonIsSufficient(nonPreferredReason) ? '#16a34a' : '#b45309',marginTop:4,fontWeight:500}}>
+              {wordCount(nonPreferredReason)}/{REASON_MIN_WORDS} words minimum
+            </div>
+          </div>
+        )}
 
         {/* ── Actions ── */}
         <div className="no-actions">

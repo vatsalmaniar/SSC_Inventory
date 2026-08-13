@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { searchItems } from '../lib/itemSearch'
+import { reasonIsSufficient, wordCount, describeFlags, REASON_MIN_WORDS } from '../lib/vendorBrands'
 import { writeDoc } from '../lib/printDoc'
 import { friendlyError } from '../lib/errorMsg'
 import { notify } from '../lib/notify'
@@ -78,6 +79,12 @@ export default function PurchaseOrderDetail() {
   const [saving, setSaving]       = useState(false)
   const [activeTab, setActiveTab] = useState('overview')  // overview | items | delivery
   const [userRole, setUserRole]   = useState('')
+  // Brands on this PO that are not bought direct from its vendor. Read from the
+  // SAME database function the approval trigger uses, so this warning and that
+  // gate can never disagree.
+  const [brandFlags, setBrandFlags] = useState([])
+  const [npReason, setNpReason]     = useState('')
+  const [npSaving, setNpSaving]     = useState(false)
   const [userId, setUserId]       = useState('')
   const [userName, setUserName]   = useState('')
 
@@ -154,6 +161,28 @@ export default function PurchaseOrderDetail() {
   const [excludeSupportingIdx,setExcludeSupportingIdx]= useState(new Set())
 
   useEffect(() => { init() }, [id])
+
+  // Kept with the other hooks — never below an early return.
+  useEffect(() => {
+    if (!po?.id) return
+    setNpReason(po.non_preferred_reason || '')
+    sb.rpc('po_brand_flags', { p_po_id: po.id })
+      .then(({ data }) => setBrandFlags(data || []))
+      .catch(() => setBrandFlags([]))
+  }, [po?.id, po?.vendor_id, items.length])
+
+  async function saveNonPreferredReason() {
+    if (!reasonIsSufficient(npReason)) {
+      toast(`Please give at least ${REASON_MIN_WORDS} words.`, 'error'); return
+    }
+    setNpSaving(true)
+    const { error } = await sb.from('purchase_orders')
+      .update({ non_preferred_reason: npReason.trim() }).eq('id', id)
+    setNpSaving(false)
+    if (error) { toast(friendlyError(error, 'Could not save the reason')); return }
+    toast('Reason saved', 'success')
+    setPo(p => ({ ...p, non_preferred_reason: npReason.trim() }))
+  }
 
 
   async function init() {
@@ -1877,7 +1906,51 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               <div className="od-tabpanel" hidden={activeTab!=='overview'}>
 
             {/* PO Information */}
-            <div className="od-card">
+            {(brandFlags.length > 0 || po.non_preferred_reason) && (
+        /* Shown wherever the PO is looked at — the decision has to be visible
+           to whoever approves, receives or audits it. Where a reason is still
+           missing this is also where it gets written, because approval is
+           blocked by the database until it exists. */
+        <div style={{ background: brandFlags.length && !reasonIsSufficient(npReason) ? '#fffbeb' : '#f8fafc',
+                      border: `1px solid ${brandFlags.length && !reasonIsSufficient(npReason) ? '#fde68a' : 'var(--gray-200)'}`,
+                      borderRadius:10, padding:'12px 14px', margin:'0 0 14px' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:'#b45309', letterSpacing:'0.04em',
+                        textTransform:'uppercase', marginBottom:6 }}>
+            {brandFlags.length ? `Not the direct source — ${describeFlags(brandFlags)}` : 'Non-preferred vendor — reason given'}
+          </div>
+          {(!brandFlags.length || !canEdit) ? (
+            <div style={{ fontSize:12.5, color:'var(--gray-700)', lineHeight:1.55 }}>
+              {po.non_preferred_reason || '—'}
+            </div>
+          ) : (
+            <>
+              <textarea
+                value={npReason}
+                onChange={e => setNpReason(e.target.value)}
+                rows={2}
+                placeholder="Why is this going to a trader instead of the principal? Please explain in detail..."
+                style={{ width:'100%', border:'1px solid #fcd34d', borderRadius:8, padding:'8px 10px',
+                         fontSize:12, fontFamily:'var(--font)', color:'var(--gray-900)', resize:'none',
+                         outline:'none', boxSizing:'border-box', background:'white', lineHeight:1.5 }} />
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:6 }}>
+                <span style={{ fontSize:10, fontWeight:500,
+                               color: reasonIsSufficient(npReason) ? '#16a34a' : '#b45309' }}>
+                  {wordCount(npReason)}/{REASON_MIN_WORDS} words minimum
+                </span>
+                <button className="od-btn" style={{ padding:'4px 10px', fontSize:11.5 }}
+                  onClick={saveNonPreferredReason}
+                  disabled={npSaving || !reasonIsSufficient(npReason) || npReason.trim() === (po.non_preferred_reason || '')}>
+                  {npSaving ? 'Saving…' : 'Save reason'}
+                </button>
+                <span style={{ fontSize:10.5, color:'var(--gray-400)' }}>
+                  approval is blocked until this is recorded
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      <div className="od-card">
               <div className="od-card-header"><div className="od-card-title">PO Information</div></div>
               <div className="od-card-body">
                 {editMode ? (

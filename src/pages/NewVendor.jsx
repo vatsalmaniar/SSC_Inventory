@@ -49,6 +49,13 @@ export default function NewVendor() {
   const navigate = useNavigate()
   const [userRole, setUserRole]   = useState('')
   const [userName, setUserName]   = useState('')
+  // Which brands this vendor will supply, captured at creation. Recording it
+  // later means it never gets recorded — and New PO relies on it to tell a
+  // buyer when they are about to purchase a brand from a non-direct source.
+  const [allBrands, setAllBrands]       = useState([])
+  const [pickedBrands, setPickedBrands] = useState([])
+  const [preferredBrands, setPreferredBrands] = useState([])
+
   const [saving, setSaving]       = useState(false)
   const [errors, setErrors]       = useState({})
 
@@ -66,6 +73,10 @@ export default function NewVendor() {
   const [fileErrors, setFileErrors]     = useState({})
 
   useEffect(() => { init() }, [])
+
+  useEffect(() => {
+    sb.rpc('get_all_brands').then(({ data }) => setAllBrands((data || []).map(r => r.brand).filter(Boolean)))
+  }, [])
 
   async function init() {
     let { data: { session } } = await sb.auth.getSession()
@@ -185,6 +196,16 @@ export default function NewVendor() {
 
       if (insertErr) { toast(friendlyError(insertErr, "Creating vendor failed. Please try again.")); setSaving(false); return }
       const newId = inserted.id
+
+      // Brands they supply. Not fatal if it fails — the vendor exists and the
+      // brands can be added from Vendor 360; losing the vendor over a second
+      // insert would be worse.
+      if (pickedBrands.length) {
+        const { error: brandErr } = await sb.from('vendor_brands').insert(
+          pickedBrands.map(b => ({ vendor_id: newId, brand: b, is_preferred: preferredBrands.includes(b) }))
+        )
+        if (brandErr) console.error('vendor_brands:', brandErr)
+      }
 
       // Upload GST cert (optional)
       let gstUrl = null
@@ -427,6 +448,54 @@ export default function NewVendor() {
                       <option>Active</option>
                       <option>Dormant</option>
                     </select>
+                  </Field>
+                </div>
+
+                {/* Brands supplied. Multi-select, with "we buy direct" marked
+                    per brand — a vendor can be the principal for one brand and
+                    a trader for another (ACCENT CONTROLS is Accent's principal
+                    but a trader for Novotechnik). New PO reads this to ask for
+                    a reason when a buyer goes to a non-direct source. */}
+                <div style={{ marginTop: 18 }}>
+                  <Field label="Brands Supplied">
+                    <select
+                      value=""
+                      style={FIELD_STYLE}
+                      onChange={e => {
+                        const b = e.target.value
+                        if (b && !pickedBrands.includes(b)) setPickedBrands([...pickedBrands, b])
+                      }}>
+                      <option value="">Add a brand…</option>
+                      {allBrands.filter(b => !pickedBrands.includes(b)).map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                    {!pickedBrands.length ? (
+                      <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:6 }}>
+                        Optional, but a vendor with no brands recorded will prompt the buyer for a reason on every PO.
+                      </div>
+                    ) : (
+                      <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:8 }}>
+                        {pickedBrands.map(b => {
+                          const pref = preferredBrands.includes(b)
+                          return (
+                            <div key={b} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px',
+                                 border:'1px solid var(--gray-200)', borderRadius:8, background: pref ? '#f0fdf4' : 'white' }}>
+                              <span style={{ flex:1, minWidth:0, fontSize:13 }}>{b}</span>
+                              <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:11.5, color:'var(--gray-600)', whiteSpace:'nowrap', cursor:'pointer' }}>
+                                <input type="checkbox" checked={pref}
+                                  onChange={() => setPreferredBrands(pref
+                                    ? preferredBrands.filter(x => x !== b)
+                                    : [...preferredBrands, b])} />
+                                We buy direct
+                              </label>
+                              <button type="button"
+                                onClick={() => { setPickedBrands(pickedBrands.filter(x => x !== b)); setPreferredBrands(preferredBrands.filter(x => x !== b)) }}
+                                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--gray-400)', fontSize:15, lineHeight:1, padding:'0 2px' }}
+                                title={`Remove ${b}`}>×</button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </Field>
                 </div>
               </div>

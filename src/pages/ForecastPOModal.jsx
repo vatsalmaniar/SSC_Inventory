@@ -3,6 +3,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { resolvePurchasePrice, resolvePurchasePrices, priceLineFields, unitPriceFor } from '../lib/itemPricing'
 import { searchItems } from '../lib/itemSearch'
+import { flagsForPo, reasonIsSufficient, wordCount, describeFlags, REASON_MIN_WORDS } from '../lib/vendorBrands'
 import { friendlyError } from '../lib/errorMsg'
 import Typeahead from '../components/Typeahead'
 import PriceSourceNote from '../components/PriceSourceNote'
@@ -42,6 +43,10 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
   const [notes, setNotes]                       = useState('')
   const [sscNotes, setSscNotes]                 = useState('')
   const [isTest, setIsTest]                     = useState(false)
+  // Same rule as New PO and the approval trigger — lib/vendorBrands.js asks the
+  // database, so a forecast buy cannot quietly skip what a normal PO is asked.
+  const [brandFlags, setBrandFlags]   = useState([])
+  const [npReason, setNpReason]       = useState('')
 
   const [items, setItems] = useState([emptyPOItem()])
   const itemsRef = useRef(items)
@@ -88,6 +93,17 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
       setItems([emptyPOItem()])
     }
   }, [open])
+
+  useEffect(() => {
+    const codes = items.map(i => i.item_code).filter(Boolean)
+    if (!vendorId || !codes.length) { setBrandFlags([]); return }
+    let live = true
+    const t = setTimeout(async () => {
+      const f = await flagsForPo(sb, { itemCodes: codes, vendorId })
+      if (live) setBrandFlags(f)
+    }, 350)
+    return () => { live = false; clearTimeout(t) }
+  }, [vendorId, items.map(i => i.item_code).join('|')])
 
   async function fetchVendors(q) {
     const { data } = await sb.from('vendors')
@@ -169,6 +185,10 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
     if (!vendorId)           { toast('Please select a vendor'); return }
     if (!fulfilmentCenter)   { toast('Please select a delivery address'); return }
     if (!filledItems.length) { toast('Add at least one line item'); return }
+    if (brandFlags.length && !reasonIsSufficient(npReason)) {
+      toast(`${describeFlags(brandFlags)} — a reason of at least ${REASON_MIN_WORDS} words is required.`, 'error')
+      return
+    }
     for (const item of filledItems) {
       if (!item.qty || parseFloat(item.qty) <= 0)          { toast(`Qty required for: ${item.item_code}`); return }
       if (item.lp_unit_price === '' || parseFloat(item.lp_unit_price) < 0) { toast(`LP Price required for: ${item.item_code}`); return }
@@ -214,6 +234,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
         created_by:           userId,
         created_by_name:      userName,
         submitted_by_name:    userName,
+        non_preferred_reason: brandFlags.length ? npReason.trim() : null,
         is_test:              isTest,
       }).select('id').single()
 
@@ -432,6 +453,23 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
           <div className="no-card no-totals-card">
             <div className="no-totals-row">
               <div style={{ flex:1 }} />
+              {brandFlags.length > 0 && (
+                /* Same band as New PO. A forecast is still a purchase order and
+                   the approval trigger will refuse it without a reason, so ask
+                   here rather than let it fail later. */
+                <div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:10,padding:'12px 14px',margin:'0 0 12px'}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'#b45309',marginBottom:8}}>
+                    {describeFlags(brandFlags)} — reason required
+                  </div>
+                  <textarea value={npReason} onChange={e => setNpReason(e.target.value)} rows={2}
+                    placeholder="Why is this going to a trader instead of the principal? Please explain in detail..."
+                    style={{width:'100%',border:'1px solid #fcd34d',borderRadius:8,padding:'8px 10px',fontSize:12,fontFamily:'var(--font)',color:'var(--gray-900)',resize:'none',outline:'none',boxSizing:'border-box',background:'white',lineHeight:1.5}} />
+                  <div style={{fontSize:10,marginTop:4,fontWeight:500,color: reasonIsSufficient(npReason) ? '#16a34a' : '#b45309'}}>
+                    {wordCount(npReason)}/{REASON_MIN_WORDS} words minimum
+                  </div>
+                </div>
+              )}
+
               <div className="no-totals-summary">
                 <div className="no-total-line grand">
                   <span>Grand Total</span>
