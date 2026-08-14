@@ -90,6 +90,7 @@ export default function PurchaseOrderDetail() {
   // had failed. Once a sufficient reason is stored, show it as a recorded fact
   // with an Edit affordance.
   const [npEditing, setNpEditing]   = useState(false)
+  const [npAuthor, setNpAuthor]     = useState(null)
   const [userId, setUserId]       = useState('')
   const [userName, setUserName]   = useState('')
 
@@ -171,6 +172,10 @@ export default function PurchaseOrderDetail() {
   useEffect(() => {
     if (!po?.id) return
     setNpReason(po.non_preferred_reason || '')
+    if (po.non_preferred_reason_by) {
+      sb.from('profiles').select('name').eq('id', po.non_preferred_reason_by).maybeSingle()
+        .then(({ data }) => setNpAuthor(data?.name || null))
+    } else setNpAuthor(null)
     sb.rpc('po_brand_flags', { p_po_id: po.id })
       .then(({ data }) => setBrandFlags(data || []))
       .catch(() => setBrandFlags([]))
@@ -764,6 +769,15 @@ SSC Control Pvt. Ltd.`
 
   // ── Stage 2: PO Approved — generate PO number + PDF ──
   async function handleApprove() {
+    // CHECK BEFORE MINTING. A PO number and a revision row are created further
+    // down, and the UPDATE that follows them can be refused by the approval
+    // trigger. When that happened the number was already burnt and the revision
+    // was left naming a number the PO never got (SSC/PO0263 carried a revision
+    // saying PO0261). Fail here, before anything is consumed.
+    if (brandFlags.length && !reasonIsSufficient(po.non_preferred_reason)) {
+      toast(`Why are we not buying ${brandFlags.map(b => b.brand).join(', ')} directly? Record a reason of at least ${REASON_MIN_WORDS} words before approving.`, 'error')
+      return
+    }
     setSaving(true)
 
     // A PO number is minted ONCE, on first approval, and is then permanent.
@@ -1926,8 +1940,15 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       borderRadius:10, padding:'12px 14px', margin:'0 0 14px' }}>
           <div style={{ fontSize:11, fontWeight:700, color:'#b45309', letterSpacing:'0.04em',
                         textTransform:'uppercase', marginBottom:6 }}>
-            {brandFlags.length ? `Not the direct source — ${describeFlags(brandFlags)}` : 'Non-preferred vendor — reason given'}
+            {brandFlags.length
+              ? `Why are we not buying ${brandFlags.map(b => b.brand).join(', ')} directly?`
+              : 'Why we did not buy directly'}
           </div>
+          {brandFlags.length > 0 && (
+            <div style={{ fontSize:11, color:'var(--gray-500)', marginBottom:8, fontWeight:'var(--fw-regular)', textTransform:'none', letterSpacing:0 }}>
+              {describeFlags(brandFlags)}
+            </div>
+          )}
           {(!brandFlags.length || !canEdit || (reasonIsSufficient(po.non_preferred_reason) && !npEditing)) ? (
             <div>
               <div style={{ fontSize:12.5, color:'var(--gray-700)', lineHeight:1.55 }}>
@@ -1936,7 +1957,9 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               {brandFlags.length > 0 && canEdit && (
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:8 }}>
                   <span style={{ fontSize:10.5, color:'var(--green-text)', fontWeight:'var(--fw-semibold)' }}>
-                    ✓ Recorded — this PO can be approved
+                    ✓ Recorded{npAuthor ? ` by ${npAuthor}` : ''}
+                    {po.non_preferred_reason_at ? ` · ${fmt(po.non_preferred_reason_at)}` : ''}
+                    {' — this PO can be approved'}
                   </span>
                   <button className="od-btn" style={{ padding:'3px 9px', fontSize:11 }}
                     onClick={() => { setNpReason(po.non_preferred_reason || ''); setNpEditing(true) }}>
