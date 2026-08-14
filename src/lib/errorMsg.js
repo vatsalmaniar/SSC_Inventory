@@ -11,6 +11,11 @@ export function friendlyError(err, fallback = 'Something went wrong. Please try 
   // constraint" and reads a working rule as a broken screen.
   if (msg.includes('item_prices_no_overlap') || msg.includes('uq_item_price_open'))
     return 'A price for this item is already in force over these dates. Use "New rate" on the existing price instead of adding a second one.'
+  // These triggers already raise a message written FOR the user, naming the
+  // brand and what to do. friendlyError was swallowing them into "Something
+  // went wrong", which left a buyer blocked with no idea why.
+  if (raw.includes('cannot be approved without a reason')) return raw
+  if (raw.includes('is already issued and cannot be changed')) return raw
   if (msg.includes('item_prices_approval_shape'))
     return 'A price has to be approved by someone other than the person who entered it.'
   if (msg.includes('duplicate key') || msg.includes('unique constraint')) return 'This already exists.'

@@ -186,7 +186,7 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
     if (!fulfilmentCenter)   { toast('Please select a delivery address'); return }
     if (!filledItems.length) { toast('Add at least one line item'); return }
     if (brandFlags.length && !reasonIsSufficient(npReason)) {
-      toast(`${describeFlags(brandFlags)} — a reason of at least ${REASON_MIN_WORDS} words is required.`, 'error')
+      toast(`${describeFlags(brandFlags)} — a reason of at least ${REASON_MIN_WORDS} words is required; you have written ${wordCount(npReason)}.`, 'error')
       return
     }
     for (const item of filledItems) {

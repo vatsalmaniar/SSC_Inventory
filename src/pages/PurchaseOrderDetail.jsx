@@ -85,6 +85,11 @@ export default function PurchaseOrderDetail() {
   const [brandFlags, setBrandFlags] = useState([])
   const [npReason, setNpReason]     = useState('')
   const [npSaving, setNpSaving]     = useState(false)
+  // The band stayed a textarea forever, because the brand is still non-preferred
+  // whether or not a reason has been written. Saving therefore looked like it
+  // had failed. Once a sufficient reason is stored, show it as a recorded fact
+  // with an Edit affordance.
+  const [npEditing, setNpEditing]   = useState(false)
   const [userId, setUserId]       = useState('')
   const [userName, setUserName]   = useState('')
 
@@ -172,16 +177,21 @@ export default function PurchaseOrderDetail() {
   }, [po?.id, po?.vendor_id, items.length])
 
   async function saveNonPreferredReason() {
+    // Explicit refusal, not a silently disabled button. A greyed-out control
+    // with no message reads as "the system is broken" — which is exactly how it
+    // looked when a short reason simply would not save.
     if (!reasonIsSufficient(npReason)) {
-      toast(`Please give at least ${REASON_MIN_WORDS} words.`, 'error'); return
+      toast(`A reason of at least ${REASON_MIN_WORDS} words is required — you have written ${wordCount(npReason)}. Nothing was saved.`, 'error')
+      return
     }
     setNpSaving(true)
     const { error } = await sb.from('purchase_orders')
       .update({ non_preferred_reason: npReason.trim() }).eq('id', id)
     setNpSaving(false)
     if (error) { toast(friendlyError(error, 'Could not save the reason')); return }
-    toast('Reason saved', 'success')
+    toast('Reason saved — this PO can now be approved', 'success')
     setPo(p => ({ ...p, non_preferred_reason: npReason.trim() }))
+    setNpEditing(false)
   }
 
 
@@ -1918,9 +1928,22 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                         textTransform:'uppercase', marginBottom:6 }}>
             {brandFlags.length ? `Not the direct source — ${describeFlags(brandFlags)}` : 'Non-preferred vendor — reason given'}
           </div>
-          {(!brandFlags.length || !canEdit) ? (
-            <div style={{ fontSize:12.5, color:'var(--gray-700)', lineHeight:1.55 }}>
-              {po.non_preferred_reason || '—'}
+          {(!brandFlags.length || !canEdit || (reasonIsSufficient(po.non_preferred_reason) && !npEditing)) ? (
+            <div>
+              <div style={{ fontSize:12.5, color:'var(--gray-700)', lineHeight:1.55 }}>
+                {po.non_preferred_reason || '—'}
+              </div>
+              {brandFlags.length > 0 && canEdit && (
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:8 }}>
+                  <span style={{ fontSize:10.5, color:'var(--green-text)', fontWeight:'var(--fw-semibold)' }}>
+                    ✓ Recorded — this PO can be approved
+                  </span>
+                  <button className="od-btn" style={{ padding:'3px 9px', fontSize:11 }}
+                    onClick={() => { setNpReason(po.non_preferred_reason || ''); setNpEditing(true) }}>
+                    Edit
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -1939,7 +1962,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 </span>
                 <button className="od-btn" style={{ padding:'4px 10px', fontSize:11.5 }}
                   onClick={saveNonPreferredReason}
-                  disabled={npSaving || !reasonIsSufficient(npReason) || npReason.trim() === (po.non_preferred_reason || '')}>
+                  disabled={npSaving || npReason.trim() === (po.non_preferred_reason || '')}>
                   {npSaving ? 'Saving…' : 'Save reason'}
                 </button>
                 <span style={{ fontSize:10.5, color:'var(--gray-400)' }}>

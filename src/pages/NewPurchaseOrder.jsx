@@ -529,7 +529,7 @@ export default function NewPurchaseOrder() {
     // and this PO is not on one.
     if (nonPreferredBrands.length) {
       if (!reasonIsSufficient(nonPreferredReason)) {
-        toast(`${describeFlags(nonPreferredBrands)} — a reason of at least ${REASON_MIN_WORDS} words is required.`, 'error')
+        toast(`${describeFlags(nonPreferredBrands)} — a reason of at least ${REASON_MIN_WORDS} words is required; you have written ${wordCount(nonPreferredReason)}.`, 'error')
         return
       }
     }
