@@ -127,6 +127,25 @@ export default function NewOrder() {
       next[idx] = { ...next[idx], item_code: item.item_code, item_type: item.type || '' }
       return next
     })
+    // Pull the item's description in, the way New PO does. NOT the price: the
+    // partner discount is what WE pay, so auto-filling it here would quote the
+    // customer at our own cost. Only the description, and only when the line is
+    // blank — a salesperson who has typed their own wording keeps it.
+    fillDescription(idx, item.item_code)
+  }
+
+  async function fillDescription(idx, code) {
+    if (!code) return
+    const { data } = await sb.from('items').select('description').eq('item_code', code).maybeSingle()
+    const desc = data?.description
+    if (!desc) return
+    setItems(prev => {
+      const next = [...prev]
+      const line = next[idx]
+      if (!line || line.item_code !== code || line.description?.trim()) return prev
+      next[idx] = { ...line, description: desc }
+      return next
+    })
   }
 
   function addRow()       { setItems(prev => [...prev, emptyItem()]) }
