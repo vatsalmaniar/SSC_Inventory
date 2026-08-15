@@ -459,10 +459,11 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
                    here rather than let it fail later. */
                 <div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:10,padding:'12px 14px',margin:'0 0 12px'}}>
                   <div style={{fontSize:12,fontWeight:700,color:'#b45309',marginBottom:8}}>
-                    {describeFlags(brandFlags)} — reason required
+                    Why are we not buying {brandFlags.map(b => b.brand).join(', ')} directly?
                   </div>
+                  <div style={{fontSize:11,color:'#92400e',marginBottom:8}}>{describeFlags(brandFlags)}</div>
                   <textarea value={npReason} onChange={e => setNpReason(e.target.value)} rows={2}
-                    placeholder="Why is this going to a trader instead of the principal? Please explain in detail..."
+                    placeholder="e.g. principal had no stock, urgent requirement, customer specified this supplier..."
                     style={{width:'100%',border:'1px solid #fcd34d',borderRadius:8,padding:'8px 10px',fontSize:12,fontFamily:'var(--font)',color:'var(--gray-900)',resize:'none',outline:'none',boxSizing:'border-box',background:'white',lineHeight:1.5}} />
                   <div style={{fontSize:10,marginTop:4,fontWeight:500,color: reasonIsSufficient(npReason) ? '#16a34a' : '#b45309'}}>
                     {wordCount(npReason)}/{REASON_MIN_WORDS} words minimum

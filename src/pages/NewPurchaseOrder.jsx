@@ -1171,13 +1171,14 @@ export default function NewPurchaseOrder() {
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
               <svg fill="none" stroke="#b45309" strokeWidth="2" viewBox="0 0 24 24" style={{width:16,height:16,flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               <span style={{fontSize:12,fontWeight:700,color:'#b45309'}}>
-                {describeFlags(nonPreferredBrands)} — reason required
+                Why are we not buying {nonPreferredBrands.map(b => b.brand).join(', ')} directly?
               </span>
             </div>
+            <div style={{fontSize:11,color:'#92400e',marginBottom:8}}>{describeFlags(nonPreferredBrands)}</div>
             <textarea
               value={nonPreferredReason}
               onChange={e => setNonPreferredReason(e.target.value)}
-              placeholder="Why is this going to a trader instead of the principal? Please explain in detail (minimum 7 words)..."
+              placeholder="e.g. principal had no stock, urgent requirement, customer specified this supplier..."
               rows={2}
               style={{width:'100%',border:'1px solid #fcd34d',borderRadius:8,padding:'8px 10px',fontSize:12,fontFamily:'var(--font)',color:'var(--gray-900)',resize:'none',outline:'none',boxSizing:'border-box',background:'white',lineHeight:1.5}}
             />
