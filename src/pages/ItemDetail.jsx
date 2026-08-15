@@ -281,6 +281,7 @@ export default function ItemDetail() {
   // VALUE; it is never fine for a unit price.
   const rupee = fmtMoneyFull
   // Editing prices is admin + management only. Accounts and ops can read, not write.
+  const canSeePurchase = ['admin', 'management', 'ops', 'accounts'].includes(role)
   const canEditPrices = ['admin', 'management'].includes(role)
 
   async function loadSpecials(code) {
@@ -450,7 +451,9 @@ export default function ItemDetail() {
     { key: 'summary',  label: 'Summary' },
     ...((commercials || specials.length) ? [{ key: 'commercials', label: 'Commercials' }] : []),
     { key: 'orders',   label: `Order History (${kpi.totalOrders})` },
-    { key: 'pos',      label: `PO History (${kpi.totalPos})` },
+    // PO History carries vendor unit prices — what we PAY. Sales sees the item,
+    // the orders and the stock, but not our buying price.
+    ...(canSeePurchase ? [{ key: 'pos', label: `PO History (${kpi.totalPos})` }] : []),
     { key: 'grns',     label: `GRNs (${kpi.totalGrns})` },
     { key: 'transfers', label: `Internal Transfers (${transfers.length})` },
   ]
@@ -784,7 +787,7 @@ export default function ItemDetail() {
           })()}
 
           {/* ── PO History Tab ── */}
-          {tab === 'pos' && (
+          {tab === 'pos' && canSeePurchase && (
             // Cancelled POs stay hidden here (poRows already excludes them), per earlier ask.
             <div className="c360-card">
               {poRows.length === 0 ? (

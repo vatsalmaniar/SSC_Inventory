@@ -245,14 +245,17 @@ export default function OrderDetail() {
         const itemIds = (data?.order_items || []).map(oi => oi.id)
         const lineLinks = []
         for (let i = 0; i < itemIds.length; i += 150) {
-          const { data: rows } = await sb.from('po_items').select('po_id, order_item_id').in('order_item_id', itemIds.slice(i, i + 150))
+          const { data: rows } = await sb.from('v_po_line_status').select('po_id, order_item_id').in('order_item_id', itemIds.slice(i, i + 150))
           if (rows?.length) lineLinks.push(...rows)
         }
-        const { data: headerPos } = await sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery,created_at').eq('order_id', id)
+        // v_po_status, not purchase_orders: this page is used by sales, and a
+        // purchase order's VALUE is what we pay the vendor. The view carries no
+        // amount at all, so it cannot leak by someone adding a column later.
+        const { data: headerPos } = await sb.from('v_po_status').select('id,po_number,status,vendor_name,expected_delivery,created_at').eq('order_id', id)
         let pos = headerPos || []
         const extraIds = [...new Set(lineLinks.map(l => l.po_id))].filter(pid => !pos.some(p => p.id === pid))
         if (extraIds.length) {
-          const { data: extraPos } = await sb.from('purchase_orders').select('id,po_number,status,vendor_name,total_amount,expected_delivery,created_at').in('id', extraIds)
+          const { data: extraPos } = await sb.from('v_po_status').select('id,po_number,status,vendor_name,expected_delivery,created_at').in('id', extraIds)
           if (extraPos?.length) pos = [...pos, ...extraPos]
         }
         pos.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
@@ -264,7 +267,7 @@ export default function OrderDetail() {
         // Cancelled POs stay in the linked list (visibility) but their lines
         // don't count as coverage and don't produce an ETA.
         const cancelledPoIds = new Set(pos.filter(p => p.status === 'cancelled').map(p => p.id))
-        const { data: pis } = await sb.from('po_items').select('po_id, order_item_id, delivery_date, qty, received_qty').in('po_id', poIds)
+        const { data: pis } = await sb.from('v_po_line_status').select('po_id, order_item_id, delivery_date, qty, received_qty').in('po_id', poIds)
         const activePis = (pis || []).filter(pi => !cancelledPoIds.has(pi.po_id))
         // QUANTITY-aware coverage: a Map of order_item_id → covered qty, not a
         // Set. With a Set, one PO line for 1 of 100 units marked the whole line
@@ -998,16 +1001,16 @@ if (match) {
   // cancel the PO; the order is still live and only the quantity shrank.
   async function notifyOpsForLinkedPOs(scope = 'full', detail = '') {
     try {
-      const { data: headerPos } = await sb.from('purchase_orders').select('id,po_number,status').eq('order_id', id)
+      const { data: headerPos } = await sb.from('v_po_status').select('id,po_number,status').eq('order_id', id)
       let linkedPos = headerPos || []
       // Also catch POs linked only at line level (a PO clubbing multiple COs
       // has just one CO on its header — the others connect via po_items).
       const cancelItemIds = (order?.order_items || []).map(oi => oi.id)
       if (cancelItemIds.length) {
-        const { data: lineLinks } = await sb.from('po_items').select('po_id').in('order_item_id', cancelItemIds)
+        const { data: lineLinks } = await sb.from('v_po_line_status').select('po_id').in('order_item_id', cancelItemIds)
         const extraIds = [...new Set((lineLinks || []).map(l => l.po_id))].filter(pid => !linkedPos.some(p => p.id === pid))
         if (extraIds.length) {
-          const { data: extraPos } = await sb.from('purchase_orders').select('id,po_number,status').in('id', extraIds)
+          const { data: extraPos } = await sb.from('v_po_status').select('id,po_number,status').in('id', extraIds)
           if (extraPos?.length) linkedPos = [...linkedPos, ...extraPos]
         }
       }
@@ -1480,7 +1483,6 @@ if (match) {
                               </div>
                               <div style={{fontSize:12,color:'var(--gray-500)',marginTop:2}}>
                                 {po.vendor_name || '—'}
-                                {po.total_amount ? <span style={{marginLeft:8,color:'var(--gray-400)'}}>· ₹{Number(po.total_amount).toLocaleString('en-IN',{maximumFractionDigits:0})}</span> : ''}
                               </div>
                               {poEarliestDelivery[po.id] && (
                                 <div style={{fontSize:11.5,color:'var(--blue-700)',marginTop:4,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
