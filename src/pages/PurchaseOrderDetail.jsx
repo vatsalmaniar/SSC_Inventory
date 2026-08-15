@@ -395,11 +395,14 @@ export default function PurchaseOrderDetail() {
     setSaving(true)
     const updates = { status: newStatus, updated_at: new Date().toISOString(), ...extra }
     const { error } = await sb.from('purchase_orders').update(updates).eq('id', id)
-    if (error) { toast(friendlyError(error)); setSaving(false); return }
+    // Report the outcome. handleApprove needs to know whether the approval
+    // actually landed before it writes a revision saying that it did.
+    if (error) { toast(friendlyError(error)); setSaving(false); return false }
     await logActivity(`Status changed to ${PO_STATUS_LABELS[newStatus] || newStatus}`)
     toast('Status updated to ' + (PO_STATUS_LABELS[newStatus] || newStatus), 'success')
     setSaving(false)
     await loadPO()
+    return true
   }
 
   async function logActivity(message) {
@@ -780,77 +783,51 @@ SSC Control Pvt. Ltd.`
     }
     setSaving(true)
 
-    // A PO number is minted ONCE, on first approval, and is then permanent.
-    // This used to call next_po_number() unconditionally, so amending an
-    // already-approved PO (which sends it back to pending_approval) renamed it
-    // on re-approval and overwrote approved_at / placed_at. Five live POs were
-    // silently renumbered on 2026-08-04 — PO0185 became PO0232 — after the
-    // vendor already held the original number. See sql/po_number_restore.sql.
-    const isFirstApproval = !po.po_number || po.po_number.startsWith('Temp/')
-    let poNum = po.po_number
-    if (isFirstApproval) {
-      const isCO = po.po_number?.startsWith('Temp/PCO') || po.order_id
-      const { data, error: rpcErr } = await sb.rpc('next_po_number', { p_is_co: !!isCO })
-      if (rpcErr) { toast(friendlyError(rpcErr, "Generating PO number failed. Please try again.")); setSaving(false); return }
-      poNum = data
-    }
-
-    // ── Freeze this state as a numbered revision ──
-    // The header can only describe ONE state, so without this every amendment
-    // destroys the previous one. Measured 2026-08-05: 91 edits landed on POs
-    // already placed with a vendor, across 77 POs, with no record of what the
-    // vendor held.
+    // ── ALLOCATION, APPROVAL AND THE REVISION ARE ONE TRANSACTION ────────────
+    // approve_po() locks the PO, checks WHO may approve (admin/management, and
+    // never the person who raised it), allocates the number from the range,
+    // sets the status and writes the revision — together. If any part is
+    // refused, all of it rolls back and nothing is consumed.
     //
-    // The revision number is resolved BEFORE the document is rendered, so the
-    // printed PO carries its own revision marker. Reading it back from the DB
-    // (not from `revisions` state) keeps it correct even if two approvals race.
-    let nextRev = 0
-    let changeSummary = null
-    try {
-      const { data: lastRev } = await sb.from('po_revisions')
-        .select('rev_no').eq('po_id', id).order('rev_no', { ascending: false }).limit(1).maybeSingle()
-      nextRev = isFirstApproval ? 0 : ((lastRev?.rev_no ?? -1) + 1)
+    // This was three separate browser calls where only the last could fail.
+    // Seven numbers were burnt that way, and a revision left by a failed
+    // attempt then collided with the next real approval (SSC/PCO0963).
+    //
+    // The document is attached AFTER, because it is rendered here in the
+    // browser and cannot live inside a database transaction. doc_url is the one
+    // field a revision will accept once, from empty — attaching the paperwork
+    // is not rewriting history.
+    const { data: appr, error: apprErr } = await sb.rpc('approve_po', {
+      p_po_id: id, p_approver_name: userName,
+    })
+    if (apprErr) {
+      toast(friendlyError(apprErr, 'Approval failed. Nothing was changed — please retry.'))
+      setSaving(false); return
+    }
+    const row = Array.isArray(appr) ? appr[0] : appr
+    const poNum = row?.out_po_number || po.po_number
+    const isFirstApproval = row?.out_was_first ?? false
+    const nextRev = row?.out_rev_no ?? 0
 
-      // The amendment diff was already composed by saveEdit and logged; reuse it
-      // verbatim rather than recomputing, so the revision and the timeline agree.
-      if (!isFirstApproval) {
-        const { data: amendNote } = await sb.from('po_comments')
-          .select('message').eq('po_id', id).ilike('message', 'PO AMENDED after approval%')
-          .order('created_at', { ascending: false }).limit(1).maybeSingle()
-        changeSummary = amendNote?.message?.replace('PO AMENDED after approval — sent back for re-approval. ', '') || null
-      }
-    } catch (err) { console.error('revision number lookup failed:', err) }
-
-    // Regenerate the document every time — an amended PO needs paperwork that
-    // matches the new figures, under the SAME PO number, marked with its revision.
     let poPdfUrl = null
     try { poPdfUrl = await generatePoPdf(poNum, nextRev) } catch (err) { console.error('PDF generation failed:', err) }
 
-    const { error: revErr } = await sb.from('po_revisions').insert({
-      po_id: id, rev_no: nextRev, po_number: poNum,
-      change_summary: changeSummary,
-      total_amount: items.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0),
-      approved_by: userName, approved_at: new Date().toISOString(),
-      doc_url: poPdfUrl, created_by: userId || null,
-    })
-    if (revErr) {
-      // Never block an approval on the history write — but make the gap loud,
-      // because an unrecorded revision is how the 2026-08-04 mess stayed hidden.
-      console.error('po_revisions insert failed:', revErr)
-      toast('PO approved, but the revision record failed to save. Tell IT before sending this PO.', 'error')
+    if (poPdfUrl) {
+      const [{ error: revDocErr }] = await Promise.all([
+        sb.from('po_revisions').update({ doc_url: poPdfUrl }).eq('po_id', id).eq('rev_no', nextRev),
+        sb.from('purchase_orders').update({ po_pdf_url: poPdfUrl }).eq('id', id),
+      ])
+      // The PO is approved and its revision recorded either way — a missing
+      // document is visible and fixable, not a hole in the audit trail.
+      if (revDocErr) console.error('attaching the document to the revision failed:', revDocErr)
+    } else {
+      toast('PO approved, but the document could not be generated. Regenerate it before sending.', 'error')
     }
 
-    await updateStatus('approved', {
-      // Only stamped on first approval. Re-approval of an amendment is recorded
-      // in po_comments, which keeps the full who/when trail without destroying
-      // the original approval date the PO's age and SLA are measured from.
-      ...(isFirstApproval ? {
-        po_number:   poNum,
-        approved_by: userName,
-        approved_at: new Date().toISOString(),
-      } : {}),
-      ...(poPdfUrl && { po_pdf_url: poPdfUrl }),
-    })
+    await logActivity('Status changed to PO Approved')
+    toast('Status updated to PO Approved', 'success')
+    await loadPO()
+
     // Tells the placer the PO is theirs now and starts the 48h clock.
     await notify('po_approved', {
       message: `${poNum} approved${isFirstApproval ? '' : ' (amended)'} — ${fmtINR(po.total_amount)} to ${po.vendor_name || 'vendor'}. Place with the vendor within ${SLA_PLACE_HOURS}h.`,
