@@ -6,12 +6,6 @@ import '../styles/login.css'
 
 const HCAPTCHA_SITE_KEY = '3eb698c2-27c4-46b8-bc52-6aa0e778a0cc'
 
-const IS_LOCALHOST = typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' ||
-   window.location.hostname === '127.0.0.1' ||
-   window.location.hostname.startsWith('192.168.') ||
-   window.location.hostname.startsWith('10.'))
-
 export default function Login() {
   const navigate = useNavigate()
   const [username, setUsername]     = useState('')
@@ -122,7 +116,12 @@ export default function Login() {
         user_agent: navigator.userAgent,
       }).then(() => {}).catch(() => {})
       setLoading(false)
-      setError('Invalid username or password.')
+      // Don't blame the password for a failure that never reached the password.
+      // A captcha rejection means the request was refused before any credential
+      // check, and telling the user "wrong password" sends them off resetting it.
+      setError(/captcha/i.test(authErr.message || '')
+        ? 'Security check failed. Please complete the CAPTCHA and try again.'
+        : 'Invalid username or password.')
       setPassword('')
       return
     }
@@ -306,8 +305,11 @@ export default function Login() {
               </div>
             </div>
 
-            {!IS_LOCALHOST && (
-              <div style={{ display:'flex', justifyContent:'center', margin:'8px 0 16px', minHeight:78 }}>
+            {/* Rendered on localhost too. Supabase Auth enforces captcha SERVER-side,
+                so skipping the widget locally doesn't skip the check — it just sends
+                no token and gets "captcha protection: request disallowed", which read
+                to the user as a wrong password. Local testing was impossible. */}
+            <div style={{ display:'flex', justifyContent:'center', margin:'8px 0 16px', minHeight:78 }}>
                 <HCaptcha
                   ref={captchaRef}
                   sitekey={HCAPTCHA_SITE_KEY}
@@ -317,8 +319,7 @@ export default function Login() {
                   onChalExpired={() => setCaptchaToken('')}
                   size="normal"
                 />
-              </div>
-            )}
+            </div>
 
             {captchaFailed && (
               <div style={{ fontSize:12, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:6, padding:'8px 12px', marginBottom:12 }}>
@@ -326,7 +327,7 @@ export default function Login() {
               </div>
             )}
 
-            <button className="submit-btn" onClick={doLogin} disabled={loading || (!IS_LOCALHOST && !captchaToken && !captchaFailed)}>
+            <button className="submit-btn" onClick={doLogin} disabled={loading || (!captchaToken && !captchaFailed)}>
               {loading ? <><div className="spinner"/><span>Signing in...</span></> : <span>Sign in</span>}
             </button>
 
