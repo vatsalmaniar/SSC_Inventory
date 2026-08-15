@@ -324,3 +324,26 @@ end $$;
 
 revoke execute on function generate_customer_id() from public, anon;
 grant  execute on function generate_customer_id() to authenticated;
+
+
+-- ── DEPRECATED FUNCTIONS ────────────────────────────────────────────────────
+-- Kept rather than dropped: revoking EXECUTE already makes them unreachable and
+-- is reversible, whereas a DROP is not — and a service_role script outside this
+-- repo could still be calling one. They are marked here so that anyone reading
+-- the schema, or browsing functions in Supabase Studio, sees why they exist and
+-- which function to use instead.
+comment on function create_item(text,text,text,text,text,text,text) is
+  'DEPRECATED — DO NOT USE. Superseded by create_item_v3. Mints item_no by MAX+1 with no lock, and skips the MOQ, near-duplicate and list-price/discount-group validations v3 enforces. EXECUTE revoked from anon/authenticated/public 2026-08-15.';
+
+comment on function create_item_v2(text,text,text,text,text,text,text,text,integer) is
+  'DEPRECATED — DO NOT USE. Superseded by create_item_v3. Same defects as create_item. EXECUTE revoked from anon/authenticated/public 2026-08-15.';
+
+comment on function next_grn_number() is
+  'DEPRECATED — DO NOT USE. Superseded by next_grn_number(p_fc). Mints by MAX+1 and excludes warehouse codes AMD/BRD which appear nowhere in the data (the real codes are KAV and GOD), so its filter never matched. It also took a DIFFERENT advisory lock from the p_fc overload, so the two never locked against each other. EXECUTE revoked 2026-08-15.';
+
+-- and point the live ones at themselves, so the right choice is obvious
+comment on function create_item_v3(text,text,text,text,text,text,text,integer,text,numeric,text) is
+  'Current item creator. Admin/management only. Allocates item_no from the ITEM number range via next_doc_seq().';
+
+comment on function next_grn_number(text) is
+  'Current GRN numberer. Per fulfilment centre (KAV/GOD) via the GRN:<fc> number range.';
