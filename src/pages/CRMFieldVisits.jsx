@@ -184,6 +184,13 @@ export default function CRMFieldVisits() {
       visit_type: visitType,
       company_freetext: companyName,
       company_id: null,
+      // The rep already picked this customer from the typeahead — the form has
+      // been holding the id all along and then dropping it here, so all 658
+      // visits carried a company NAME and no link to anything. Customer 360
+      // asks "which visits belong to this customer" and could never answer.
+      // A visit to a genuine prospect has no id and keeps only the free text;
+      // resolve_visit_customer() links it the day that name becomes a customer.
+      customer_id: form.selected_customer_id || null,
       opportunity_id: form.opportunity_id || null,
       purpose: form.purpose.trim() || null,
       outcome: form.outcome.trim() || null,
@@ -245,7 +252,10 @@ export default function CRMFieldVisits() {
       visit_type: v.visit_type || 'SOLO',
       with_ssc: v.visit_type === 'JOINT_SSC_TEAM' || (Array.isArray(v.ssc_team_members) && v.ssc_team_members.length > 0),
       with_principal: v.visit_type === 'JOINT_PRINCIPAL' || !!v.principal_id,
-      selected_customer_id: '',
+      // Carry the existing link through an edit. Blanking it here would strip
+      // the customer off the visit every time someone corrected a typo, which
+      // is how the link would quietly rot back out of the data.
+      selected_customer_id: v.customer_id || '',
       company_freetext: v.company_freetext || '',
       opportunity_id: v.opportunity_id || '',
       purpose: v.purpose || '',
