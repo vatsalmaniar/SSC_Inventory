@@ -100,6 +100,7 @@ export default function CustomerDetail() {
   const [contacts, setContacts]       = useState([])
   const [opps, setOpps]               = useState([])
   const [visits, setVisits]           = useState([])
+  const [quotes, setQuotes]           = useState([])
   const [payments, setPayments]       = useState(null)  // { outstanding_inr, overdue_inr } | null
   const [activeTab, setActiveTab]     = useState('summary')
   // Agreements with this customer — SALES side only. This page is used in front
@@ -136,7 +137,7 @@ export default function CustomerDetail() {
     const custRes = await sb.from('customers').select('*').eq('id', id).single()
     if (!custRes.data) { navigate('/customers'); return }
 
-    const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes] = await Promise.all([
+    const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes, quotesRes] = await Promise.all([
       fetchAll((from, to) => sb.from('orders')
         .select('id,order_number,customer_name,status,order_type,order_items(qty,total_price,unit_price_after_disc,cancelled_qty,line_status),created_at,po_number,order_dispatches(delivered_at)')
         .eq('is_test', false)
@@ -149,14 +150,27 @@ export default function CustomerDetail() {
         .select('id,opportunity_name,stage,estimated_value_inr,quotation_ref,quotation_value_inr,quotation_revision,created_at,brands,profiles(name),crm_principals(name)')
         .eq('customer_id', id)
         .order('created_at', { ascending: false }),
+      // customer_id, not company_id: company_id is NULL on every one of the 658
+      // visits ever logged, so this tab showed nothing for every customer since
+      // the day it was built. The visits form captured the customer and then
+      // discarded it on save — both halves of the same missing link.
       sb.from('crm_field_visits')
         .select('id,visit_date,visit_type,purpose,outcome,next_action,next_action_date,created_at,profiles(name),crm_opportunities(opportunity_name)')
-        .eq('company_id', id)
+        .eq('customer_id', id)
         .order('visit_date', { ascending: false }),
       sb.from('customer_payments_snapshot')
         .select('outstanding_inr,overdue_inr,imported_at')
         .eq('customer_id', id)
         .maybeSingle(),
+      // Quotations are documents that NAME this customer — read them from the
+      // quotes table, the way SAP lists sales documents by partner. Deriving
+      // them from crm_opportunities.quotation_ref only worked while every quote
+      // came from an opportunity: in April 215 of 215 did, in August only 3 of
+      // 18. HITACHI HI-REL had five quotes and this page showed none.
+      sb.from('crm_quotes')
+        .select('id,quote_number,full_ref,revision,total_value,status,created_at,opportunity_id,profiles(name),crm_opportunities(id,opportunity_name,stage)')
+        .eq('customer_id', id)
+        .order('created_at', { ascending: false }),
     ])
 
     setCustomer(custRes.data)
@@ -165,6 +179,7 @@ export default function CustomerDetail() {
     setContacts(contactsRes.data || [])
     setOpps(oppsRes.data || [])
     setVisits(visitsRes.data || [])
+    setQuotes(quotesRes.data || [])
     setPayments(paymentsRes?.data || null)
     setLoading(false)
   }
@@ -507,6 +522,42 @@ ${oppsHTML}
   const totalRevenue    = ordersTotalValue(orders)
   const openOpps        = opps.filter(o => !['WON','LOST'].includes(o.stage))
   const quotationOpps   = opps.filter(o => o.quotation_ref)
+  // ── Quotations, from BOTH linkages ──
+  // crm_quotes is the document itself and wins. An opportunity carrying a
+  // quotation_ref that has no matching quote row is still shown, because the
+  // older workflow recorded the quote only on the opportunity — dropping those
+  // would hide history rather than fix it. Matched on the bare number so
+  // "SSC/QU0301/26-27" and a full_ref carrying a revision suffix collapse to
+  // one row instead of appearing twice.
+  const quoteKey = r => (r || '').toString().trim().toUpperCase().match(/QU\d+/)?.[0] || (r || '').toString().trim().toUpperCase()
+  const quotationRows = (() => {
+    const rows = quotes.map(q => ({
+      key:      quoteKey(q.quote_number || q.full_ref),
+      id:       'q-' + q.id,
+      ref:      q.full_ref || q.quote_number || '—',
+      oppId:    q.opportunity_id || q.crm_opportunities?.id || null,
+      oppName:  q.crm_opportunities?.opportunity_name || null,
+      stage:    q.crm_opportunities?.stage || null,
+      revision: q.revision || 1,
+      rep:      q.profiles?.name || null,
+      date:     q.created_at,
+      value:    q.total_value,
+      estValue: null,
+    }))
+    const seen = new Set(rows.map(r => r.key))
+    for (const o of quotationOpps) {
+      const k = quoteKey(o.quotation_ref)
+      if (seen.has(k)) continue
+      seen.add(k)
+      rows.push({
+        key: k, id: 'o-' + o.id, ref: o.quotation_ref, oppId: o.id,
+        oppName: o.opportunity_name, stage: o.stage, revision: o.quotation_revision || 1,
+        rep: o.profiles?.name || null, date: o.created_at,
+        value: o.quotation_value_inr, estValue: o.estimated_value_inr,
+      })
+    }
+    return rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  })()
   const initials        = customer.customer_name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
   const avatarBg        = ownerColor(customer.customer_name)
 
@@ -521,7 +572,7 @@ ${oppsHTML}
     { key:'opportunities', label:'Opportunities', count: opps.length },
     { key:'orders',        label:'Orders',        count: nonCancelledOrders.length },
     { key:'visits',        label:'Visits',        count: visits.length },
-    { key:'quotations',    label:'Quotations',    count: quotationOpps.length },
+    { key:'quotations',    label:'Quotations',    count: quotationRows.length },
     ...(canSeePrices ? [{ key:'commercials', label:'Commercials', count: spas.length }] : []),
   ]
 
@@ -1089,9 +1140,9 @@ ${oppsHTML}
             {activeTab === 'quotations' && (
               <div className="c360-card">
                 <div className="c360-card-header">
-                  <div className="c360-card-title">Quotations ({quotationOpps.length})</div>
+                  <div className="c360-card-title">Quotations ({quotationRows.length})</div>
                 </div>
-                {quotationOpps.length === 0 ? (
+                {quotationRows.length === 0 ? (
                   <div className="c360-empty"><div className="c360-empty-icon">📄</div>No quotations sent yet.</div>
                 ) : (
                   <table className="c360-table">
@@ -1108,24 +1159,30 @@ ${oppsHTML}
                       </tr>
                     </thead>
                     <tbody>
-                      {quotationOpps.map(o => {
-                        const ss = STAGE_STYLES[o.stage] || { background:'#f1f5f9', color:'#475569' }
+                      {quotationRows.map(q => {
+                        const ss = STAGE_STYLES[q.stage] || { background:'#f1f5f9', color:'#475569' }
+                        // A quote raised straight against the customer has no
+                        // opportunity to open — only the ones that do are clickable.
                         return (
-                          <tr key={o.id} onClick={() => navigate('/crm/opportunities/'+o.id)} style={{ cursor:'pointer' }}>
-                            <td className="mono" style={{ fontWeight:700, color:'#1a73e8' }}>{o.quotation_ref}</td>
+                          <tr key={q.id}
+                              onClick={q.oppId ? () => navigate('/crm/opportunities/'+q.oppId) : undefined}
+                              style={q.oppId ? { cursor:'pointer' } : undefined}>
+                            <td className="mono" style={{ fontWeight:700, color:'#1a73e8' }}>{q.ref}</td>
                             <td style={{ fontWeight:600, maxWidth:180 }}>
-                              <div style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.opportunity_name||'—'}</div>
+                              <div style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{q.oppName||'—'}</div>
                             </td>
-                            <td><span className="c360-quot-stage" style={ss}>{STAGE_LABELS[o.stage]||o.stage}</span></td>
+                            <td>{q.stage
+                              ? <span className="c360-quot-stage" style={ss}>{STAGE_LABELS[q.stage]||q.stage}</span>
+                              : <span style={{ color:'var(--gray-400)', fontSize:12 }}>—</span>}</td>
                             <td style={{ textAlign:'center', fontWeight:600, color:'var(--gray-600)' }}>
-                              {o.quotation_revision > 1
-                                ? <span style={{ background:'#fef3c7', color:'#92400e', fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4 }}>Rev {o.quotation_revision}</span>
+                              {q.revision > 1
+                                ? <span style={{ background:'#fef3c7', color:'#92400e', fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4 }}>Rev {q.revision}</span>
                                 : <span style={{ color:'var(--gray-400)', fontSize:12 }}>v1</span>}
                             </td>
-                            <td style={{ fontSize:12, color:'var(--gray-500)' }}>{o.profiles?.name||'—'}</td>
-                            <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap', fontSize:12 }}>{fmt(o.created_at)}</td>
-                            <td style={{ textAlign:'right', fontWeight:700 }}>{o.quotation_value_inr?fmtINR(o.quotation_value_inr):'—'}</td>
-                            <td style={{ textAlign:'right', color:'var(--gray-500)' }}>{o.estimated_value_inr?fmtINR(o.estimated_value_inr):'—'}</td>
+                            <td style={{ fontSize:12, color:'var(--gray-500)' }}>{q.rep||'—'}</td>
+                            <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap', fontSize:12 }}>{fmt(q.date)}</td>
+                            <td style={{ textAlign:'right', fontWeight:700 }}>{q.value?fmtINR(q.value):'—'}</td>
+                            <td style={{ textAlign:'right', color:'var(--gray-500)' }}>{q.estValue?fmtINR(q.estValue):'—'}</td>
                           </tr>
                         )
                       })}
