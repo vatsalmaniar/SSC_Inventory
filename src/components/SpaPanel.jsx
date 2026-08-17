@@ -17,6 +17,8 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../lib/supabase'
 import { fmtMoneyFull } from '../lib/fmt'
+import { toast } from '../lib/toast'
+import { friendlyError } from '../lib/errorMsg'
 import Loading from '../components/Loading'
 import '../styles/drawer.css'
 import '../styles/orders-redesign.css'
@@ -84,19 +86,52 @@ export function SpaList({ agreements, side, onOpen, emptyText }) {
  * that priced from it. `highlightItem` bolds one row — used from Item 360 so you
  * can see this item's rate in the context of the whole deal.
  */
-export function SpaDrawer({ spa, side = 'both', highlightItem, onClose }) {
+export function SpaDrawer({ spa, side = 'both', highlightItem, customerId, onApproved, onClose }) {
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [approving, setApproving] = useState(false)
+  const [role, setRole] = useState('')
+
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user || !live) return
+      const { data } = await sb.from('profiles').select('role').eq('id', user.id).maybeSingle()
+      if (live) setRole(data?.role || '')
+    })()
+    return () => { live = false }
+  }, [])
+
+  // Approving a price agreement commits what we pay, or charge, across every
+  // rate on it. Same authority as approving a purchase order.
+  const canApprove = ['admin', 'management'].includes(role)
+
+  async function doApprove() {
+    if (approving) return
+    setApproving(true)
+    const { error } = await sb.rpc('approve_spa', { p_spa_id: spa.id })
+    setApproving(false)
+    if (error) { toast(friendlyError(error, 'Could not approve this agreement.')); return }
+    toast(`${spa.spa_no} approved — its rates are now live`, 'success')
+    onApproved?.()
+    onClose?.()
+  }
 
   useEffect(() => {
     if (!spa?.id) return
     let live = true
     setLoading(true); setDetail(null)
     ;(async () => {
+      // Opened from a customer's page, show that customer's rates only. One
+      // vendor agreement can hold rates for dozens of customers, and listing
+      // all 143 of them under Milacron answers a question nobody asked.
+      let rateQ = sb.from('item_prices')
+        .select('item_code,price_type,amount,min_qty,valid_from,valid_to,price_status')
+        .eq('spa_id', spa.id).order('item_code')
+      if (customerId) rateQ = rateQ.eq('customer_id', customerId)
       const [ratesRes, poRes] = await Promise.all([
-        sb.from('item_prices')
-          .select('item_code,price_type,amount,min_qty,valid_from,valid_to,price_status')
-          .eq('spa_id', spa.id).order('item_code'),
+        rateQ,
         // Where it has actually been used. Read from po_items.spa_no, which is
         // STAMPED at pricing time, so a superseded agreement still shows the
         // documents it priced.
@@ -114,7 +149,7 @@ export function SpaDrawer({ spa, side = 'both', highlightItem, onClose }) {
       setLoading(false)
     })()
     return () => { live = false }
-  }, [spa?.id, spa?.spa_no])
+  }, [spa?.id, spa?.spa_no, customerId])
 
   if (!spa) return null
   const st = statusPill(spa.status)
@@ -148,6 +183,18 @@ export function SpaDrawer({ spa, side = 'both', highlightItem, onClose }) {
                 <span style={{ marginLeft: 8, fontSize: 11.5, color: 'var(--gray-500)' }}>
                   rates are not applied until the agreement is approved
                 </span>
+              )}
+              {/* Until now nothing in the app could approve an agreement — it
+                  had to be done from the database, which left approved_by empty
+                  on the earlier ones. approve_spa() flips the agreement and every
+                  pending rate on it in one transaction, and records who did it. */}
+              {spa.status === 'draft' && canApprove && (
+                <button onClick={doApprove} disabled={approving}
+                  style={{ marginLeft: 10, fontSize: 11.5, fontWeight: 600, padding: '4px 12px',
+                           borderRadius: 6, border: '1px solid #16a34a', background: approving ? '#f1f5f9' : '#16a34a',
+                           color: approving ? 'var(--gray-500)' : '#fff', cursor: approving ? 'default' : 'pointer' }}>
+                  {approving ? 'Approving…' : 'Approve agreement'}
+                </button>
               )}
             </span>
             <span style={{ color: 'var(--gray-500)' }}>Valid</span>
@@ -252,7 +299,23 @@ export async function fetchAgreements({ customerId, vendorId }) {
   let q = sb.from('special_price_agreements')
     .select('id,spa_no,title,counterparty_type,reference,valid_from,valid_to,status,source_file,notes,item_prices(count)')
     .order('valid_from', { ascending: false })
-  q = customerId ? q.eq('customer_id', customerId) : q.eq('vendor_id', vendorId)
+
+  if (customerId) {
+    // Which customer a RATE belongs to lives on the price row, not on the
+    // agreement header. A vendor agreement can carry rates negotiated for
+    // several named customers — SSC/SPA0004 holds 143 Schmersal rates across
+    // 36 of them — and filtering on the header's customer_id made every one of
+    // those invisible on Customer 360 even though the rates were right there.
+    const { data: rows } = await sb.from('item_prices')
+      .select('spa_id').eq('customer_id', customerId).not('spa_id', 'is', null)
+    const viaRates = [...new Set((rows || []).map(r => r.spa_id))]
+    q = viaRates.length
+      ? q.or(`customer_id.eq.${customerId},id.in.(${viaRates.join(',')})`)
+      : q.eq('customer_id', customerId)
+  } else {
+    q = q.eq('vendor_id', vendorId)
+  }
+
   const { data, error } = await q
   if (error) { console.error('fetchAgreements:', error); return [] }
   return (data || []).map(a => ({ ...a, rate_count: a.item_prices?.[0]?.count ?? null }))

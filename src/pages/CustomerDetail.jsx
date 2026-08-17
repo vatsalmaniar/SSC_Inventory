@@ -1131,7 +1131,13 @@ ${oppsHTML}
                   <span className="c360-card-title">Special Price Agreements ({spas.length})</span>
                 </div>
                 <div className="c360-card-body">
-                  <SpaList agreements={spas} side="sales" onOpen={setSpaOpen}
+                  {/* "both", not "sales": a vendor may negotiate a PURCHASE rate
+                      for a named end customer — Schmersal quotes us a Milacron
+                      price — and that rate belongs on the customer's page too.
+                      This tab is already limited to admin/management/ops/accounts
+                      by canSeePrices, the same gate as Item 360's PO History, so
+                      no salesperson sees what we pay. */}
+                  <SpaList agreements={spas} side="both" onOpen={setSpaOpen}
                     emptyText="No special price agreement with this customer. Orders are priced by the salesperson." />
                 </div>
               </div>
@@ -1328,7 +1334,7 @@ ${oppsHTML}
         </div>
       )}
 
-      {spaOpen && <SpaDrawer spa={spaOpen} side="sales" onClose={() => setSpaOpen(null)} />}
+      {spaOpen && <SpaDrawer spa={spaOpen} side="both" customerId={id} onClose={() => setSpaOpen(null)} />}
     </Layout>
   )
 }
