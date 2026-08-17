@@ -170,9 +170,25 @@ export function SpaDrawer({ spa, side = 'both', highlightItem, customerId, onApp
   const showBuy  = side === 'both' || side === 'purchase'
   const showSell = side === 'both' || side === 'sales'
   const showMargin = side === 'both'
-  // Only worth a column when the agreement actually varies by customer, and
+  // Only worth grouping when the agreement actually varies by customer, and
   // never on a customer's own page where every row is theirs by definition.
   const showCustomer = !customerId && (detail?.items || []).some(r => r.customer_name)
+
+  // Biggest customer first — the one you buy most from is the one you came to
+  // read about. Rates with no customer sit last, under "Any customer".
+  const rateGroups = (() => {
+    if (!detail) return []
+    if (!showCustomer) return [{ name: null, rows: detail.items }]
+    const by = new Map()
+    for (const r of detail.items) {
+      const k = r.customer_name || ''
+      if (!by.has(k)) by.set(k, [])
+      by.get(k).push(r)
+    }
+    return [...by.entries()]
+      .map(([name, rows]) => ({ name: name || null, rows }))
+      .sort((a, b) => (b.rows.length - a.rows.length) || (a.name || '￿').localeCompare(b.name || '￿'))
+  })()
 
   return (
     <div className="od-drawer-scrim" onClick={onClose}>
@@ -237,46 +253,56 @@ export function SpaDrawer({ spa, side = 'both', highlightItem, customerId, onApp
                 <table className="od-items-table">
                   <thead><tr>
                     <th>Item</th>
-                    {/* A rate negotiated FOR a named end customer is meaningless
-                        without saying who: the same part is Rs 70 for one and
-                        Rs 100 for another. Hidden when no rate on the agreement
-                        is customer-scoped, and when the drawer is already
-                        filtered to one customer's page. */}
-                    {showCustomer && <th>Customer</th>}
                     <th style={{ textAlign: 'right' }}>From qty</th>
                     {showBuy  && <th style={{ textAlign: 'right' }}>We buy at</th>}
                     {showSell && <th style={{ textAlign: 'right' }}>{side === 'sales' ? 'Your price' : 'We sell at'}</th>}
                     {showMargin && <th style={{ textAlign: 'right' }}>Margin</th>}
                   </tr></thead>
-                  <tbody>
-                    {detail.items.map(r => {
-                      const m = (r.buy && r.sell)
-                        ? Math.round((1 - Number(r.buy.amount) / Number(r.sell.amount)) * 1000) / 10 : null
-                      const here = r.item_code === highlightItem
-                      return (
-                        <tr key={`${r.item_code}|${r.customer_name || ''}|${r.min_qty}`}
-                            style={here ? { background: '#eff6ff' } : undefined}>
-                          <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: here ? 600 : 400 }}>{r.item_code}</td>
-                          {showCustomer && <td style={{ fontSize: 11.5, maxWidth: 190 }}>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                 title={r.customer_name || ''}>
-                              {r.customer_name || <span style={{ color: 'var(--gray-400)' }}>any customer</span>}
-                            </div>
-                          </td>}
-                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>
-                            {r.min_qty}
+                  {/* Grouped by the customer the rate was negotiated FOR, one
+                      block each. A flat list of 143 rows tells you what Schmersal
+                      charges; grouped, it tells you what they charge for Milacron
+                      — which is the question anyone opening this actually has.
+                      No grouping when the agreement is not customer-scoped, or on
+                      a customer's own page where every row is already theirs. */}
+                  {rateGroups.map(g => (
+                    <tbody key={g.name || '_'}>
+                      {showCustomer && (
+                        <tr>
+                          <td colSpan={1 + (showBuy?1:0) + (showSell?1:0) + (showMargin?1:0) + 1}
+                              style={{ background: 'var(--gray-50, #f9fafb)', padding: '7px 10px',
+                                       borderTop: '1px solid var(--gray-200, #e5e7eb)' }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-800, #1f2937)' }}>
+                              {g.name || 'Any customer'}
+                            </span>
+                            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--gray-500)' }}>
+                              {g.rows.length} {g.rows.length === 1 ? 'rate' : 'rates'}
+                            </span>
                           </td>
-                          {showBuy && <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>
-                            {r.buy ? fmtMoneyFull(r.buy.amount) : '—'}</td>}
-                          {showSell && <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>
-                            {r.sell ? fmtMoneyFull(r.sell.amount) : '—'}</td>}
-                          {showMargin && <td style={{ textAlign: 'right', fontWeight: 600,
-                            color: m == null ? 'var(--gray-300)' : m < 0 ? '#b91c1c' : '#166534' }}>
-                            {m == null ? '—' : m + '%'}</td>}
                         </tr>
-                      )
-                    })}
-                  </tbody>
+                      )}
+                      {g.rows.map(r => {
+                        const m = (r.buy && r.sell)
+                          ? Math.round((1 - Number(r.buy.amount) / Number(r.sell.amount)) * 1000) / 10 : null
+                        const here = r.item_code === highlightItem
+                        return (
+                          <tr key={`${r.item_code}|${r.customer_name || ''}|${r.min_qty}`}
+                              style={here ? { background: '#eff6ff' } : undefined}>
+                            <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: here ? 600 : 400 }}>{r.item_code}</td>
+                            <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>
+                              {r.min_qty}
+                            </td>
+                            {showBuy && <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>
+                              {r.buy ? fmtMoneyFull(r.buy.amount) : '—'}</td>}
+                            {showSell && <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>
+                              {r.sell ? fmtMoneyFull(r.sell.amount) : '—'}</td>}
+                            {showMargin && <td style={{ textAlign: 'right', fontWeight: 600,
+                              color: m == null ? 'var(--gray-300)' : m < 0 ? '#b91c1c' : '#166534' }}>
+                              {m == null ? '—' : m + '%'}</td>}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  ))}
                 </table>
               </div>
 
