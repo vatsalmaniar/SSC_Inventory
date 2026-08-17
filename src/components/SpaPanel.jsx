@@ -127,7 +127,7 @@ export function SpaDrawer({ spa, side = 'both', highlightItem, customerId, onApp
       // vendor agreement can hold rates for dozens of customers, and listing
       // all 143 of them under Milacron answers a question nobody asked.
       let rateQ = sb.from('item_prices')
-        .select('item_code,price_type,amount,min_qty,valid_from,valid_to,price_status')
+        .select('item_code,price_type,amount,min_qty,valid_from,valid_to,price_status,customer_id,customers(customer_name)')
         .eq('spa_id', spa.id).order('item_code')
       if (customerId) rateQ = rateQ.eq('customer_id', customerId)
       const [ratesRes, poRes] = await Promise.all([
@@ -140,12 +140,26 @@ export function SpaDrawer({ spa, side = 'both', highlightItem, customerId, onApp
           .eq('spa_no', spa.spa_no).limit(200),
       ])
       if (!live) return
-      const byItem = new Map()
+      // Keyed on item + CUSTOMER + quantity break, not on item alone. Keying on
+      // the item made every rate after the first for that item overwrite the one
+      // before it: SSC/SPA0004 holds 143 rates over 129 items, so 14 were
+      // silently invisible. ACTUATOR AZM 17/170-B5 showed Perfect Engineering's
+      // Rs 100 while Milacron's Rs 70 was hidden underneath it — a buyer reading
+      // the agreement would have seen a rate that was not the one they'd get.
+      const byRate = new Map()
       for (const r of (ratesRes.data || [])) {
-        if (!byItem.has(r.item_code)) byItem.set(r.item_code, { item_code: r.item_code })
-        byItem.get(r.item_code)[r.price_type === 'PURCHASE' ? 'buy' : 'sell'] = r
+        const k = `${r.item_code}|${r.customer_id || ''}|${r.min_qty || 1}`
+        if (!byRate.has(k)) byRate.set(k, {
+          item_code: r.item_code,
+          customer_name: r.customers?.customer_name || null,
+          min_qty: r.min_qty || 1,
+        })
+        byRate.get(k)[r.price_type === 'PURCHASE' ? 'buy' : 'sell'] = r
       }
-      setDetail({ items: [...byItem.values()], usedOn: poRes.data || [] })
+      const items = [...byRate.values()].sort((a, b) =>
+        a.item_code.localeCompare(b.item_code) ||
+        (a.customer_name || '').localeCompare(b.customer_name || ''))
+      setDetail({ items, usedOn: poRes.data || [] })
       setLoading(false)
     })()
     return () => { live = false }
@@ -156,6 +170,9 @@ export function SpaDrawer({ spa, side = 'both', highlightItem, customerId, onApp
   const showBuy  = side === 'both' || side === 'purchase'
   const showSell = side === 'both' || side === 'sales'
   const showMargin = side === 'both'
+  // Only worth a column when the agreement actually varies by customer, and
+  // never on a customer's own page where every row is theirs by definition.
+  const showCustomer = !customerId && (detail?.items || []).some(r => r.customer_name)
 
   return (
     <div className="od-drawer-scrim" onClick={onClose}>
@@ -220,6 +237,12 @@ export function SpaDrawer({ spa, side = 'both', highlightItem, customerId, onApp
                 <table className="od-items-table">
                   <thead><tr>
                     <th>Item</th>
+                    {/* A rate negotiated FOR a named end customer is meaningless
+                        without saying who: the same part is Rs 70 for one and
+                        Rs 100 for another. Hidden when no rate on the agreement
+                        is customer-scoped, and when the drawer is already
+                        filtered to one customer's page. */}
+                    {showCustomer && <th>Customer</th>}
                     <th style={{ textAlign: 'right' }}>From qty</th>
                     {showBuy  && <th style={{ textAlign: 'right' }}>We buy at</th>}
                     {showSell && <th style={{ textAlign: 'right' }}>{side === 'sales' ? 'Your price' : 'We sell at'}</th>}
@@ -231,10 +254,17 @@ export function SpaDrawer({ spa, side = 'both', highlightItem, customerId, onApp
                         ? Math.round((1 - Number(r.buy.amount) / Number(r.sell.amount)) * 1000) / 10 : null
                       const here = r.item_code === highlightItem
                       return (
-                        <tr key={r.item_code} style={here ? { background: '#eff6ff' } : undefined}>
+                        <tr key={`${r.item_code}|${r.customer_name || ''}|${r.min_qty}`}
+                            style={here ? { background: '#eff6ff' } : undefined}>
                           <td style={{ fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: here ? 600 : 400 }}>{r.item_code}</td>
+                          {showCustomer && <td style={{ fontSize: 11.5, maxWidth: 190 }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                 title={r.customer_name || ''}>
+                              {r.customer_name || <span style={{ color: 'var(--gray-400)' }}>any customer</span>}
+                            </div>
+                          </td>}
                           <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>
-                            {(r.buy || r.sell)?.min_qty || 1}
+                            {r.min_qty}
                           </td>
                           {showBuy && <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5 }}>
                             {r.buy ? fmtMoneyFull(r.buy.amount) : '—'}</td>}
