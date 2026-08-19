@@ -41,6 +41,8 @@ export default function Accounts() {
   const payFileInputRef                     = useRef(null)
   const [payDragOver, setPayDragOver]       = useState(false)
   const [payRows, setPayRows]               = useState([])              // [{party_name_raw, outstanding_inr, overdue_inr, bill_count}]
+  const [payBills, setPayBills]             = useState([])              // bill-level rows — what the customer statement is made of
+  const [payUnmatched, setPayUnmatched]     = useState([])              // parties with no customer match, after the last push
   const [payFileName, setPayFileName]       = useState('')
   const [payErrorMsg, setPayErrorMsg]       = useState('')
   const [paySuccess, setPaySuccess]         = useState(null)
@@ -193,46 +195,59 @@ export default function Accounts() {
   }
 
   // ── Pending Payments upload ──
+  //
+  // Tally's party names arrive with literal "_x000D_" carriage-return escapes
+  // baked in ("COMPEX SOLUTION_x000D_"). Comparing those raw against the customer
+  // master silently failed for 11 parties / ₹2.96 L on the 19-Aug sheet — they
+  // vanished from every customer page. Clean once, here, and use it everywhere.
+  function cleanParty(s) {
+    return String(s || '').replace(/_x000D_/gi, ' ').replace(/\s+/g, ' ').trim()
+  }
+
   function parsePaymentsRows(raw) {
-    if (!raw || raw.length < 3) return []
-    const parties = []
-    let curParty = null
-    let curBills = 0
-    let curOverdue = 0
+    if (!raw || raw.length < 3) return { parties: [], bills: [], error: '' }
     // raw[0] = column headers ("Date","Ref. No.","Party's Name","Pending",…,"Due on")
     // raw[1] = sub-header row ("Amount", …)
     // Detail rows have a numeric Excel-serial date in col A.
     // Party-header rows: only col C has the party name.
     // Subtotal rows: cols A/B/C empty, col D (Pending) > 0.
 
-    // Find the "Due on" column dynamically — Tally versions shift it
-    // (seen at col K and col M across exports). Auto-detect by header text.
+    // EVERY column is resolved by header text, never by position. The three
+    // exports seen so far have 10, 12 and 13 columns: "Due on" sat at index 9,
+    // 11 and 12, and index 9 is "Post-Dated" in the newest file but the
+    // ">240 days" ageing bucket in the oldest. A positional read there turns an
+    // ageing figure into a cheque amount.
     const header = raw[0] || []
-    let dueOnIdx = -1
-    for (let i = 0; i < header.length; i++) {
-      const h = String(header[i] || '').toLowerCase().replace(/[\s.]/g, '')
-      if (h === 'dueon' || h === 'duedate' || h === 'due') { dueOnIdx = i; break }
-    }
+    const norm = header.map(h => String(h || '').toLowerCase().replace(/[\s._\-–]/g, ''))
+    const col = (...names) => norm.findIndex(h => names.includes(h))
+    const iPend = col('pending', 'pendingamount')
+    const iDue  = col('dueon', 'duedate', 'due')
+    const iPdc  = col('postdated', 'postdatedamount')
+    if (iPend < 0) return { parties: [], bills: [], error: 'Could not find the "Pending" column in this file.' }
 
     // Excel serial → JS Date. 25569 = days between 1900-01-01 and 1970-01-01.
     function serialToDate(s) {
+      if (s instanceof Date) return isNaN(s) ? null : s
       if (typeof s !== 'number' || s < 30000) return null
       return new Date(Math.round((s - 25569) * 86400 * 1000))
     }
-    const today = new Date(); today.setHours(0,0,0,0)
+    const iso = d => (d ? d.toISOString().slice(0, 10) : null)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+
+    const parties = []
+    const bills = []
+    let curParty = null, curBills = 0, curOverdue = 0, curPdc = 0
 
     for (let i = 2; i < raw.length; i++) {
       const r = raw[i] || []
       const a = r[0]
       const b = String(r[1] || '').trim()
-      const c = String(r[2] || '').trim().replace(/\s+/g, ' ')
-      const pending = parseFloat(r[3]) || 0
-      const hasDate = typeof a === 'number' && a > 30000
+      const c = cleanParty(r[2])
+      const pending = parseFloat(r[iPend]) || 0
+      const hasDate = (typeof a === 'number' && a > 30000) || a instanceof Date
       // Party header: name present, no date/ref/amount
       if (c && !hasDate && !b && pending === 0) {
-        curParty = c
-        curBills = 0
-        curOverdue = 0
+        curParty = c; curBills = 0; curOverdue = 0; curPdc = 0
         continue
       }
       // Detail bill row — per-bill overdue check:
@@ -240,18 +255,34 @@ export default function Accounts() {
       // Falls back to aging buckets (90+ days) if Due-on column is missing.
       if (hasDate && curParty) {
         curBills++
+        const billDate = serialToDate(a)
+        const due = iDue >= 0 ? serialToDate(r[iDue]) : null
+        const pdc = iPdc >= 0 ? (parseFloat(r[iPdc]) || 0) : 0
         let billOverdue = 0
-        if (dueOnIdx >= 0) {
-          const due = serialToDate(r[dueOnIdx])
-          if (due && due < today) billOverdue = pending
+        let days = 0
+        if (iDue >= 0) {
+          if (due && due < today) {
+            billOverdue = pending
+            days = Math.floor((today - due) / 86400000)
+          }
         } else {
           // Legacy fallback: 90+ aging buckets
-          billOverdue =
-            (parseFloat(r[7]) || 0) +
-            (parseFloat(r[8]) || 0) +
-            (parseFloat(r[9]) || 0)
+          billOverdue = (parseFloat(r[7]) || 0) + (parseFloat(r[8]) || 0) + (parseFloat(r[9]) || 0)
         }
         curOverdue += billOverdue
+        curPdc += pdc
+        bills.push({
+          party_name_raw: curParty,
+          bill_date: iso(billDate),
+          // kept verbatim apart from Tally's "bill no" noise word — this is the
+          // reference the customer quotes back when paying
+          bill_ref: b.replace(/^bill\s*no\.?:?\s*/i, '').trim() || b,
+          pending_inr: pending,
+          pdc_inr: pdc,
+          due_date: iso(due),
+          days_past_due: days,
+          is_overdue: billOverdue > 0,
+        })
         continue
       }
       // Per-party subtotal — finalize the current party. (Grand total row at end has curParty=null → skipped.)
@@ -260,14 +291,13 @@ export default function Accounts() {
           party_name_raw: curParty,
           outstanding_inr: pending,
           overdue_inr: curOverdue,
+          pdc_inr: curPdc,
           bill_count: curBills,
         })
-        curParty = null
-        curBills = 0
-        curOverdue = 0
+        curParty = null; curBills = 0; curOverdue = 0; curPdc = 0
       }
     }
-    return parties
+    return { parties, bills, error: '' }
   }
 
   function handlePayDragOver(e) { e.preventDefault(); setPayDragOver(true) }
@@ -285,11 +315,13 @@ export default function Accounts() {
         const ws = wb.Sheets[wb.SheetNames[0]]
         const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
         const parsed = parsePaymentsRows(raw)
-        if (!parsed.length) {
+        if (parsed.error) { setPayErrorMsg(parsed.error); return }
+        if (!parsed.parties.length) {
           setPayErrorMsg('Could not find any parties. Expected a Tally-style Bills Receivable export with columns: Date, Ref. No., Party\'s Name, Pending, <30, 30–60, 60–90, 90–120, 120–240, >240.')
           return
         }
-        setPayRows(parsed)
+        setPayRows(parsed.parties)
+        setPayBills(parsed.bills)
       } catch (err) {
         setPayErrorMsg('Could not read file: ' + (err.message || 'invalid XLS/XLSX'))
       }
@@ -310,7 +342,9 @@ export default function Accounts() {
         const { data, error } = await sb.from('customers').select('id,customer_name').range(from, from + PAGE - 1)
         if (error) throw error
         if (!data?.length) break
-        data.forEach(c => { if (c.customer_name) custMap.set(c.customer_name.trim().toLowerCase(), c.id) })
+        // Match on the same cleaned form used on the sheet side, so a stray
+        // double space or a Tally escape can't hide a real customer.
+        data.forEach(c => { if (c.customer_name) custMap.set(cleanParty(c.customer_name).toLowerCase(), c.id) })
         if (data.length < PAGE) break
         from += PAGE
       }
@@ -318,17 +352,20 @@ export default function Accounts() {
       setPayErrorMsg('Failed to load customer list for matching: ' + e.message)
       setPayPushing(false); return
     }
+    const matchOf = name => custMap.get(cleanParty(name).toLowerCase()) || null
 
     const now = new Date().toISOString()
     const rows = payRows.map(p => ({
       party_name_raw: p.party_name_raw,
-      customer_id: custMap.get(p.party_name_raw.trim().toLowerCase()) || null,
+      customer_id: matchOf(p.party_name_raw),
       outstanding_inr: p.outstanding_inr,
       overdue_inr: p.overdue_inr,
       bill_count: p.bill_count,
       imported_at: now,
     }))
     const matched = rows.filter(r => r.customer_id).length
+    setPayUnmatched(rows.filter(r => !r.customer_id)
+      .sort((a, b) => b.outstanding_inr - a.outstanding_inr))
 
     // Clear existing snapshot
     setPayProgress({ pct: 8, label: 'Clearing previous snapshot…' })
@@ -346,15 +383,55 @@ export default function Accounts() {
       setPayProgress({ pct: 10 + Math.round((done / rows.length) * 88), label: done + ' of ' + rows.length + ' parties uploaded…' })
     }
 
+    // ── Bill-level rows — what the customer statement is made of ──
+    // Tally is the source of truth, so this is a straight overwrite: wipe the
+    // previous upload and write this one. The run row carries the "as on" date
+    // the statement is stamped with; days_past_due is frozen against it, so a
+    // statement re-renders the same way tomorrow as it does today.
+    setPayProgress({ pct: 92, label: 'Writing bill-wise dues…' })
+    const asOn = new Date().toISOString().slice(0, 10)
+    let billsWritten = 0
+    try {
+      await sb.from('customer_dues_bills').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await sb.from('customer_dues_runs').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      const { data: run, error: runErr } = await sb.from('customer_dues_runs').insert({
+        as_on: asOn,
+        source_filename: payFileName || null,
+        party_count: rows.length,
+        bill_count: payBills.length,
+        total_outstanding_inr: payRows.reduce((s, p) => s + (p.outstanding_inr || 0), 0),
+        total_pdc_inr:         payRows.reduce((s, p) => s + (p.pdc_inr || 0), 0),
+        total_overdue_inr:     payRows.reduce((s, p) => s + (p.overdue_inr || 0), 0),
+        matched_party_count: matched,
+        is_current: true,
+      }).select('id').single()
+      if (runErr) throw runErr
+
+      const billRows = payBills.map(b => ({ ...b, run_id: run.id, customer_id: matchOf(b.party_name_raw) }))
+      for (let i = 0; i < billRows.length; i += 500) {
+        const { error } = await sb.from('customer_dues_bills').insert(billRows.slice(i, i + 500))
+        if (error) throw error
+        billsWritten += Math.min(500, billRows.length - i)
+        setPayProgress({ pct: 92 + Math.round((billsWritten / Math.max(1, billRows.length)) * 7),
+                         label: billsWritten + ' of ' + billRows.length + ' bills written…' })
+      }
+    } catch (e) {
+      // Party totals are already live; only the bill detail failed. Say exactly
+      // that rather than implying the whole import is broken.
+      setPayErrorMsg('Party totals imported, but bill-wise dues failed: ' + (e.message || e)
+        + ' — customer statements will be unavailable until this is re-uploaded.')
+      setPayPushing(false); return
+    }
+
     setPayPushing(false)
     setPayProgress({ pct: 100, label: 'Done — ' + rows.length + ' parties imported.' })
-    setPaySuccess({ text: rows.length + ' parties imported into Receivables snapshot', sub: matched + ' matched to Customer 360 · ' + (rows.length - matched) + ' unmatched (will not show on customer pages)' })
+    setPaySuccess({ text: rows.length + ' parties imported into Receivables snapshot', sub: matched + ' matched to Customer 360 · ' + (rows.length - matched) + ' unmatched (will not show on customer pages) · ' + billsWritten + ' bills available for statements' })
     setPayShowReset(true)
     loadPayStatus()
   }
 
   function resetPayUpload() {
-    setPayRows([]); setPayFileName(''); setPayErrorMsg(''); setPaySuccess(null)
+    setPayRows([]); setPayBills([]); setPayUnmatched([]); setPayFileName(''); setPayErrorMsg(''); setPaySuccess(null)
     setPayShowProgress(false); setPayProgress({ pct: 0, label: '' }); setPayShowReset(false)
     if (payFileInputRef.current) payFileInputRef.current.value = ''
   }
@@ -744,6 +821,35 @@ export default function Accounts() {
               {payShowReset && (
                 <div className="acc-reset-link"><button onClick={resetPayUpload}>Upload another file</button></div>
               )}
+            </div>
+          )}
+
+          {/* Unmatched parties — these carry dues but have no customer record, so
+              they appear on no Customer 360 page and get no statement. Most are
+              ledger heads (Gratuity Expenses, insurance, transporters) and belong
+              here; a real customer showing up in this list means the name differs
+              from the master. */}
+          {payUnmatched.length > 0 && (
+            <div className="acc-preview-card" style={{ marginTop: 20 }}>
+              <div className="acc-preview-header">
+                <h3>Not matched to a customer ({payUnmatched.length})</h3>
+                <span>₹{Math.round(payUnmatched.reduce((s, p) => s + p.outstanding_inr, 0)).toLocaleString('en-IN')} · no statement will be generated for these</span>
+              </div>
+              <div className="acc-preview-scroll">
+                <table className="acc-preview-table">
+                  <thead><tr><th>#</th><th>Party Name (as in Tally)</th><th>Bills</th><th>Outstanding (₹)</th></tr></thead>
+                  <tbody>
+                    {payUnmatched.map((p, i) => (
+                      <tr key={p.party_name_raw + i}>
+                        <td style={{ color:'var(--gray-400)' }}>{i + 1}</td>
+                        <td>{p.party_name_raw}</td>
+                        <td>{p.bill_count}</td>
+                        <td style={{ fontFamily:'var(--mono)', fontSize:12 }}>₹{Math.round(p.outstanding_inr).toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

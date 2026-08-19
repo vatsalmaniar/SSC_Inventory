@@ -451,3 +451,47 @@
   .c360-stats { display: grid; grid-template-columns: repeat(2, 1fr); }
   .c360-stat { min-width: 0; }
 }
+
+/* ── Pending Payment Due tab ───────────────────────────────────────────── */
+.c360-dues-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.c360-dues-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  background: white;
+}
+.c360-dues-tile.red   { background: #fef2f2; border-color: #fecaca; }
+.c360-dues-tile.green { background: #f0fdf4; border-color: #bbf7d0; }
+.c360-dues-label {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--gray-500);
+}
+.c360-dues-value {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-800);
+  letter-spacing: -0.3px;
+}
+.c360-dues-tile.red   .c360-dues-value { color: #b91c1c; }
+.c360-dues-tile.green .c360-dues-value { color: #15803d; }
+.c360-dues-sub { font-size: 11px; color: var(--gray-500); }
+.c360-dues-asof {
+  font-size: 11px;
+  color: var(--gray-400);
+  padding-bottom: 12px;
+}
+@media (max-width: 560px) {
+  .c360-dues-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

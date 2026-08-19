@@ -15,6 +15,7 @@ import '../styles/orderdetail.css'
 import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
 import { SpaList, SpaDrawer, fetchAgreements } from '../components/SpaPanel'
+import { summariseDues, buildDuesStatementHtml } from '../lib/duesStatement'
 
 const SALES_REPS = [
   'Aarth Joshi','Akash Devda','Ankit Dave','Bhavesh Patel','Darsh Chauhan',
@@ -102,6 +103,8 @@ export default function CustomerDetail() {
   const [visits, setVisits]           = useState([])
   const [quotes, setQuotes]           = useState([])
   const [payments, setPayments]       = useState(null)  // { outstanding_inr, overdue_inr } | null
+  const [dues, setDues]               = useState([])    // bill-wise rows from the last Tally upload
+  const [duesRun, setDuesRun]         = useState(null)  // { as_on, imported_at, source_filename }
   const [activeTab, setActiveTab]     = useState('summary')
   // Agreements with this customer — SALES side only. This page is used in front
   // of the customer, so no purchase price and no margin appear on it.
@@ -137,7 +140,7 @@ export default function CustomerDetail() {
     const custRes = await sb.from('customers').select('*').eq('id', id).single()
     if (!custRes.data) { navigate('/customers'); return }
 
-    const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes, quotesRes] = await Promise.all([
+    const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes, duesRes, duesRunRes, quotesRes] = await Promise.all([
       fetchAll((from, to) => sb.from('orders')
         .select('id,order_number,customer_name,status,order_type,order_items(qty,total_price,unit_price_after_disc,cancelled_qty,line_status),created_at,po_number,order_dispatches(delivered_at)')
         .eq('is_test', false)
@@ -162,6 +165,16 @@ export default function CustomerDetail() {
         .select('outstanding_inr,overdue_inr,imported_at')
         .eq('customer_id', id)
         .maybeSingle(),
+      // Bill-wise dues straight from the last Tally upload — the rows the
+      // Pending Payment Due tab and the customer statement are built from.
+      sb.from('customer_dues_bills')
+        .select('bill_date,bill_ref,pending_inr,pdc_inr,due_date,days_past_due,is_overdue')
+        .eq('customer_id', id)
+        .order('due_date', { ascending: true }),
+      sb.from('customer_dues_runs')
+        .select('as_on,imported_at,source_filename')
+        .eq('is_current', true)
+        .maybeSingle(),
       // Quotations are documents that NAME this customer — read them from the
       // quotes table, the way SAP lists sales documents by partner. Deriving
       // them from crm_opportunities.quotation_ref only worked while every quote
@@ -181,7 +194,22 @@ export default function CustomerDetail() {
     setVisits(visitsRes.data || [])
     setQuotes(quotesRes.data || [])
     setPayments(paymentsRes?.data || null)
+    setDues(duesRes?.data || [])
+    setDuesRun(duesRunRes?.data || null)
     setLoading(false)
+  }
+
+  // Statement of Dues — same HTML the (future) WhatsApp send will attach, so
+  // what accounts prints today is byte-for-byte what the customer receives later.
+  function printStatement() {
+    const w = window.open('', '_blank')
+    if (!w) { toast('Popup blocked — allow popups for this site and try again.'); return }
+    writeDoc(w, buildDuesStatementHtml({
+      customer,
+      partyName: customer?.customer_name,
+      bills: dues,
+      asOn: duesRun?.as_on,
+    }))
   }
 
   async function saveContact() {
@@ -574,6 +602,10 @@ ${oppsHTML}
     { key:'visits',        label:'Visits',        count: visits.length },
     { key:'quotations',    label:'Quotations',    count: quotationRows.length },
     ...(canSeePrices ? [{ key:'commercials', label:'Commercials', count: spas.length }] : []),
+    // Visible to everyone who can open Customer 360 (user decision, 2026-08-19):
+    // Outstanding/Overdue already show on Summary for all roles, and sales are
+    // the ones chasing collections.
+    { key:'dues', label:'Pending Payment Due', count: dues.length },
   ]
 
 
@@ -1142,6 +1174,104 @@ ${oppsHTML}
                 </div>
               </div>
             )}
+
+            {activeTab === 'dues' && (() => {
+              // Every figure here comes from summariseDues() — the same function
+              // the printed statement uses — so the page and the PDF can never
+              // disagree about what this customer owes.
+              const d = summariseDues(dues)
+              return (
+                <div className="c360-card">
+                  <div className="c360-card-header">
+                    <div className="c360-card-title">Pending Payment Due ({d.billCount})</div>
+                    {dues.length > 0 && (
+                      <button className="c360-btn c360-btn-primary" onClick={printStatement}>Statement PDF</button>
+                    )}
+                  </div>
+
+                  {!duesRun ? (
+                    <div className="c360-empty"><div className="c360-empty-icon">📄</div>
+                      No receivables uploaded yet. Accounts &rarr; Payments &rarr; upload the Tally Bills Receivable export.
+                    </div>
+                  ) : dues.length === 0 ? (
+                    <div className="c360-empty"><div className="c360-empty-icon">✅</div>
+                      No open bills as on {fmt(duesRun.as_on)}.
+                    </div>
+                  ) : (<>
+                    <div className="c360-card-body" style={{ paddingBottom: 0 }}>
+                      <div className="c360-dues-tiles">
+                        <div className="c360-dues-tile">
+                          <span className="c360-dues-label">Total Outstanding</span>
+                          <span className="c360-dues-value">{fmtINR(d.outstanding)}</span>
+                          <span className="c360-dues-sub">{d.billCount} open bills</span>
+                        </div>
+                        {d.hasPdc && (
+                          <div className="c360-dues-tile">
+                            <span className="c360-dues-label">Post-Dated Cheques</span>
+                            <span className="c360-dues-value">{fmtINR(d.pdc)}</span>
+                            <span className="c360-dues-sub">already in hand</span>
+                          </div>
+                        )}
+                        <div className="c360-dues-tile red">
+                          <span className="c360-dues-label">Overdue</span>
+                          <span className="c360-dues-value">{fmtINR(d.overdue)}</span>
+                          <span className="c360-dues-sub">{d.overdueCount} bills past due date</span>
+                        </div>
+                        <div className="c360-dues-tile green">
+                          <span className="c360-dues-label">Not Yet Due</span>
+                          <span className="c360-dues-value">{fmtINR(d.notDue)}</span>
+                          <span className="c360-dues-sub">within terms</span>
+                        </div>
+                        <div className="c360-dues-tile">
+                          <span className="c360-dues-label">Oldest Overdue</span>
+                          <span className="c360-dues-value">{d.oldest > 0 ? d.oldest + ' days' : '—'}</span>
+                          <span className="c360-dues-sub">past due date</span>
+                        </div>
+                      </div>
+                      <div className="c360-dues-asof">
+                        As per Tally upload of {fmt(duesRun.as_on)}
+                        {duesRun.source_filename ? ' · ' + duesRun.source_filename : ''}
+                      </div>
+                    </div>
+
+                    <table className="c360-table">
+                      <thead>
+                        <tr>
+                          <th>Bill No.</th>
+                          <th>Bill Date</th>
+                          <th>Due Date</th>
+                          <th style={{ textAlign:'center' }}>Days Overdue</th>
+                          {d.hasPdc && <th style={{ textAlign:'right' }}>Post-Dated</th>}
+                          <th style={{ textAlign:'right' }}>Amount Due</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dues.map((b, i) => (
+                          <tr key={(b.bill_ref || '') + i}>
+                            <td className="mono" style={{ fontWeight:600 }}>{(b.bill_ref || '—').toUpperCase()}</td>
+                            <td style={{ color:'var(--gray-500)', fontSize:12, whiteSpace:'nowrap' }}>{fmt(b.bill_date)}</td>
+                            <td style={{ color:'var(--gray-500)', fontSize:12, whiteSpace:'nowrap' }}>{fmt(b.due_date)}</td>
+                            <td style={{ textAlign:'center' }}>
+                              {b.is_overdue
+                                ? <span style={{ color:'#b91c1c', fontWeight:600 }}>{b.days_past_due}</span>
+                                : <span style={{ color:'var(--gray-400)', fontSize:12 }}>Within terms</span>}
+                            </td>
+                            {d.hasPdc && (
+                              <td style={{ textAlign:'right', color:'var(--gray-500)' }}>
+                                {b.pdc_inr ? fmtINR(b.pdc_inr) : '—'}
+                              </td>
+                            )}
+                            <td style={{ textAlign:'right', fontWeight:600 }}>
+                              {fmtINR((b.pending_inr || 0) - (b.pdc_inr || 0))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>)}
+                </div>
+              )
+            })()}
 
             {activeTab === 'quotations' && (
               <div className="c360-card">
