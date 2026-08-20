@@ -209,3 +209,21 @@ html, body { min-height: 100%; font-family: var(--font); color: var(--gray-900);
   animation: spin 0.75s linear infinite;
   flex-shrink: 0;
 }
+
+/* ── On/off switch — ONE definition shared across modules ──────────────────
+   People had its own `.switch` scoped to `.people-app`; anything outside that
+   shell (Customer 360, New Customer) could not use it. This is the same look,
+   unscoped. Use `.ssc-switch` everywhere; do not hand-roll another toggle. */
+.ssc-switch {
+  position: relative; width: 42px; height: 24px; border: 0; border-radius: 999px;
+  background: var(--gray-200); cursor: pointer; padding: 0; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.ssc-switch[data-on="1"] { background: #10b981; }
+.ssc-switch[disabled]    { cursor: not-allowed; opacity: 0.5; }
+.ssc-switch i {
+  position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: transform 0.15s;
+}
+.ssc-switch[data-on="1"] i { transform: translateX(18px); }

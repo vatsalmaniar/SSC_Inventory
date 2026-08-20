@@ -84,6 +84,9 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
     shipping_address: '',
     poc_name:       '',
     poc_no:         '',
+    whatsapp_no:    '',
+    whatsapp_name:  '',
+    whatsapp_auto:  false,
     poc_email:      '',
     director_name:  '',
     director_no:    '',
@@ -154,6 +157,7 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
     if (!form.poc_name.trim())            e.poc_name            = 'Required'
     if (!form.poc_no.trim())              e.poc_no              = 'Required'
     else if (!/^[6-9][0-9]{9}$/.test(form.poc_no.trim())) e.poc_no = 'Invalid mobile number (10 digits, starts with 6-9)'
+    if (form.whatsapp_no.trim() && !/^[6-9][0-9]{9}$/.test(form.whatsapp_no.trim())) e.whatsapp_no = 'Invalid mobile number (10 digits, starts with 6-9)'
     if (!form.poc_email.trim())           e.poc_email           = 'Required'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.poc_email.trim())) e.poc_email = 'Invalid email format'
     if (!form.director_name.trim())       e.director_name       = 'Required'
@@ -186,6 +190,9 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
         billing_address:  form.billing_address || null,
         shipping_address: form.shipping_address || null,
         poc_name:         form.poc_name || null,
+        whatsapp_no:      form.whatsapp_no.trim() ? '+91' + form.whatsapp_no.trim() : null,
+        whatsapp_name:    form.whatsapp_name.trim() || null,
+        whatsapp_auto:    !!(form.whatsapp_no.trim() && form.whatsapp_auto),
         poc_no:           form.poc_no || null,
         poc_email:        form.poc_email || null,
         director_name:    form.director_name || null,
@@ -336,6 +343,40 @@ export default function NewCustomerModal({ prefill = {}, onClose, onCreated }) {
               <div style={{ gridColumn:'span 2' }}>
                 <F label="Email" required err={errors.poc_email}>
                   <input style={inp('poc_email')} type="email" value={form.poc_email} onChange={e => set('poc_email', e.target.value)} placeholder="contact@company.com" />
+                </F>
+              </div>
+              {/* WhatsApp contact for dues statements — the POC above is usually
+                  the purchase contact, not whoever releases payment. */}
+              <F label="WhatsApp No." err={errors.whatsapp_no}>
+                <input style={inp('whatsapp_no')} value={form.whatsapp_no} placeholder="10-digit mobile"
+                  onChange={e => {
+                    const v = e.target.value
+                    // Entering a number means reminders are wanted; clearing it
+                    // switches them off (the DB refuses that pairing anyway).
+                    setForm(p => ({ ...p, whatsapp_no: v,
+                      whatsapp_auto: v.trim() ? (p.whatsapp_no.trim() ? p.whatsapp_auto : true) : false }))
+                  }} />
+              </F>
+              <F label="WhatsApp Name (optional)">
+                <input style={inp('whatsapp_name')} value={form.whatsapp_name}
+                  onChange={e => set('whatsapp_name', e.target.value)} placeholder="Person on this number" />
+              </F>
+              <div style={{ gridColumn:'span 2' }}>
+                <F label="Automatic WhatsApp Reminders">
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <button type="button" className="ssc-switch"
+                      data-on={form.whatsapp_auto ? '1' : '0'}
+                      disabled={!form.whatsapp_no.trim()}
+                      title={form.whatsapp_no.trim() ? '' : 'Add a WhatsApp number first'}
+                      onClick={() => setForm(p => ({ ...p, whatsapp_auto: !p.whatsapp_auto }))}>
+                      <i />
+                    </button>
+                    <span style={{ fontSize:12, color:'var(--gray-500)' }}>
+                      {!form.whatsapp_no.trim() ? 'Add a WhatsApp number to enable'
+                        : form.whatsapp_auto ? 'Statement of dues will be sent to this number'
+                        : 'Off — no reminders will be sent'}
+                    </span>
+                  </div>
                 </F>
               </div>
             </div>

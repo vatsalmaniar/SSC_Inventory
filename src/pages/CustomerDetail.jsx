@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { sb } from '../lib/supabase'
+import { sb, SUPABASE_URL } from '../lib/supabase'
 import { writeDoc } from '../lib/printDoc'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
@@ -16,6 +16,7 @@ import '../styles/customer360.css'
 import { friendlyError } from '../lib/errorMsg'
 import { SpaList, SpaDrawer, fetchAgreements } from '../components/SpaPanel'
 import { summariseDues, buildDuesStatementHtml } from '../lib/duesStatement'
+import { htmlToPdfBlob } from '../lib/htmlToPdf'
 
 const SALES_REPS = [
   'Aarth Joshi','Akash Devda','Ankit Dave','Bhavesh Patel','Darsh Chauhan',
@@ -105,6 +106,8 @@ export default function CustomerDetail() {
   const [payments, setPayments]       = useState(null)  // { outstanding_inr, overdue_inr } | null
   const [dues, setDues]               = useState([])    // bill-wise rows from the last Tally upload
   const [duesRun, setDuesRun]         = useState(null)  // { as_on, imported_at, source_filename }
+  const [waLog, setWaLog]             = useState([])    // reminder history for this customer
+  const [waSending, setWaSending]     = useState(false)
   const [activeTab, setActiveTab]     = useState('summary')
   // Agreements with this customer — SALES side only. This page is used in front
   // of the customer, so no purchase price and no margin appear on it.
@@ -140,7 +143,7 @@ export default function CustomerDetail() {
     const custRes = await sb.from('customers').select('*').eq('id', id).single()
     if (!custRes.data) { navigate('/customers'); return }
 
-    const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes, duesRes, duesRunRes, quotesRes] = await Promise.all([
+    const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes, duesRes, duesRunRes, waLogRes, quotesRes] = await Promise.all([
       fetchAll((from, to) => sb.from('orders')
         .select('id,order_number,customer_name,status,order_type,order_items(qty,total_price,unit_price_after_disc,cancelled_qty,line_status),created_at,po_number,order_dispatches(delivered_at)')
         .eq('is_test', false)
@@ -175,6 +178,11 @@ export default function CustomerDetail() {
         .select('as_on,imported_at,source_filename')
         .eq('is_current', true)
         .maybeSingle(),
+      sb.from('whatsapp_messages')
+        .select('sent_at,status,to_number,overdue_inr,error_message')
+        .eq('customer_id', id)
+        .order('sent_at', { ascending: false })
+        .limit(5),
       // Quotations are documents that NAME this customer — read them from the
       // quotes table, the way SAP lists sales documents by partner. Deriving
       // them from crm_opportunities.quotation_ref only worked while every quote
@@ -196,6 +204,7 @@ export default function CustomerDetail() {
     setPayments(paymentsRes?.data || null)
     setDues(duesRes?.data || [])
     setDuesRun(duesRunRes?.data || null)
+    setWaLog(waLogRes?.data || [])
     setLoading(false)
   }
 
@@ -210,6 +219,59 @@ export default function CustomerDetail() {
       bills: dues,
       asOn: duesRun?.as_on,
     }))
+  }
+
+  // Send the payment reminder. The PDF is built here, in the browser, from the
+  // same template the Statement PDF button prints — so what the customer
+  // receives is byte-for-byte what accounts can see. The Edge Function re-checks
+  // the opt-in and recomputes every amount server-side; nothing here is trusted.
+  async function sendWhatsAppReminder(force = false) {
+    if (waSending) return
+    const d = summariseDues(dues)
+    if (!force && !window.confirm(
+      `Send a payment reminder on WhatsApp?\n\n` +
+      `To: ${customer.whatsapp_name ? customer.whatsapp_name + ' · ' : ''}${customer.whatsapp_no}\n` +
+      `${customer.customer_name}\n\n` +
+      `Outstanding: ${fmtINR(d.outstanding)}\n` +
+      `Overdue: ${fmtINR(d.overdue)}\n` +
+      `${d.billCount} bills · statement as on ${fmt(duesRun?.as_on)}`)) return
+
+    setWaSending(true)
+    try {
+      const html = buildDuesStatementHtml({
+        customer, partyName: customer?.customer_name, bills: dues, asOn: duesRun?.as_on,
+      })
+      const { blob } = await htmlToPdfBlob(html, `Statement of Dues.pdf`)
+      if (!blob) { toast('Could not build the statement PDF.'); return }
+      const b64 = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = () => res(String(r.result).split(',')[1])
+        r.onerror = rej
+        r.readAsDataURL(blob)
+      })
+
+      const { data: { session } } = await sb.auth.getSession()
+      const resp = await fetch(SUPABASE_URL + '/functions/v1/send-whatsapp-statement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ customer_id: id, pdf_base64: b64, force }),
+      })
+      const out = await resp.json()
+      if (out.needs_confirm) {
+        if (window.confirm(out.error + '\n\nSend another one anyway?')) { setWaSending(false); return sendWhatsAppReminder(true) }
+        return
+      }
+      if (!out.ok) { toast(out.error || 'Could not send the reminder.'); return }
+      toast('Payment reminder sent on WhatsApp')
+      const { data: fresh } = await sb.from('whatsapp_messages')
+        .select('sent_at,status,to_number,overdue_inr,error_message')
+        .eq('customer_id', id).order('sent_at', { ascending: false }).limit(5)
+      setWaLog(fresh || [])
+    } catch (e) {
+      toast(friendlyError(e, 'Could not send the reminder.'))
+    } finally {
+      setWaSending(false)
+    }
   }
 
   async function saveContact() {
@@ -270,6 +332,19 @@ export default function CustomerDetail() {
     if (editData.director_no && !isValidPhone(dirSplit.dial, dirSplit.digits)) { toast('Invalid Director phone format'); return }
     if (editData.poc_email && !isValidEmail(editData.poc_email)) { toast('Invalid POC email format'); return }
     if (editData.director_email && !isValidEmail(editData.director_email)) { toast('Invalid Director email format'); return }
+    const waSplit = splitPhone(editData.whatsapp_no || '')
+    if (editData.whatsapp_no && !isValidPhone(waSplit.dial, waSplit.digits)) { toast('Invalid WhatsApp number format'); return }
+    // The DB refuses this combination too — catching it here gives a readable
+    // message instead of a raw constraint violation.
+    if (editData.whatsapp_auto && !editData.whatsapp_no) { toast('Add a WhatsApp number before turning reminders on'); return }
+    // Two customers sharing one WhatsApp number means one person receives two
+    // statements. Legitimate for group companies, so warn rather than block.
+    if (editData.whatsapp_no && editData.whatsapp_no !== customer.whatsapp_no) {
+      const { data: dup } = await sb.from('customers')
+        .select('customer_name').eq('whatsapp_no', editData.whatsapp_no).neq('id', id).limit(1)
+      if (dup?.length && !window.confirm(
+        `${dup[0].customer_name} already uses this WhatsApp number.\n\nThat contact will receive a separate statement for each customer. Save anyway?`)) return
+    }
     setSaving(true)
     // Normalise tax IDs on save — GST and PAN are uppercase per Indian tax spec;
     // stray whitespace/case defeats every dedup + join elsewhere in the app.
@@ -292,6 +367,9 @@ export default function CustomerDetail() {
       poc_name:         editData.poc_name || null,
       poc_no:           editData.poc_no || null,
       poc_email:        editData.poc_email || null,
+      whatsapp_no:      editData.whatsapp_no || null,
+      whatsapp_name:    (editData.whatsapp_name || '').trim() || null,
+      whatsapp_auto:    !!(editData.whatsapp_no && editData.whatsapp_auto),
       director_name:    editData.director_name || null,
       director_no:      editData.director_no || null,
       director_email:   editData.director_email || null,
@@ -821,6 +899,29 @@ ${oppsHTML}
                               <label>POC Email</label>
                               <div className="val">{customer.poc_email ? <a href={'mailto:'+customer.poc_email} style={{ color:'#1a73e8', textDecoration:'none' }}>{customer.poc_email}</a> : '—'}</div>
                             </div>
+                            <div className="c360-field">
+                              <label>WhatsApp No.</label>
+                              <div className="val">
+                                {customer.whatsapp_no
+                                  ? <a href={'https://wa.me/' + customer.whatsapp_no.replace(/\D/g,'')}
+                                       target="_blank" rel="noopener noreferrer"
+                                       style={{ color:'#059669', textDecoration:'none' }}>
+                                      <PhoneDisplay value={customer.whatsapp_no}/>
+                                    </a>
+                                  : '—'}
+                                {customer.whatsapp_name ? <span style={{ color:'var(--gray-500)', fontSize:12 }}> · {customer.whatsapp_name}</span> : ''}
+                              </div>
+                            </div>
+                            <div className="c360-field">
+                              <label>Auto WhatsApp Reminders</label>
+                              <div className="val">
+                                {customer.whatsapp_auto
+                                  ? <span style={{ color:'#047857', fontWeight:600 }}>On</span>
+                                  : <span style={{ color:'var(--gray-400)' }}>
+                                      Off{customer.whatsapp_no ? '' : ' — no number'}
+                                    </span>}
+                              </div>
+                            </div>
                           </div>
 
                           <div className="c360-section-label">Director / Decision Maker</div>
@@ -1185,7 +1286,31 @@ ${oppsHTML}
                   <div className="c360-card-header">
                     <div className="c360-card-title">Pending Payment Due ({d.billCount})</div>
                     {dues.length > 0 && (
-                      <button className="c360-btn c360-btn-primary" onClick={printStatement}>Statement PDF</button>
+                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        <button className="c360-btn" onClick={printStatement}>Statement PDF</button>
+                        {/* Admin only (user decision, 2026-08-20). The Edge Function
+                            enforces the same rule, so a stale page cannot send. */}
+                        {userRole === 'admin' && (() => {
+                          // Reminders are for OVERDUE customers only — a customer
+                          // inside their credit terms has done nothing wrong. The
+                          // Edge Function enforces the same rule server-side.
+                          const why = !customer.whatsapp_no
+                            ? 'No WhatsApp number on file for this customer'
+                            : !customer.whatsapp_auto
+                              ? 'Auto reminders are off for this customer'
+                              : d.overdue <= 0
+                                ? 'Nothing overdue — this customer is within terms'
+                                : ''
+                          return (
+                            <button className="c360-btn c360-btn-primary"
+                              disabled={!!why || waSending}
+                              title={why}
+                              onClick={() => sendWhatsAppReminder(false)}>
+                              {waSending ? 'Sending…' : 'Send WhatsApp Reminder'}
+                            </button>
+                          )
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -1231,6 +1356,15 @@ ${oppsHTML}
                       <div className="c360-dues-asof">
                         As per Tally upload of {fmt(duesRun.as_on)}
                         {duesRun.source_filename ? ' · ' + duesRun.source_filename : ''}
+                        {waLog.length > 0 && (
+                          <> · Last reminder {fmt(waLog[0].sent_at)}{' '}
+                            <span style={{ color: waLog[0].status === 'failed' ? '#b91c1c' : '#047857', fontWeight:600 }}>
+                              {waLog[0].status}
+                            </span>
+                            {waLog[0].status === 'failed' && waLog[0].error_message
+                              ? <span style={{ color:'#b91c1c' }}> — {waLog[0].error_message}</span> : ''}
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -1569,6 +1703,51 @@ function EditForm({ editData, setEditData }) {
       <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.7px', margin:'12px 0 8px' }}>Point of Contact</div>
       <div className="od-edit-row">{inp('POC Name','poc_name')}{phn('POC Phone','poc_no')}</div>
       <div className="od-edit-row"><div style={{ flex:1 }}>{emailInp('POC Email','poc_email')}</div><div style={{ flex:1 }}></div></div>
+
+      {/* WhatsApp contact — deliberately separate from the POC above. The POC is
+          usually the purchase contact; dues statements need whoever handles
+          payments, often a different person on a different number. */}
+      <div className="od-edit-row">
+        <div className="od-edit-field">
+          <label>WhatsApp No.</label>
+          <PhoneInput dial={splitPhone(editData.whatsapp_no || '').dial}
+            digits={splitPhone(editData.whatsapp_no || '').digits}
+            onChange={({ dial: d, digits: dg }) => {
+              const v = dg ? `${d}${dg}` : ''
+              // The number only ever gets entered so statements can go out, so
+              // switch reminders on with it. Clearing it forces the switch off —
+              // a DB CHECK refuses an opt-in with nothing to send to anyway.
+              setEditData(p => ({
+                ...p,
+                whatsapp_no: v,
+                whatsapp_auto: v ? (p.whatsapp_no ? p.whatsapp_auto : true) : false,
+              }))
+            }}/>
+        </div>
+        {inp('WhatsApp Name (optional)','whatsapp_name','text','Person on this number')}
+      </div>
+      <div className="od-edit-row">
+        <div className="od-edit-field" style={{ flex:1 }}>
+          <label>Automatic WhatsApp Reminders</label>
+          <div style={{ display:'flex', alignItems:'center', gap:10, paddingTop:4 }}>
+            <button type="button" className="ssc-switch"
+              data-on={editData.whatsapp_auto ? '1' : '0'}
+              disabled={!editData.whatsapp_no}
+              title={editData.whatsapp_no ? '' : 'Add a WhatsApp number first'}
+              onClick={() => setEditData(p => ({ ...p, whatsapp_auto: !p.whatsapp_auto }))}>
+              <i />
+            </button>
+            <span style={{ fontSize:12, color:'var(--gray-500)' }}>
+              {!editData.whatsapp_no
+                ? 'Add a WhatsApp number to enable'
+                : editData.whatsapp_auto
+                  ? 'Statement of dues will be sent to this number'
+                  : 'Off — no reminders will be sent'}
+            </span>
+          </div>
+        </div>
+        <div style={{ flex:1 }}></div>
+      </div>
 
       <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.7px', margin:'12px 0 8px' }}>Director / Decision Maker</div>
       <div className="od-edit-row">{inp('Director Name','director_name')}{phn('Director Phone','director_no')}</div>

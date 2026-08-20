@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import PeopleAvatar from '../components/PeopleAvatar'
-import { fmt } from '../lib/fmt'
+import { fmt, fmtDateTime } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
+import ReminderRunModal from '../components/ReminderRunModal'
 import '../styles/orders-redesign.css'
 
 const PAGE_SIZE = 50
@@ -30,6 +31,23 @@ export default function CustomerMaster() {
   const [pending, setPending] = useState([])
   const [creditCheck, setCreditCheck] = useState([])
   const [userRole, setUserRole] = useState('')
+  const [showReminders, setShowReminders] = useState(false)
+  const [lastBulk, setLastBulk] = useState(null)   // { sent_at, n } of the last bulk run
+
+  // "When did we last do a bulk run" — a run writes one row per customer, so
+  // take the newest and count everything sent within an hour of it.
+  async function loadLastBulk() {
+    const { data } = await sb.from('whatsapp_messages')
+      .select('sent_at').eq('source', 'bulk')
+      .order('sent_at', { ascending: false }).limit(1)
+    if (!data?.length) { setLastBulk(null); return }
+    const at = data[0].sent_at
+    const from = new Date(new Date(at).getTime() - 60 * 60 * 1000).toISOString()
+    const { count } = await sb.from('whatsapp_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('source', 'bulk').gte('sent_at', from)
+    setLastBulk({ sent_at: at, n: count || 0 })
+  }
   const [reps, setReps] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('approved')
@@ -44,7 +62,7 @@ export default function CustomerMaster() {
   const [filterType, setFilterType] = useState('')
   const debounceRef = useRef(null)
 
-  useEffect(() => { init() }, [])
+  useEffect(() => { init(); loadLastBulk() }, [])
   useEffect(() => {
     const q = new URLSearchParams(location.search).get('search')
     if (q) { setSearch(q); loadCustomers({ q, p:1 }) }
@@ -270,6 +288,23 @@ export default function CustomerMaster() {
                 {downloading ? 'Exporting…' : 'Summary'}
               </button>
             </div>
+            {/* Bulk payment reminders — admin only, same gate as the per-customer
+                button on Customer 360 and the Edge Function behind both. */}
+            {userRole === 'admin' && (
+              <div className="cm-reminder-wrap">
+                <button className="o-dl-btn" onClick={() => setShowReminders(true)} title="WhatsApp payment reminders">
+                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                  Reminders
+                </button>
+                {/* Twice-weekly cadence — knowing when the last run went out is
+                    what stops a second one going the same afternoon. */}
+                <div className="cm-reminder-last">
+                  {lastBulk
+                    ? <>Last run {fmtDateTime(lastBulk.sent_at)} · {lastBulk.n} sent</>
+                    : <>No bulk run yet</>}
+                </div>
+              </div>
+            )}
             <button className="btn-primary" onClick={() => navigate('/customers/new')}>
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
               New Customer
@@ -420,6 +455,7 @@ export default function CustomerMaster() {
           </div>
         )}
       </div>
+      {showReminders && <ReminderRunModal onClose={() => setShowReminders(false)} onSent={loadLastBulk} />}
     </Layout>
   )
 }
