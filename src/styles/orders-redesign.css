@@ -520,3 +520,9 @@
   .cm-reminders { padding: 6px 10px; }
   .cm-rem-sub { display: none; }
 }
+/* Reminders button while a server-side run is in flight */
+.cm-reminders.sending { border-color: #bfdbfe; background: #eff6ff; }
+.cm-reminders.sending .cm-rem-icon  { color: #1a73e8; }
+.cm-reminders.sending .cm-rem-title { color: #1d4ed8; }
+.cm-rem-bar { display: block; height: 3px; border-radius: 999px; background: #dbeafe; margin-top: 4px; overflow: hidden; }
+.cm-rem-bar > span { display: block; height: 100%; background: #1a73e8; transition: width 0.4s; }

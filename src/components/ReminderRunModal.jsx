@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { sb, SUPABASE_URL } from '../lib/supabase'
 import { fmt, fmtMoney } from '../lib/fmt'
 import { summariseDues, buildDuesStatementHtml } from '../lib/duesStatement'
 import { htmlToPdfBlob } from '../lib/htmlToPdf'
 import Loading from '../components/Loading'
 import { toast } from '../lib/toast'
+import { friendlyError } from '../lib/errorMsg'
 
 // Bulk WhatsApp payment reminders.
 //
@@ -24,12 +25,47 @@ export default function ReminderRunModal({ onClose, onSent }) {
   const [picked, setPicked]     = useState(() => new Set())
   const [running, setRunning]   = useState(false)
   const [done, setDone]         = useState(null)     // { sent, failed, skipped }
-  const [progress, setProgress] = useState({ i: 0, n: 0, label: '' })
   const [results, setResults]   = useState({})       // customerId -> 'sent' | error text
   const [asOn, setAsOn]         = useState(null)    // statement date of the current dues run
-  const abortRef = useRef(false)
+  const [jobId, setJobId]       = useState(null)
+  const [job, setJob]           = useState(null)    // live job row while a run is in flight
+  const [itemStatus, setItemStatus] = useState({})  // customer_id -> 'sent' | 'failed' | 'skipped'
 
   useEffect(() => { load() }, [])
+
+  // Watch the job while this window happens to be open. Closing it does not
+  // stop anything — the server owns the run.
+  useEffect(() => {
+    if (!jobId) return
+    let alive = true
+    const tick = async () => {
+      const [{ data }, { data: its }] = await Promise.all([
+        sb.from('whatsapp_reminder_jobs').select('*').eq('id', jobId).maybeSingle(),
+        sb.from('whatsapp_reminder_job_items').select('customer_id,status,error').eq('job_id', jobId).neq('status', 'pending'),
+      ])
+      if (!alive || !data) return
+      setJob(data)
+      if (its) setItemStatus(Object.fromEntries(its.map(i => [i.customer_id, i.status === 'sent' ? 'sent' : (i.error || i.status)])))
+      if (['done', 'stopped', 'failed'].includes(data.status)) {
+        setRunning(false)
+        setDone({ sent: data.sent, failed: data.failed, stopped: data.status === 'stopped' })
+        if (data.sent && !data.failed) toast(`${data.sent} payment reminder${data.sent > 1 ? 's' : ''} sent`, 'success')
+        else if (data.sent) toast(`${data.sent} sent · ${data.failed} failed`, 'warning')
+        else if (data.failed) toast(`All ${data.failed} failed to send`, 'error')
+        if (onSent) onSent()
+        return
+      }
+      if (alive) setTimeout(tick, 2500)
+    }
+    tick()
+    return () => { alive = false }
+  }, [jobId])
+
+  // Pick up a run that is already going, started from another tab or session.
+  useEffect(() => {
+    sb.from('whatsapp_reminder_jobs').select('*').in('status', ['queued','running']).maybeSingle()
+      .then(({ data }) => { if (data) { setJobId(data.id); setJob(data); setRunning(true) } })
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -69,6 +105,8 @@ export default function ReminderRunModal({ onClose, onSent }) {
     setPicked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
+  // The run happens on the server now. This starts it and then watches — the
+  // browser can be closed the moment it is queued, which is the whole point.
   async function run() {
     const list = rows.filter(r => picked.has(r.customer.id))
     if (!list.length) return
@@ -77,61 +115,38 @@ export default function ReminderRunModal({ onClose, onSent }) {
       `Send WhatsApp payment reminders to ${list.length} customer${list.length > 1 ? 's' : ''}?\n\n` +
       `Total overdue: ${fmtMoney(totalOverdue)}\n` +
       `Statement as on ${fmt(asOn)}\n\n` +
-      `Each customer receives their own statement PDF. This cannot be undone.`)) return
+      `Each customer receives their own statement PDF. This runs on the server — ` +
+      `you can close this window once it starts.`)) return
 
-    setRunning(true); abortRef.current = false
-    const res = {}
-    let sent = 0, failed = 0
-    for (let i = 0; i < list.length; i++) {
-      if (abortRef.current) break
-      const r = list[i]
-      setProgress({ i: i + 1, n: list.length, label: r.customer.customer_name })
-      try {
-        // Fetched here, not upfront — one customer's bills, at the moment we
-        // need them, so opening this modal stays instant.
-        const [{ data: full }, { data: bills }] = await Promise.all([
-          sb.from('customers')
-            .select('customer_name,customer_id,gst,credit_terms,poc_name,account_owner,billing_address')
-            .eq('id', r.customer.id).maybeSingle(),
-          sb.from('customer_dues_bills')
-            .select('bill_date,bill_ref,pending_inr,pdc_inr,due_date,days_past_due,is_overdue')
-            .eq('customer_id', r.customer.id).order('due_date', { ascending: true }),
-        ])
-        if (!bills?.length) throw new Error('No open bills')
-        const html = buildDuesStatementHtml({
-          customer: { ...(full || {}), ...r.customer },
-          partyName: r.customer.customer_name,
-          bills, asOn,
-        })
-        const { blob } = await htmlToPdfBlob(html, 'Statement of Dues.pdf')
-        if (!blob) throw new Error('Could not build the statement PDF')
-        const b64 = await new Promise((ok, no) => {
-          const fr = new FileReader()
-          fr.onload = () => ok(String(fr.result).split(',')[1])
-          fr.onerror = no
-          fr.readAsDataURL(blob)
-        })
-        const { data: { session } } = await sb.auth.getSession()
-        const resp = await fetch(SUPABASE_URL + '/functions/v1/send-whatsapp-statement', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ customer_id: r.customer.id, pdf_base64: b64, force: true, source: 'bulk' }),
-        })
-        const out = await resp.json()
-        if (out.ok) { res[r.customer.id] = 'sent'; sent++ }
-        else { res[r.customer.id] = out.error || 'Failed'; failed++ }
-      } catch (e) {
-        res[r.customer.id] = e?.message || 'Failed'; failed++
-      }
-      setResults({ ...res })
-      if (i < list.length - 1) await new Promise(t => setTimeout(t, GAP_MS))
+    setRunning(true)
+    try {
+      const { data: { session } } = await sb.auth.getSession()
+      const resp = await fetch(SUPABASE_URL + '/functions/v1/run-reminder-job', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ action: 'start', customer_ids: list.map(r => r.customer.id) }),
+      })
+      const out = await resp.json()
+      if (!out.ok) { toast(out.error || 'Could not start the run.', 'error'); setRunning(false); return }
+      if (out.already_running) toast('A run is already in progress.', 'warning')
+      else toast(`Queued ${out.total} reminders — running in the background`, 'success')
+      setJobId(out.job_id || out.job?.id || null)
+      if (onSent) onSent()
+    } catch (e) {
+      toast(friendlyError(e, 'Could not start the run.'), 'error')
+      setRunning(false)
     }
-    setDone({ sent, failed, stopped: abortRef.current })
-    setRunning(false)
-    if (sent && !failed)      toast(`${sent} payment reminder${sent > 1 ? 's' : ''} sent on WhatsApp`, 'success')
-    else if (sent && failed)  toast(`${sent} sent · ${failed} failed`, 'warning')
-    else if (failed)          toast(`All ${failed} failed to send`, 'error')
-    if (onSent) onSent()
+  }
+
+  async function stopRun() {
+    if (!window.confirm('Stop the run? Messages already sent cannot be recalled.')) return
+    const { data: { session } } = await sb.auth.getSession()
+    await fetch(SUPABASE_URL + '/functions/v1/run-reminder-job', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ action: 'stop' }),
+    })
+    toast('Stopping after the current message', 'warning')
   }
 
   const chosenCount = rows.filter(r => picked.has(r.customer.id)).length
@@ -189,7 +204,7 @@ export default function ReminderRunModal({ onClose, onSent }) {
               </thead>
               <tbody>
                 {rows.map(r => {
-                  const st = results[r.customer.id]
+                  const st = itemStatus[r.customer.id] || results[r.customer.id]
                   return (
                     <tr key={r.customer.id} className={st === 'sent' ? 'ok' : st ? 'bad' : ''}>
                       <td>
@@ -222,9 +237,13 @@ export default function ReminderRunModal({ onClose, onSent }) {
 
           {running && (
             <div className="rr-progress">
-              <div className="rr-bar"><div style={{ width: `${(progress.i / Math.max(1, progress.n)) * 100}%` }} /></div>
+              <div className="rr-bar">
+                <div style={{ width: `${(((job?.sent || 0) + (job?.failed || 0)) / Math.max(1, job?.total || 1)) * 100}%` }} />
+              </div>
               <div className="rr-progress-label">
-                Sending {progress.i} of {progress.n} — {progress.label}
+                Sending {(job?.sent || 0) + (job?.failed || 0)} of {job?.total || '…'}
+                {job?.failed ? ` · ${job.failed} failed` : ''}
+                {' — running on the server, you can close this window'}
               </div>
             </div>
           )}
@@ -236,8 +255,10 @@ export default function ReminderRunModal({ onClose, onSent }) {
           )}
 
           <div className="rr-foot">
-            {running ? (
-              <button className="rr-btn" onClick={() => { abortRef.current = true }}>Stop after current</button>
+            {running ? (<>
+              <button className="rr-btn" onClick={onClose}>Close (keeps running)</button>
+              <button className="rr-btn" onClick={stopRun}>Stop run</button>
+            </>
             ) : done ? (
               <button className="rr-btn rr-primary" onClick={onClose}>Close</button>
             ) : (<>

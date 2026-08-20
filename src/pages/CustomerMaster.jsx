@@ -49,6 +49,7 @@ export default function CustomerMaster() {
   const [showReminders, setShowReminders] = useState(false)
   const [lastBulk, setLastBulk] = useState(null)   // { sent_at, n } of the last bulk run
   const [queue, setQueue] = useState(null)         // { n, overdue } — prefetched so the modal opens instantly
+  const [liveJob, setLiveJob] = useState(null)    // a run in flight, started by anyone
 
   // "When did we last do a bulk run" — a run writes one row per customer, so
   // take the newest and count everything sent within an hour of it.
@@ -72,6 +73,15 @@ export default function CustomerMaster() {
       n: due.length,
       overdue: due.reduce((s, r) => s + (Number(r.overdue) || 0), 0),
     })
+  }
+
+  // A run lives on the server, so it shows up here even if someone else started
+  // it, or the tab that started it has since been closed.
+  async function loadLiveJob() {
+    const { data } = await sb.from('whatsapp_reminder_jobs')
+      .select('id,status,total,sent,failed').in('status', ['queued','running']).maybeSingle()
+    setLiveJob(data || null)
+    return data
   }
 
   async function loadLastBulk() {
@@ -100,7 +110,18 @@ export default function CustomerMaster() {
   const [filterType, setFilterType] = useState('')
   const debounceRef = useRef(null)
 
-  useEffect(() => { init(); loadLastBulk(); loadQueue() }, [])
+  useEffect(() => { init(); loadLastBulk(); loadQueue(); loadLiveJob() }, [])
+
+  // Poll only while something is actually running — no idle chatter at a
+  // database that a daily cron once knocked over.
+  useEffect(() => {
+    if (!liveJob) return
+    const t = setInterval(async () => {
+      const j = await loadLiveJob()
+      if (!j) { clearInterval(t); loadLastBulk(); loadQueue() }
+    }, 4000)
+    return () => clearInterval(t)
+  }, [liveJob?.id])
   useEffect(() => {
     const q = new URLSearchParams(location.search).get('search')
     if (q) { setSearch(q); loadCustomers({ q, p:1 }) }
@@ -330,24 +351,33 @@ export default function CustomerMaster() {
                 button on Customer 360 and the Edge Function behind both. */}
             {userRole === 'admin' && (
               <button
-                className={'cm-reminders' + (queue?.n ? ' due' : queue ? ' clear' : '')}
+                className={'cm-reminders' + (liveJob ? ' sending' : queue?.n ? ' due' : queue ? ' clear' : '')}
                 onClick={() => setShowReminders(true)}
-                disabled={queue === null}
-                title={queue === null ? 'Checking who is due…'
+                disabled={queue === null && !liveJob}
+                title={liveJob ? 'A reminder run is in progress'
+                      : queue === null ? 'Checking who is due…'
                       : queue.n ? `${queue.n} customers overdue and not reminded in the last 3 days`
                       : 'Everyone overdue has been reminded recently'}>
                 <svg className="cm-rem-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
                 <span className="cm-rem-text">
                   <span className="cm-rem-title">
-                    {queue === null ? 'Reminders' : queue.n ? 'Send reminders' : 'All caught up'}
+                    {liveJob ? `Sending ${(liveJob.sent || 0) + (liveJob.failed || 0)} of ${liveJob.total}`
+                      : queue === null ? 'Reminders'
+                      : queue.n ? 'Send reminders' : 'All caught up'}
                   </span>
                   <span className="cm-rem-sub">
-                    {queue === null ? 'checking…'
+                    {liveJob ? 'running on the server'
+                      : queue === null ? 'checking…'
                       : lastBulk ? `Last run ${relTime(lastBulk.sent_at)} · ${lastBulk.n} sent`
                       : 'No run yet'}
                   </span>
+                  {liveJob && (
+                    <span className="cm-rem-bar">
+                      <span style={{ width: `${(((liveJob.sent || 0) + (liveJob.failed || 0)) / Math.max(1, liveJob.total)) * 100}%` }} />
+                    </span>
+                  )}
                 </span>
-                {queue?.n ? <span className="cm-rem-badge">{queue.n}</span> : null}
+                {!liveJob && queue?.n ? <span className="cm-rem-badge">{queue.n}</span> : null}
               </button>
             )}
             <button className="btn-primary" onClick={() => navigate('/customers/new')}>
@@ -500,7 +530,7 @@ export default function CustomerMaster() {
           </div>
         )}
       </div>
-      {showReminders && <ReminderRunModal onClose={() => setShowReminders(false)} onSent={() => { loadLastBulk(); loadQueue() }} />}
+      {showReminders && <ReminderRunModal onClose={() => setShowReminders(false)} onSent={() => { loadLastBulk(); loadQueue(); loadLiveJob() }} />}
     </Layout>
   )
 }
