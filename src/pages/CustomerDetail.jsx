@@ -4,7 +4,7 @@ import { sb, SUPABASE_URL } from '../lib/supabase'
 import { writeDoc } from '../lib/printDoc'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
-import { fmt, fmtMoneyFull } from '../lib/fmt'
+import { fmt, fmtMoneyFull, fmtDateTime } from '../lib/fmt'
 import { ordersTotalValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
@@ -86,6 +86,8 @@ function statusLabel(s) {
   }
   return map[s] || s?.replace(/_/g, ' ')
 }
+
+const WA_STATUS_COLOR = { sent:'#1d4ed8', delivered:'#047857', read:'#047857', failed:'#b91c1c', queued:'#b45309' }
 
 export default function CustomerDetail() {
   const { id } = useParams()
@@ -179,10 +181,10 @@ export default function CustomerDetail() {
         .eq('is_current', true)
         .maybeSingle(),
       sb.from('whatsapp_messages')
-        .select('sent_at,status,to_number,overdue_inr,error_message')
+        .select('sent_at,status,to_number,to_name,overdue_inr,error_message,delivered_at,read_at,source')
         .eq('customer_id', id)
         .order('sent_at', { ascending: false })
-        .limit(5),
+        .limit(20),
       // Quotations are documents that NAME this customer — read them from the
       // quotes table, the way SAP lists sales documents by partner. Deriving
       // them from crm_opportunities.quotation_ref only worked while every quote
@@ -1402,6 +1404,45 @@ ${oppsHTML}
                         ))}
                       </tbody>
                     </table>
+
+                    {/* What was sent, and what came back. Delivery status only
+                        exists for messages sent after the webhook went live —
+                        earlier ones stay at 'sent' forever. */}
+                    {waLog.length > 0 && (
+                      <div className="c360-card-body" style={{ borderTop:'1px solid var(--gray-100)' }}>
+                        {waLog.length > 0 && (<>
+                          <div className="c360-section-label">WhatsApp Reminders ({waLog.length})</div>
+                          <table className="c360-table" style={{ marginBottom: 0 }}>
+                            <thead><tr>
+                              <th>Sent</th><th>To</th><th>Status</th>
+                              <th style={{ textAlign:'right' }}>Overdue then</th><th>By</th>
+                            </tr></thead>
+                            <tbody>
+                              {waLog.map((m, i) => (
+                                <tr key={m.sent_at + i}>
+                                  <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(m.sent_at)}</td>
+                                  <td className="mono" style={{ fontSize:12 }}>
+                                    {m.to_number}{m.to_name ? <div style={{ color:'var(--gray-400)', fontSize:11 }}>{m.to_name}</div> : null}
+                                  </td>
+                                  <td>
+                                    <span style={{ fontWeight:600, color: WA_STATUS_COLOR[m.status] || 'var(--gray-500)' }}>
+                                      {m.status}
+                                    </span>
+                                    {m.read_at ? <div style={{ fontSize:11, color:'var(--gray-400)' }}>read {fmtDateTime(m.read_at)}</div>
+                                      : m.delivered_at ? <div style={{ fontSize:11, color:'var(--gray-400)' }}>delivered {fmtDateTime(m.delivered_at)}</div>
+                                      : null}
+                                    {m.error_message ? <div style={{ fontSize:11, color:'#b91c1c' }}>{m.error_message}</div> : null}
+                                  </td>
+                                  <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR(m.overdue_inr)}</td>
+                                  <td style={{ fontSize:12, color:'var(--gray-500)' }}>{m.source === 'bulk' ? 'Bulk run' : 'Manual'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </>)}
+
+                      </div>
+                    )}
                   </>)}
                 </div>
               )

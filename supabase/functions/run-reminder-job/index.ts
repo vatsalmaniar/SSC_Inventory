@@ -96,6 +96,34 @@ serve(async (req) => {
       return await processBatch(sb, String(body.job_id || ''), H)
     }
 
+    // ── SCHEDULED ── pg_cron, twice a week at noon. Authenticated by the job
+    // secret, not a user session, so it carries its own guard rails.
+    if (action === 'scheduled') {
+      if (!JOB_SECRET || body.secret !== JOB_SECRET) return fail('Not allowed.', 403)
+      if (!WA_TOKEN) return await skip(sb, 'WhatsApp is not configured', H)
+
+      // The dues come from a Tally sheet somebody uploads by hand. Running on
+      // yesterday's sheet would dun customers who have paid since — statements
+      // listing bills they have already settled. A missed Monday is cheaper.
+      const { data: run } = await sb.from('customer_dues_runs')
+        .select('as_on').eq('is_current', true).maybeSingle()
+      const today = new Date().toISOString().slice(0, 10)
+      if (!run?.as_on) return await skip(sb, 'no receivables uploaded yet', H)
+      if (run.as_on !== today) {
+        return await skip(sb, `receivables are from ${run.as_on}, not today — nobody uploaded this morning`, H)
+      }
+
+      const { data: busy } = await sb.from('whatsapp_reminder_jobs')
+        .select('id').in('status', ['queued','running']).maybeSingle()
+      if (busy) return await skip(sb, 'a run is already in progress', H)
+
+      const queued = await queueRun(sb, null, run.as_on)
+      if (!queued.ok) return await skip(sb, queued.error!, H)
+      await notify(sb, `Scheduled WhatsApp reminders started — ${queued.total} customers queued.`)
+      kick(queued.job_id!)
+      return new Response(JSON.stringify({ ok: true, job_id: queued.job_id, total: queued.total }), { headers: H })
+    }
+
     // ── START ── a human pressing the button.
     const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim()
     if (!token) return fail('Not signed in.', 401)
@@ -119,48 +147,68 @@ serve(async (req) => {
       .select('id, status, total, sent, failed').in('status', ['queued', 'running']).maybeSingle()
     if (active) return new Response(JSON.stringify({ ok: true, job: active, already_running: true }), { headers: H })
 
-    // Snapshot who is eligible right now. The view already applies the toggle,
-    // the number, overdue-only and the floor.
-    const { data: queue, error: qErr } = await sb.from('whatsapp_reminder_queue').select('customer_id, overdue')
-    if (qErr) return fail('Could not read the reminder queue: ' + qErr.message)
-
-    let chosen = (queue || []).filter(q => Number(q.overdue) >= MIN_OVERDUE)
-    // The UI may hand us an explicit subset (someone unticked rows).
-    if (Array.isArray(body.customer_ids) && body.customer_ids.length) {
-      const want = new Set(body.customer_ids.map(String))
-      chosen = chosen.filter(q => want.has(String(q.customer_id)))
-    }
-    // Skip anyone already reminded in the last few days.
-    const since = new Date(Date.now() - RESEND_GUARD_DAYS * 86400000).toISOString()
-    const { data: recent } = await sb.from('whatsapp_messages')
-      .select('customer_id').neq('status', 'failed').gte('sent_at', since)
-    const done = new Set((recent || []).map(r => r.customer_id))
-    if (body.include_recent !== true) chosen = chosen.filter(q => !done.has(q.customer_id))
-
-    if (!chosen.length) return fail('Nobody is due a reminder right now.')
-
     const { data: run } = await sb.from('customer_dues_runs').select('as_on').eq('is_current', true).maybeSingle()
-    const { data: job, error: jErr } = await sb.from('whatsapp_reminder_jobs')
-      .insert({ status: 'queued', as_on: run?.as_on || null, total: chosen.length, created_by: user.id })
-      .select('id').single()
-    if (jErr) return fail('Could not create the run: ' + jErr.message)
-
-    for (let i = 0; i < chosen.length; i += 500) {
-      const { error } = await sb.from('whatsapp_reminder_job_items').insert(
-        chosen.slice(i, i + 500).map(c => ({ job_id: job.id, customer_id: c.customer_id, overdue_inr: c.overdue })))
-      if (error) {
-        await sb.from('whatsapp_reminder_jobs').update({ status: 'failed', last_error: error.message }).eq('id', job.id)
-        return fail('Could not queue the customers: ' + error.message)
-      }
-    }
-
-    kick(job.id)   // fire and forget; the caller does not wait for the run
-    return new Response(JSON.stringify({ ok: true, job_id: job.id, total: chosen.length }), { headers: H })
+    const queued = await queueRun(sb, user.id, run?.as_on || null, body.customer_ids, body.include_recent === true)
+    if (!queued.ok) return fail(queued.error!)
+    kick(queued.job_id!)   // fire and forget; the caller does not wait for the run
+    return new Response(JSON.stringify({ ok: true, job_id: queued.job_id, total: queued.total }), { headers: H })
 
   } catch (e) {
     return fail('Unexpected error: ' + ((e as Error)?.message || String(e)), 500)
   }
 })
+
+/** Snapshot the eligible customers into a new job. One implementation, so the
+ *  button and the schedule can never diverge on who gets a reminder. */
+async function queueRun(sb: any, userId: string | null, asOn: string | null,
+                        onlyIds?: unknown, includeRecent = false) {
+  const { data: queue, error: qErr } = await sb.from('whatsapp_reminder_queue').select('customer_id, overdue')
+  if (qErr) return { ok: false, error: 'Could not read the reminder queue: ' + qErr.message }
+
+  let chosen = (queue || []).filter((q: any) => Number(q.overdue) >= MIN_OVERDUE)
+  if (Array.isArray(onlyIds) && onlyIds.length) {
+    const want = new Set(onlyIds.map(String))
+    chosen = chosen.filter((q: any) => want.has(String(q.customer_id)))
+  }
+  if (!includeRecent) {
+    const since = new Date(Date.now() - RESEND_GUARD_DAYS * 86400000).toISOString()
+    const { data: recent } = await sb.from('whatsapp_messages')
+      .select('customer_id').neq('status', 'failed').gte('sent_at', since)
+    const done = new Set((recent || []).map((r: any) => r.customer_id))
+    chosen = chosen.filter((q: any) => !done.has(q.customer_id))
+  }
+  if (!chosen.length) return { ok: false, error: 'Nobody is due a reminder right now.' }
+
+  const { data: job, error: jErr } = await sb.from('whatsapp_reminder_jobs')
+    .insert({ status: 'queued', as_on: asOn, total: chosen.length, created_by: userId })
+    .select('id').single()
+  if (jErr) return { ok: false, error: 'Could not create the run: ' + jErr.message }
+
+  for (let i = 0; i < chosen.length; i += 500) {
+    const { error } = await sb.from('whatsapp_reminder_job_items').insert(
+      chosen.slice(i, i + 500).map((c: any) => ({ job_id: job.id, customer_id: c.customer_id, overdue_inr: c.overdue })))
+    if (error) {
+      await sb.from('whatsapp_reminder_jobs').update({ status: 'failed', last_error: error.message }).eq('id', job.id)
+      return { ok: false, error: 'Could not queue the customers: ' + error.message }
+    }
+  }
+  return { ok: true, job_id: job.id as string, total: chosen.length }
+}
+
+/** Tell the admins. A scheduled run that quietly does nothing is worse than one
+ *  that fails loudly — a skipped Monday would otherwise go unnoticed for days. */
+async function notify(sb: any, message: string) {
+  const { data: admins } = await sb.from('profiles').select('id, name').eq('role', 'admin')
+  if (!admins?.length) return
+  await sb.from('notifications').insert(admins.map((a: any) => ({
+    user_id: a.id, user_name: a.name || 'Admin', from_name: 'WhatsApp Reminders', message,
+  })))
+}
+
+async function skip(sb: any, why: string, H: HeadersInit) {
+  await notify(sb, `Scheduled WhatsApp reminders did NOT run — ${why}.`)
+  return new Response(JSON.stringify({ ok: true, skipped: true, reason: why }), { headers: H })
+}
 
 /** Ask ourselves to process the next batch. Deliberately not awaited. */
 function kick(jobId: string) {
@@ -192,8 +240,7 @@ async function processBatch(sb: any, jobId: string, H: HeadersInit) {
     .select('id, customer_id').eq('job_id', jobId).eq('status', 'pending').limit(BATCH)
 
   if (!items?.length) {
-    await sb.from('whatsapp_reminder_jobs')
-      .update({ status: 'done', finished_at: new Date().toISOString() }).eq('id', jobId)
+    await finish(sb, jobId)
     return done({ ok: true, status: 'done' })
   }
 
@@ -225,10 +272,21 @@ async function processBatch(sb: any, jobId: string, H: HeadersInit) {
     .select('id', { count: 'exact', head: true }).eq('job_id', jobId).eq('status', 'pending')
 
   if (count && count > 0) kick(jobId)
-  else await sb.from('whatsapp_reminder_jobs')
-    .update({ status: 'done', finished_at: new Date().toISOString() }).eq('id', jobId)
+  else await finish(sb, jobId)
 
   return done({ ok: true, sent, failed, remaining: count || 0 })
+}
+
+/** Close the job and tell the admins what happened. */
+async function finish(sb: any, jobId: string) {
+  await sb.from('whatsapp_reminder_jobs')
+    .update({ status: 'done', finished_at: new Date().toISOString() }).eq('id', jobId)
+  const { data: j } = await sb.from('whatsapp_reminder_jobs')
+    .select('sent, failed, total').eq('id', jobId).maybeSingle()
+  if (!j) return
+  await notify(sb, j.failed
+    ? `WhatsApp reminders finished — ${j.sent} sent, ${j.failed} failed of ${j.total}.`
+    : `WhatsApp reminders finished — ${j.sent} of ${j.total} sent.`)
 }
 
 /** One customer: re-check, build, upload, send, log. */
