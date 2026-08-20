@@ -24,6 +24,21 @@ function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+
 function initials(name) { return (name||'').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?' }
 function isNewCustomer(created_at) { if (!created_at) return false; return created_at >= NEW_CUSTOMER_FLOOR }
 
+// "2h ago" reads faster than a timestamp when the only question is
+// "did someone already do this today".
+function relTime(ts) {
+  if (!ts) return ''
+  const then = new Date(ts), mins = Math.floor((Date.now() - then.getTime()) / 60000)
+  if (mins < 1)   return 'just now'
+  if (mins < 60)  return mins + 'm ago'
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24)   return hrs + 'h ago'
+  const days = Math.floor(hrs / 24)
+  if (days === 1) return 'yesterday'
+  if (days < 7)   return days + 'd ago'
+  return fmt(then)
+}
+
 export default function CustomerMaster() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -33,9 +48,32 @@ export default function CustomerMaster() {
   const [userRole, setUserRole] = useState('')
   const [showReminders, setShowReminders] = useState(false)
   const [lastBulk, setLastBulk] = useState(null)   // { sent_at, n } of the last bulk run
+  const [queue, setQueue] = useState(null)         // { n, overdue } — prefetched so the modal opens instantly
 
   // "When did we last do a bulk run" — a run writes one row per customer, so
   // take the newest and count everything sent within an hour of it.
+  // Prefetched on page load so the button can say how many are actually due,
+  // and so the modal has nothing left to fetch when it opens.
+  //
+  // "Due" is deliberately not "eligible": right after a run, 215 customers are
+  // still overdue but 206 of them were just messaged. Showing 215 would invite
+  // someone to send the same reminder twice in an afternoon.
+  async function loadQueue() {
+    const since = new Date(Date.now() - 3 * 86400000).toISOString()
+    const [{ data: q }, { data: recent }] = await Promise.all([
+      sb.from('whatsapp_reminder_queue').select('customer_id,overdue'),
+      sb.from('whatsapp_messages').select('customer_id').neq('status', 'failed').gte('sent_at', since),
+    ])
+    if (!q) { setQueue(null); return }
+    const done = new Set((recent || []).map(m => m.customer_id))
+    const due = q.filter(r => !done.has(r.customer_id))
+    setQueue({
+      eligible: q.length,
+      n: due.length,
+      overdue: due.reduce((s, r) => s + (Number(r.overdue) || 0), 0),
+    })
+  }
+
   async function loadLastBulk() {
     const { data } = await sb.from('whatsapp_messages')
       .select('sent_at').eq('source', 'bulk')
@@ -62,7 +100,7 @@ export default function CustomerMaster() {
   const [filterType, setFilterType] = useState('')
   const debounceRef = useRef(null)
 
-  useEffect(() => { init(); loadLastBulk() }, [])
+  useEffect(() => { init(); loadLastBulk(); loadQueue() }, [])
   useEffect(() => {
     const q = new URLSearchParams(location.search).get('search')
     if (q) { setSearch(q); loadCustomers({ q, p:1 }) }
@@ -291,19 +329,26 @@ export default function CustomerMaster() {
             {/* Bulk payment reminders — admin only, same gate as the per-customer
                 button on Customer 360 and the Edge Function behind both. */}
             {userRole === 'admin' && (
-              <div className="cm-reminder-wrap">
-                <button className="o-dl-btn" onClick={() => setShowReminders(true)} title="WhatsApp payment reminders">
-                  <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                  Reminders
-                </button>
-                {/* Twice-weekly cadence — knowing when the last run went out is
-                    what stops a second one going the same afternoon. */}
-                <div className="cm-reminder-last">
-                  {lastBulk
-                    ? <>Last run {fmtDateTime(lastBulk.sent_at)} · {lastBulk.n} sent</>
-                    : <>No bulk run yet</>}
-                </div>
-              </div>
+              <button
+                className={'cm-reminders' + (queue?.n ? ' due' : queue ? ' clear' : '')}
+                onClick={() => setShowReminders(true)}
+                disabled={queue === null}
+                title={queue === null ? 'Checking who is due…'
+                      : queue.n ? `${queue.n} customers overdue and not reminded in the last 3 days`
+                      : 'Everyone overdue has been reminded recently'}>
+                <svg className="cm-rem-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                <span className="cm-rem-text">
+                  <span className="cm-rem-title">
+                    {queue === null ? 'Reminders' : queue.n ? 'Send reminders' : 'All caught up'}
+                  </span>
+                  <span className="cm-rem-sub">
+                    {queue === null ? 'checking…'
+                      : lastBulk ? `Last run ${relTime(lastBulk.sent_at)} · ${lastBulk.n} sent`
+                      : 'No run yet'}
+                  </span>
+                </span>
+                {queue?.n ? <span className="cm-rem-badge">{queue.n}</span> : null}
+              </button>
             )}
             <button className="btn-primary" onClick={() => navigate('/customers/new')}>
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
@@ -455,7 +500,7 @@ export default function CustomerMaster() {
           </div>
         )}
       </div>
-      {showReminders && <ReminderRunModal onClose={() => setShowReminders(false)} onSent={loadLastBulk} />}
+      {showReminders && <ReminderRunModal onClose={() => setShowReminders(false)} onSent={() => { loadLastBulk(); loadQueue() }} />}
     </Layout>
   )
 }

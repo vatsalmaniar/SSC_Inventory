@@ -3,7 +3,6 @@ import { sb, SUPABASE_URL } from '../lib/supabase'
 import { fmt, fmtMoney } from '../lib/fmt'
 import { summariseDues, buildDuesStatementHtml } from '../lib/duesStatement'
 import { htmlToPdfBlob } from '../lib/htmlToPdf'
-import { fetchAll } from '../lib/fetchAll'
 import Loading from '../components/Loading'
 import { toast } from '../lib/toast'
 
@@ -34,43 +33,33 @@ export default function ReminderRunModal({ onClose, onSent }) {
 
   async function load() {
     setLoading(true)
-    // The eligible set and the amounts both come from the current dues run, the
-    // same source the statement and the Edge Function use.
-    const [{ data: custs }, bills, { data: run }, { data: recent }] = await Promise.all([
-      sb.from('customers')
-        .select('id,customer_name,customer_id,whatsapp_no,whatsapp_name,gst,credit_terms,poc_name,account_owner,billing_address')
-        .eq('whatsapp_auto', true).not('whatsapp_no', 'is', null),
-      fetchAll((from, to) => sb.from('customer_dues_bills')
-        .select('customer_id,bill_date,bill_ref,pending_inr,pdc_inr,due_date,days_past_due,is_overdue')
-        .not('customer_id', 'is', null).range(from, to)),
+    // One aggregated read (~200 rows) instead of every bill in the book. The
+    // bill LINES are only needed to build a statement, so they are fetched for
+    // one customer at a time during the run.
+    const [{ data: queue }, { data: run }, { data: recent }] = await Promise.all([
+      sb.from('whatsapp_reminder_queue').select('*').order('overdue', { ascending: false }),
       sb.from('customer_dues_runs').select('as_on').eq('is_current', true).maybeSingle(),
-      sb.from('whatsapp_messages').select('customer_id,sent_at,status')
+      sb.from('whatsapp_messages').select('customer_id,sent_at')
         .neq('status', 'failed')
         .gte('sent_at', new Date(Date.now() - 3 * 86400000).toISOString()),
     ])
 
-    const byCust = new Map()
-    ;(bills || []).forEach(b => {
-      if (!byCust.has(b.customer_id)) byCust.set(b.customer_id, [])
-      byCust.get(b.customer_id).push(b)
-    })
     const sentRecently = new Map()
-    ;(recent || []).forEach(m => {
-      if (!sentRecently.has(m.customer_id)) sentRecently.set(m.customer_id, m.sent_at)
-    })
+    ;(recent || []).forEach(m => { if (!sentRecently.has(m.customer_id)) sentRecently.set(m.customer_id, m.sent_at) })
 
-    const out = []
-    ;(custs || []).forEach(c => {
-      const bl = byCust.get(c.id) || []
-      if (!bl.length) return
-      const d = summariseDues(bl)
-      if (d.overdue <= 0) return          // within terms — not a reminder candidate
-      out.push({ customer: c, bills: bl, dues: d, recentAt: sentRecently.get(c.id) || null })
-    })
-    out.sort((a, b) => b.dues.overdue - a.dues.overdue)
+    const out = (queue || []).map(q => ({
+      customer: {
+        id: q.customer_id, customer_name: q.customer_name, customer_id: q.code,
+        account_owner: q.account_owner, whatsapp_no: q.whatsapp_no, whatsapp_name: q.whatsapp_name,
+      },
+      dues: {
+        billCount: q.bill_count, outstanding: Number(q.outstanding) || 0,
+        pdc: Number(q.pdc) || 0, overdue: Number(q.overdue) || 0, oldest: q.oldest || 0,
+      },
+      recentAt: sentRecently.get(q.customer_id) || null,
+    }))
 
     setRows(out)
-    // Pre-tick everyone except those already reminded in the last 3 days.
     setPicked(new Set(out.filter(r => !r.recentAt).map(r => r.customer.id)))
     setAsOn(run?.as_on || null)
     setLoading(false)
@@ -98,9 +87,21 @@ export default function ReminderRunModal({ onClose, onSent }) {
       const r = list[i]
       setProgress({ i: i + 1, n: list.length, label: r.customer.customer_name })
       try {
+        // Fetched here, not upfront — one customer's bills, at the moment we
+        // need them, so opening this modal stays instant.
+        const [{ data: full }, { data: bills }] = await Promise.all([
+          sb.from('customers')
+            .select('customer_name,customer_id,gst,credit_terms,poc_name,account_owner,billing_address')
+            .eq('id', r.customer.id).maybeSingle(),
+          sb.from('customer_dues_bills')
+            .select('bill_date,bill_ref,pending_inr,pdc_inr,due_date,days_past_due,is_overdue')
+            .eq('customer_id', r.customer.id).order('due_date', { ascending: true }),
+        ])
+        if (!bills?.length) throw new Error('No open bills')
         const html = buildDuesStatementHtml({
-          customer: r.customer, partyName: r.customer.customer_name,
-          bills: r.bills, asOn,
+          customer: { ...(full || {}), ...r.customer },
+          partyName: r.customer.customer_name,
+          bills, asOn,
         })
         const { blob } = await htmlToPdfBlob(html, 'Statement of Dues.pdf')
         if (!blob) throw new Error('Could not build the statement PDF')
