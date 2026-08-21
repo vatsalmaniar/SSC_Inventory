@@ -39,6 +39,10 @@ function emptyItem() {
   return { _new: true, item_code: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '', description: '' }
 }
 
+const WA_DOT_ICON = (
+  <svg fill="currentColor" viewBox="0 0 24 24"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.1-.2.2-.3.2-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.2-.6-.4zM12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3.1.8.8-3-.2-.3a8.2 8.2 0 1113.6-2.5 8.2 8.2 0 01-6.4 6.4z"/></svg>
+)
+
 function numToWords(n) {
   const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen']
   const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety']
@@ -2163,7 +2167,11 @@ if (match) {
                 {comments.map(c => {
                   const isSystem = c.is_activity === true
                   const isCancelLog = c.is_cancellation === true || (c.message.includes('cancelled') || c.message.includes('Cancelled'))
-                  const dotType = isCancelLog ? 'cancel'
+                  // A message the customer actually received deserves to look
+                  // different from an internal note — WhatsApp's own green.
+                  const isWhatsApp = c.author_name === 'WhatsApp'
+                  const dotType = isWhatsApp ? 'whatsapp'
+                    : isCancelLog ? 'cancel'
                     : c.message.includes('Dispatch') || c.message.includes('dispatch') ? 'dispatch'
                     : c.message.includes('Invoice') || c.message.includes('invoice') ? 'invoice'
                     : c.message.includes('Delivered') || c.message.includes('delivered') ? 'success'
@@ -2176,6 +2184,7 @@ if (match) {
                     success:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>,
                     system:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
                     comment:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
+                    whatsapp: WA_DOT_ICON,
                   }[dotType]
 
                   return isSystem ? (

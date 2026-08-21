@@ -711,3 +711,6 @@ html:not([data-theme="dark"]) .od-page {
   .gcompose.is-min { top: auto; height: auto; }
   .gcompose-foot { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
 }
+/* WhatsApp activity — the customer actually received this one, so it reads in
+   WhatsApp's own green rather than as another internal note. */
+.od-tl-dot.whatsapp { background: #e7fce3; color: #128C7E; border-color: rgba(37,211,102,0.35); }

@@ -53,7 +53,8 @@ function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+
 function OwnerChip({name}) { const _p=usePeopleDir()[(name||'').trim().toLowerCase()]; if(!name) return <span style={{color:'var(--gray-300)'}}>—</span>; const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); return <div style={{display:'flex',alignItems:'center',gap:7,whiteSpace:'nowrap'}}><div style={{width:24,height:24,borderRadius:'50%',...(_p?{backgroundImage:'url('+_p+')',backgroundSize:'cover',backgroundPosition:'center'}:{background:ownerColor(name)}),color:'white',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{_p?'':ini}</div><span style={{fontSize:12,fontWeight:500}}>{name}</span></div> }
 
 
-function getDotType(msg) {
+function getDotType(msg, author) {
+  if (author === 'WhatsApp') return 'whatsapp'
   const m = msg?.toLowerCase() || ''
   if (m.includes('cancel'))   return 'cancel'
   if (m.includes('dispatch') || m.includes('picked') || m.includes('packed')) return 'dispatch'
@@ -64,6 +65,7 @@ function getDotType(msg) {
 }
 
 const DOT_ICONS = {
+  whatsapp: <svg fill="currentColor" viewBox="0 0 24 24"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.1-.2.2-.3.2-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.2-.6-.4zM12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3.1.8.8-3-.2-.3a8.2 8.2 0 1113.6-2.5 8.2 8.2 0 01-6.4 6.4z"/></svg>,
   cancel:   <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
   dispatch: <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
   invoice:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
@@ -1322,7 +1324,7 @@ const mentionSuggestions = mentionQuery !== null
                 {comments.map(c => {
                   const isSystem = c.is_activity === true
                   const isCancelLog = c.message?.toLowerCase().includes('cancel')
-                  const dotType = isSystem ? getDotType(c.message) : 'comment'
+                  const dotType = isSystem ? getDotType(c.message, c.author_name) : 'comment'
                   const dotIcon = DOT_ICONS[dotType] || DOT_ICONS.system
 
                   return isSystem ? (
