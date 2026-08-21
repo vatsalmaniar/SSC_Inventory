@@ -425,7 +425,7 @@ html:not([data-theme="dark"]) .od-page {
   position: relative; z-index: 1; margin-top: 1px;
   background: #f1f5f9; color: #64748b; border: 1.5px solid var(--gray-200);
 }
-.od-tl-dot svg { width: 10px; height: 10px; }
+.od-tl-dot svg { width: 11px; height: 11px; stroke-linecap: round; stroke-linejoin: round; }
 .od-tl-dot.created  { background: #eff6ff; color: #1d4ed8; border-color: rgba(29,78,216,0.25); }
 .od-tl-dot.edited   { background: #fffbeb; color: #d97706; border-color: rgba(217,119,6,0.25); }
 .od-tl-dot.approved { background: #f0fdf4; color: #16a34a; border-color: rgba(22,163,74,0.3); }
@@ -713,4 +713,5 @@ html:not([data-theme="dark"]) .od-page {
 }
 /* WhatsApp activity — the customer actually received this one, so it reads in
    WhatsApp's own green rather than as another internal note. */
-.od-tl-dot.whatsapp { background: #e7fce3; color: #128C7E; border-color: rgba(37,211,102,0.35); }
+.od-tl-dot.whatsapp { background: #e7fce3; color: #25D366; border-color: rgba(37,211,102,0.4); }
+.od-tl-dot.whatsapp svg { width: 11px; height: 11px; }
