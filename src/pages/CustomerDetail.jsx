@@ -372,6 +372,7 @@ export default function CustomerDetail() {
       whatsapp_no:      editData.whatsapp_no || null,
       whatsapp_name:    (editData.whatsapp_name || '').trim() || null,
       whatsapp_auto:    !!(editData.whatsapp_no && editData.whatsapp_auto),
+      whatsapp_dispatch_auto: !!(editData.whatsapp_no && editData.whatsapp_dispatch_auto),
       director_name:    editData.director_name || null,
       director_no:      editData.director_no || null,
       director_email:   editData.director_email || null,
@@ -912,6 +913,16 @@ ${oppsHTML}
                                     </a>
                                   : '—'}
                                 {customer.whatsapp_name ? <span style={{ color:'var(--gray-500)', fontSize:12 }}> · {customer.whatsapp_name}</span> : ''}
+                              </div>
+                            </div>
+                            <div className="c360-field">
+                              <label>Dispatch Invoice on WhatsApp</label>
+                              <div className="val">
+                                {customer.whatsapp_dispatch_auto
+                                  ? <span style={{ color:'#047857', fontWeight:600 }}>On</span>
+                                  : <span style={{ color:'var(--gray-400)' }}>
+                                      Off{customer.whatsapp_no ? '' : ' — no number'}
+                                    </span>}
                               </div>
                             </div>
                             <div className="c360-field">
@@ -1762,6 +1773,7 @@ function EditForm({ editData, setEditData }) {
                 ...p,
                 whatsapp_no: v,
                 whatsapp_auto: v ? (p.whatsapp_no ? p.whatsapp_auto : true) : false,
+                whatsapp_dispatch_auto: v ? (p.whatsapp_no ? p.whatsapp_dispatch_auto : true) : false,
               }))
             }}/>
         </div>
@@ -1787,7 +1799,27 @@ function EditForm({ editData, setEditData }) {
             </span>
           </div>
         </div>
-        <div style={{ flex:1 }}></div>
+        {/* Separate from reminders on purpose: a customer may want to know their
+            material has shipped without being chased for money, or the reverse. */}
+        <div className="od-edit-field" style={{ flex:1 }}>
+          <label>Dispatch Invoice on WhatsApp</label>
+          <div style={{ display:'flex', alignItems:'center', gap:10, paddingTop:4 }}>
+            <button type="button" className="ssc-switch"
+              data-on={editData.whatsapp_dispatch_auto ? '1' : '0'}
+              disabled={!editData.whatsapp_no}
+              title={editData.whatsapp_no ? '' : 'Add a WhatsApp number first'}
+              onClick={() => setEditData(p => ({ ...p, whatsapp_dispatch_auto: !p.whatsapp_dispatch_auto }))}>
+              <i />
+            </button>
+            <span style={{ fontSize:12, color:'var(--gray-500)' }}>
+              {!editData.whatsapp_no
+                ? 'Add a WhatsApp number to enable'
+                : editData.whatsapp_dispatch_auto
+                  ? 'Invoice sent when a delivery is marked complete'
+                  : 'Off — no dispatch notices'}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.7px', margin:'12px 0 8px' }}>Director / Decision Maker</div>

@@ -1,6 +1,8 @@
--- Scheduled WhatsApp payment reminders — Monday and Thursday, 12:00 noon IST.
+-- Scheduled WhatsApp payment reminders — MONDAY, 12:00 noon IST.
 --
--- 06:30 UTC = 12:00 IST; days 1 and 4 are Monday and Thursday.
+-- 06:30 UTC = 12:00 IST; day 1 is Monday. Was Mon + Thu, cut to Monday only on
+-- 2026-08-21: twice a week to the same overdue customer is nagging, and the
+-- resend guard is 7 days anyway, so the Thursday run would mostly have skipped.
 --
 -- On load: this is deliberately unlike the daily-summary job that took the
 -- database down in April. That one scanned and aggregated everything, daily.
@@ -25,7 +27,7 @@ select cron.unschedule('whatsapp-reminders')
 
 select cron.schedule(
   'whatsapp-reminders',
-  '30 6 * * 1,4',
+  '30 6 * * 1',
   $$
   select net.http_post(
     url     := 'https://kvjihrlbntxcdadogmhn.supabase.co/functions/v1/run-reminder-job',

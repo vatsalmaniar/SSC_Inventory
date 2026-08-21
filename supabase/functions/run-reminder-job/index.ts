@@ -37,7 +37,11 @@ const MIN_OVERDUE    = 500      // below this, chasing costs more than it collec
 const BATCH          = 12       // ~12 × 1.5s ≈ 18s, inside the invocation limit
 const MAX_PASSES     = 60       // 60 × 12 = 720 customers, then it stops itself
 const GAP_MS         = 400
-const RESEND_GUARD_DAYS = 3
+// 7, not 3. Monday and Thursday are three days apart, so a 3-day guard let the
+// same customer be reminded on both — roughly nine times a month, every month,
+// about money they already know they owe. That is how a reminder becomes spam
+// and how a WhatsApp number gets blocked.
+const RESEND_GUARD_DAYS = 7
 
 const ALLOWED_ORIGINS = ['https://app.ssccontrol.com', 'https://ssc-inventory.vercel.app', 'http://localhost:5173']
 const corsFor = (o: string | null) => ({
@@ -117,6 +121,17 @@ serve(async (req) => {
         .select('id').in('status', ['queued','running']).maybeSingle()
       if (busy) return await skip(sb, 'a run is already in progress', H)
 
+      // Dry run: every check, no sending. Any test of the scheduled path goes
+      // through this — 8 real customers were messaged on 2026-08-21 by someone
+      // firing the live path to "prove" it worked.
+      if (body.dry_run === true) {
+        const preview = await queueRun(sb, null, run.as_on, undefined, false, true)
+        return new Response(JSON.stringify({
+          ok: true, dry_run: true, would_send: preview.total || 0,
+          as_on: run.as_on, reason: preview.ok ? null : preview.error,
+        }), { headers: H })
+      }
+
       const queued = await queueRun(sb, null, run.as_on)
       if (!queued.ok) return await skip(sb, queued.error!, H)
       await notify(sb, `Scheduled WhatsApp reminders started — ${queued.total} customers queued.`)
@@ -148,6 +163,10 @@ serve(async (req) => {
     if (active) return new Response(JSON.stringify({ ok: true, job: active, already_running: true }), { headers: H })
 
     const { data: run } = await sb.from('customer_dues_runs').select('as_on').eq('is_current', true).maybeSingle()
+    if (body.dry_run === true) {
+      const preview = await queueRun(sb, user.id, run?.as_on || null, body.customer_ids, body.include_recent === true, true)
+      return new Response(JSON.stringify({ ok: true, dry_run: true, would_send: preview.total || 0, reason: preview.ok ? null : preview.error }), { headers: H })
+    }
     const queued = await queueRun(sb, user.id, run?.as_on || null, body.customer_ids, body.include_recent === true)
     if (!queued.ok) return fail(queued.error!)
     kick(queued.job_id!)   // fire and forget; the caller does not wait for the run
@@ -161,7 +180,7 @@ serve(async (req) => {
 /** Snapshot the eligible customers into a new job. One implementation, so the
  *  button and the schedule can never diverge on who gets a reminder. */
 async function queueRun(sb: any, userId: string | null, asOn: string | null,
-                        onlyIds?: unknown, includeRecent = false) {
+                        onlyIds?: unknown, includeRecent = false, dryRun = false) {
   const { data: queue, error: qErr } = await sb.from('whatsapp_reminder_queue').select('customer_id, overdue')
   if (qErr) return { ok: false, error: 'Could not read the reminder queue: ' + qErr.message }
 
@@ -178,6 +197,7 @@ async function queueRun(sb: any, userId: string | null, asOn: string | null,
     chosen = chosen.filter((q: any) => !done.has(q.customer_id))
   }
   if (!chosen.length) return { ok: false, error: 'Nobody is due a reminder right now.' }
+  if (dryRun) return { ok: true, total: chosen.length, job_id: null }
 
   const { data: job, error: jErr } = await sb.from('whatsapp_reminder_jobs')
     .insert({ status: 'queued', as_on: asOn, total: chosen.length, created_by: userId })
