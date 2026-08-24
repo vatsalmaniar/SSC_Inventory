@@ -11,6 +11,7 @@ import { friendlyError } from '../lib/errorMsg'
 import { fetchActivePoCoveredQty, lineNeedsProcurement, lineToProcureQty, UNPLACED_PO_STATUSES, unplacedPoLabel } from '../lib/coverage'
 import { resolvePurchasePrice, resolvePurchasePrices, priceLineFields, unitPriceFor } from '../lib/itemPricing'
 import { searchItems } from '../lib/itemSearch'
+import { withItemStatus, itemStatusPill, itemBlockReason } from '../lib/itemStatus'
 import { flagsForPo, reasonIsSufficient, wordCount, describeFlags, REASON_MIN_WORDS } from '../lib/vendorBrands'
 
 const FC_ADDRESSES = {
@@ -383,10 +384,14 @@ export default function NewPurchaseOrder() {
   // Ranked search — see lib/itemSearch.js. The old alphabetical ilike could
   // hide an exact match behind longer codes that merely contained the text.
   async function fetchItems(q) {
-    return searchItems(q, { limit: 20 })
+    return withItemStatus(await searchItems(q, { limit: 20 }))
   }
 
   function selectItemCode(idx, item) {
+    // Refuse here rather than let the buyer price a line the database will
+    // reject on save. Same sentence as block_superseded_item().
+    const blocked = itemBlockReason(item)
+    if (blocked) { toast(blocked); return }
     const rid = items[idx]?._rid
     setItems(prev => {
       const next = [...prev]
@@ -1045,12 +1050,20 @@ export default function NewPurchaseOrder() {
                             placeholder="Search item code or brand…"
                             fetchFn={fetchItems}
                             strictSelect
-                            renderItem={it => (
+                            renderItem={it => {
+                              const pill = itemStatusPill(it)
+                              return (
                               <div>
-                                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{it.item_code}</div>
-                                {(it.brand || it.category) && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 1 }}>{[it.brand, it.category].filter(Boolean).join(' · ')}</div>}
+                                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>
+                                  {it.item_code}
+                                  {pill && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, background: pill.bg, color: pill.color, borderRadius: 4, padding: '1px 5px' }}>{pill.label}</span>}
+                                </div>
+                                {it.superseded_by
+                                  ? <div style={{ fontSize: 11, color: '#b45309', marginTop: 1 }}>use {it.superseded_by}</div>
+                                  : (it.brand || it.category) && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 1 }}>{[it.brand, it.category].filter(Boolean).join(' · ')}</div>}
                               </div>
-                            )}
+                              )
+                            }}
                           />
                         </div>
                         {isCO && item.item_type && (

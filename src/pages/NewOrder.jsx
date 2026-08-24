@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { deliveryDateIssue, deliveryDateMax, orderDateIssue } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
+import { withItemStatus, itemStatusPill, itemBlockReason } from '../lib/itemStatus'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -79,7 +80,10 @@ export default function NewOrder() {
     // Fuzzy match: finds "12A 230HBAC" when user types "12A230HBAC".
     // Server-side, top-20 by similarity — every master item stays searchable.
     const { data } = await sb.rpc('search_items_fuzzy', { p_query: q, p_limit: 20 })
-    return data || []
+    // A superseded part still shows, wearing its pill, the same way a
+    // blacklisted customer does. Hiding it would leave whoever typed the old
+    // code staring at an empty list; this hands them the replacement.
+    return withItemStatus(data || [])
   }
 
   function selectCustomer(c) {
@@ -122,6 +126,11 @@ export default function NewOrder() {
   }
 
   function selectItemCode(idx, item) {
+    // Say it here, before they fill in a quantity and a price and then lose it
+    // all to a database refusal on save. The wording matches the trigger's, so
+    // the message reads the same whichever caught it.
+    const blocked = itemBlockReason(item)
+    if (blocked) { toast(blocked); return }
     setItems(prev => {
       const next = [...prev]
       next[idx] = { ...next[idx], item_code: item.item_code, item_type: item.type || '' }
@@ -492,12 +501,20 @@ export default function NewOrder() {
                         placeholder="Search item code or brand…"
                         fetchFn={fetchItems}
                         strictSelect
-                        renderItem={it => (
+                        renderItem={it => {
+                          const pill = itemStatusPill(it)
+                          return (
                           <div>
-                            <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{it.item_code}</div>
-                            {(it.brand || it.category) && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 1 }}>{[it.brand, it.category].filter(Boolean).join(' · ')}</div>}
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>
+                              {it.item_code}
+                              {pill && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, background: pill.bg, color: pill.color, borderRadius: 4, padding: '1px 5px' }}>{pill.label}</span>}
+                            </div>
+                            {it.superseded_by
+                              ? <div style={{ fontSize: 11, color: '#b45309', marginTop: 1 }}>use {it.superseded_by}</div>
+                              : (it.brand || it.category) && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 1 }}>{[it.brand, it.category].filter(Boolean).join(' · ')}</div>}
                           </div>
-                        )}
+                          )
+                        }}
                       />
                     </td>
                     <td className="col-qty">

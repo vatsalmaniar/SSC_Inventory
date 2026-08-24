@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
+import { forgetRetiredItems } from '../lib/itemStatus'
 import { fmtMoneyFull } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
@@ -284,6 +285,46 @@ export default function ItemDetail() {
   const canSeePurchase = ['admin', 'management', 'ops', 'accounts'].includes(role)
   const canEditPrices = ['admin', 'management'].includes(role)
 
+  // ── Item status ──
+  // Retiring a part is a master-data decision: it stops the whole company
+  // putting that code on a new order or PO. set_item_status() checks the role
+  // and refuses a chain (a replacement that is itself retired), so this is a
+  // prompt, not the rule.
+  const [savingStatus, setSavingStatus] = useState(false)
+
+  async function openStatus() {
+    const cur = item.item_status || 'Active'
+    const next = window.prompt(
+      `Status for ${item.item_code}\n\n` +
+      `Active         — normal\n` +
+      `Superseded     — a duplicate; you will be asked which code replaces it\n` +
+      `Discontinued   — no longer sold\n\n` +
+      `Currently: ${cur}${item.superseded_by ? ' (use ' + item.superseded_by + ')' : ''}`,
+      cur)
+    if (!next) return
+    const status = next.trim()
+    if (status === cur && status !== 'Superseded') return
+
+    let replacement = null
+    if (status === 'Superseded') {
+      replacement = window.prompt(`Which item code replaces ${item.item_code}?`, item.superseded_by || '')
+      if (!replacement || !replacement.trim()) return
+      replacement = replacement.trim()
+    }
+
+    setSavingStatus(true)
+    const { error } = await sb.rpc('set_item_status', {
+      p_item_code: item.item_code, p_status: status, p_superseded_by: replacement,
+    })
+    setSavingStatus(false)
+    if (error) { toast(error.message || friendlyError(error, 'Could not change the status.')); return }
+    // The pickers read a cached list of retired items — drop it so the change
+    // shows immediately rather than in five minutes.
+    forgetRetiredItems()
+    toast(`${item.item_code} is now ${status}`, 'success')
+    init()
+  }
+
   async function loadSpecials(code) {
     const { data } = await sb.from('item_prices')
       .select('id,price_type,price_scope,customer_id,vendor_id,amount,min_qty,valid_from,valid_to,project_ref,notes,price_status,approved_by_user,approved_at,created_by,price_list_id,spa_id,price_lists(name),special_price_agreements(spa_no,title,counterparty_type,reference,valid_from,valid_to,status,source_file,notes),vendors(vendor_name),customers(customer_name)')
@@ -484,6 +525,26 @@ export default function ItemDetail() {
                   <TypeBadge type={item.type} />
                   {item.brand && <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#eff6ff', color: '#1d4ed8', fontWeight: 600 }}>{item.brand}</span>}
                   {item.category && <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#f0fdf4', color: '#166534', fontWeight: 600 }}>{item.category}</span>}
+                  {/* A retired part is marked here rather than hidden, the same
+                      way a blacklisted customer is. Without this the status set
+                      in the database would be invisible, and nobody could undo
+                      it — items have no edit screen anywhere else in the app. */}
+                  {item.item_status && item.item_status !== 'Active' && (
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                      background: item.item_status === 'Superseded' ? '#fffbeb' : '#fef2f2',
+                      color:      item.item_status === 'Superseded' ? '#b45309' : '#dc2626' }}>
+                      {item.item_status.toUpperCase()}
+                      {item.superseded_by && ` — use ${item.superseded_by}`}
+                    </span>
+                  )}
+                  {canEditPrices && (
+                    <button onClick={openStatus} disabled={savingStatus}
+                      style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 6,
+                               border: '1px solid var(--gray-300)', background: 'white',
+                               color: 'var(--gray-600)', cursor: 'pointer' }}>
+                      {item.item_status && item.item_status !== 'Active' ? 'Change status' : 'Retire item'}
+                    </button>
+                  )}
                 </div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 800, color: 'var(--gray-900)', letterSpacing: '-0.3px', wordBreak: 'break-all' }}>{item.item_code}</div>
                 {item.description && (

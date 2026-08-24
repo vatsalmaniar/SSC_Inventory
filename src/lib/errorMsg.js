@@ -16,6 +16,11 @@ export function friendlyError(err, fallback = 'Something went wrong. Please try 
   // went wrong", which left a buyer blocked with no idea why.
   if (raw.includes('cannot be approved without a reason')) return raw
   if (raw.includes('is already issued and cannot be changed')) return raw
+  // block_superseded_item names the replacement code. Swallowing it into
+  // "Something went wrong" would leave a salesperson with a dead end instead of
+  // the one piece of information they need — which code to use.
+  if (raw.includes('has been superseded')) return raw
+  if (raw.includes('is discontinued and cannot be added')) return raw
   if (msg.includes('item_prices_approval_shape'))
     return 'A price has to be approved by someone other than the person who entered it.'
   if (msg.includes('duplicate key') || msg.includes('unique constraint')) return 'This already exists.'
