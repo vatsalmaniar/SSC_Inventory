@@ -604,6 +604,16 @@ export default function ItemDetail() {
                     { label: 'Subcategory', val: item.subcategory || '—' },
                     { label: 'Series',      val: item.series || '—' },
                     { label: 'Type',        val: <TypeBadge type={item.type} /> },
+                    // Status sits with the item's own facts, not only as a pill
+                    // in the header — Item Details is where someone looks to
+                    // ask "what is this item", and a retired one must answer.
+                    { label: 'Status', val: (item.item_status && item.item_status !== 'Active')
+                        ? <span style={{ fontSize: 11.5, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                            background: item.item_status === 'Superseded' ? '#fffbeb' : '#fef2f2',
+                            color:      item.item_status === 'Superseded' ? '#b45309' : '#dc2626' }}>
+                            {item.item_status.toUpperCase()}{item.superseded_by && ` — use ${item.superseded_by}`}
+                          </span>
+                        : <span style={{ fontSize: 11.5, fontWeight: 600, color: '#166534' }}>Active</span> },
                     { label: 'Added On',    val: fmt(item.created_at) },
                     { label: 'Added By',    val: item.created_by ? (auditNames[item.created_by] || '—') : <span style={{ color:'var(--gray-400)' }}>Legacy / unknown</span> },
                     ...(item.updated_by && item.updated_by !== item.created_by
