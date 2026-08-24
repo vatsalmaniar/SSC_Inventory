@@ -153,6 +153,7 @@ export default function ItemDetail() {
     buy_pct: '', buy_amount: '', sell_pct: '', sell_amount: '', min_qty: '1',
     valid_from: '', valid_to: '', project_ref: '', notes: '' }
   const [sp, setSp]                   = useState(blankSpecial)
+  const [savingStatus, setSavingStatus] = useState(false)
 
   useEffect(() => { init() }, [id])
 
@@ -290,8 +291,6 @@ export default function ItemDetail() {
   // putting that code on a new order or PO. set_item_status() checks the role
   // and refuses a chain (a replacement that is itself retired), so this is a
   // prompt, not the rule.
-  const [savingStatus, setSavingStatus] = useState(false)
-
   async function openStatus() {
     const cur = item.item_status || 'Active'
     const next = window.prompt(
