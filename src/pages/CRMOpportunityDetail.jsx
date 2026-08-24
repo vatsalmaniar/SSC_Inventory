@@ -10,6 +10,7 @@ import Layout from '../components/Layout'
 import Loading from '../components/Loading'
 import NewCustomerModal from './NewCustomerModal'
 import Typeahead from '../components/Typeahead'
+import { itemStatusPill, itemBlockReason } from '../lib/itemStatus'
 import '../styles/crm.css'
 import '../styles/orderdetail.css'
 import '../styles/neworder.css'
@@ -714,7 +715,8 @@ export default function CRMOpportunityDetail() {
   }
 
   async function fetchItems(q) {
-    const { data } = await sb.from('items').select('item_code').ilike('item_code', '%' + q + '%').limit(10)
+    const { data } = await sb.from('items').select('item_code,item_status,superseded_by')
+      .ilike('item_code', '%' + q + '%').limit(10)
     return data || []
   }
 
@@ -1704,11 +1706,16 @@ export default function CRMOpportunityDetail() {
                             <Typeahead
                               value={row.item_code}
                               onChange={v => updateQuoteRow(idx, 'item_code', v)}
-                              onSelect={it => updateQuoteRow(idx, 'item_code', it.item_code)}
+                              onSelect={it => { const b = itemBlockReason(it); if (b) { toast(b); return } updateQuoteRow(idx, 'item_code', it.item_code) }}
                               placeholder="Search or type..."
                               fetchFn={fetchItems}
                               strictSelect
-                              renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>}
+                              renderItem={it => { const pill = itemStatusPill(it); return (
+                                <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>
+                                  {it.item_code}
+                                  {pill && <span style={{ marginLeft:6, fontSize:9, fontWeight:700, background:pill.bg, color:pill.color, borderRadius:4, padding:'1px 4px' }}>{pill.label}</span>}
+                                  {it.superseded_by && <span style={{ marginLeft:6, fontSize:10, color:'#b45309' }}>use {it.superseded_by}</span>}
+                                </div>) }}
                             />
                             <input
                               value={row.description || ''}
@@ -2295,11 +2302,16 @@ export default function CRMOpportunityDetail() {
                             <td className="col-code">
                               <Typeahead value={row.item_code}
                                 onChange={v => updateSampleItem(idx,'item_code',v)}
-                                onSelect={it => updateSampleItem(idx,'item_code',it.item_code)}
+                                onSelect={it => { const b = itemBlockReason(it); if (b) { toast(b); return } updateSampleItem(idx,'item_code',it.item_code) }}
                                 placeholder="Search or type…"
-                                fetchFn={async q => { const { data } = await sb.from('items').select('item_code').ilike('item_code','%'+q+'%').limit(10); return data||[] }}
+                                fetchFn={async q => { const { data } = await sb.from('items').select('item_code,item_status,superseded_by').ilike('item_code','%'+q+'%').limit(10); return data||[] }}
                                 strictSelect
-                                renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>}
+                                renderItem={it => { const pill = itemStatusPill(it); return (
+                                <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>
+                                  {it.item_code}
+                                  {pill && <span style={{ marginLeft:6, fontSize:9, fontWeight:700, background:pill.bg, color:pill.color, borderRadius:4, padding:'1px 4px' }}>{pill.label}</span>}
+                                  {it.superseded_by && <span style={{ marginLeft:6, fontSize:10, color:'#b45309' }}>use {it.superseded_by}</span>}
+                                </div>) }}
                               />
                             </td>
                             <td className="col-qty"><input type="number" value={row.qty} onChange={e => updateSampleItem(idx,'qty',e.target.value)} placeholder="0" min="0" /></td>
@@ -2522,11 +2534,16 @@ export default function CRMOpportunityDetail() {
                             <td className="col-code">
                               <Typeahead value={row.item_code}
                                 onChange={v => updateSampleItem(idx, 'item_code', v)}
-                                onSelect={it => updateSampleItem(idx, 'item_code', it.item_code)}
+                                onSelect={it => { const b = itemBlockReason(it); if (b) { toast(b); return } updateSampleItem(idx, 'item_code', it.item_code) }}
                                 placeholder="Search or type…"
-                                fetchFn={async q => { const { data } = await sb.from('items').select('item_code').ilike('item_code','%'+q+'%').limit(10); return data||[] }}
+                                fetchFn={async q => { const { data } = await sb.from('items').select('item_code,item_status,superseded_by').ilike('item_code','%'+q+'%').limit(10); return data||[] }}
                                 strictSelect
-                                renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>}
+                                renderItem={it => { const pill = itemStatusPill(it); return (
+                                <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>
+                                  {it.item_code}
+                                  {pill && <span style={{ marginLeft:6, fontSize:9, fontWeight:700, background:pill.bg, color:pill.color, borderRadius:4, padding:'1px 4px' }}>{pill.label}</span>}
+                                  {it.superseded_by && <span style={{ marginLeft:6, fontSize:10, color:'#b45309' }}>use {it.superseded_by}</span>}
+                                </div>) }}
                               />
                             </td>
                             <td className="col-qty"><input type="number" value={row.qty} onChange={e => updateSampleItem(idx,'qty',e.target.value)} placeholder="0" min="0" /></td>

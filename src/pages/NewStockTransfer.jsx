@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import Typeahead from '../components/Typeahead'
+import { itemStatusPill, itemBlockReason } from '../lib/itemStatus'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
 
@@ -44,7 +45,7 @@ export default function NewStockTransfer() {
   async function fetchItems(q) {
     if (!q || q.length < 2) return []
     const { data } = await sb.from('items')
-      .select('item_code,item_no,brand,category')
+      .select('item_code,item_no,brand,category,item_status,superseded_by')
       .or(`item_code.ilike.%${q}%,item_no.ilike.%${q}%`)
       .eq('is_active', true)
       .limit(20)
@@ -205,17 +206,22 @@ export default function NewStockTransfer() {
                       <Typeahead
                         value={row._itemText}
                         onChange={v => { updateRow(idx, '_itemText', v); if (!v.trim()) { updateRow(idx, 'item_code', ''); updateRow(idx, '_description', '') } }}
-                        onSelect={item => selectItem(idx, item)}
+                        onSelect={item => { const b = itemBlockReason(item); if (b) { toast(b); return } selectItem(idx, item) }}
                         placeholder="Search item code..."
                         fetchFn={fetchItems}
                         strictSelect
-                        renderItem={item => (
+                        renderItem={item => { const pill = itemStatusPill(item); return (
                           <div>
                             <span style={{ fontWeight: 600, fontFamily: 'var(--mono)', fontSize: 12 }}>{item.item_code}</span>
-                            {item.item_no && <span style={{ color: 'var(--gray-400)', marginLeft: 8, fontSize: 11 }}>{item.item_no}</span>}
-                            {item.brand && <span style={{ color: 'var(--gray-400)', marginLeft: 6, fontSize: 11 }}>· {item.brand}</span>}
+                            {pill && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, background: pill.bg, color: pill.color, borderRadius: 4, padding: '1px 4px' }}>{pill.label}</span>}
+                            {item.superseded_by
+                              ? <span style={{ color: '#b45309', marginLeft: 6, fontSize: 11 }}>use {item.superseded_by}</span>
+                              : <>
+                                  {item.item_no && <span style={{ color: 'var(--gray-400)', marginLeft: 8, fontSize: 11 }}>{item.item_no}</span>}
+                                  {item.brand && <span style={{ color: 'var(--gray-400)', marginLeft: 6, fontSize: 11 }}>· {item.brand}</span>}
+                                </>}
                           </div>
-                        )}
+                        ) }}
                       />
                     </td>
                     <td>

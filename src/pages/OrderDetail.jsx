@@ -10,6 +10,7 @@ import { FC_PIPELINE_STATUSES, TERMINAL_STATUSES, lineIssuedQty,
          linePendingQty, lineHeldInOpenBatch, lineUndispatchedQty } from '../lib/orderStatus'
 import { notify } from '../lib/notify'
 import Typeahead from '../components/Typeahead'
+import { itemStatusPill, itemBlockReason } from '../lib/itemStatus'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
 import { usePeopleDir } from '../components/PeopleAvatar'
@@ -421,7 +422,10 @@ export default function OrderDetail() {
   }
 
   async function fetchItems(q) {
-    const { data } = await sb.from('items').select('item_code').ilike('item_code', '%' + q + '%').limit(10)
+    // Selects the status so a retired code can be shown wearing its pill rather
+    // than silently accepted and then refused by the database on save.
+    const { data } = await sb.from('items').select('item_code,item_status,superseded_by')
+      .ilike('item_code', '%' + q + '%').limit(10)
     return data || []
   }
 
@@ -1555,8 +1559,13 @@ if (match) {
                             <td className="col-sr">{idx + 1}</td>
                             <td className="col-code">
                               <Typeahead value={item.item_code} onChange={v => updateEditItem(idx, 'item_code', v)}
-                                onSelect={it => updateEditItem(idx, 'item_code', it.item_code)} placeholder="Search..."
-                                fetchFn={fetchItems} strictSelect renderItem={it => <div className="typeahead-item-main" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{it.item_code}</div>} />
+                                onSelect={it => { const b = itemBlockReason(it); if (b) { toast(b); return } updateEditItem(idx, 'item_code', it.item_code) }} placeholder="Search..."
+                                fetchFn={fetchItems} strictSelect renderItem={it => { const pill = itemStatusPill(it); return (
+                                  <div className="typeahead-item-main" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
+                                    {it.item_code}
+                                    {pill && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, background: pill.bg, color: pill.color, borderRadius: 4, padding: '1px 4px' }}>{pill.label}</span>}
+                                    {it.superseded_by && <span style={{ marginLeft: 6, fontSize: 10, color: '#b45309' }}>use {it.superseded_by}</span>}
+                                  </div>) }} />
                             </td>
                             <td className="col-qty"><input type="number" value={item.qty} onChange={e => updateEditItem(idx, 'qty', e.target.value)} placeholder="0" /></td>
                             <td className="col-lp"><input type="number" value={item.lp_unit_price} onChange={e => updateEditItem(idx, 'lp_unit_price', e.target.value)} placeholder="0.00" step="0.01" /></td>

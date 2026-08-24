@@ -7,6 +7,7 @@ import { toast } from '../lib/toast'
 import { fmtTs, fmtMoneyFull } from '../lib/fmt'
 import Layout from '../components/Layout'
 import Typeahead from '../components/Typeahead'
+import { itemStatusPill, itemBlockReason } from '../lib/itemStatus'
 import '../styles/neworder.css'
 import '../styles/orderdetail.css'
 import '../styles/crm-redesign.css'
@@ -167,7 +168,8 @@ export default function CRMQuotations() {
   }
 
   async function fetchItems(q) {
-    const { data } = await sb.from('items').select('item_code').ilike('item_code', '%' + q + '%').limit(10)
+    const { data } = await sb.from('items').select('item_code,item_status,superseded_by')
+      .ilike('item_code', '%' + q + '%').limit(10)
     return data || []
   }
 
@@ -753,11 +755,16 @@ export default function CRMQuotations() {
                             <Typeahead
                               value={row.item_code}
                               onChange={v => updateRow(idx, 'item_code', v)}
-                              onSelect={it => updateRow(idx, 'item_code', it.item_code)}
+                              onSelect={it => { const b = itemBlockReason(it); if (b) { toast(b); return } updateRow(idx, 'item_code', it.item_code) }}
                               placeholder="Search or type..."
                               fetchFn={fetchItems}
                               strictSelect
-                              renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>}
+                              renderItem={it => { const pill = itemStatusPill(it); return (
+                                <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>
+                                  {it.item_code}
+                                  {pill && <span style={{ marginLeft:6, fontSize:9, fontWeight:700, background:pill.bg, color:pill.color, borderRadius:4, padding:'1px 4px' }}>{pill.label}</span>}
+                                  {it.superseded_by && <span style={{ marginLeft:6, fontSize:10, color:'#b45309' }}>use {it.superseded_by}</span>}
+                                </div>) }}
                             />
                             <input
                               value={row.description || ''}
