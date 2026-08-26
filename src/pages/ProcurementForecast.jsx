@@ -371,7 +371,7 @@ function StatusPill({ status }) {
   )
 }
 
-function ItemRow({ item, monthsKeys, salesData, stockData, calc, onSalesEdit, onCopySys, onStockEdit, onCopySysStock }) {
+function ItemRow({ item, monthsKeys, salesData, stockData, calc, trendOf, onSalesEdit, onCopySys, onStockEdit, onCopySysStock }) {
   const c  = calc(item.item_code)
   const st = stockData[item.item_code] || { kaveri: 0, godawari: 0, manual: null }
   const sysStock = (st.kaveri || 0) + (st.godawari || 0)
@@ -428,6 +428,20 @@ function ItemRow({ item, monthsKeys, salesData, stockData, calc, onSalesEdit, on
       </div>
       <div className="it-cell it-status-col">
         <StatusPill status={status}/>
+      </div>
+      <div className="it-cell it-trend">
+        {(() => { const t = trendOf(item.item_code); return (<>
+          <span className="trend-chip mono" title={t.tip} style={{ '--trend-color': t.color }}>
+            {t.dir && (
+              <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ transform: t.dir === 'down' ? 'rotate(180deg)' : t.dir === 'flat' ? 'rotate(90deg)' : 'none', flex: 'none' }}>
+                <path d="M8 13 V3 M4 7 L8 3 L12 7"/>
+              </svg>
+            )}
+            {t.label}
+          </span>
+          <span className="trend-ref">{t.ref}</span>
+        </>)})()}
       </div>
     </div>
   )
@@ -696,6 +710,7 @@ export default function ProcurementForecast() {
   const [salesData, setSalesData]   = useState({})
   const [stockData, setStockData]   = useState({})
   const [onOrderData, setOnOrderData] = useState({})  // item_code → pending PO qty (on order, not yet received)
+  const [curQtrSales, setCurQtrSales] = useState({})  // item_code → delivered qty in the CURRENT quarter-to-date (trend only)
   const [loading, setLoading]       = useState(true)
   const [loadingBrand, setLoadingBrand] = useState(false)
   const [saving, setSaving]         = useState(false)
@@ -756,7 +771,12 @@ export default function ProcurementForecast() {
     setBrandItems(items)
 
     const startDate = QM[0] + '-01'
-    const endDate   = QM[2] + '-' + lastDayOf(QM[2])
+    // Window extends past the forecast quarter to TODAY so the Trend column can
+    // compare the formula's quarter against the LIVE quarter-to-date. Trend is
+    // an indication for the planner only — it feeds no status/qty logic.
+    const nowD = new Date()
+    const endMonth = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}`
+    const endDate  = endMonth + '-' + lastDayOf(endMonth)
 
     // Everything else comes from ONE server-side call keyed on the BRAND —
     // forecast_brand_data returns sales (sys+manual), stock (live+manual) and
@@ -778,17 +798,22 @@ export default function ProcurementForecast() {
       return
     }
 
-    const sMap = {}, stMap = {}, ooMap = {}
+    const sMap = {}, stMap = {}, ooMap = {}, cqMap = {}
     items.forEach(i => {
       sMap[i.item_code] = {}; QM.forEach(m => { sMap[i.item_code][m] = { sys: 0, manual: null } })
       stMap[i.item_code] = { kaveri: 0, godawari: 0, manual: null }
       ooMap[i.item_code] = 0
+      cqMap[i.item_code] = 0
     })
     ;(bd || []).forEach(row => {
       if (!sMap[row.item_code]) return
       QM.forEach(m => {
         if (row.sys_sales?.[m] !== undefined)    sMap[row.item_code][m].sys    = parseFloat(row.sys_sales[m]) || 0
         if (row.manual_sales?.[m] !== undefined) sMap[row.item_code][m].manual = row.manual_sales[m]
+      })
+      // Months in the window but AFTER the forecast quarter = current quarter-to-date
+      Object.keys(row.sys_sales || {}).forEach(m => {
+        if (!QM.includes(m)) cqMap[row.item_code] += parseFloat(row.sys_sales[m]) || 0
       })
       stMap[row.item_code] = {
         kaveri:   parseFloat(row.kaveri)   || 0,
@@ -801,6 +826,7 @@ export default function ProcurementForecast() {
     setSalesData(sMap)
     setStockData(stMap)
     setOnOrderData(ooMap)
+    setCurQtrSales(cqMap)
     setLoadingBrand(false)
   }
 
@@ -832,6 +858,34 @@ export default function ProcurementForecast() {
     // Covered only thanks to material in transit — "don't order, chase the delivery"
     const incoming   = !noConfig && !needsOrder && effectiveStock < minQty
     return { reorderDays, replenishDays, qAvg: Math.round(qAvg), dailyRate, minQty, poQty, effectiveStock, onOrder, needsOrder, incoming, noConfig }
+  }
+
+  // ── Trend: the formula's quarter vs the LIVE quarter-to-date. INDICATION
+  // ONLY — never feeds status, quantities, or the wizard (user rule). The
+  // forecast orders in the current quarter using LAST quarter's sales; this
+  // column is the reality check on what is happening right now.
+  function trendOf(item_code) {
+    const prevRate = calc(item_code).qAvg                       // effective (manual ?? sys) monthly avg of the forecast quarter
+    const nowD = new Date()
+    const curQStartMonth = new Date(nowD.getFullYear(), nowD.getMonth() - ((nowD.getMonth()) % 3), 1)
+    // elapsed months of the current quarter, floored at 0.5 to avoid noise on day 1-15
+    const elapsed = Math.max(0.5, (nowD - curQStartMonth) / (30.44 * 86400000))
+    const curRate = (curQtrSales[item_code] || 0) / elapsed
+    const tip = `${QLabel}: ${prevRate}/mo -> this qtr so far: ${curRate.toFixed(1)}/mo`
+    const refLabel = 'vs ' + QLabel.split(' ')[0]  // e.g. 'vs Q1'
+    if (prevRate <= 0 && curRate <= 0) return { label: '\u2014', dir: null, color: 'var(--pf-muted-2)', tip: 'No movement in either quarter', ref: refLabel }
+    if (prevRate <= 0 && curRate > 0)  return { label: 'New', dir: 'up', color: 'var(--pf-warn)', tip: tip + ' \u2014 new/one-off demand, verify before ordering', ref: refLabel }
+    const pct = ((curRate - prevRate) / prevRate) * 100
+    const shown = Math.abs(pct) >= 999 ? (pct > 0 ? '+999%' : '\u2212999%')
+      : (pct >= 0 ? '+' : '\u2212') + Math.abs(pct).toFixed(Math.abs(pct) >= 100 ? 0 : 1) + '%'
+    let color = 'var(--pf-muted)'
+    let note = ''
+    if (curRate <= 0 && prevRate >= 2)      { color = 'var(--pf-bad)';  note = ' \u2014 demand stopped, check before restocking' }
+    else if (pct >= 300)                    { color = 'var(--pf-warn)'; note = ' \u2014 abnormal surge, verify before ordering' }
+    else if (pct >= 15)                     { color = 'var(--pf-good)' }
+    else if (pct <= -50)                    { color = 'var(--pf-bad)' }
+    else if (pct <= -15)                    { color = 'var(--pf-warn)' }
+    return { label: shown, dir: pct >= 15 ? 'up' : pct <= -15 ? 'down' : 'flat', color, tip: tip + note, ref: refLabel }
   }
 
   // chart-shaped item list (sorted critical first)
@@ -1040,6 +1094,7 @@ export default function ProcurementForecast() {
                       <div className="it-head-l2 mono">Kaveri + Godawari</div>
                     </div>
                     <div className="it-cell it-status-col">Status</div>
+                    <div className="it-cell it-trend" title="Forecast quarter vs current quarter-to-date — indication only">Trend</div>
                   </div>
                   <div className="it-body">
                     {brandItems
@@ -1059,6 +1114,7 @@ export default function ProcurementForecast() {
                           salesData={salesData}
                           stockData={stockData}
                           calc={calc}
+                          trendOf={trendOf}
                           onSalesEdit={setSalesManual}
                           onCopySys={copySysToManual}
                           onStockEdit={setStockManual}

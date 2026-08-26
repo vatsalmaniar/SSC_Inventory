@@ -129,8 +129,8 @@
 .pf-app .items-table-wrap::-webkit-scrollbar-track { background: var(--pf-bg-2); }
 .pf-app .items-table-wrap::-webkit-scrollbar-thumb { background: var(--pf-line); border-radius: 5px; border: 2px solid var(--pf-bg-2); }
 .pf-app .items-table-wrap::-webkit-scrollbar-thumb:hover { background: var(--pf-muted-2); }
-.pf-app .items-table { font-size: 12.5px; min-width: 1190px; }
-.pf-app .it-row { display: grid; grid-template-columns: 280px 320px 70px 84px 84px 88px 110px 90px; gap: 8px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--pf-line-2); }
+.pf-app .items-table { font-size: 12.5px; min-width: 1280px; }
+.pf-app .it-row { display: grid; grid-template-columns: 280px 320px 70px 84px 84px 88px 110px 90px 84px; gap: 8px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--pf-line-2); }
 .pf-app .it-head { background: var(--pf-bg-2); padding: 10px 16px; font-family: 'Geist Mono', monospace; font-size: 10.5px; color: var(--pf-muted); letter-spacing: 0.04em; text-transform: uppercase; position: sticky; top: 0; z-index: 5; }
 .pf-app .it-head-l1 { font-weight: 600; color: var(--pf-ink); text-transform: none; font-family: 'Geist', sans-serif; font-size: 12px; letter-spacing: 0; }
 .pf-app .it-head-l2 { font-size: 10px; color: var(--pf-muted); margin-top: 1px; font-weight: 400; }
@@ -155,6 +155,9 @@
 .pf-app .it-num.it-min { color: var(--ssc-blue); font-weight: 600; }
 .pf-app .it-num.it-po { color: var(--pf-good); font-weight: 600; }
 .pf-app .it-num.it-pend { color: var(--pf-warn, #B45309); font-weight: 600; }
+.pf-app .it-trend { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.pf-app .trend-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; white-space: nowrap; padding: 3px 8px; border-radius: 7px; color: var(--trend-color); background: color-mix(in srgb, var(--trend-color) 10%, transparent); border: 1px solid color-mix(in srgb, var(--trend-color) 22%, transparent); }
+.pf-app .trend-ref { font-size: 9.5px; color: var(--pf-muted-2); white-space: nowrap; }
 .pf-app .it-stock-col { text-align: right; }
 .pf-app .it-stock-bd { font-size: 10.5px; color: var(--pf-muted-2); }
 .pf-app .it-stock-total { font-size: 13px; font-weight: 600; padding: 3px 8px; background: var(--pf-bg-2); border-radius: 6px; display: inline-block; }
@@ -275,7 +278,7 @@
       "code   code   status"
       "months months months"
       "avg    min    po"
-      "pend   stock  stock";
+      "pend   stock  trend";
     gap: 8px 10px;
     padding: 12px 14px;
   }
@@ -287,15 +290,18 @@
   .pf-app .it-row.it-data > :nth-child(6) { grid-area: pend; }
   .pf-app .it-row.it-data > :nth-child(7) { grid-area: stock; }
   .pf-app .it-row.it-data > :nth-child(8) { grid-area: status; justify-self: end; align-self: start; }
+  .pf-app .it-row.it-data > :nth-child(9) { grid-area: trend; justify-self: end; }
   /* labels for the bare numbers */
   .pf-app .it-row.it-data > :nth-child(3)::before { content: 'Avg/Qtr'; }
   .pf-app .it-row.it-data > :nth-child(4)::before { content: 'Min'; }
   .pf-app .it-row.it-data > :nth-child(5)::before { content: 'PO Qty'; }
   .pf-app .it-row.it-data > :nth-child(6)::before { content: 'Pending PO'; }
+  .pf-app .it-row.it-data > :nth-child(9)::before { content: 'Trend'; }
   .pf-app .it-row.it-data > :nth-child(3)::before,
   .pf-app .it-row.it-data > :nth-child(4)::before,
   .pf-app .it-row.it-data > :nth-child(5)::before,
-  .pf-app .it-row.it-data > :nth-child(6)::before {
+  .pf-app .it-row.it-data > :nth-child(6)::before,
+  .pf-app .it-row.it-data > :nth-child(9)::before {
     display: block;
     font-family: 'Geist Mono', monospace;
     font-size: 9.5px;
