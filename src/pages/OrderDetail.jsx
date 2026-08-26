@@ -648,12 +648,23 @@ export default function OrderDetail() {
   async function findOlderWaiting(itemCodes) {
     const codes = [...new Set(itemCodes.filter(Boolean))]
     if (!codes.length || !order?.order_date) return []
-    const { data } = await sb.from('order_items')
-      .select('item_code,qty,dispatched_qty,cancelled_qty,order_id,orders!inner(id,order_number,customer_name,order_date,status,is_test,partial_deliveries_allowed,credit_override,hold_party,hold_reason,hold_set_by,hold_set_at)')
-      .in('item_code', codes)
-      .eq('stock_status', 'out_of_stock')
-      .lt('orders.order_date', order.order_date)
-      .eq('orders.is_test', order.is_test || false)
+    // One query PER code, not .in(codes): PostgREST's .in() list parsing breaks
+    // when a code contains quotes/commas/parens (e.g. 4" Fan Grill), which made
+    // the whole request fail and SILENTLY SKIPPED this FIFO check. [[postgrest-in-quoting]]
+    const results = await Promise.all(codes.map(code =>
+      sb.from('order_items')
+        .select('item_code,qty,dispatched_qty,cancelled_qty,order_id,orders!inner(id,order_number,customer_name,order_date,status,is_test,partial_deliveries_allowed,credit_override,hold_party,hold_reason,hold_set_by,hold_set_at)')
+        .eq('item_code', code)
+        .eq('stock_status', 'out_of_stock')
+        .lt('orders.order_date', order.order_date)
+        .eq('orders.is_test', order.is_test || false)
+    ))
+    const failed = results.filter(r => r.error)
+    if (failed.length) {
+      console.error('findOlderWaiting partial failure:', failed[0].error)
+      toast('Could not fully verify the FIFO queue for some items — check older orders manually.', 'warning')
+    }
+    const data = results.flatMap(r => r.data || [])
     const DEAD = TERMINAL_STATUSES  // canonical — src/lib/orderStatus.js
     const candidates = (data || []).filter(it => {
       const o = it.orders

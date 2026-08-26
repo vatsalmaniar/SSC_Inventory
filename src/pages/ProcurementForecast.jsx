@@ -354,13 +354,19 @@ function StockChart({ items, brand, cfg, totalStats }) {
 
 // =================== Items Table ===================
 function StatusPill({ status }) {
+  // Same visual language as the Order List status pill (.ol-status-pill):
+  // tinted chip + solid dot driven by --stage-color.
   const map = {
-    critical: { label: 'Order',    cls: 'pill-critical' },
-    noconfig: { label: 'No Cfg',   cls: 'pill-noconfig' },
-    ok:       { label: 'OK',       cls: 'pill-ok' },
+    critical: { label: 'Order',  color: '#EF4444' },
+    noconfig: { label: 'No Cfg', color: '#B45309' },
+    ok:       { label: 'OK',     color: '#16A34A' },
   }
   const v = map[status] || map.ok
-  return <span className={`pill ${v.cls}`}>{v.label}</span>
+  return (
+    <span className="status-pill" style={{ '--stage-color': v.color }}>
+      <span className="status-dot"/>{v.label}
+    </span>
+  )
 }
 
 function ItemRow({ item, monthsKeys, salesData, stockData, calc, onSalesEdit, onCopySys, onStockEdit, onCopySysStock }) {
@@ -401,6 +407,7 @@ function ItemRow({ item, monthsKeys, salesData, stockData, calc, onSalesEdit, on
       <div className="it-cell it-num mono">{c.qAvg || '—'}</div>
       <div className="it-cell it-num it-min mono">{c.noConfig ? '—' : c.minQty.toLocaleString()}</div>
       <div className="it-cell it-num it-po mono">{c.noConfig ? '—' : c.poQty.toLocaleString()}</div>
+      <div className="it-cell it-num it-pend mono" title="On open POs, not yet received">{c.onOrder > 0 ? c.onOrder.toLocaleString() : '—'}</div>
       <div className="it-cell it-stock-col">
         <div className="it-stock-bd mono">
           {st.kaveri || 0} <span>+</span> {st.godawari || 0}
@@ -686,6 +693,7 @@ export default function ProcurementForecast() {
   const [brandItems, setBrandItems] = useState([])
   const [salesData, setSalesData]   = useState({})
   const [stockData, setStockData]   = useState({})
+  const [onOrderData, setOnOrderData] = useState({})  // item_code → pending PO qty (on order, not yet received)
   const [loading, setLoading]       = useState(true)
   const [loadingBrand, setLoadingBrand] = useState(false)
   const [saving, setSaving]         = useState(false)
@@ -695,7 +703,6 @@ export default function ProcurementForecast() {
   const [reviewItems, setReviewItems]               = useState([])
   const [showForecastPO, setShowForecastPO]         = useState(false)
   const [forecastPOItems, setForecastPOItems]       = useState([])
-  const [loadingForecastPO, setLoadingForecastPO]   = useState(false)
   const [snapshotting, setSnapshotting]             = useState(false)
   const snapshotGuard = useRef(false)
   const [userId, setUserId]                         = useState('')
@@ -745,49 +752,53 @@ export default function ProcurementForecast() {
     const items = itemsData || []
     if (!items.length) { setBrandItems([]); setLoadingBrand(false); return }
     setBrandItems(items)
-    const itemCodes = items.map(i => i.item_code)
 
     const startDate = QM[0] + '-01'
     const endDate   = QM[2] + '-' + lastDayOf(QM[2])
 
-    // System sales = qty actually DELIVERED (FC clicked delivered → status='dispatched_fc' + delivered_at).
-    // Aggregated SERVER-SIDE via forecast_delivered_qty RPC (sum per item per month).
-    // The old client-side approach pulled every dispatch batch for the quarter and
-    // summed in JS — but PostgREST caps selects at 1000 rows, so once a quarter had
-    // >1000 batches the extras were silently dropped and system-sales under-counted
-    // (e.g. a 1377-qty item showed 9). The RPC sums in Postgres and returns only the
-    // brand's item rows, so the cap can't bite. See [[thousand-row-cap]].
-    const [deliveredRes, manualSalesRes, invRes, manualStockRes] = await Promise.all([
-      sb.rpc('forecast_delivered_qty', {
-        p_start: startDate + 'T00:00:00',
-        p_end:   endDate + 'T23:59:59',
-        p_item_codes: itemCodes,
-      }),
-      sb.from('procurement_forecast_sales').select('item_code, month, manual_qty').in('item_code', itemCodes).in('month', QM),
-      sb.from('inventory').select('product_code, quantity, location').in('product_code', itemCodes),
-      sb.from('procurement_forecast_stock').select('item_code, manual_qty').in('item_code', itemCodes),
-    ])
+    // Everything else comes from ONE server-side call keyed on the BRAND —
+    // forecast_brand_data returns sales (sys+manual), stock (live+manual) and
+    // pending-PO qty per item. Item codes never cross the wire as a list:
+    // PostgREST's .in() breaks on codes containing quotes/commas/parens
+    // (Hicool's 4" filter kits), errored silently, and showed zeros — which
+    // seeded the create-PO wizard with Pending PO = 0 for whole brands.
+    // See sql/forecast_brand_data.sql and [[postgrest-in-quoting]].
+    const { data: bd, error: bdErr } = await sb.rpc('forecast_brand_data', {
+      p_brand:  brand,
+      p_start:  startDate + 'T00:00:00',
+      p_end:    endDate + 'T23:59:59',
+      p_months: QM,
+    })
+    if (bdErr) {
+      // A failed load must LOOK failed — silent zeros are how the wizard bug shipped.
+      toast('Forecast data failed to load: ' + bdErr.message, 'error')
+      setBrandItems([]); setLoadingBrand(false)
+      return
+    }
 
-    const sMap = {}
-    items.forEach(i => { sMap[i.item_code] = {}; QM.forEach(m => { sMap[i.item_code][m] = { sys: 0, manual: null } }) })
-    ;(deliveredRes.data || []).forEach(row => {
-      if (sMap[row.item_code]?.[row.month] !== undefined) sMap[row.item_code][row.month].sys = parseFloat(row.qty) || 0
+    const sMap = {}, stMap = {}, ooMap = {}
+    items.forEach(i => {
+      sMap[i.item_code] = {}; QM.forEach(m => { sMap[i.item_code][m] = { sys: 0, manual: null } })
+      stMap[i.item_code] = { kaveri: 0, godawari: 0, manual: null }
+      ooMap[i.item_code] = 0
     })
-    ;(manualSalesRes.data || []).forEach(row => {
-      if (sMap[row.item_code]?.[row.month] !== undefined) sMap[row.item_code][row.month].manual = row.manual_qty
+    ;(bd || []).forEach(row => {
+      if (!sMap[row.item_code]) return
+      QM.forEach(m => {
+        if (row.sys_sales?.[m] !== undefined)    sMap[row.item_code][m].sys    = parseFloat(row.sys_sales[m]) || 0
+        if (row.manual_sales?.[m] !== undefined) sMap[row.item_code][m].manual = row.manual_sales[m]
+      })
+      stMap[row.item_code] = {
+        kaveri:   parseFloat(row.kaveri)   || 0,
+        godawari: parseFloat(row.godawari) || 0,
+        manual:   row.manual_stock === null || row.manual_stock === undefined ? null : parseFloat(row.manual_stock),
+      }
+      ooMap[row.item_code] = parseFloat(row.pending_po) || 0
     })
-
-    const stMap = {}
-    items.forEach(i => { stMap[i.item_code] = { kaveri: 0, godawari: 0, manual: null } })
-    ;(invRes.data || []).forEach(row => {
-      if (!stMap[row.product_code]) return
-      if (row.location === 'Kaveri') stMap[row.product_code].kaveri += (row.quantity || 0)
-      else if (row.location === 'Godawari') stMap[row.product_code].godawari += (row.quantity || 0)
-    })
-    ;(manualStockRes.data || []).forEach(row => { if (stMap[row.item_code]) stMap[row.item_code].manual = row.manual_qty })
 
     setSalesData(sMap)
     setStockData(stMap)
+    setOnOrderData(ooMap)
     setLoadingBrand(false)
   }
 
@@ -810,9 +821,13 @@ export default function ProcurementForecast() {
     const poQty  = Math.ceil(dailyRate * replenishDays)
     const st = stockData[item_code] || { kaveri: 0, godawari: 0, manual: null }
     const effectiveStock = st.manual !== null ? st.manual : (st.kaveri || 0) + (st.godawari || 0)
+    // Material already on open POs counts toward availability — without it,
+    // items with a full replenishment in transit flash "critical" and the
+    // wizard re-orders them (the Pending-PO-shows-zero incident, 2026-08-26).
+    const onOrder    = onOrderData[item_code] || 0
     const noConfig   = !brandConfig || reorderDays === 0
-    const needsOrder = !noConfig && effectiveStock < minQty
-    return { reorderDays, replenishDays, qAvg: Math.round(qAvg), dailyRate, minQty, poQty, effectiveStock, needsOrder, noConfig }
+    const needsOrder = !noConfig && (effectiveStock + onOrder) < minQty
+    return { reorderDays, replenishDays, qAvg: Math.round(qAvg), dailyRate, minQty, poQty, effectiveStock, onOrder, needsOrder, noConfig }
   }
 
   // chart-shaped item list (sorted critical first)
@@ -860,27 +875,15 @@ export default function ProcurementForecast() {
   async function openForecastPO() {
     const triggered = brandItems.filter(i => calc(i.item_code).needsOrder)
     if (!triggered.length) { toast('No items need ordering'); return }
-    setLoadingForecastPO(true)
-    const { data: pendingRows } = await sb.from('po_items')
-      .select('item_code, qty, received_qty, purchase_orders!inner(status)')
-      .in('item_code', triggered.map(i => i.item_code))
-      // Exclude cancelled; count everything else (draft → material_received → closed).
-      // Closed POs are harmless — qty = received_qty so pending = 0.
-      // Deny-list beats allow-list: new future statuses automatically count as pending.
-      .neq('purchase_orders.status', 'cancelled')
-    const pendingMap = {}
-    ;(pendingRows || []).forEach(r => {
-      const p = Math.max(0, (r.qty || 0) - (r.received_qty || 0))
-      pendingMap[r.item_code] = (pendingMap[r.item_code] || 0) + p
-    })
+    // Pending-PO qty comes from the same forecast_brand_data load as the rest
+    // of the page (server-side, quoting-safe) — the old per-code .in() fetch
+    // here broke on codes with quotes/parens and silently seeded zeros.
     const seeds = triggered.map(i => {
       const c = calc(i.item_code)
       const item = brandItems.find(b => b.item_code === i.item_code)
-      const pendingQty = pendingMap[i.item_code] || 0
-      return { item_code: i.item_code, itemNo: item?.item_no || '', poQty: c.poQty, pendingQty }
+      return { item_code: i.item_code, itemNo: item?.item_no || '', poQty: c.poQty, pendingQty: c.onOrder }
     })
     setReviewItems(seeds)
-    setLoadingForecastPO(false)
     setShowPOReview(true)
   }
 
@@ -1000,9 +1003,9 @@ export default function ProcurementForecast() {
                     {saving ? 'Saving…' : 'Save Overrides'}
                   </button>
                   {triggeredCount > 0 && (
-                    <button className="btn-primary" onClick={openForecastPO} disabled={loadingForecastPO}>
+                    <button className="btn-primary" onClick={openForecastPO}>
                       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 2 V11 M4 7 L8 11 L12 7"/></svg>
-                      {loadingForecastPO ? 'Loading…' : `Generate PO (${triggeredCount})`}
+                      {`Generate PO (${triggeredCount})`}
                     </button>
                   )}
                 </div>
@@ -1027,6 +1030,7 @@ export default function ProcurementForecast() {
                     <div className="it-cell it-num">Q Avg</div>
                     <div className="it-cell it-num it-min">Min Qty</div>
                     <div className="it-cell it-num it-po">PO Qty</div>
+                    <div className="it-cell it-num it-pend" title="On open POs, not yet received">Pending PO</div>
                     <div className="it-cell it-stock-col">
                       <div className="it-head-l1">Stock</div>
                       <div className="it-head-l2 mono">Kaveri + Godawari</div>

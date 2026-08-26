@@ -129,8 +129,8 @@
 .pf-app .items-table-wrap::-webkit-scrollbar-track { background: var(--pf-bg-2); }
 .pf-app .items-table-wrap::-webkit-scrollbar-thumb { background: var(--pf-line); border-radius: 5px; border: 2px solid var(--pf-bg-2); }
 .pf-app .items-table-wrap::-webkit-scrollbar-thumb:hover { background: var(--pf-muted-2); }
-.pf-app .items-table { font-size: 12.5px; min-width: 1080px; }
-.pf-app .it-row { display: grid; grid-template-columns: 280px 320px 70px 80px 80px 110px 90px; gap: 8px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--pf-line-2); }
+.pf-app .items-table { font-size: 12.5px; min-width: 1190px; }
+.pf-app .it-row { display: grid; grid-template-columns: 280px 320px 70px 84px 84px 88px 110px 90px; gap: 8px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--pf-line-2); }
 .pf-app .it-head { background: var(--pf-bg-2); padding: 10px 16px; font-family: 'Geist Mono', monospace; font-size: 10.5px; color: var(--pf-muted); letter-spacing: 0.04em; text-transform: uppercase; position: sticky; top: 0; z-index: 5; }
 .pf-app .it-head-l1 { font-weight: 600; color: var(--pf-ink); text-transform: none; font-family: 'Geist', sans-serif; font-size: 12px; letter-spacing: 0; }
 .pf-app .it-head-l2 { font-size: 10px; color: var(--pf-muted); margin-top: 1px; font-weight: 400; }
@@ -150,13 +150,19 @@
 .pf-app .it-input.empty { border-color: var(--pf-line); background: var(--pf-bg-2); color: var(--pf-muted); }
 .pf-app .it-input:focus { border-color: var(--pf-warn); background: #FFFBEB; box-shadow: 0 0 0 3px rgba(245,158,11,0.12); }
 .pf-app .it-num { font-size: 12.5px; text-align: right; }
+.pf-app .it-head .it-num { white-space: normal; line-height: 1.3; overflow-wrap: break-word; }
 .pf-app .it-num.it-min { color: var(--ssc-blue); font-weight: 600; }
 .pf-app .it-num.it-po { color: var(--pf-good); font-weight: 600; }
+.pf-app .it-num.it-pend { color: var(--pf-warn, #B45309); font-weight: 600; }
 .pf-app .it-stock-col { text-align: right; }
 .pf-app .it-stock-bd { font-size: 10.5px; color: var(--pf-muted-2); }
 .pf-app .it-stock-total { font-size: 13px; font-weight: 600; padding: 3px 8px; background: var(--pf-bg-2); border-radius: 6px; display: inline-block; }
 .pf-app .it-status-col { display: flex; justify-content: flex-end; }
 .pf-app .pill { font-size: 10.5px; font-weight: 600; padding: 3px 10px; border-radius: 100px; letter-spacing: 0.02em; font-family: 'Geist Mono', monospace; text-transform: uppercase; }
+/* Status pill — mirrors .ol-status-pill from orders-redesign.css so the
+   Forecast status column reads exactly like the Order List's. */
+.pf-app .status-pill { font-size: 11px; font-weight: 500; padding: 4px 9px; border-radius: 5px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: color-mix(in srgb, var(--stage-color) 12%, transparent); color: color-mix(in srgb, var(--stage-color) 75%, var(--pf-ink)); }
+.pf-app .status-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--stage-color); }
 .pf-app .pill-critical { background: var(--pf-bad); color: #fff; }
 .pf-app .pill-order { background: rgba(245,158,11,0.15); color: #B45309; }
 .pf-app .pill-ok { background: rgba(16,185,129,0.12); color: #047857; }
@@ -268,7 +274,7 @@
       "code   code   status"
       "months months months"
       "avg    min    po"
-      "stock  stock  stock";
+      "pend   stock  stock";
     gap: 8px 10px;
     padding: 12px 14px;
   }
@@ -277,15 +283,18 @@
   .pf-app .it-row.it-data > :nth-child(3) { grid-area: avg; }
   .pf-app .it-row.it-data > :nth-child(4) { grid-area: min; }
   .pf-app .it-row.it-data > :nth-child(5) { grid-area: po; }
-  .pf-app .it-row.it-data > :nth-child(6) { grid-area: stock; }
-  .pf-app .it-row.it-data > :nth-child(7) { grid-area: status; justify-self: end; align-self: start; }
+  .pf-app .it-row.it-data > :nth-child(6) { grid-area: pend; }
+  .pf-app .it-row.it-data > :nth-child(7) { grid-area: stock; }
+  .pf-app .it-row.it-data > :nth-child(8) { grid-area: status; justify-self: end; align-self: start; }
   /* labels for the bare numbers */
   .pf-app .it-row.it-data > :nth-child(3)::before { content: 'Avg/Qtr'; }
   .pf-app .it-row.it-data > :nth-child(4)::before { content: 'Min'; }
   .pf-app .it-row.it-data > :nth-child(5)::before { content: 'PO Qty'; }
+  .pf-app .it-row.it-data > :nth-child(6)::before { content: 'Pending PO'; }
   .pf-app .it-row.it-data > :nth-child(3)::before,
   .pf-app .it-row.it-data > :nth-child(4)::before,
-  .pf-app .it-row.it-data > :nth-child(5)::before {
+  .pf-app .it-row.it-data > :nth-child(5)::before,
+  .pf-app .it-row.it-data > :nth-child(6)::before {
     display: block;
     font-family: 'Geist Mono', monospace;
     font-size: 9.5px;

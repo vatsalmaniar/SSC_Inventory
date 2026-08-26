@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
+import { selectByCodes } from '../lib/safeCodes'
 import Layout from '../components/Layout'
 import PeopleAvatar from '../components/PeopleAvatar'
 import * as XLSX from 'xlsx'
@@ -206,8 +207,9 @@ export default function GRNList() {
     const itemCodes = [...new Set((allItems || []).map(it => it.item_code).filter(Boolean))]
     const itemMetaByCode = {}
     if (itemCodes.length) {
-      const { data: itemsMaster } = await fetchInChunks(itemCodes, 150, (chunk) =>
-        sb.from('items').select('item_code,brand,category,subcategory').in('item_code', chunk))
+      // selectByCodes, not .in(): codes with quotes/parens break .in() parsing ([[postgrest-in-quoting]])
+      const { data: itemsMaster } = await selectByCodes(
+        () => sb.from('items').select('item_code,brand,category,subcategory'), 'item_code', itemCodes)
       ;(itemsMaster || []).forEach(m => { itemMetaByCode[m.item_code] = [m.brand, m.category, m.subcategory].filter(Boolean).join(' · ') })
     }
 

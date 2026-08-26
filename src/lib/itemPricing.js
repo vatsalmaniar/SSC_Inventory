@@ -31,6 +31,7 @@
 //    the way to the screen.
 
 import { sb } from './supabase'
+import { selectByCodes } from './safeCodes'
 import { resolveFromRows, localToday } from './itemPricingRules'
 
 const CHUNK = 150   // >~150 codes in one .in() exceeds PostgREST's 8 KB URL cap
@@ -44,29 +45,24 @@ export async function fetchPricingData(itemCodes) {
   const commercials = new Map(), items = new Map(), specials = new Map()
   if (!codes.length) return { commercials, items, specials, failed: false }
 
-  let failed = false
-  for (let i = 0; i < codes.length; i += CHUNK) {
-    const slice = codes.slice(i, i + CHUNK)
-    const [commRes, itemRes, spRes] = await Promise.all([
-      sb.from('v_item_commercials').select('*').in('item_code', slice),
-      sb.from('items').select('item_code,description,moq').in('item_code', slice),
-      sb.from('item_prices')
-        .select('id,item_code,price_scope,customer_id,vendor_id,project_ref,amount,min_qty,valid_from,valid_to,price_status,spa_id,special_price_agreements(spa_no)')
-        .eq('price_type', 'PURCHASE').in('item_code', slice),
-    ])
-    // A failed read is NOT the same as "no price". Flagged so the caller can
-    // leave the line alone instead of labelling it "no list price on file".
-    if (commRes.error || itemRes.error || spRes.error) {
-      failed = true
-      console.error('fetchPricingData:', commRes.error || itemRes.error || spRes.error)
-      continue
-    }
-    for (const r of (commRes.data || [])) commercials.set(r.item_code, r)
-    for (const r of (itemRes.data || [])) items.set(r.item_code, r)
-    for (const r of (spRes.data  || [])) {
-      if (!specials.has(r.item_code)) specials.set(r.item_code, [])
-      specials.get(r.item_code).push(r)
-    }
+  // selectByCodes chunks internally AND handles codes that break PostgREST's
+  // .in() parsing (quotes/commas/parens) via per-code .eq — [[postgrest-in-quoting]]
+  const [commRes, itemRes, spRes] = await Promise.all([
+    selectByCodes(() => sb.from('v_item_commercials').select('*'), 'item_code', codes, { chunk: CHUNK }),
+    selectByCodes(() => sb.from('items').select('item_code,description,moq'), 'item_code', codes, { chunk: CHUNK }),
+    selectByCodes(() => sb.from('item_prices')
+      .select('id,item_code,price_scope,customer_id,vendor_id,project_ref,amount,min_qty,valid_from,valid_to,price_status,spa_id,special_price_agreements(spa_no)')
+      .eq('price_type', 'PURCHASE'), 'item_code', codes, { chunk: CHUNK }),
+  ])
+  // A failed read is NOT the same as "no price". Flagged so the caller can
+  // leave the line alone instead of labelling it "no list price on file".
+  const failed = !!(commRes.error || itemRes.error || spRes.error)
+  if (failed) console.error('fetchPricingData:', commRes.error || itemRes.error || spRes.error)
+  for (const r of (commRes.data || [])) commercials.set(r.item_code, r)
+  for (const r of (itemRes.data || [])) items.set(r.item_code, r)
+  for (const r of (spRes.data  || [])) {
+    if (!specials.has(r.item_code)) specials.set(r.item_code, [])
+    specials.get(r.item_code).push(r)
   }
   return { commercials, items, specials, failed }
 }

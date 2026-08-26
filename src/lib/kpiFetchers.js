@@ -22,6 +22,7 @@
 // Derived KPIs do not query — they compute from the merged month values.
 
 import { sb } from './supabase'
+import { selectByCodes } from './safeCodes'
 
 // ── helper: bucket a date into the matching month range key ──
 function bucketKey(dt, monthRanges) {
@@ -102,11 +103,13 @@ export const AUTO_FETCHERS = {
     const codes = [...itemMeta.keys()]
     if (codes.length === 0) return {}
 
-    const { data } = await sb.from('order_items')
-      .select('item_code, orders!inner(id, account_owner, status, is_test, created_at)')
-      .in('item_code', codes)
-      .eq('orders.account_owner', profileName).neq('orders.status', 'cancelled').eq('orders.is_test', false)
-      .gte('orders.created_at', fyStart).lt('orders.created_at', fyEnd)
+    // selectByCodes, not .in(): codes with quotes/parens break .in() parsing ([[postgrest-in-quoting]])
+    const { data } = await selectByCodes(
+      () => sb.from('order_items')
+        .select('item_code, orders!inner(id, account_owner, status, is_test, created_at)')
+        .eq('orders.account_owner', profileName).neq('orders.status', 'cancelled').eq('orders.is_test', false)
+        .gte('orders.created_at', fyStart).lt('orders.created_at', fyEnd),
+      'item_code', codes)
 
     const matches = (pair, meta) =>
       (!pair.brand       || pair.brand       === meta.brand) &&
