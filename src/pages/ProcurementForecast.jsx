@@ -227,6 +227,7 @@ function StockChart({ items, brand, cfg, totalStats }) {
             {[
               { v: 'all', l: 'All' },
               { v: 'critical', l: 'Critical' },
+              { v: 'incoming', l: 'Incoming' },
               { v: 'ok', l: 'OK' },
             ].map(f => (
               <button key={f.v} className={filter === f.v ? 'on' : ''} onClick={() => setFilter(f.v)}>{f.l}</button>
@@ -357,9 +358,10 @@ function StatusPill({ status }) {
   // Same visual language as the Order List status pill (.ol-status-pill):
   // tinted chip + solid dot driven by --stage-color.
   const map = {
-    critical: { label: 'Order',  color: '#EF4444' },
-    noconfig: { label: 'No Cfg', color: '#B45309' },
-    ok:       { label: 'OK',     color: '#16A34A' },
+    critical: { label: 'Order',    color: '#EF4444' },
+    incoming: { label: 'Incoming', color: '#F59E0B' },
+    noconfig: { label: 'No Cfg',   color: '#B45309' },
+    ok:       { label: 'OK',       color: '#16A34A' },
   }
   const v = map[status] || map.ok
   return (
@@ -373,7 +375,7 @@ function ItemRow({ item, monthsKeys, salesData, stockData, calc, onSalesEdit, on
   const c  = calc(item.item_code)
   const st = stockData[item.item_code] || { kaveri: 0, godawari: 0, manual: null }
   const sysStock = (st.kaveri || 0) + (st.godawari || 0)
-  const status = c.noConfig ? 'noconfig' : c.needsOrder ? 'critical' : 'ok'
+  const status = c.noConfig ? 'noconfig' : c.needsOrder ? 'critical' : c.incoming ? 'incoming' : 'ok'
 
   return (
     <div className={`it-row it-data status-${status}`}>
@@ -827,14 +829,16 @@ export default function ProcurementForecast() {
     const onOrder    = onOrderData[item_code] || 0
     const noConfig   = !brandConfig || reorderDays === 0
     const needsOrder = !noConfig && (effectiveStock + onOrder) < minQty
-    return { reorderDays, replenishDays, qAvg: Math.round(qAvg), dailyRate, minQty, poQty, effectiveStock, onOrder, needsOrder, noConfig }
+    // Covered only thanks to material in transit — "don't order, chase the delivery"
+    const incoming   = !noConfig && !needsOrder && effectiveStock < minQty
+    return { reorderDays, replenishDays, qAvg: Math.round(qAvg), dailyRate, minQty, poQty, effectiveStock, onOrder, needsOrder, incoming, noConfig }
   }
 
   // chart-shaped item list (sorted critical first)
   const chartItems = useMemo(() => {
     return brandItems.filter(i => !calc(i.item_code).noConfig).map(i => {
       const c = calc(i.item_code)
-      const status = c.needsOrder ? 'critical' : 'ok'
+      const status = c.needsOrder ? 'critical' : c.incoming ? 'incoming' : 'ok'
       return {
         label: i.item_no || i.item_code.slice(-7),
         code: i.item_code,
@@ -846,7 +850,7 @@ export default function ProcurementForecast() {
         noConfig: c.noConfig,
       }
     }).sort((a, b) => {
-      const order = { critical: 0, noconfig: 1, ok: 2 }
+      const order = { critical: 0, incoming: 1, noconfig: 2, ok: 3 }
       if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status]
       const ra = a.minQty > 0 ? a.stock / a.minQty : 1
       const rb = b.minQty > 0 ? b.stock / b.minQty : 1

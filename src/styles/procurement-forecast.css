@@ -143,6 +143,7 @@
 .pf-app .it-id { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(30,84,183,0.08); color: var(--ssc-blue); font-weight: 600; margin-bottom: 2px; }
 .pf-app .it-data.status-critical .it-id { background: rgba(239,68,68,0.10); color: #B91C1C; }
 .pf-app .it-data.status-order .it-id { background: rgba(245,158,11,0.10); color: #B45309; }
+.pf-app .it-data.status-incoming .it-id { background: rgba(245,158,11,0.10); color: #B45309; }
 .pf-app .it-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Geist Mono', monospace; }
 .pf-app .it-month { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
 .pf-app .it-orig { font-size: 10px; color: var(--pf-muted-2); text-align: center; }
