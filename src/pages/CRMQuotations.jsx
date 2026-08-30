@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { searchItems, itemSuggestionBreak, codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { writeDoc } from '../lib/printDoc'
@@ -168,9 +169,10 @@ export default function CRMQuotations() {
   }
 
   async function fetchItems(q) {
-    const { data } = await sb.from('items').select('item_code,item_status,superseded_by')
-      .ilike('item_code', '%' + q + '%').limit(10)
-    return data || []
+    // Tiered search — see lib/itemSearch.js. Was a raw %ILIKE% on the stored
+    // code, which could not find any of the 4,423 codes carrying a legacy
+    // space: "MAD140" never matched "MAD 1401040R5".
+    return searchItems(q, { limit: 10 })
   }
 
   async function nextQuoteNumber() {
@@ -432,7 +434,7 @@ export default function CRMQuotations() {
     })
     .filter(qt => !filterRep || qt.created_by === filterRep)
     .filter(qt => !q ||
-      (qt.quote_number||'').toLowerCase().includes(q) ||
+      codeIncludes(qt.quote_number, q) ||
       quoteCustomerName(qt).toLowerCase().includes(q)
     )
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
@@ -757,7 +759,7 @@ export default function CRMQuotations() {
                               onChange={v => updateRow(idx, 'item_code', v)}
                               onSelect={it => { const b = itemBlockReason(it); if (b) { toast(b); return } updateRow(idx, 'item_code', it.item_code) }}
                               placeholder="Search or type..."
-                              fetchFn={fetchItems}
+                              fetchFn={fetchItems} separator={itemSuggestionBreak}
                               strictSelect
                               renderItem={it => { const pill = itemStatusPill(it); return (
                                 <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>

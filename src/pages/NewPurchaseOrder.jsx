@@ -10,8 +10,8 @@ import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
 import { fetchActivePoCoveredQty, lineNeedsProcurement, lineToProcureQty, UNPLACED_PO_STATUSES, unplacedPoLabel } from '../lib/coverage'
 import { resolvePurchasePrice, resolvePurchasePrices, priceLineFields, unitPriceFor } from '../lib/itemPricing'
-import { searchItems } from '../lib/itemSearch'
-import { withItemStatus, itemStatusPill, itemBlockReason } from '../lib/itemStatus'
+import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
+import { withItemStatus, itemStatusPill, itemBlockReason, itemTypeColor } from '../lib/itemStatus'
 import { flagsForPo, reasonIsSufficient, wordCount, describeFlags, REASON_MIN_WORDS } from '../lib/vendorBrands'
 
 const FC_ADDRESSES = {
@@ -1049,6 +1049,7 @@ export default function NewPurchaseOrder() {
                             onSelect={it => selectItemCode(idx, it)}
                             placeholder="Search item code or brand…"
                             fetchFn={fetchItems}
+                            separator={itemSuggestionBreak}
                             strictSelect
                             renderItem={it => {
                               const pill = itemStatusPill(it)
@@ -1056,6 +1057,7 @@ export default function NewPurchaseOrder() {
                               <div>
                                 <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>
                                   {it.item_code}
+                                  {it.type && <span className="item-type-pill" style={{ '--stage-color': itemTypeColor(it.type) }}>{it.type}</span>}
                                   {pill && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, background: pill.bg, color: pill.color, borderRadius: 4, padding: '1px 5px' }}>{pill.label}</span>}
                                 </div>
                                 {it.superseded_by

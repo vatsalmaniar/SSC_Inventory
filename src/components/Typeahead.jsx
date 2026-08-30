@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-export default function Typeahead({ value, onChange, onSelect, placeholder, fetchFn, renderItem, disabled, strictSelect }) {
+export default function Typeahead({ value, onChange, onSelect, placeholder, fetchFn, renderItem, disabled, strictSelect, separator }) {
   const [open, setOpen]       = useState(false)
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -76,11 +76,17 @@ export default function Typeahead({ value, onChange, onSelect, placeholder, fetc
             ? <div className="typeahead-empty">Searching...</div>
             : results.length === 0
               ? <div className="typeahead-empty">No results</div>
-              : results.map((r, i) => (
-                <div key={i} className="typeahead-item" onMouseDown={() => select(r)}>
-                  {renderItem(r)}
-                </div>
-              ))
+              : results.map((r, i) => {
+                const brk = separator ? separator(results[i - 1], r) : null
+                return (
+                  <div key={i}>
+                    {brk && <div className="typeahead-sep">{brk}</div>}
+                    <div className="typeahead-item" onMouseDown={() => select(r)}>
+                      {renderItem(r)}
+                    </div>
+                  </div>
+                )
+              })
           }
         </div>
       )}

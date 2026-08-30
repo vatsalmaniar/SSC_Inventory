@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmtShort, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
@@ -228,7 +229,7 @@ export default function ProcurementOrders() {
   const visible = tab === 'orphan' ? orphanOrders : tab === 'unplaced' ? unplacedOrders : pendingOrders
   const q = search.trim().toLowerCase()
   const filtered = !q ? visible : visible.filter(o =>
-    (o.order_number||'').toLowerCase().includes(q) || (o.customer_name||'').toLowerCase().includes(q)
+    codeIncludes(o.order_number, q) || (o.customer_name||'').toLowerCase().includes(q)
   )
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)

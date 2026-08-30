@@ -7,6 +7,9 @@ import { toast } from '../lib/toast'
 import { fmtTs } from '../lib/fmt'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
+import Typeahead from '../components/Typeahead'
+import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
+import { itemStatusPill, itemBlockReason, itemTypeColor } from '../lib/itemStatus'
 import '../styles/crm.css'
 import '../styles/orderdetail.css'
 
@@ -429,7 +432,28 @@ export default function CRMLeadDetail() {
                       {quoteRows.map((row, idx) => (
                         <tr key={row._id}>
                           <td style={{ paddingLeft:16, color:'var(--gray-400)', fontSize:11 }}>{idx+1}</td>
-                          <td style={{ padding:'4px 8px' }}><input style={{ ...INP, fontFamily:'var(--mono)', color:'var(--blue-600)' }} value={row.item_code} onChange={e=>updateQuoteRow(idx,'item_code',e.target.value)} placeholder="Code"/></td>
+                          <td style={{ padding:'4px 8px' }}>
+                            {/* Was a bare text box — no lookup, no validation, no status
+                                pill, so a retired part could be quoted silently and every
+                                lead-quote line in the data had a code not in the master.
+                                Same picker as CRMOpportunityDetail's quote rows. */}
+                            <Typeahead
+                              value={row.item_code}
+                              onChange={v => updateQuoteRow(idx,'item_code',v)}
+                              onSelect={it => { const b = itemBlockReason(it); if (b) { toast(b); return } updateQuoteRow(idx,'item_code',it.item_code) }}
+                              placeholder="Search or type..."
+                              fetchFn={q => searchItems(q, { limit: 10 })}
+                              separator={itemSuggestionBreak}
+                              strictSelect
+                              renderItem={it => { const pill = itemStatusPill(it); return (
+                                <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>
+                                  {it.item_code}
+                                  {it.type && <span className="item-type-pill" style={{ '--stage-color': itemTypeColor(it.type) }}>{it.type}</span>}
+                                  {pill && <span style={{ marginLeft:6, fontSize:9, fontWeight:700, background:pill.bg, color:pill.color, borderRadius:4, padding:'1px 4px' }}>{pill.label}</span>}
+                                  {it.superseded_by && <span style={{ marginLeft:6, fontSize:10, color:'#b45309' }}>use {it.superseded_by}</span>}
+                                </div>) }}
+                            />
+                          </td>
                           <td style={{ padding:'4px 8px' }}><input style={INP} value={row.description} onChange={e=>updateQuoteRow(idx,'description',e.target.value)} placeholder="Description"/></td>
                           <td style={{ padding:'4px 8px' }}><input style={{ ...INP, textAlign:'right' }} type="number" value={row.qty} onChange={e=>updateQuoteRow(idx,'qty',e.target.value)}/></td>
                           <td style={{ padding:'4px 8px' }}><input style={{ ...INP, textAlign:'right' }} type="number" value={row.unit_price} onChange={e=>updateQuoteRow(idx,'unit_price',e.target.value)} placeholder="0"/></td>

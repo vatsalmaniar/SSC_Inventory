@@ -526,3 +526,17 @@
 .cm-reminders.sending .cm-rem-title { color: #1d4ed8; }
 .cm-rem-bar { display: block; height: 3px; border-radius: 999px; background: #dbeafe; margin-top: 4px; overflow: hidden; }
 .cm-rem-bar > span { display: block; height: 100%; background: #1a73e8; transition: width 0.4s; }
+
+/* Divides real matches from fuzzy suggestions in the Item 360 result list. */
+.ol-sep {
+  padding: 7px 16px; border-top: 1px solid var(--gray-200); border-bottom: 1px solid var(--gray-200);
+  background: var(--gray-100); font-family: var(--mono); font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-medium); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gray-400);
+}
+
+/* Item 360: description under the code. Only 15% of items have one, so it is a
+   subtitle rather than a column — an empty column would be mostly empty. */
+.orders-app .ol-desc {
+  margin-top: 2px; font-size: 11.5px; color: var(--o-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

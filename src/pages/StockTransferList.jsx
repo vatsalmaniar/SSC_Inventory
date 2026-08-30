@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
@@ -63,7 +64,7 @@ export default function StockTransferList() {
 
   const q = search.trim().toLowerCase()
   const filtered = timelineTransfers.filter(t => matchFilter(t, filter))
-    .filter(t => !q || (t.transfer_number || '').toLowerCase().includes(q) || (t.source_fc || '').toLowerCase().includes(q) || (t.destination_fc || '').toLowerCase().includes(q))
+    .filter(t => !q || codeIncludes(t.transfer_number, q) || (t.source_fc || '').toLowerCase().includes(q) || (t.destination_fc || '').toLowerCase().includes(q))
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)

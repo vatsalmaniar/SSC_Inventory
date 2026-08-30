@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -44,12 +45,9 @@ export default function NewStockTransfer() {
 
   async function fetchItems(q) {
     if (!q || q.length < 2) return []
-    const { data } = await sb.from('items')
-      .select('item_code,item_no,brand,category,item_status,superseded_by')
-      .or(`item_code.ilike.%${q}%,item_no.ilike.%${q}%`)
-      .eq('is_active', true)
-      .limit(20)
-    return data || []
+    // Tiered search — see lib/itemSearch.js. item_no (IN####) is tier 0 there,
+    // so the old .or(item_no.ilike) is covered.
+    return searchItems(q, { limit: 20, activeOnly: true })
   }
 
   function addRow()       { setItems(prev => [...prev, emptyItem()]) }
@@ -208,7 +206,7 @@ export default function NewStockTransfer() {
                         onChange={v => { updateRow(idx, '_itemText', v); if (!v.trim()) { updateRow(idx, 'item_code', ''); updateRow(idx, '_description', '') } }}
                         onSelect={item => { const b = itemBlockReason(item); if (b) { toast(b); return } selectItem(idx, item) }}
                         placeholder="Search item code..."
-                        fetchFn={fetchItems}
+                        fetchFn={fetchItems} separator={itemSuggestionBreak}
                         strictSelect
                         renderItem={item => { const pill = itemStatusPill(item); return (
                           <div>

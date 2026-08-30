@@ -43,8 +43,11 @@ export default function Sales() {
     const raw = (term ?? searchTerm).trim()
     if (!raw) { setView('home'); return }
     setView('searching')
-    const { data, error } = await sb.from('inventory')
-      .select('*').ilike('product_code', '%' + raw + '%').order('product_code')
+    // Tiered search — see sql/search_inventory.sql. The old %ILIKE% on the raw
+    // Tally code could not find any of the 1,781 stock rows (42%) whose code
+    // carries a space: "UNI704" returned nothing while the stock sat under
+    // "UNI 704-B ZDA 48 05 00". Sales concluded there was no stock.
+    const { data, error } = await sb.rpc('search_inventory', { p_query: raw, p_limit: 200 })
     if (error) { setErrorMsg(error.message); setView('error'); return }
     if (!data || !data.length) { setView('empty'); return }
     setResults(data)

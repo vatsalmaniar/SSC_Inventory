@@ -66,3 +66,14 @@ export async function withItemStatus(rows) {
     return hit ? { ...r, item_status: hit.item_status, superseded_by: hit.superseded_by } : r
   })
 }
+
+/**
+ * SI / CI type badge. Item 360 renders this inline via .ol-status-pill; every
+ * picker uses <span className="item-type-pill"> with the same --stage-color, so
+ * the two cannot drift. Returns null when an item has no type.
+ */
+export function itemTypeColor(type) {
+  if (type === 'SI') return 'var(--blue-800)'
+  if (type === 'CI') return '#C2410C'
+  return null
+}

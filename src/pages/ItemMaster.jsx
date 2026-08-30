@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
+import { searchItems, isSuggestion } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
@@ -14,6 +15,9 @@ export default function ItemMaster() {
   const [search, setSearch] = useState('')
   const [searching, setSearching] = useState(false)
   const [total, setTotal] = useState(0)
+  // Results are matches first, then fuzzy suggestions. matchCount is where the
+  // boundary falls in the FULL result set, so the divider survives pagination.
+  const [matchCount, setMatchCount] = useState(0)
   const [page, setPage] = useState(1)
   const [filterBrand, setFilterBrand] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
@@ -49,10 +53,11 @@ export default function ItemMaster() {
     const type = opts.type ?? filterType
     if (!opts.silent) setLoading(true)
 
-    // SEARCH path — fuzzy (finds "12A 230HBAC" when user types "12A230HBAC").
-    // Server-side top-200 by similarity, then client filter + paginate.
+    // SEARCH path — tiered (see lib/itemSearch.js). Exact/prefix/contains
+    // decide membership; fuzzy only appends below. Server-side top-200,
+    // then client filter + paginate.
     if (q.trim()) {
-      const { data } = await sb.rpc('search_items_fuzzy', { p_query: q.trim(), p_limit: 200 })
+      const data = await searchItems(q, { limit: 200 })
       let rows = data || []
       if (brand) rows = rows.filter(r => r.brand === brand)
       if (cat)   rows = rows.filter(r => r.category === cat)
@@ -60,6 +65,7 @@ export default function ItemMaster() {
       const from = (p - 1) * PAGE_SIZE
       setItems(rows.slice(from, from + PAGE_SIZE))
       setTotal(rows.length)
+      setMatchCount(rows.filter(r => !isSuggestion(r)).length)
       setPage(p)
       setLoading(false); setSearching(false)
       return
@@ -112,7 +118,10 @@ export default function ItemMaster() {
           <div>
             <h1 className="page-title">Item 360</h1>
             <div className="o-summary">
-              <span><b>{total.toLocaleString()}</b> item{total !== 1 ? 's' : ''}</span>
+              <span><b>{matchCount.toLocaleString()}</b> item{matchCount !== 1 ? 's' : ''}</span>
+              {total > matchCount && (
+                <><span className="o-sep">·</span><span>{total - matchCount} similar</span></>
+              )}
               <span className="o-sep">·</span>
               <span>Product Catalog</span>
             </div>
@@ -171,14 +180,19 @@ export default function ItemMaster() {
               </div>
             ) : (
               <div className="ol-table">
-                {items.map(item => {
+                {items.map((item, i) => {
+                  // Global index, so the divider lands correctly on any page.
+                  const showBreak = (page - 1) * PAGE_SIZE + i === matchCount && total > matchCount
                   const isCI = item.type === 'CI'
                   const typeColor = isCI ? '#C2410C' : item.type === 'SI' ? '#1a73e8' : '#94A3B8'
                   return (
-                    <div key={item.id} className="ol-row ol-data" style={{ gridTemplateColumns: '90px 200px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 90px' }} onClick={() => navigate('/items/' + item.id)}>
+                    <Fragment key={item.id}>
+                    {showBreak && <div className="ol-sep">Similar codes</div>}
+                    <div className="ol-row ol-data" style={{ gridTemplateColumns: '90px 200px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 90px' }} onClick={() => navigate('/items/' + item.id)}>
                       <div className="ol-cell" style={{ fontFamily: 'Geist Mono, monospace', fontSize: 11, color: 'var(--o-muted-2)', fontWeight: 600 }}>{item.item_no || '—'}</div>
                       <div className="ol-cell">
                         <div className="ol-num">{item.item_code}</div>
+                        {item.description && <div className="ol-desc">{item.description}</div>}
                       </div>
                       <div className="ol-cell ol-cust">{item.brand || '—'}</div>
                       <div className="ol-cell ol-cust">{item.category || '—'}</div>
@@ -192,6 +206,7 @@ export default function ItemMaster() {
                         ) : <span style={{color:'var(--o-muted-2)'}}>—</span>}
                       </div>
                     </div>
+                    </Fragment>
                   )
                 })}
               </div>

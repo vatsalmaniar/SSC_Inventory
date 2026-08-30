@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { searchItems } from '../lib/itemSearch'
+import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
+import { itemTypeColor } from '../lib/itemStatus'
 import { reasonIsSufficient, wordCount, describeFlags, REASON_MIN_WORDS } from '../lib/vendorBrands'
 import { writeDoc } from '../lib/printDoc'
 import { htmlToPdfBlob } from '../lib/htmlToPdf'
@@ -2115,7 +2116,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                             <td className="col-code">
                               <Typeahead value={item.item_code || ''} onChange={v => updateEditItem(idx, 'item_code', v)}
                                 onSelect={it => updateEditItem(idx, 'item_code', it.item_code)} placeholder="Search..."
-                                fetchFn={fetchItems} strictSelect renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}</div>} />
+                                fetchFn={fetchItems} separator={itemSuggestionBreak} strictSelect renderItem={it => <div className="typeahead-item-main" style={{ fontFamily:'var(--mono)', fontSize:12 }}>{it.item_code}{it.type && <span className="item-type-pill" style={{ '--stage-color': itemTypeColor(it.type) }}>{it.type}</span>}</div>} />
                             </td>
                             <td className="col-qty"><input type="number" value={item.qty} onChange={e => updateEditItem(idx, 'qty', e.target.value)} placeholder="0" /></td>
                             <td className="col-lp"><input type="number" value={item.lp_unit_price} onChange={e => updateEditItem(idx, 'lp_unit_price', e.target.value)} placeholder="0.00" step="0.01" /></td>

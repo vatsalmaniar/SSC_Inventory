@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
@@ -104,8 +105,8 @@ export default function SalesModule() {
   const q = search.trim().toLowerCase()
   const baseFiltered = filter === 'eway_generated' ? [] : orders.filter(matchFilter)
   const filtered = filter === 'eway_generated'
-    ? ewayRows.filter(({ order: o }) => !q || o.customer_name?.toLowerCase().includes(q) || o.order_number?.toLowerCase().includes(q))
-    : baseFiltered.filter(o => !q || o.customer_name?.toLowerCase().includes(q) || o.order_number?.toLowerCase().includes(q))
+    ? ewayRows.filter(({ order: o }) => !q || o.customer_name?.toLowerCase().includes(q) || codeIncludes(o.order_number, q))
+    : baseFiltered.filter(o => !q || o.customer_name?.toLowerCase().includes(q) || codeIncludes(o.order_number, q))
 
   const FILTERS = [
     { key: 'all',                label: 'All'           },

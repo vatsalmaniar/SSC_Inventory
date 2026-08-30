@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
@@ -250,7 +251,7 @@ export default function OrdersList() {
   const q = search.trim().toLowerCase()
   const filtered = timelineOrders
     .filter(o => matchFilter(o, filter))
-    .filter(o => !q || o.customer_name?.toLowerCase().includes(q) || o.order_number?.toLowerCase().includes(q) || o.engineer_name?.toLowerCase().includes(q))
+    .filter(o => !q || o.customer_name?.toLowerCase().includes(q) || codeIncludes(o.order_number, q) || o.engineer_name?.toLowerCase().includes(q))
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)

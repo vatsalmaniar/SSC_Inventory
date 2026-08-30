@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { searchItems } from '../lib/itemSearch'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb, checkSessionAge } from '../lib/supabase'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
@@ -420,7 +421,9 @@ export default function Layout({ children, pageTitle, pageKey }) {
       canProcurement ? sb.from('purchase_orders').select('id,po_number,vendor_name,status').or(`po_number.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
       canProcurement ? sb.from('grn').select('id,grn_number,grn_type,status').ilike('grn_number', `%${q}%`).limit(5) : { data: [] },
       canProcurement ? sb.from('purchase_invoices').select('id,invoice_number,vendor_name,status').or(`invoice_number.ilike.%${q}%,vendor_name.ilike.%${q}%`).limit(5) : { data: [] },
-      canItems ? sb.from('items').select('id,item_code,item_no,brand,category').or(`item_code.ilike.%${q}%,item_no.ilike.%${q}%,brand.ilike.%${q}%`).limit(5) : { data: [] },
+      // Tiered search — see lib/itemSearch.js. Covers code, item_no and brand,
+      // and unlike the old %ILIKE% it finds codes carrying a legacy space.
+      canItems ? searchItems(q, { limit: 5 }).then(data => ({ data })) : { data: [] },
     ])
     setSearchResults({
       orders:           ordersRes.data || [],

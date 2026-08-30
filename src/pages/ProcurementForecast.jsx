@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -462,8 +463,7 @@ function POReviewModalNew({ open, onClose, onNext, brand, qLabel, seedItems }) {
   if (!open) return null
 
   const filteredRows = filter ? rows.filter(r =>
-    (r.item_code || '').toLowerCase().includes(filter.toLowerCase()) ||
-    (r.itemNo || '').toLowerCase().includes(filter.toLowerCase())
+    codeIncludes(r.item_code, filter) || codeIncludes(r.itemNo, filter)
   ) : rows
   const allChecked = rows.length > 0 && rows.every(r => r.include)
   const included = rows.filter(r => r.include)

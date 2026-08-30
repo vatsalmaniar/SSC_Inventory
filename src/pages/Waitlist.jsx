@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START } from '../lib/fmt'
@@ -157,7 +158,7 @@ export default function Waitlist() {
   }
 
   const q = search.trim().toLowerCase()
-  const matchesSearch = (o) => !q || o.order_number?.toLowerCase().includes(q) || o.customer_name?.toLowerCase().includes(q) || ownerName(o).toLowerCase().includes(q)
+  const matchesSearch = (o) => !q || codeIncludes(o.order_number, q) || o.customer_name?.toLowerCase().includes(q) || ownerName(o).toLowerCase().includes(q)
   const overdueFiltered = overdue.filter(r => matchesSearch(r.o)).filter(r => {
     if (flagFilter === 'all') return true
     if (flagFilter === 'none') return !r.o.hold_party && r.auto.length === 0
@@ -187,7 +188,7 @@ export default function Waitlist() {
       return { item_code, rows, totalWaiting: rows.reduce((s, r) => s + r.remaining, 0), available: stockMap[item_code] || 0 }
     }).sort((a, b) => (a.rows[0]?.order_date || '').localeCompare(b.rows[0]?.order_date || ''))
   })()
-  const groupsFiltered = q ? groups.filter(g => g.item_code.toLowerCase().includes(q) || g.rows.some(r => r.customer_name?.toLowerCase().includes(q) || r.order_number?.toLowerCase().includes(q))) : groups
+  const groupsFiltered = q ? groups.filter(g => codeIncludes(g.item_code, q) || g.rows.some(r => r.customer_name?.toLowerCase().includes(q) || codeIncludes(r.order_number, q))) : groups
   const daysSince = (d) => d ? Math.max(0, Math.floor((new Date(today) - new Date(d)) / 86400000)) : 0
 
   // Pagination — same 50-per-page pattern as OrdersList/GRNList. Each tab has its own row set.

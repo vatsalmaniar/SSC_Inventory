@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, FY_LABEL, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
@@ -125,14 +126,14 @@ export default function PurchaseInvoiceList() {
   }
   const q = search.trim().toLowerCase()
   const filtered = timelineInvoices.filter(matchFilter).filter(inv =>
-    !q || (inv.invoice_number || '').toLowerCase().includes(q) || (inv.vendor_name || '').toLowerCase().includes(q)
+    !q || codeIncludes(inv.invoice_number, q) || (inv.vendor_name || '').toLowerCase().includes(q)
       || (grnNumById[inv.grn_id] || '').toLowerCase().includes(q)
   )
   const isCnTab = filter === 'credit_notes'
   const cnFiltered = cnTimeline
     .filter(g => !q
-      || (g.grn_number || '').toLowerCase().includes(q)
-      || (g._order?.order_number || '').toLowerCase().includes(q)
+      || codeIncludes(g.grn_number, q)
+      || codeIncludes(g._order?.order_number, q)
       || (g._order?.customer_name || '').toLowerCase().includes(q)
       || (g.credit_note_number || '').toLowerCase().includes(q))
   // "All" mixes vendor invoices and credit/Dr-note GRNs, newest first;

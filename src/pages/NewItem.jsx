@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { searchSimilarItems } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -115,8 +116,10 @@ export default function NewItem() {
     clearTimeout(simTimer.current)
     if (!v.trim() || v.trim().length < 2) { setSimilar([]); return }
     simTimer.current = setTimeout(async () => {
-      const { data } = await sb.rpc('search_items_fuzzy', { p_query: v.trim(), p_limit: 6 })
-      setSimilar(data || [])
+      // Duplicate-prevention typeahead: RECALL, not the picker's precision.
+      // searchItems hides near-misses the moment something matches exactly,
+      // which would defeat the whole check — hence its own function.
+      setSimilar(await searchSimilarItems(v, { limit: 6 }))
     }, 250)
   }
 

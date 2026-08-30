@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt } from '../lib/fmt'
@@ -109,9 +110,9 @@ export default function OpenDeliveries() {
     return rows.filter(r => {
       if (bucket !== 'all' && r.bucket !== bucket) return false
       if (!q) return true
-      return (r.order.order_number || '').toLowerCase().includes(q)
+      return codeIncludes(r.order.order_number, q)
           || (r.order.customer_name || '').toLowerCase().includes(q)
-          || (r.dc_number || '').toLowerCase().includes(q)
+          || codeIncludes(r.dc_number, q)
     })
   }, [rows, bucket, search])
 

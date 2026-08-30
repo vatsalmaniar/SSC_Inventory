@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, FY_LABEL, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
@@ -109,8 +110,8 @@ export default function FCModule() {
   const q = search.trim().toLowerCase()
   const filtered = timelineBatches.filter(matchFilter).filter(b =>
     !q || b.orders?.customer_name?.toLowerCase().includes(q) ||
-    b.orders?.order_number?.toLowerCase().includes(q) ||
-    b.dc_number?.toLowerCase().includes(q)
+    codeIncludes(b.orders?.order_number, q) ||
+    codeIncludes(b.dc_number, q)
   )
   const totalActive = counts.action + counts.waiting
   const totalValue = filtered.reduce((s, b) => {

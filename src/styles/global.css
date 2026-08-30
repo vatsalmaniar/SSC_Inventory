@@ -99,6 +99,19 @@ html, body { min-height: 100%; font-family: var(--font); color: var(--gray-900);
 .typeahead-item-main { font-weight: 500; color: var(--gray-900); }
 .typeahead-item-sub  { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
 .typeahead-empty { padding: 9px 14px; font-size: 12.5px; font-family: var(--font); color: var(--gray-400); }
+/* Divides real matches from fuzzy suggestions in every item picker. */
+.item-type-pill {
+  display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 6px;
+  border-radius: 4px; font-family: var(--mono); font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-semibold); letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--stage-color) 13%, transparent);
+  color: color-mix(in srgb, var(--stage-color) 78%, var(--gray-900));
+}
+.typeahead-sep {
+  padding: 6px 14px; border-top: 1px solid var(--gray-200); background: var(--gray-100);
+  font-family: var(--mono); font-size: var(--fs-eyebrow); font-weight: var(--fw-medium);
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--gray-400);
+}
 /* 16px stops iOS zooming the page when the field takes focus */
 @media (max-width: 560px) { .typeahead-wrap input { font-size: 16px; } }
 

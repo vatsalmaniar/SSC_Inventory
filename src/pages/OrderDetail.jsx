@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { writeDoc } from '../lib/printDoc'
@@ -422,11 +423,10 @@ export default function OrderDetail() {
   }
 
   async function fetchItems(q) {
-    // Selects the status so a retired code can be shown wearing its pill rather
-    // than silently accepted and then refused by the database on save.
-    const { data } = await sb.from('items').select('item_code,item_status,superseded_by')
-      .ilike('item_code', '%' + q + '%').limit(10)
-    return data || []
+    // Tiered search — see lib/itemSearch.js. Was a raw %ILIKE% on the stored
+    // code, which could not find any of the 4,423 codes carrying a legacy
+    // space: "MAD140" never matched "MAD 1401040R5".
+    return searchItems(q, { limit: 10 })
   }
 
   async function goToItem(item_code) {
@@ -1571,7 +1571,7 @@ if (match) {
                             <td className="col-code">
                               <Typeahead value={item.item_code} onChange={v => updateEditItem(idx, 'item_code', v)}
                                 onSelect={it => { const b = itemBlockReason(it); if (b) { toast(b); return } updateEditItem(idx, 'item_code', it.item_code) }} placeholder="Search..."
-                                fetchFn={fetchItems} strictSelect renderItem={it => { const pill = itemStatusPill(it); return (
+                                fetchFn={fetchItems} separator={itemSuggestionBreak} strictSelect renderItem={it => { const pill = itemStatusPill(it); return (
                                   <div className="typeahead-item-main" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
                                     {it.item_code}
                                     {pill && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, background: pill.bg, color: pill.color, borderRadius: 4, padding: '1px 4px' }}>{pill.label}</span>}

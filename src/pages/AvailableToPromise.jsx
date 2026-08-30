@@ -7,6 +7,7 @@
 // list is advisory; enforcement stays in the dispatch flow (FIFO jump warning
 // + dispatch_order_batch).
 import { useState, useEffect } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, fmtTs, FY_START } from '../lib/fmt'
@@ -252,8 +253,8 @@ export default function AvailableToPromise() {
   const q = search.trim().toLowerCase()
   const filtered = ownerRows
     .filter(r => matchChip(r, chip))
-    .filter(r => !q || r.customer_name?.toLowerCase().includes(q) || r.order_number?.toLowerCase().includes(q)
-      || r.owner?.toLowerCase().includes(q) || r.lines.some(l => l.item_code?.toLowerCase().includes(q)))
+    .filter(r => !q || r.customer_name?.toLowerCase().includes(q) || codeIncludes(r.order_number, q)
+      || r.owner?.toLowerCase().includes(q) || r.lines.some(l => codeIncludes(l.item_code, q)))
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)

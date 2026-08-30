@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
@@ -137,7 +138,7 @@ export default function GRNList() {
 
   const q = search.trim().toLowerCase()
   const filtered = timelineGrns.filter(g => matchFilter(g, filter)).filter(g => matchType(g, typeFilter))
-    .filter(g => !q || g.grn_number?.toLowerCase().includes(q) || g.vendor_name?.toLowerCase().includes(q) || g.invoice_number?.toLowerCase().includes(q))
+    .filter(g => !q || codeIncludes(g.grn_number, q) || g.vendor_name?.toLowerCase().includes(q) || codeIncludes(g.invoice_number, q))
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)

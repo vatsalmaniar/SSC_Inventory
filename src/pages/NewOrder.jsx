@@ -4,7 +4,8 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { deliveryDateIssue, deliveryDateMax, orderDateIssue } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
-import { withItemStatus, itemStatusPill, itemBlockReason } from '../lib/itemStatus'
+import { withItemStatus, itemStatusPill, itemBlockReason, itemTypeColor } from '../lib/itemStatus'
+import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
@@ -77,9 +78,9 @@ export default function NewOrder() {
   }
 
   async function fetchItems(q) {
-    // Fuzzy match: finds "12A 230HBAC" when user types "12A230HBAC".
-    // Server-side, top-20 by similarity — every master item stays searchable.
-    const { data } = await sb.rpc('search_items_fuzzy', { p_query: q, p_limit: 20 })
+    // Tiered search — see lib/itemSearch.js. Exact/prefix/contains decide what
+    // is shown; fuzzy only appends suggestions below them (tier >= FUZZY_TIER).
+    const data = await searchItems(q, { limit: 20 })
     // A superseded part still shows, wearing its pill, the same way a
     // blacklisted customer does. Hiding it would leave whoever typed the old
     // code staring at an empty list; this hands them the replacement.
@@ -500,6 +501,7 @@ export default function NewOrder() {
                         onSelect={it => selectItemCode(idx, it)}
                         placeholder="Search item code or brand…"
                         fetchFn={fetchItems}
+                        separator={itemSuggestionBreak}
                         strictSelect
                         renderItem={it => {
                           const pill = itemStatusPill(it)
@@ -507,6 +509,7 @@ export default function NewOrder() {
                           <div>
                             <div style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>
                               {it.item_code}
+                              {it.type && <span className="item-type-pill" style={{ '--stage-color': itemTypeColor(it.type) }}>{it.type}</span>}
                               {pill && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, background: pill.bg, color: pill.color, borderRadius: 4, padding: '1px 5px' }}>{pill.label}</span>}
                             </div>
                             {it.superseded_by

@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { resolvePurchasePrice, resolvePurchasePrices, priceLineFields, unitPriceFor } from '../lib/itemPricing'
-import { searchItems } from '../lib/itemSearch'
+import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
+import { itemTypeColor } from '../lib/itemStatus'
 import { flagsForPo, reasonIsSufficient, wordCount, describeFlags, REASON_MIN_WORDS } from '../lib/vendorBrands'
 import { friendlyError } from '../lib/errorMsg'
 import Typeahead from '../components/Typeahead'
@@ -397,10 +398,11 @@ export default function ForecastPOModal({ open, onClose, seedItems, brand, qLabe
                           onSelect={it => { updateItem(idx, 'item_code', it.item_code); applyPricing(item._rid, it.item_code, 1) }}
                           placeholder="Search item…"
                           fetchFn={fetchItemCodes}
+                          separator={itemSuggestionBreak}
                           strictSelect
                           renderItem={it => (
                             <div>
-                              <div style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:600 }}>{it.item_code}</div>
+                              <div style={{ fontFamily:'var(--mono)', fontSize:12, fontWeight:600 }}>{it.item_code}{it.type && <span className="item-type-pill" style={{ '--stage-color': itemTypeColor(it.type) }}>{it.type}</span>}</div>
                               {(it.brand || it.category) && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:1 }}>{[it.brand, it.category].filter(Boolean).join(' · ')}</div>}
                             </div>
                           )}
