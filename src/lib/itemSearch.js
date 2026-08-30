@@ -28,7 +28,8 @@
 import { sb } from './supabase'
 
 const RPC = 'search_items_v2'          // rollback: 'search_items_fuzzy'
-const RPC_SIMILAR = 'search_items_similar'
+const RPC_SIMILAR   = 'search_items_similar'
+const RPC_INVENTORY = 'search_inventory'
 
 /** Tiers 0-4 are real matches (exact, prefix, contains, all-tokens, brand).
  *  Tiers 5-6 are fuzzy suggestions. */
@@ -100,4 +101,19 @@ export const normCode = v => (v || '').toLowerCase().replace(/[^a-z0-9]/g, '')
 export const codeIncludes = (code, query) => {
   const n = normCode(query)
   return n ? normCode(code).includes(n) : true
+}
+
+/**
+ * Live stock search for /inventory (Sales stock check). Searches the Tally
+ * `inventory` table, NOT the item master — different table, same tier rules,
+ * see sql/search_inventory.sql.
+ *
+ * Lives here so every search RPC name sits in one file: that is what makes a
+ * rollback a one-line change, and why the lint rule forbids naming these RPCs
+ * anywhere else.
+ */
+export async function searchInventory(q, { limit = 200 } = {}) {
+  const query = (q || '').trim()
+  if (!query) return { data: [], error: null }
+  return sb.rpc(RPC_INVENTORY, { p_query: query, p_limit: limit })
 }

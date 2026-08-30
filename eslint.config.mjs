@@ -34,6 +34,25 @@ export default [
     rules: {
       'react-hooks/rules-of-hooks': 'error',
       'no-undef': 'error',
+      'no-restricted-syntax': ['error',
+        {
+          selector: "CallExpression[callee.property.name='rpc'][arguments.0.value=/^search_(items|inventory)/]",
+          message: 'Do not call the search RPCs directly. Use searchItems() / searchSimilarItems() from src/lib/itemSearch.js — it is the only place that knows which RPC is live, which is also the rollback switch.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='ilike'][arguments.0.value=/^(item_code|product_code)$/]",
+          message: 'No hand-rolled item search. %ILIKE% on a part code cannot match across punctuation — "MAD140" never finds "MAD 1401040R5" (45% of codes carry a space). Use searchItems() from src/lib/itemSearch.js.',
+        },
+        {
+          selector: "TemplateElement[value.raw=/(item_code|product_code)\\.ilike/]",
+          message: 'No hand-rolled item search inside .or(). Use searchItems() from src/lib/itemSearch.js.',
+        },
+      ],
     },
+  },
+  {
+    // The one place allowed to name a search RPC — it owns the rollback switch.
+    files: ['src/lib/itemSearch.js'],
+    rules: { 'no-restricted-syntax': 'off' },
   },
 ]
