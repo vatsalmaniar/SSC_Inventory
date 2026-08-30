@@ -7,6 +7,12 @@ export default function Typeahead({ value, onChange, onSelect, placeholder, fetc
   const [dropStyle, setDropStyle] = useState({})
   const [query, setQuery]     = useState(value || '')
   const timerRef              = useRef(null)
+  // Debouncing cancels pending TIMERS, not requests already in flight. Two can
+  // overlap, and setResults ran for whichever REPLIED last rather than whichever
+  // was typed last: a slow answer for "MAD14" could overwrite the correct answer
+  // for "MAD1401030", leaving the box and the list disagreeing. Each request
+  // takes a ticket; a stale one is discarded.
+  const seqRef                = useRef(0)
   const wrapRef               = useRef(null)
   const inputRef              = useRef(null)
 
@@ -37,15 +43,19 @@ export default function Typeahead({ value, onChange, onSelect, placeholder, fetc
     const v = e.target.value
     if (strictSelect) {
       setQuery(v)
-      if (!v.trim()) { onChange(''); setResults([]); setOpen(false); return }
+      if (!v.trim()) { seqRef.current++; onChange(''); setResults([]); setOpen(false); setLoading(false); return }
     } else {
       onChange(v)
-      if (!v.trim()) { setResults([]); setOpen(false); return }
+      if (!v.trim()) { seqRef.current++; setResults([]); setOpen(false); setLoading(false); return }
     }
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(async () => {
+      const seq = ++seqRef.current
       setLoading(true)
       const data = await fetchFn(v)
+      // A newer keystroke (or a selection) has superseded this request — drop
+      // it. Whatever superseded it owns the results and the loading flag.
+      if (seq !== seqRef.current) return
       setResults(data)
       calcPosition()
       setOpen(true)
@@ -60,6 +70,11 @@ export default function Typeahead({ value, onChange, onSelect, placeholder, fetc
   }
 
   function select(item) {
+    // Invalidate anything in flight, or a late reply reopens the dropdown after
+    // the user has already picked.
+    seqRef.current++
+    clearTimeout(timerRef.current)
+    setLoading(false)
     onSelect(item)
     setOpen(false)
     setResults([])
