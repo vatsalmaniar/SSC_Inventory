@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
+import { poLinePendingQty, poLinePendingValue, poPendingValue, posPendingValue } from '../lib/poValue'
 import Layout from '../components/Layout'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { xlsStatusStyle, xlsFinish, xlsDownload } from '../lib/xlsExport'
@@ -110,6 +111,7 @@ export default function PurchaseOrderList() {
     else if (dateMode === 'cancelled') setDateMode('po')
   }
   const [search, setSearch] = useState('')
+  const [vendorFilter, setVendorFilter] = useState('all')
   const [page, setPage] = useState(1)
   const [showTest, setShowTest] = useState(false)
   const PAGE_SIZE = 50
@@ -164,9 +166,32 @@ export default function PurchaseOrderList() {
   // every filter across every PO, and without this it re-ran on every keystroke
   // in the search box. Same formulas, they just stop recomputing when nothing
   // they depend on has changed.
+  // Vendor options are keyed by vendor_id, NOT by vendor_name. A renamed vendor
+  // keeps its OLD name on the documents it already had (that is the deliberate
+  // rename rule), so grouping by name splits one vendor into two entries that
+  // each show only part of their POs. Live today: 161 POs sit under a single
+  // vendor_id as both "HICOOL ELECTRONIC INDUSTRIES PRIVATE LIMITED" and
+  // "HCE DYNAMICS PRIVATE LIMITED". `pos` arrives created_at DESC, so the first
+  // name seen for an id is the current one — that is the label we show.
+  const vendors = useMemo(() => {
+    const byId = new Map()
+    for (const po of pos) {
+      const name = (po.vendor_name || '').trim()
+      if (!name) continue
+      const key = po.vendor_id || 'name:' + name.toLowerCase()
+      if (!byId.has(key)) byId.set(key, name)
+    }
+    return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [pos])
+
+  // Applied here rather than in `filtered` so the chip counts, the KPI tiles,
+  // both totals and both Excel exports all agree with what is on screen —
+  // the same position OrdersList.jsx uses for its owner filter.
   const timelineOrders = useMemo(
-    () => pos.filter(po => inTimeline(po, timeline, customFrom, customTo, dateMode)),
-    [pos, timeline, customFrom, customTo, dateMode])
+    () => pos.filter(po => inTimeline(po, timeline, customFrom, customTo, dateMode))
+             .filter(po => vendorFilter === 'all' ||
+                           (po.vendor_id || 'name:' + (po.vendor_name || '').trim().toLowerCase()) === vendorFilter),
+    [pos, timeline, customFrom, customTo, dateMode, vendorFilter])
 
   const counts = useMemo(
     () => FILTERS.reduce((acc, { key }) => { acc[key] = timelineOrders.filter(po => matchFilter(po, key, amendedUnsent)).length; return acc }, {}),
@@ -182,6 +207,9 @@ export default function PurchaseOrderList() {
   const safePage = Math.min(page, totalPages)
   const paginated = useMemo(() => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE), [filtered, safePage])
   const sumTotal = useMemo(() => filtered.filter(po => po.status !== 'cancelled').reduce((s, po) => s + poValue(po), 0), [filtered])
+  // Value ordered but not yet received. posPendingValue already returns 0 for a
+  // cancelled PO, so no filter is needed here — see src/lib/poValue.js.
+  const sumPending = useMemo(() => posPendingValue(filtered), [filtered])
   const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'POs'
   const timelineLabel = timeline === 'custom'
     ? (customFrom || customTo ? `${customFrom || ''}–${customTo || ''}` : 'Custom')
@@ -291,10 +319,8 @@ export default function PurchaseOrderList() {
           pushRow({ ...baseRow, sr_no: rowCounter, item_code:'', total_qty:'', pending_qty:'', total_value:'', pending_value:'', delivery_date:'' })
         } else {
           items.forEach(item => {
-            const recv = item.received_qty || 0
-            const pendingQty = Math.max(0, (item.qty || 0) - recv)
-            const unit = item.unit_price_after_disc || item.unit_price || item.lp_unit_price || 0
-            const pendingValueLocal = pendingQty * unit
+            const pendingQty = poLinePendingQty(item)
+            const pendingValueLocal = poLinePendingValue(item)
             rowCounter += 1
             pushRow({
               ...baseRow,
@@ -315,7 +341,7 @@ export default function PurchaseOrderList() {
 
   return (
     <Layout pageTitle="Purchase Orders" pageKey="procurement">
-      <div className="orders-app">
+      <div className="orders-app polist-app">
         <div className="page-head">
           <div>
             <h1 className="page-title">Purchase Orders</h1>
@@ -323,6 +349,7 @@ export default function PurchaseOrderList() {
               <span><b>{filtered.length}</b> {activeFilterLabel.toLowerCase()}</span>
               <span className="o-sep">·</span>
               <span><b>{fmtCr(sumTotal)}</b> total value</span>
+              {sumPending > 0 && (<><span className="o-sep">·</span><span style={{color:'#B45309'}}><b style={{color:'#B45309'}}>{fmtCr(sumPending)}</b> pending</span></>)}
             </div>
           </div>
           <div className="page-meta">
@@ -382,6 +409,10 @@ export default function PurchaseOrderList() {
               </button>
             )}
           </div>
+          <select className="o-owner-select" value={vendorFilter} onChange={e => { setVendorFilter(e.target.value); setPage(1) }} title="Filter by vendor">
+            <option value="all">All Vendors</option>
+            {vendors.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+          </select>
           <div className="o-datemode">
             <button className={dateMode === 'po' ? 'on' : ''} onClick={() => { setDateMode('po'); setPage(1) }}>PO Date</button>
             <button className={dateMode === 'expected' ? 'on' : ''} onClick={() => { setDateMode('expected'); setPage(1) }}>Expected Delivery</button>
@@ -404,14 +435,15 @@ export default function PurchaseOrderList() {
           <div className="o-loading">Loading POs…</div>
         ) : (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '140px minmax(0, 1.4fr) 110px minmax(0, 1fr) auto 140px' }}>
+            <div className="ol-row ol-head">
               <div>PO #</div>
               <div>Vendor</div>
               <div>{filter === 'cancelled' ? 'Cancelled On' : 'PO Date'}</div>
-              <div>Submitted By</div>
+              <div className="po-hide-md">Submitted By</div>
               <div className="ol-numgroup">
                 <div className="num num-label" style={{ textAlign:'right' }}>Items</div>
                 <div className="num num-label" style={{ textAlign:'right' }}>Value</div>
+                <div className="num num-label" style={{ textAlign:'right' }}>Pending</div>
               </div>
               <div className="num">Status</div>
             </div>
@@ -425,7 +457,7 @@ export default function PurchaseOrderList() {
                 {paginated.map(po => {
                   const color = PO_STATUS_COLORS[po.status] || '#94A3B8'
                   return (
-                    <div key={po.id} className="ol-row ol-data" style={{ gridTemplateColumns: '140px minmax(0, 1.4fr) 110px minmax(0, 1fr) auto 140px' }} onClick={() => navigate('/procurement/po/' + po.id)}>
+                    <div key={po.id} className="ol-row ol-data" onClick={() => navigate('/procurement/po/' + po.id)}>
                       <div className="ol-cell">
                         <div className="ol-num">{po.po_number}</div>
                         {po.order_number && <div className="ol-date-sub">{po.order_number}</div>}
@@ -444,7 +476,7 @@ export default function PurchaseOrderList() {
                           </>
                         )}
                       </div>
-                      <div className="ol-cell">
+                      <div className="ol-cell po-hide-md">
                         {po.submitted_by_name ? (
                           <div className="ol-owner" title={po.submitted_by_name}>
                             <PeopleAvatar name={po.submitted_by_name} className="ol-owner-avatar" />
@@ -455,6 +487,14 @@ export default function PurchaseOrderList() {
                       <div className="ol-numgroup">
                         <div className="ol-items">{(po.po_items || []).length}</div>
                         <div className="ol-val">₹{poValue(po).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        {/* Third cell. .ol-numgroup declares THREE tracks
+                            (44px 110px 110px, orders-redesign.css:273) and this
+                            page rendered two, leaving a dead 110px gutter before
+                            Status on every row. It is also the number a buyer
+                            actually wants: value still to be received. */}
+                        <div className={'ol-pending ' + (poPendingValue(po) > 0 ? 'has' : '')}>
+                          {poPendingValue(po) > 0 ? '₹' + poPendingValue(po).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
+                        </div>
                       </div>
                       <div className="ol-cell ol-status-cell">
                         <span className="ol-status-pill" style={{ '--stage-color': color }}>

@@ -19,6 +19,7 @@ import { SLA_APPROVE_HOURS, SLA_PLACE_HOURS } from '../lib/coverage'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
 import { toast } from '../lib/toast'
+import { poLinePendingQty, poUnitPrice } from '../lib/poValue'
 import Typeahead from '../components/Typeahead'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
@@ -2255,7 +2256,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                                                      : r < (item.qty || 0)
                       }).map((item, idx) => {
                         const rec    = item.received_qty || 0
-                        const pend   = Math.max(0, (item.qty || 0) - rec)
+                        const pend   = poLinePendingQty(item)
                         const status = (item.qty || 0) > 0 && rec >= (item.qty || 0) ? 'done' : rec > 0 ? 'partial' : 'pending'
                         return (
                           <tr key={item.id || idx}>
@@ -2282,7 +2283,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                             <td style={{ textAlign:'center', color: pend > 0 ? '#b45309' : 'var(--gray-400)', fontWeight:600 }}>{pend || '—'}</td>
                             <td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
                             <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td>
-                            <td>{fmtINR(item.unit_price_after_disc || item.unit_price)}</td>
+                            <td>{fmtINR(poUnitPrice(item))}</td>
                             <td className="right">{fmtINR(item.total_price)}</td>
                             <td className="right" style={{ paddingRight:20 }}>
                               {status === 'done'    && <span className="od-sf-pill done">✓ Received</span>}
@@ -2308,7 +2309,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       return itemFilter === 'recd' ? r >= (item.qty || 0) && (item.qty || 0) > 0 : r < (item.qty || 0)
                     })
                     const units = shown.reduce((s2, i) => s2 + (Number(i.qty) || 0), 0)
-                    const recdValue = items.reduce((s2, i) => s2 + (Number(i.received_qty) || 0) * (Number(i.unit_price_after_disc) || 0), 0)
+                    const recdValue = items.reduce((s2, i) => s2 + (Number(i.received_qty) || 0) * poUnitPrice(i), 0)
                     return (
                       <div className="od-uni-foot">
                         <span className="tf-label">{shown.length} of {items.length} items · {units} units</span>
@@ -2337,14 +2338,14 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 </div>
 
                 {/* GRN-wise summary */}
-                <div style={{ padding:'0 20px 16px' }}>
+                <div style={{ padding:'0 20px 16px', display:'flex', flexDirection:'column', gap:12 }}>
                   {grns.map(g => {
                     const gItems = Object.values(grnItemsByPOItem).flat().filter(gi => gi.grn?.id === g.id || gi.grn_number === g.grn_number)
                     return (
-                      <div key={g.id} style={{ border:'1px solid var(--gray-100)', borderRadius:10, overflow:'hidden' }}>
+                      <div key={g.id} style={{ border:'1px solid var(--gray-100)', borderRadius:8, overflow:'hidden' }}>
                         {/* GRN header */}
                         <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'var(--gray-50)', flexWrap:'wrap' }}>
-                          <span onClick={() => navigate('/fc/grn/' + g.id)} style={{ fontFamily:'var(--mono)', fontWeight:700, fontSize:13, color:'#1d4ed8', cursor:'pointer' }}>{g.grn_number}</span>
+                          <span onClick={() => navigate('/fc/grn/' + g.id)} style={{ fontFamily:'var(--mono)', fontWeight:600, fontSize:13, color:'var(--blue-800)', cursor:'pointer' }}>{g.grn_number}</span>
                           {/* od-sf-pill, not `pill` — .pill/.pill-received live only in styles/orders.css,
                               which this page does not import. Routes are lazy-loaded and the build
                               splits orders-*.css from orderdetail-*.css, so landing directly on a PO
@@ -2357,7 +2358,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                           </span>
                           {g.received_by && <OwnerChip name={g.received_by} />}
                           <span onClick={(e) => { e.stopPropagation(); navigate('/fc/grn/' + g.id) }}
-                            style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11, fontWeight:600, color:'#1d4ed8', cursor:'pointer', padding:'4px 10px', background:'#eff6ff', borderRadius:6, border:'1px solid #bfdbfe' }}>
+                            style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11, fontWeight:600, color:'var(--blue-800)', cursor:'pointer', padding:'4px 10px', background:'var(--blue-50)', borderRadius:6, border:'1px solid var(--blue-200)' }}>
                             <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" style={{ width:13, height:13 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View GRN
                           </span>
@@ -2367,20 +2368,20 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                             stylesheet's scroll fallback only starts at <=560px, so without this an 11-column
                             table is CLIPPED (not scrollable) between ~561px and the ~900px breakpoint. */}
                         <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                        <table className="od-items-table">
                           <thead>
-                            <tr style={{ borderBottom:'1px solid var(--gray-100)' }}>
-                              <th style={{ padding:'8px 16px', textAlign:'left', fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Item Code</th>
-                              <th style={{ padding:'8px 12px', textAlign:'center', fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Ordered</th>
-                              <th style={{ padding:'8px 12px', textAlign:'center', fontSize:10, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Received</th>
+                            <tr>
+                              <th>Item Code</th>
+                              <th style={{ textAlign:'center' }}>Ordered</th>
+                              <th style={{ textAlign:'center' }}>Received</th>
                             </tr>
                           </thead>
                           <tbody>
                             {gItems.map((gi, i) => (
-                              <tr key={i} style={{ borderBottom: i < gItems.length - 1 ? '1px solid var(--gray-50)' : 'none' }}>
-                                <td style={{ padding:'8px 16px', fontFamily:'var(--mono)', fontWeight:500, color:'var(--gray-800)' }}>{gi.item_code}</td>
-                                <td style={{ padding:'8px 12px', textAlign:'center', color:'var(--gray-500)' }}>{gi.ordered_qty || '—'}</td>
-                                <td style={{ padding:'8px 12px', textAlign:'center', fontWeight:700, color:'var(--green-text)' }}>{gi.received_qty}</td>
+                              <tr key={i}>
+                                <td className="mono">{gi.item_code}</td>
+                                <td style={{ textAlign:'center', color:'var(--gray-500)' }}>{gi.ordered_qty || '—'}</td>
+                                <td style={{ textAlign:'center', fontWeight:600, color:'var(--green-text)' }}>{gi.received_qty}</td>
                               </tr>
                             ))}
                           </tbody>
