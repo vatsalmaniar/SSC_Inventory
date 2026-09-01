@@ -2,7 +2,9 @@
 // drift between pages. (Before this, /orders and /orders/list each rolled their
 // own math and disagreed: 9.28 vs 9.25 on the same data.)
 //
-// Definition (agreed with the user):
+// Definition (agreed with the user; RE-CONFIRMED 2026-09-01 — "this is perfect"
+// — after it was enforced across all 16 value sites, so treat any proposal to
+// change it as a business decision that needs asking, never a refactor):
 //   - A CANCELLED order contributes 0 (excluded entirely — no revenue).
 //   - Per LINE: total_price minus the value of cancelled qty (partial cancels
 //     are always netted out).
