@@ -58,11 +58,17 @@ export function itemSuggestionBreak(prev, row) {
  *                              sim, tier — a superset of what every picker
  *                              renders, so call sites need no reshaping.
  */
-export async function searchItems(q, { limit = 20, activeOnly = false } = {}) {
+export async function searchItems(q, { limit = 20, activeOnly = false, brand = null, category = null, type = null } = {}) {
   const query = (q || '').trim()
   if (!query) return []
 
-  const { data, error } = await sb.rpc(RPC, { p_query: query, p_limit: limit })
+  // brand/category/type are applied BY THE DATABASE, before the limit. Filtering
+  // the fetched page in the browser instead is what made Item 360 report
+  // "No items found" for brands whose items all ranked past the limit.
+  const { data, error } = await sb.rpc(RPC, {
+    p_query: query, p_limit: limit,
+    p_brand: brand || null, p_category: category || null, p_type: type || null,
+  })
   if (error || !data) return []
   if (!activeOnly || !data.length) return data
 

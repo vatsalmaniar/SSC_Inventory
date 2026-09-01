@@ -57,11 +57,13 @@ export default function ItemMaster() {
     // decide membership; fuzzy only appends below. Server-side top-200,
     // then client filter + paginate.
     if (q.trim()) {
-      const data = await searchItems(q, { limit: 200 })
-      let rows = data || []
-      if (brand) rows = rows.filter(r => r.brand === brand)
-      if (cat)   rows = rows.filter(r => r.category === cat)
-      if (type)  rows = rows.filter(r => r.type === type)
+      // Filters go to the DATABASE, not applied to the already-fetched page.
+      // Filtering client-side meant the top 200 were fetched and THEN narrowed, so
+      // a brand whose items all ranked past 200 showed "No items found" for items
+      // that exist — searching "UNI" (415 matches) hid seven brands outright, and
+      // the header count under-reported along with them.
+      const data = await searchItems(q, { limit: 200, brand, category: cat, type })
+      const rows = data || []
       const from = (p - 1) * PAGE_SIZE
       setItems(rows.slice(from, from + PAGE_SIZE))
       setTotal(rows.length)

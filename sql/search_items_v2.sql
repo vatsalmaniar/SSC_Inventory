@@ -65,7 +65,15 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_items_code_norm_btree_pat
 -- CREATE OR REPLACE cannot do — hence the DROP. Safe only while nothing in
 -- production calls this; search_items_fuzzy is what production still uses.
 DROP FUNCTION IF EXISTS public.search_items_v2(text, integer);
-CREATE FUNCTION public.search_items_v2(p_query text, p_limit integer DEFAULT 20)
+DROP FUNCTION IF EXISTS public.search_items_v2(text, integer, text, text, text);
+CREATE FUNCTION public.search_items_v2(
+  p_query text, p_limit integer DEFAULT 20,
+  -- Optional facet filters. They MUST be applied inside every tier branch, i.e.
+  -- BEFORE each per-tier LIMIT — Item 360 used to fetch the top 200 and filter in
+  -- the browser, so a brand whose items all ranked past 200 showed "No items
+  -- found" for items that exist. Searching "UNI" (415 matches) hid SEVEN brands
+  -- outright. Defaults are NULL, so the other eleven callers are unaffected.
+  p_brand text DEFAULT NULL, p_category text DEFAULT NULL, p_type text DEFAULT NULL)
 RETURNS TABLE (
   id uuid, item_no text, item_code text, brand text, category text,
   subcategory text, type text, item_status text, superseded_by text,
@@ -110,12 +118,18 @@ toks AS (
 strict AS (
   SELECT i.id, 0::smallint AS tier FROM public.items i, q
    WHERE q.nlen > 0 AND lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')) = q.norm
+     AND (p_brand IS NULL OR i.brand = p_brand)
+     AND (p_category IS NULL OR i.category = p_category)
+     AND (p_type IS NULL OR i.type = p_type)
   UNION ALL
   SELECT i.id, 0::smallint FROM public.items i, q
    WHERE q.ino ~ '^IN[0-9]+$' AND i.item_no = q.ino
+     AND (p_brand IS NULL OR i.brand = p_brand)
+     AND (p_category IS NULL OR i.category = p_category)
+     AND (p_type IS NULL OR i.type = p_type)
   UNION ALL
   SELECT id, 1::smallint AS tier FROM (
-    SELECT i.id FROM public.items i, q WHERE q.nlen > 0 AND lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')) LIKE q.norm || '%'
+    SELECT i.id FROM public.items i, q WHERE q.nlen > 0 AND lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')) LIKE q.norm || '%' AND (p_brand IS NULL OR i.brand = p_brand) AND (p_category IS NULL OR i.category = p_category) AND (p_type IS NULL OR i.type = p_type)
      ORDER BY CASE WHEN i.type = 'SI' THEN 0 ELSE 1 END,
               length(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')),
               similarity(lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')), q.norm) DESC,
@@ -123,7 +137,7 @@ strict AS (
      LIMIT (SELECT lim FROM q)) z
   UNION ALL
   SELECT id, 2::smallint AS tier FROM (
-    SELECT i.id FROM public.items i, q WHERE q.nlen >= 3 AND lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')) LIKE '%' || q.norm || '%'
+    SELECT i.id FROM public.items i, q WHERE q.nlen >= 3 AND lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')) LIKE '%' || q.norm || '%' AND (p_brand IS NULL OR i.brand = p_brand) AND (p_category IS NULL OR i.category = p_category) AND (p_type IS NULL OR i.type = p_type)
      ORDER BY CASE WHEN i.type = 'SI' THEN 0 ELSE 1 END,
               length(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')),
               similarity(lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')), q.norm) DESC,
@@ -138,6 +152,9 @@ strict AS (
        AND lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')) LIKE '%' || tk.lead || '%'
        AND NOT EXISTS (SELECT 1 FROM unnest(tk.arr) t
                         WHERE lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')) NOT LIKE '%' || t || '%')
+     AND (p_brand IS NULL OR i.brand = p_brand)
+     AND (p_category IS NULL OR i.category = p_category)
+     AND (p_type IS NULL OR i.type = p_type)
      ORDER BY CASE WHEN i.type = 'SI' THEN 0 ELSE 1 END,
               length(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')),
               similarity(lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')), q.norm) DESC,
@@ -145,7 +162,7 @@ strict AS (
      LIMIT (SELECT lim FROM q)) z
   UNION ALL
   SELECT id, 4::smallint AS tier FROM (
-    SELECT i.id FROM public.items i, q WHERE q.nlen >= 3 AND i.brand ILIKE '%' || q.raw || '%'
+    SELECT i.id FROM public.items i, q WHERE q.nlen >= 3 AND i.brand ILIKE '%' || q.raw || '%' AND (p_brand IS NULL OR i.brand = p_brand) AND (p_category IS NULL OR i.category = p_category) AND (p_type IS NULL OR i.type = p_type)
      ORDER BY CASE WHEN i.type = 'SI' THEN 0 ELSE 1 END,
               length(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')),
               similarity(lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')), q.norm) DESC,
@@ -160,18 +177,27 @@ fuzzy AS (
    WHERE NOT EXISTS (SELECT 1 FROM strict_best)
      AND q.nlen >= 4
      AND i.item_code % q.raw
+     AND (p_brand IS NULL OR i.brand = p_brand)
+     AND (p_category IS NULL OR i.category = p_category)
+     AND (p_type IS NULL OR i.type = p_type)
   UNION ALL
   -- 5b: normalised trigram (punctuation-blind typos) -> idx_items_code_norm_trgm
   SELECT i.id, 5::smallint FROM public.items i, q
    WHERE NOT EXISTS (SELECT 1 FROM strict_best)
      AND q.nlen >= 4
      AND lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')) % q.norm
+     AND (p_brand IS NULL OR i.brand = p_brand)
+     AND (p_category IS NULL OR i.category = p_category)
+     AND (p_type IS NULL OR i.type = p_type)
   UNION ALL
   -- 5c: v1's brand trigram clause -> idx_items_brand_trgm
   SELECT i.id, 5::smallint FROM public.items i, q
    WHERE NOT EXISTS (SELECT 1 FROM strict_best)
      AND q.nlen >= 4
      AND i.brand % q.raw
+     AND (p_brand IS NULL OR i.brand = p_brand)
+     AND (p_category IS NULL OR i.category = p_category)
+     AND (p_type IS NULL OR i.type = p_type)
   UNION ALL
   -- Tier 6: legacy reverse-containment ("the code is inside what I typed"),
   -- rewritten as equality against the enumerated substrings of the query so it
@@ -179,6 +205,9 @@ fuzzy AS (
   SELECT i.id, 6::smallint FROM public.items i, cands c
    WHERE NOT EXISTS (SELECT 1 FROM strict_best)
      AND lower(regexp_replace(i.item_code,'[^a-zA-Z0-9]','','g')) = ANY (c.arr)
+     AND (p_brand IS NULL OR i.brand = p_brand)
+     AND (p_category IS NULL OR i.category = p_category)
+     AND (p_type IS NULL OR i.type = p_type)
 ),
 -- Suggestions are a LAST RESORT, never padding: they appear ONLY when the
 -- strict tiers found NOTHING, and are then capped at 12. Typing a real part code
@@ -220,8 +249,8 @@ SELECT i.id, i.item_no, i.item_code, i.brand, i.category, i.subcategory, i.type,
  LIMIT (SELECT lim FROM q);
 $fn$;
 
-REVOKE ALL ON FUNCTION public.search_items_v2(text, integer) FROM public, anon;
-GRANT EXECUTE ON FUNCTION public.search_items_v2(text, integer) TO authenticated;
+REVOKE ALL ON FUNCTION public.search_items_v2(text, integer, text, text, text) FROM public, anon;
+GRANT EXECUTE ON FUNCTION public.search_items_v2(text, integer, text, text, text) TO authenticated;
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- search_items_similar — duplicate detection ONLY (New Item typeahead)
