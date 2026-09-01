@@ -92,7 +92,13 @@ CREATE TABLE IF NOT EXISTS public.expenses (
   expense_date    date NOT NULL,
   -- make_date (not date_trunc): date_trunc on a date is NOT immutable → can't be generated
   month_start     date GENERATED ALWAYS AS (make_date(EXTRACT(YEAR FROM expense_date)::int, EXTRACT(MONTH FROM expense_date)::int, 1)) STORED,
-  amount          numeric NOT NULL CHECK (amount > 0 AND amount <= 100000),   -- the BILL amount
+  amount          numeric NOT NULL CHECK (amount > 0 AND amount <= 200000),   -- the BILL amount
+  -- Cap raised 1,00,000 -> 2,00,000 on 2026-09-01 (user request). Applied live as:
+  --   ALTER TABLE public.expenses DROP CONSTRAINT expenses_amount_check,
+  --     ADD CONSTRAINT expenses_amount_check CHECK (amount > 0 AND amount <= 200000);
+  -- Change the DB first, then src/pages/PeopleExpenses.jsx — the other way round
+  -- lets someone submit and get a raw Postgres constraint error instead of the
+  -- form's message. Both must always carry the same number.
   approved_amount numeric CHECK (approved_amount IS NULL OR (approved_amount >= 0 AND approved_amount <= amount)),
   payment_method  text NOT NULL CHECK (payment_method IN ('card','cash','gpay')),  -- how the EMPLOYEE paid the vendor
   vendor          text,                             -- selected from category.vendor_options (Uber / Airtel / …)

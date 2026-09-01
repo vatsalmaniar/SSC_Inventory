@@ -69,7 +69,7 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
     const d = EX.expenseDateIssue(date); if (d) er.date = `Date ${d}`
     const amt = Number(amount)
     if (!amount || isNaN(amt) || amt <= 0) er.amount = 'Enter the bill amount'
-    else if (amt > 100000) er.amount = 'Max ₹1,00,000 per claim'
+    else if (amt > 200000) er.amount = 'Max ₹2,00,000 per claim'
     if (!pay) er.pay = 'Select how you paid'
     if (vendorOpts.length && !vendor) er.vendor = 'Select one'
     if (!files.length) er.files = 'Attach at least one bill'
