@@ -243,7 +243,10 @@ export default function PurchaseOrderDetail() {
         // If linked CO is cancelled AND this PO is post-approval (with vendor), fetch active COs for relink
         if (o?.status === 'cancelled' && o?.customer_name) {
           const { data: activeCOs } = await sb.from('orders')
-            .select('id,order_number,customer_name,status,created_at,order_items(id,total_price)')
+            // cancelled_qty + the two price columns are NOT decoration: the
+            // dropdown value below uses lineNetValue(), which silently returns
+            // the GROSS figure if cancelled_qty is absent from the row.
+            .select('id,order_number,customer_name,status,created_at,order_items(id,total_price,cancelled_qty,unit_price_after_disc,lp_unit_price)')
             .ilike('customer_name', o.customer_name.trim())
             .eq('order_type', 'CO').eq('is_test', false)
             .neq('status', 'cancelled')
