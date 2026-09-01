@@ -69,6 +69,22 @@ const STALE_RED_H = 49
 // the LAST synced allocation (with its timestamp); only the Sync button
 // re-runs the stock match. Delivered/terminal orders are still dropped on
 // every load so an already-shipped order can never look dispatchable.
+// Server-side allocation. atp_allocation() (sql/atp_allocation.sql) is a
+// faithful port of lib/dispatchability.js, parity-verified on live data:
+// 466 orders / 1,334 lines / 0 differences (scripts/atp-parity.mjs).
+//
+// It removes the per-browser snapshot below: every user ran FIFO locally over
+// all FY orders + the whole stock sheet (9 round trips, 3.2 MB) and cached the
+// result in THEIR browser — so two users could see different allocations of the
+// same stock, and an upload by accounts reached nobody until each person
+// noticed a banner and pressed Sync. One call, 490 kB, same answer for everyone.
+//
+// ROLLBACK: set this to false. The client path below is untouched and still
+// works — no database change needed. Delete it (and lib/dispatchability.js)
+// only after this has run clean in production for a week; that file is the
+// reference implementation the parity harness tests against.
+const USE_SERVER_ALLOCATION = true
+
 const cacheKey = (testMode) => `atp_snapshot_v1_${testMode ? 'test' : 'live'}`
 function readCache(testMode) {
   try { const raw = localStorage.getItem(cacheKey(testMode)); return raw ? JSON.parse(raw) : null } catch { return null }
@@ -113,9 +129,47 @@ export default function AvailableToPromise() {
   // Page open: show the last synced snapshot (no stock re-match), refresh only
   // the order side so delivered orders drop off. First visit → full sync.
   async function open(testMode) {
+    // Server mode: always live. Nothing to be stale, nothing to sync.
+    if (USE_SERVER_ALLOCATION) { await serverSync(testMode); return }
     const cache = readCache(testMode)
     if (!cache?.result?.orders) { await fullSync(testMode); return }
     await refreshFromCache(testMode, cache)
+  }
+
+  // One RPC. Shape is identical to allocateFifo()'s return, so everything
+  // downstream — buckets, chips, counts, expansion, export — is unchanged.
+  async function serverSync(testMode = false) {
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const [allocRes, statusRes] = await Promise.all([
+        sb.rpc('atp_allocation', { p_test: testMode }),
+        sb.rpc('get_inventory_status'),
+      ])
+      if (allocRes.error) throw allocRes.error
+      const alloc = allocRes.data
+      if (!alloc || !Array.isArray(alloc.orders)) throw new Error('Allocation returned no orders')
+
+      await loadFreshness(statusRes, null)
+      setGhostLocs(alloc.ghostLocations || [])
+      // Torn-upload probe: a normal upload stamps every qty>0 row of a location
+      // with one timestamp. A wide min-max spread means a half-finished upload.
+      setTornLocs(Object.entries(alloc.freshness || {})
+        .filter(([, f]) => new Date(f.max) - new Date(f.min) > 2 * 3600000)
+        .map(([loc]) => loc))
+
+      setResult(alloc)
+      setLastSynced(new Date())
+      setNewSinceSync(0)   // computed live — nothing can be missing from it
+      setExpanded(new Set())
+      setPage(1)
+    } catch (e) {
+      console.error('ATP server allocation error:', e)
+      setLoadError(e.message || 'Failed to load')
+      toast('Available to Promise failed to load: ' + (e.message || e), 'error')
+      setResult(null)
+    }
+    setLoading(false)
   }
 
   function fetchOrders(testMode) {
@@ -143,7 +197,15 @@ export default function AvailableToPromise() {
     setFreshness(Object.entries(map).map(([loc, v]) => ({ loc, ...v })).sort((a, b) => a.loc.localeCompare(b.loc)))
   }
 
-  // The Sync button: re-read orders + the full stock sheet, re-run FIFO.
+  // Every recompute trigger goes through here so USE_SERVER_ALLOCATION is
+  // honoured in one place — page open, Sync button and the test-mode toggle.
+  function resync(testMode = false) {
+    return USE_SERVER_ALLOCATION ? serverSync(testMode) : fullSync(testMode)
+  }
+
+  // CLIENT PATH (rollback). Re-reads orders + the full stock sheet, runs FIFO
+  // in the browser and caches it in localStorage. Kept until the server path
+  // has run clean in production — see USE_SERVER_ALLOCATION.
   async function fullSync(testMode = false) {
     setLoading(true)
     setLoadError(null)
@@ -273,7 +335,15 @@ export default function AvailableToPromise() {
   async function downloadSheet() {
     // Export exactly what the screen shows: order rows (fresh) + their lines
     const exportLines = (result?.orders || []).flatMap(r =>
-      r.lines.map(l => ({ ...l, order_status: r.order_status, hold_reason: r.hold_reason, partials_allowed: r.partials_allowed })))
+      // Order-level fields come from `r`, never repeated on every line object
+      // (see sql/atp_allocation.sql — repeating them was ~200 kB per call).
+      r.lines.map(l => ({
+        ...l,
+        order_number: r.order_number, order_date: r.order_date,
+        order_type: r.order_type, customer_name: r.customer_name, owner: r.owner,
+        order_status: r.order_status, hold_reason: r.hold_reason,
+        partials_allowed: r.partials_allowed,
+      })))
     if (!exportLines.length) { toast('Nothing to export.', 'warning'); return }
     let ExcelJS
     try { ExcelJS = (await import('exceljs')).default } catch (e) { toast('Failed to load Excel library: ' + e.message, 'error'); return }
@@ -356,7 +426,7 @@ export default function AvailableToPromise() {
             })}
             {user.role === 'admin' && (
               <label className={`o-test-toggle ${showTest ? 'on' : ''}`}>
-                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); fullSync(e.target.checked) }} style={{accentColor:'#B45309',width:13,height:13}}/>
+                <input type="checkbox" checked={showTest} onChange={e => { setShowTest(e.target.checked); resync(e.target.checked) }} style={{accentColor:'#B45309',width:13,height:13}}/>
                 Test Mode
               </label>
             )}
@@ -364,7 +434,7 @@ export default function AvailableToPromise() {
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Export
             </button>
-            <button onClick={() => fullSync(showTest)} disabled={loading}
+            <button onClick={() => resync(showTest)} disabled={loading}
               title="Re-read orders and the stock sheet, re-run FIFO allocation"
               style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'8px 14px', border:'1px solid #1a73e8', borderRadius:8, background: loading ? '#dbeafe' : '#1a73e8', color: loading ? '#1e40af' : 'white', fontSize:12, fontWeight:600, cursor: loading ? 'wait' : 'pointer', fontFamily:'var(--font)' }}>
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14 }}><path d="M21 12a9 9 0 11-3.5-7.1M21 4v5h-5"/></svg>
