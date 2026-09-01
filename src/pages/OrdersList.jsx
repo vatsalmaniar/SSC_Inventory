@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
@@ -207,9 +207,21 @@ export default function OrdersList() {
     // 1400+ orders/FY — a single query silently dropped the oldest 400+,
     // which made the Cancelled chip read 11 instead of 25). fetchAll pages
     // with .range() and a stable created_at+id sort.
+    //
+    // SELECT ONLY WHAT IS READ. This used to pull every column, 6,928 kB of
+    // JSON per load for 50 visible rows — 1,303 kB of it order_dispatches
+    // .dispatched_items, a blob nothing on this page or in its libraries ever
+    // touched. Trimmed to the fields actually consumed: 3,473 kB, same numbers.
+    //
+    // Before removing anything else, check src/lib/orderValue.js AND
+    // src/lib/orderStatus.js, not just this file. lp_unit_price looks unused
+    // here and is not — orderValue.lineNetValue falls back to it when
+    // unit_price_after_disc is absent, so dropping it silently changes money.
+    // dispatched_qty is kept deliberately: the saving is one number per line,
+    // and confusing it with posted_qty is the most-repeated bug in this repo.
     const { data, error, truncated } = await fetchAll((from, to) => {
       let q = sb.from('orders')
-        .select('id,order_number,customer_name,customer_gst,account_owner,engineer_name,order_date,order_type,status,freight,credit_terms,po_number,dispatch_address,received_via,notes,credit_override,created_at,cancelled_at,order_items(id,sr_no,item_code,qty,dispatched_qty,posted_qty,lp_unit_price,discount_pct,unit_price_after_disc,total_price,dispatch_date,customer_ref_no,cancelled_qty,line_status,cancelled_at),order_dispatches(id,batch_no,invoice_number,dc_number,eway_bill_number,dispatched_items,delivered_at,status)')
+        .select('id,order_number,customer_name,account_owner,engineer_name,order_date,order_type,status,freight,po_number,created_at,cancelled_at,order_items(id,sr_no,item_code,qty,dispatched_qty,posted_qty,lp_unit_price,unit_price_after_disc,total_price,dispatch_date,cancelled_qty,cancelled_at),order_dispatches(id,delivered_at,status)')
         .gte('created_at', FY_START).eq('is_test', testMode)
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
@@ -242,23 +254,42 @@ export default function OrdersList() {
     return false
   }
 
-  const owners = [...new Set(orders.map(o => o.account_owner || o.engineer_name).filter(Boolean))].sort((a, b) => a.localeCompare(b))
-  const timelineOrders = orders
+  // All of this used to be recomputed on EVERY render — including every
+  // keystroke in the search box. `counts` alone is 8 filters x 3,000+ orders,
+  // several of which walk order_items: ~24,000 matchFilter calls per keystroke.
+  // Memoised, the formulas are untouched; they simply stop re-running when
+  // nothing they depend on has changed.
+  const owners = useMemo(
+    () => [...new Set(orders.map(o => o.account_owner || o.engineer_name).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [orders])
+
+  const timelineOrders = useMemo(() => orders
     .filter(o => inTimeline(o, timeline, customFrom, customTo, dateMode))
-    .filter(o => ownerFilter === 'all' || (o.account_owner || o.engineer_name) === ownerFilter)
-  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = timelineOrders.filter(o => matchFilter(o, key)).length; return acc }, {})
+    .filter(o => ownerFilter === 'all' || (o.account_owner || o.engineer_name) === ownerFilter),
+    [orders, timeline, customFrom, customTo, dateMode, ownerFilter])
+
+  // Chip counts depend on the timeline set only — NOT on the active chip or the
+  // search box, so typing no longer recounts all eight.
+  const counts = useMemo(
+    () => FILTERS.reduce((acc, { key }) => { acc[key] = timelineOrders.filter(o => matchFilter(o, key)).length; return acc }, {}),
+    [timelineOrders])
 
   const q = search.trim().toLowerCase()
-  const filtered = timelineOrders
+  const filtered = useMemo(() => timelineOrders
     .filter(o => matchFilter(o, filter))
-    .filter(o => !q || o.customer_name?.toLowerCase().includes(q) || codeIncludes(o.order_number, q) || o.engineer_name?.toLowerCase().includes(q))
+    .filter(o => !q || o.customer_name?.toLowerCase().includes(q) || codeIncludes(o.order_number, q) || o.engineer_name?.toLowerCase().includes(q)),
+    [timelineOrders, filter, q])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
-  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+  const paginated = useMemo(
+    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filtered, safePage])
 
-  const sumTotal = ordersTotalValue(filtered)
-  const sumPending = filtered.filter(o => o.status !== 'cancelled').reduce((s, o) => s + pendingValue(o), 0)
+  const sumTotal = useMemo(() => ordersTotalValue(filtered), [filtered])
+  const sumPending = useMemo(
+    () => filtered.filter(o => o.status !== 'cancelled').reduce((s, o) => s + pendingValue(o), 0),
+    [filtered])
 
   const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'Orders'
   const timelineLabel = timeline === 'custom'
