@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { lineNetValue } from '../lib/orderValue'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
@@ -42,7 +42,7 @@ const PO_PIPE_LABELS = {
 const PIPELINE = ['draft','pending_approval','approved','placed','acknowledged','delivery_confirmation','partially_received','material_received','closed']
 const FC_OPTIONS = ['Kaveri','Godawari']
 
-const AVATAR_COLORS = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569','#c2410c','#4f7942']
+const AVATAR_COLORS = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','var(--gray-600)','#c2410c','#4f7942']
 function ownerColor(name) { let h=0; for(let i=0;i<name.length;i++) h=name.charCodeAt(i)+((h<<5)-h); return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length] }
 function OwnerChip({ name }) {
   const _p=usePeopleDir()[(name||'').trim().toLowerCase()];
@@ -80,6 +80,7 @@ export default function PurchaseOrderDetail() {
   const [revisions, setRevisions] = useState([])   // newest first; [0] is current
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
+  const [itemFilter, setItemFilter] = useState('all')   // all | recd | pend — mirrors OrderDetail's od-seg-filter
   const [activeTab, setActiveTab] = useState('overview')  // overview | items | delivery
   const [userRole, setUserRole]   = useState('')
   // Brands on this PO that are not bought direct from its vendor. Read from the
@@ -1522,14 +1523,14 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 </div>
                 <div className="od-header-title">
                   {po.vendor_name && (
-                    <span onClick={() => po.vendor_id && navigate('/vendors/' + po.vendor_id)} style={{ cursor: po.vendor_id ? 'pointer' : 'default', borderBottom: po.vendor_id ? '1px dotted #1a73e8' : 'none', color:'inherit' }}>
+                    <span onClick={() => po.vendor_id && navigate('/vendors/' + po.vendor_id)} style={{ cursor: po.vendor_id ? 'pointer' : 'default', borderBottom: po.vendor_id ? '1px dotted var(--blue-800)' : 'none', color:'inherit' }}>
                       {po.vendor_name}
                     </span>
                   )}
                 </div>
                 <div className="od-header-num">
                   {po.po_number} · {fmt(po.po_date || po.created_at)}
-                  {po.order_number && <span style={{ marginLeft:8, color:'var(--gray-400)' }}>· Linked: <span style={{ fontFamily:'var(--mono)', color:'#1a73e8' }}>{po.order_number}</span></span>}
+                  {po.order_number && <span style={{ marginLeft:8, color:'var(--gray-400)' }}>· Linked: <span style={{ fontFamily:'var(--mono)', color:'var(--blue-800)' }}>{po.order_number}</span></span>}
                 </div>
               </div>
             </div>
@@ -1552,7 +1553,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               )}
               {!editMode && ['placed','acknowledged','delivery_confirmation','partially_received'].includes(po.status) && (
                 <button className="od-btn" onClick={openSendEmailModal}
-                  style={{ background: lastEmailed ? '#f0fdf4' : '#1a73e8', color: lastEmailed ? '#15803d' : 'white', borderColor: lastEmailed ? '#bbf7d0' : '#1a73e8', gap:6 }}>
+                  style={{ background: lastEmailed ? '#f0fdf4' : 'var(--blue-800)', color: lastEmailed ? 'var(--green-text)' : 'white', borderColor: lastEmailed ? '#bbf7d0' : 'var(--blue-800)', gap:6 }}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}>
                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
                     <polyline points="22,6 12,13 2,6"/>
@@ -1570,12 +1571,19 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
           </div>
         </div>
 
+        {/* ── Banners ──
+            MUST stay inside .od-banners. The banner classes (od-grn-banner,
+            od-pending-banner, od-cancelled-banner) carry NO margin of their own
+            — orderdetail.css:62 supplies gap:12px and margin-bottom:16px. Without
+            this wrapper the GRN banner renders flush against the pipeline bar and
+            its neighbours. Same wrapper as OrderDetail.jsx:1183. */}
+        <div className="od-banners">
         {/* The header total is now derived from the lines by a database trigger
             (trg_po_recalc_total). A surviving gap therefore means a LINE IS
             MISSING — almost always a charge such as CUTOUT CHARGES — not a
             rounding error. Four live POs were found this way, worth ₹2.85L. */}
         {items.length > 0 && Math.abs((Number(po.total_amount) || 0) - grandTotal) > 0.01 && (
-          <div style={{ margin:'0 0 14px', padding:'12px 16px', borderRadius:10,
+          <div style={{ padding:'12px 16px', borderRadius:10,
                         background:'#fffbeb', border:'1px solid #fde68a', color:'#92400e', fontSize:13, lineHeight:1.6 }}>
             <strong>This PO's total doesn't match its lines.</strong>{' '}
             Header says <b>{fmtINR(po.total_amount)}</b>, the {items.length} lines add up to <b>{fmtINR(grandTotal)}</b>
@@ -1601,7 +1609,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             })}
           </div>
           {['delivery_confirmation', 'partially_received'].includes(po.status) && !editMode && (
-            <button className="od-mark-complete-btn" style={{ background:'#475569' }} onClick={handleDeliveryConfirmation}>
+            <button className="od-mark-complete-btn" style={{ background:'var(--gray-600)' }} onClick={handleDeliveryConfirmation}>
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
               {po.status === 'partially_received' ? 'Update Pending Dates' : 'Update Dates'}
             </button>
@@ -1629,23 +1637,23 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             reject small quantities, so buying a minimum/bulk lot is deliberate.
             Stated neutrally: a fact to confirm, never an error to fix. */}
         {bulkBuyLines.length > 0 && !isCancelled && (
-          <div style={{ background:'#f8fafc', border:'1px solid #cbd5e1', borderLeft:'4px solid #475569', borderRadius:10, padding:'14px 18px', marginBottom:16 }}>
+          <div style={{ background:'#f8fafc', border:'1px solid var(--gray-300)', borderLeft:'4px solid var(--gray-600)', borderRadius:10, padding:'14px 18px', marginBottom:16 }}>
             <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
-              <svg fill="none" stroke="#475569" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}>
+              <svg fill="none" stroke="var(--gray-600)" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}>
                 <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
               </svg>
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:'#0f172a', marginBottom:3 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'var(--gray-900)', marginBottom:3 }}>
                   Ordered above the customer requirement
                 </div>
-                <div style={{ fontSize:12, color:'#334155', marginBottom:8 }}>
+                <div style={{ fontSize:12, color:'var(--gray-700)', marginBottom:8 }}>
                   Usually deliberate — a minimum order quantity or a bulk buy, with the surplus going to stock.
                   Shown so it is a conscious decision rather than a typo. No action needed if intended.
                 </div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   {bulkBuyLines.map(l => (
-                    <span key={l.po_item_id} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'#334155', background:'white', border:'1px solid #cbd5e1', padding:'3px 8px', borderRadius:6 }}>
-                      {l.item_code}: PO {l.po_qty} · customer needs {l.ordered} · <span style={{ color:'#0f172a' }}>+{l.excess} to stock</span>
+                    <span key={l.po_item_id} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'var(--gray-700)', background:'white', border:'1px solid var(--gray-300)', padding:'3px 8px', borderRadius:6 }}>
+                      {l.item_code}: PO {l.po_qty} · customer needs {l.ordered} · <span style={{ color:'var(--gray-900)' }}>+{l.excess} to stock</span>
                     </span>
                   ))}
                 </div>
@@ -1658,16 +1666,16 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             vendor. Partial cancellations leave the order ACTIVE, so none of the
             cancelled-CO banners below would ever fire for this case. */}
         {overCoveredLines.length > 0 && !isCancelled && (
-          <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderLeft:'4px solid #ea580c', borderRadius:10, padding:'14px 18px', marginBottom:16 }}>
+          <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderLeft:'4px solid #b45309', borderRadius:10, padding:'14px 18px', marginBottom:16 }}>
             <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
-              <svg fill="none" stroke="#ea580c" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}>
+              <svg fill="none" stroke="#b45309" strokeWidth="2" viewBox="0 0 24 24" style={{ width:20, height:20, flexShrink:0, marginTop:1 }}>
                 <path d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/>
               </svg>
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:'#9a3412', marginBottom:3 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'#92400e', marginBottom:3 }}>
                   PO covers more than the customer now needs
                 </div>
-                <div style={{ fontSize:12, color:'#7c2d12', marginBottom:8 }}>
+                <div style={{ fontSize:12, color:'#92400e', marginBottom:8 }}>
                   The customer order was reduced (or part closed from stock) after this PO was raised.
                   {['draft','pending_approval'].includes(po.status)
                     ? ' Edit the PO to match before it goes to the vendor.'
@@ -1675,7 +1683,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 </div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   {overCoveredLines.map(l => (
-                    <span key={l.po_item_id} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'#9a3412', background:'white', border:'1px solid #fed7aa', padding:'3px 8px', borderRadius:6 }}>
+                    <span key={l.po_item_id} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'#92400e', background:'white', border:'1px solid #fde68a', padding:'3px 8px', borderRadius:6 }}>
                       {l.item_code}: PO {l.po_qty} · needed {l.still_needed} · <span style={{ color:'#b91c1c' }}>excess {l.excess}</span>
                       {l.received > 0 && <span style={{ fontSize:9, fontWeight:700, color:'#92400e' }} title="Goods already received against this line">GRN {l.received}</span>}
                     </span>
@@ -1725,7 +1733,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                                   <span style={{ fontSize:9, fontWeight:700, color:'#92400e' }} title="Goods already received via GRN — line cannot be removed">GRN</span>
                                 ) : ['ops','admin','management'].includes(userRole) ? (
                                   <button type="button" onClick={() => removeLineForCancelledCO(pi, co.order_number)} title="Remove this cancelled line from the PO"
-                                    style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#dc2626', color:'white', border:'none', borderRadius:5, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)' }}>
+                                    style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#dc2626', color:'white', border:'none', borderRadius:6, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'var(--font)' }}>
                                     <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{ width:9, height:9 }}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
                                     Remove line
                                   </button>
@@ -1754,21 +1762,21 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
         )}
 
         {!isMultiCO && sourceCOStatus === 'cancelled' && ['approved','placed','acknowledged','delivery_confirmation','partially_received'].includes(po.status) && (
-          <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderLeft:'4px solid #ea580c', borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'flex-start', gap:12, marginBottom:16 }}>
-            <div style={{ width:28, height:28, borderRadius:'50%', background:'#ffedd5', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <svg fill="none" stroke="#ea580c" strokeWidth="2.2" viewBox="0 0 24 24" style={{ width:16, height:16 }}>
+          <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderLeft:'4px solid #b45309', borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'flex-start', gap:12, marginBottom:16 }}>
+            <div style={{ width:28, height:28, borderRadius:'50%', background:'#fef3c7', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <svg fill="none" stroke="#b45309" strokeWidth="2.2" viewBox="0 0 24 24" style={{ width:16, height:16 }}>
                 <path d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/>
               </svg>
             </div>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:'#9a3412', marginBottom:3 }}>Linked CO is cancelled</div>
-              <div style={{ fontSize:12, color:'#7c2d12', lineHeight:1.5, marginBottom:10 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:'#92400e', marginBottom:3 }}>Linked CO is cancelled</div>
+              <div style={{ fontSize:12, color:'#92400e', lineHeight:1.5, marginBottom:10 }}>
                 This PO was placed against <span style={{ fontFamily:'var(--mono)', fontWeight:600, textDecoration:'line-through' }}>{po.order_number}</span> which has been cancelled. Relink this PO to a new active CO to continue.
               </div>
               {!confirmingRelink ? (
                 <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                   <select value={selectedRelinkCoId} onChange={e => setSelectedRelinkCoId(e.target.value)}
-                    style={{ padding:'7px 12px', border:'1px solid #fed7aa', borderRadius:7, fontSize:12, fontFamily:'var(--font)', background:'white', minWidth:280, cursor:'pointer' }}>
+                    style={{ padding:'7px 12px', border:'1px solid #fde68a', borderRadius:8, fontSize:12, fontFamily:'var(--font)', background:'white', minWidth:280, cursor:'pointer' }}>
                     <option value="">— Select new CO (same customer) —</option>
                     {activeCOsForRelink.map(co => {
                       const v = (co.order_items||[]).reduce((s,i) => s + lineNetValue(i), 0)
@@ -1776,14 +1784,14 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     })}
                   </select>
                   <button disabled={!selectedRelinkCoId} onClick={() => setConfirmingRelink(true)}
-                    style={{ padding:'7px 16px', fontSize:12, fontWeight:600, border:'none', borderRadius:7, background: selectedRelinkCoId ? '#ea580c' : '#fed7aa', color:'white', cursor: selectedRelinkCoId ? 'pointer':'not-allowed', fontFamily:'var(--font)' }}>
+                    style={{ padding:'7px 16px', fontSize:12, fontWeight:600, border:'none', borderRadius:8, background: selectedRelinkCoId ? '#b45309' : '#fde68a', color:'white', cursor: selectedRelinkCoId ? 'pointer':'not-allowed', fontFamily:'var(--font)' }}>
                     Relink PO →
                   </button>
-                  {activeCOsForRelink.length === 0 && <span style={{ fontSize:11, color:'#9a3412', fontStyle:'italic' }}>No active COs found for this customer.</span>}
+                  {activeCOsForRelink.length === 0 && <span style={{ fontSize:11, color:'#92400e', fontStyle:'italic' }}>No active COs found for this customer.</span>}
                 </div>
               ) : (
-                <div style={{ background:'white', border:'1px solid #fed7aa', borderRadius:8, padding:'10px 14px', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                  <div style={{ flex:1, minWidth:200, fontSize:12, color:'#7c2d12' }}>
+                <div style={{ background:'white', border:'1px solid #fde68a', borderRadius:8, padding:'10px 14px', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                  <div style={{ flex:1, minWidth:200, fontSize:12, color:'#92400e' }}>
                     Relink <span style={{ fontFamily:'var(--mono)', fontWeight:700 }}>{po.po_number}</span> → <span style={{ fontFamily:'var(--mono)', fontWeight:700 }}>{activeCOsForRelink.find(c => c.id === selectedRelinkCoId)?.order_number}</span>?
                   </div>
                   <button onClick={() => setConfirmingRelink(false)} disabled={relinking}
@@ -1791,7 +1799,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     Cancel
                   </button>
                   <button onClick={relinkPO} disabled={relinking}
-                    style={{ padding:'5px 14px', fontSize:11, fontWeight:700, border:'none', borderRadius:6, background:'#ea580c', color:'white', cursor:'pointer', fontFamily:'var(--font)', opacity: relinking ? 0.6 : 1 }}>
+                    style={{ padding:'5px 14px', fontSize:11, fontWeight:700, border:'none', borderRadius:6, background:'#b45309', color:'white', cursor:'pointer', fontFamily:'var(--font)', opacity: relinking ? 0.6 : 1 }}>
                     {relinking ? 'Relinking…' : 'Confirm Relink'}
                   </button>
                 </div>
@@ -1815,10 +1823,13 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
         {isCancelled && (
           <div className="od-cancelled-banner">
-            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            {/* slash-in-circle, same as OrderDetail.jsx:1197. This was an
+                exclamation-in-circle — a WARNING glyph on a CANCELLED banner. */}
+            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>
             <div><div className="od-cancelled-banner-label">PO Cancelled</div><div>{po.cancelled_reason || 'No reason provided.'}</div></div>
           </div>
         )}
+        </div>{/* end od-banners */}
 
         {/* ── Two-column layout ── */}
         <div className="od-layout">
@@ -1829,9 +1840,13 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             {/* ── Tabs ── */}
             <div className="od-tabs">
               <button className={'od-tab'+(activeTab==='overview'?' on':'')} onClick={()=>setActiveTab('overview')}>Overview</button>
-              <button className={'od-tab'+(activeTab==='items'?' on':'')} onClick={()=>setActiveTab('items')}>Order Details<span className="od-tab-count">{items.length}</span></button>
-              {grns.length>0 && <button className={'od-tab'+(activeTab==='delivery'?' on':'')} onClick={()=>setActiveTab('delivery')}>Delivery History<span className="od-tab-count">{grns.length}</span></button>}
-              {deliveryDates.length>0 && <button className={'od-tab'+(activeTab==='dates'?' on':'')} onClick={()=>setActiveTab('dates')}>Delivery Dates<span className="od-tab-count">{deliveryDates.length}</span></button>}
+              <button className={'od-tab'+(activeTab==='items'?' on':'')} onClick={()=>setActiveTab('items')}>Order Items<span className="od-tab-count">{items.length}</span></button>
+              {/* Always rendered, like OrderDetail.jsx:1279. These appeared only once
+                  data existed, so the tab strip changed shape as GRNs arrived and the
+                  sections were undiscoverable beforehand. Empty is an od-empty state
+                  inside the panel now. */}
+              <button className={'od-tab'+(activeTab==='delivery'?' on':'')} onClick={()=>setActiveTab('delivery')}>Delivery History<span className="od-tab-count">{grns.length}</span></button>
+              <button className={'od-tab'+(activeTab==='dates'?' on':'')} onClick={()=>setActiveTab('dates')}>Delivery Dates<span className="od-tab-count">{deliveryDates.length}</span></button>
             </div>
 
             <div className="od-tab-content">
@@ -1965,12 +1980,12 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 ) : (
                   <>
                   <div className="od-detail-grid">
-                    <div className="od-detail-field"><label>PO Number</label><div className="val" style={{ fontFamily:'var(--mono)', fontWeight:700, display:'flex', alignItems:'center', gap:7 }}>{po.po_number}{revLabel && <span title="This PO has been amended since it was first approved" style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:5, background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe' }}>{revLabel.toUpperCase()}</span>}</div></div>
+                    <div className="od-detail-field"><label>PO Number</label><div className="val" style={{ fontFamily:'var(--mono)', fontWeight:700, display:'flex', alignItems:'center', gap:7 }}>{po.po_number}{revLabel && <span title="This PO has been amended since it was first approved" style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:6, background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe' }}>{revLabel.toUpperCase()}</span>}</div></div>
                     <div className="od-detail-field">
                       <label>Vendor</label>
                       <div className="val">
                         {po.vendor_id ? (
-                          <span onClick={() => navigate('/vendors/' + po.vendor_id)} style={{ color:'#1a73e8', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted' }}>{po.vendor_name}</span>
+                          <span onClick={() => navigate('/vendors/' + po.vendor_id)} style={{ color:'var(--blue-800)', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted' }}>{po.vendor_name}</span>
                         ) : (po.vendor_name || '—')}
                       </div>
                     </div>
@@ -1984,12 +1999,12 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                           {linkedOrders.length > 0 ? linkedOrders.map(o => (
                             <span key={o.id} onClick={() => navigate('/orders/' + o.id)}
                               style={{ fontFamily:'var(--mono)', cursor:'pointer', textDecoration:'underline',
-                                color: o.status === 'cancelled' ? '#b91c1c' : '#1a73e8' }}
+                                color: o.status === 'cancelled' ? '#b91c1c' : 'var(--blue-800)' }}
                               title={o.status === 'cancelled' ? 'This CO has been cancelled' : undefined}>
                               {o.order_number}{isMultiCO ? ` · ${o.customer_name}` : ''}{o.status === 'cancelled' ? ' (cancelled)' : ''}
                             </span>
                           )) : (
-                            <span style={{ fontFamily:'var(--mono)', color:'#1a73e8', cursor: po.order_id ? 'pointer' : 'default', textDecoration: po.order_id ? 'underline' : 'none' }} onClick={() => po.order_id && navigate('/orders/' + po.order_id)}>
+                            <span style={{ fontFamily:'var(--mono)', color:'var(--blue-800)', cursor: po.order_id ? 'pointer' : 'default', textDecoration: po.order_id ? 'underline' : 'none' }} onClick={() => po.order_id && navigate('/orders/' + po.order_id)}>
                               {po.order_number}
                             </span>
                           )}
@@ -2012,7 +2027,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                         <label>PO Document</label>
                         <div className="val">
                           <span onClick={() => viewPoPdf()}
-                            style={{ fontSize:12, color:'#1a73e8', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, cursor:'pointer' }}>
+                            style={{ fontSize:12, color:'var(--blue-800)', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, cursor:'pointer' }}>
                             <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View PO
                           </span>
@@ -2029,7 +2044,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                           <div className="val" style={{ display:'flex', flexDirection:'column', gap:4 }}>
                             {urls.map((url, i) => (
                               <a key={i} href={url} target="_blank" rel="noreferrer"
-                                style={{ fontSize:12, color:'#1a73e8', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, textDecoration:'none' }}>
+                                style={{ fontSize:12, color:'var(--blue-800)', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4, textDecoration:'none' }}>
                                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                 {urls.length > 1 ? `Document ${i + 1}` : 'View Document'}
                               </a>
@@ -2056,6 +2071,59 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               </div>
             </div>
 
+
+                  {/* Order Items on Overview — parity with OrderDetail.jsx:1426.
+              Same columns, same order, same title as the benchmark, minus
+              "Cust. Ref No" (POs have no equivalent) and with no Subtotal/
+              Freight rows (a PO carries no freight column — only total_amount).
+              Deliberately the AS-ORDERED view: received / pending / status are
+              the fulfilment picture and stay on the Order Items tab, exactly as
+              OrderDetail keeps dispatch status off its Overview card. */}
+          <div className="od-card" style={{ marginTop: 16 }}>
+            <div className="od-card-header">
+              <div className="od-card-title">Order Items ({items.length})</div>
+              <button className="od-btn" onClick={() => setActiveTab('items')}>View all &rarr;</button>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="od-items-table">
+                <thead>
+                  <tr>
+                    <th style={{ paddingLeft: 20 }}>#</th>
+                    <th>Item Code</th>
+                    <th style={{ textAlign: 'center' }}>Qty</th>
+                    <th>LP Price</th>
+                    <th>Disc %</th>
+                    <th>Unit Price</th>
+                    <th>Delivery Date</th>
+                    <th className="right" style={{ paddingRight: 20 }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, idx) => (
+                    <tr key={item.id || idx}>
+                      <td style={{ paddingLeft: 20, color: 'var(--gray-400)', fontSize: 11 }}>{item.sr_no || idx + 1}</td>
+                      <td className="mono">
+                        {item.item_code || '—'}
+                        {item.description && <div style={{ fontSize: 11, color: 'var(--gray-400)', fontFamily: 'var(--font)' }}>{item.description}</div>}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>{item.qty}</td>
+                      <td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
+                      <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td>
+                      <td>{item.unit_price_after_disc ? '₹' + item.unit_price_after_disc : '—'}</td>
+                      <td style={{ fontSize: 12 }}>{item.delivery_date ? fmt(item.delivery_date) : '—'}</td>
+                      <td className="right" style={{ paddingRight: 20 }}>₹{(Number(item.total_price) || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="od-totals">
+              <div className="od-totals-inner">
+                <div className="od-totals-row grand"><span>Grand Total</span><span>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+              </div>
+            </div>
+          </div>
+
               </div>{/* end Overview panel */}
 
               {/* Line Items panel */}
@@ -2071,7 +2139,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     <div style={{ fontSize:12, fontWeight:700, color:'#166534', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:4 }}>
                       {coStockClosedItems.length} item{coStockClosedItems.length>1?'s':''} {isMultiCO ? 'across the linked COs' : `on ${po.order_number}`} closed from stock — not on this PO
                     </div>
-                    <div style={{ fontSize:11, color:'#15803d', marginBottom:8 }}>
+                    <div style={{ fontSize:11, color:'var(--green-text)', marginBottom:8 }}>
                       These lines were marked "From Stock" and will be dispatched from existing inventory. This PO covers the remaining lines that need procurement.
                     </div>
                     <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
@@ -2086,7 +2154,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       ))}
                     </div>
                     {editMode && (
-                      <div style={{ fontSize:11, color:'#15803d', marginTop:6, fontStyle:'italic' }}>
+                      <div style={{ fontSize:11, color:'var(--green-text)', marginTop:6, fontStyle:'italic' }}>
                         Click × on any chip to untick "From Stock" — that line will return to the procurement queue on the CO.
                       </div>
                     )}
@@ -2098,7 +2166,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div className="od-card">
               <div className="od-card-header">
                 <div className="od-card-title">
-                  Order Details ({editMode ? editItems.filter(i => i.item_code?.trim()).length : items.length})
+                  Order Items ({editMode ? editItems.filter(i => i.item_code?.trim()).length : items.length})
                 </div>
               </div>
               {editMode ? (
@@ -2152,6 +2220,17 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 </div>
               ) : (
                 <>
+                  {/* Receipt filter — parity with OrderDetail.jsx:1645. A long PO
+                      had no way to isolate the lines still to come in. */}
+                  <div className="od-seg-filter">
+                    <button className={itemFilter==='all'?'on':''} onClick={()=>setItemFilter('all')}>All</button>
+                    <button className={itemFilter==='recd'?'on':''} onClick={()=>setItemFilter('recd')}>Received</button>
+                    <button className={itemFilter==='pend'?'on':''} onClick={()=>setItemFilter('pend')}>Pending</button>
+                  </div>
+                  {/* overflowX wrapper as OrderDetail.jsx:1428 — .od-card is overflow:hidden and the
+                      stylesheet's scroll fallback only starts at <=560px, so without this an 11-column
+                      table is CLIPPED (not scrollable) between ~561px and the ~900px breakpoint. */}
+                  <div style={{ overflowX: 'auto' }}>
                   <table className="od-items-table">
                     <thead>
                       <tr>
@@ -2169,7 +2248,12 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((item, idx) => {
+                      {items.filter(item => {
+                        if (itemFilter === 'all') return true
+                        const r = item.received_qty || 0
+                        return itemFilter === 'recd' ? r >= (item.qty || 0) && (item.qty || 0) > 0
+                                                     : r < (item.qty || 0)
+                      }).map((item, idx) => {
                         const rec    = item.received_qty || 0
                         const pend   = Math.max(0, (item.qty || 0) - rec)
                         const status = (item.qty || 0) > 0 && rec >= (item.qty || 0) ? 'done' : rec > 0 ? 'partial' : 'pending'
@@ -2194,7 +2278,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                             </td>
                             <td style={{ fontSize:12 }}>{item.delivery_date ? fmt(item.delivery_date) : '—'}</td>
                             <td style={{ textAlign:'center' }}>{item.qty}</td>
-                            <td style={{ textAlign:'center', color: rec > 0 ? '#15803d' : 'var(--gray-400)', fontWeight:600 }}>{rec || '—'}</td>
+                            <td style={{ textAlign:'center', color: rec > 0 ? 'var(--green-text)' : 'var(--gray-400)', fontWeight:600 }}>{rec || '—'}</td>
                             <td style={{ textAlign:'center', color: pend > 0 ? '#b45309' : 'var(--gray-400)', fontWeight:600 }}>{pend || '—'}</td>
                             <td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
                             <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td>
@@ -2210,20 +2294,37 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       })}
                     </tbody>
                   </table>
+                  </div>
                   <div className="od-totals">
                     <div className="od-totals-inner">
                       <div className="od-totals-row grand"><span>Grand Total</span><span>₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
                     </div>
                   </div>
+                  {/* Summary footer — parity with OrderDetail.jsx:1695. */}
+                  {(() => {
+                    const shown = items.filter(item => {
+                      if (itemFilter === 'all') return true
+                      const r = item.received_qty || 0
+                      return itemFilter === 'recd' ? r >= (item.qty || 0) && (item.qty || 0) > 0 : r < (item.qty || 0)
+                    })
+                    const units = shown.reduce((s2, i) => s2 + (Number(i.qty) || 0), 0)
+                    const recdValue = items.reduce((s2, i) => s2 + (Number(i.received_qty) || 0) * (Number(i.unit_price_after_disc) || 0), 0)
+                    return (
+                      <div className="od-uni-foot">
+                        <span className="tf-label">{shown.length} of {items.length} items · {units} units</span>
+                        {recdValue > 0 && <span className="tf-a">Received ₹{recdValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                      </div>
+                    )
+                  })()}
                 </>
               )}
             </div>
 
               </div>{/* end Line Items panel */}
 
-              {grns.length > 0 && (
               <div className="od-tabpanel" hidden={activeTab!=='delivery'}>
             {/* Delivery History */}
+            {grns.length === 0 && <div className="od-empty">No goods received yet. A GRN raised against this PO will appear here.</div>}
             {grns.length > 0 && (
               <div className="od-card">
                 <div className="od-card-header">
@@ -2240,11 +2341,15 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                   {grns.map(g => {
                     const gItems = Object.values(grnItemsByPOItem).flat().filter(gi => gi.grn?.id === g.id || gi.grn_number === g.grn_number)
                     return (
-                      <div key={g.id} style={{ marginBottom:16, border:'1px solid var(--gray-100)', borderRadius:10, overflow:'hidden' }}>
+                      <div key={g.id} style={{ border:'1px solid var(--gray-100)', borderRadius:10, overflow:'hidden' }}>
                         {/* GRN header */}
                         <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'var(--gray-50)', flexWrap:'wrap' }}>
                           <span onClick={() => navigate('/fc/grn/' + g.id)} style={{ fontFamily:'var(--mono)', fontWeight:700, fontSize:13, color:'#1d4ed8', cursor:'pointer' }}>{g.grn_number}</span>
-                          <span className={'pill pill-' + (g.status === 'confirmed' ? 'received' : 'draft')} style={{ fontSize:10 }}>
+                          {/* od-sf-pill, not `pill` — .pill/.pill-received live only in styles/orders.css,
+                              which this page does not import. Routes are lazy-loaded and the build
+                              splits orders-*.css from orderdetail-*.css, so landing directly on a PO
+                              rendered these completely unstyled. */}
+                          <span className={'od-sf-pill ' + (g.status === 'confirmed' ? 'done' : 'partial')} style={{ fontSize:10 }}>
                             {g.status === 'confirmed' ? 'Confirmed' : g.status}
                           </span>
                           <span style={{ fontSize:12, color:'var(--gray-500)', marginLeft:'auto' }}>
@@ -2258,6 +2363,10 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                           </span>
                         </div>
                         {/* Items received in this GRN */}
+                        {/* overflowX wrapper as OrderDetail.jsx:1428 — .od-card is overflow:hidden and the
+                            stylesheet's scroll fallback only starts at <=560px, so without this an 11-column
+                            table is CLIPPED (not scrollable) between ~561px and the ~900px breakpoint. */}
+                        <div style={{ overflowX: 'auto' }}>
                         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                           <thead>
                             <tr style={{ borderBottom:'1px solid var(--gray-100)' }}>
@@ -2271,11 +2380,12 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                               <tr key={i} style={{ borderBottom: i < gItems.length - 1 ? '1px solid var(--gray-50)' : 'none' }}>
                                 <td style={{ padding:'8px 16px', fontFamily:'var(--mono)', fontWeight:500, color:'var(--gray-800)' }}>{gi.item_code}</td>
                                 <td style={{ padding:'8px 12px', textAlign:'center', color:'var(--gray-500)' }}>{gi.ordered_qty || '—'}</td>
-                                <td style={{ padding:'8px 12px', textAlign:'center', fontWeight:700, color:'#15803d' }}>{gi.received_qty}</td>
+                                <td style={{ padding:'8px 12px', textAlign:'center', fontWeight:700, color:'var(--green-text)' }}>{gi.received_qty}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       </div>
                     )
                   })}
@@ -2283,10 +2393,11 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               </div>
             )}
               </div>
-              )}{/* end Delivery History panel */}
+              {/* end Delivery History panel */}
 
-              {deliveryDates.length > 0 && (
               <div className="od-tabpanel" hidden={activeTab!=='dates'}>
+                {deliveryDates.length === 0 && <div className="od-empty">No delivery-date changes recorded for this PO.</div>}
+                {deliveryDates.length > 0 && (
                 <div className="od-card">
                   <div className="od-card-header"><div className="od-card-title">Delivery Date History</div></div>
                   <div style={{ padding:'12px 16px', display:'flex', flexDirection:'column', gap:8 }}>
@@ -2303,8 +2414,9 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     ))}
                   </div>
                 </div>
+                )}
               </div>
-              )}{/* end Delivery Dates panel */}
+              {/* end Delivery Dates panel */}
 
             </div>{/* end od-tab-content */}
           </div>{/* end od-main */}
@@ -2325,7 +2437,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       borderBottom:'1px solid var(--gray-100)',
                     }}>
                       <span style={{
-                        flexShrink:0, alignSelf:'flex-start', padding:'2px 7px', borderRadius:5,
+                        flexShrink:0, alignSelf:'flex-start', padding:'2px 7px', borderRadius:6,
                         fontSize:10.5, fontWeight:700, fontFamily:'var(--mono)',
                         background: r.rev_no === currentRevision?.rev_no ? '#eff6ff' : 'var(--gray-100)',
                         color:      r.rev_no === currentRevision?.rev_no ? '#1d4ed8' : 'var(--gray-500)',
@@ -2341,12 +2453,12 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                         <div style={{ display:'flex', gap:10, marginTop:4, alignItems:'center', flexWrap:'wrap' }}>
                           {r.doc_url && (
                             <span onClick={() => viewPoPdf(r)}
-                              style={{ fontSize:11, color:'#1a73e8', fontWeight:600, cursor:'pointer' }}>
+                              style={{ fontSize:11, color:'var(--blue-800)', fontWeight:600, cursor:'pointer' }}>
                               View this version
                             </span>
                           )}
                           {r.sent_to_vendor_at
-                            ? <span style={{ fontSize:10.5, color:'#15803d' }}>✓ Sent {fmtTs(r.sent_to_vendor_at)}</span>
+                            ? <span style={{ fontSize:10.5, color:'var(--green-text)' }}>✓ Sent {fmtTs(r.sent_to_vendor_at)}</span>
                             : <span style={{ fontSize:10.5, color:'#b45309', fontWeight:600 }}>Not sent to vendor</span>}
                         </div>
                       </div>
@@ -2360,6 +2472,17 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             <div className="od-side-card od-activity-card">
               <div className="od-side-card-title">Activity & Notes</div>
               <div className="od-activity-list">
+                {/* ── Chronological timeline ──
+                    Entries used to render in FIXED SOURCE ORDER — PO milestones,
+                    then GRNs, then invoices, then comments — so an Acknowledgement
+                    always sat ABOVE edits no matter when either happened. Events
+                    now carry their timestamp and are sorted oldest-first, matching
+                    the ascending comment fetch and the 360-history convention.
+                    ANYTHING ADDED HERE MUST BE PUSHED WITH ITS TIMESTAMP. */}
+                {(() => {
+                  const ev = []
+                  const add = (ts, node) => ev.push({ ts: ts ? new Date(ts).getTime() : 0, node })
+                  add(po.created_at, (
                 <div className="od-tl-item">
                   <div className="od-tl-dot created"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
                   <div className="od-tl-content">
@@ -2367,7 +2490,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     <div className="od-tl-sub">{po.submitted_by_name || '—'}</div>
                   </div>
                 </div>
-                {po.approved_by && (
+                  ))
+                if (po.approved_by) add(po.approved_at, (
                   <div className="od-tl-item">
                     <div className="od-tl-dot approved"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
                     <div className="od-tl-content">
@@ -2375,32 +2499,32 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       <div className="od-tl-sub">{po.approved_by}</div>
                     </div>
                   </div>
-                )}
-                {po.placed_at && (
+                ))
+                if (po.placed_at) add(po.placed_at, (
                   <div className="od-tl-item">
                     <div className="od-tl-dot dispatch"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
                     <div className="od-tl-content">
                       <div className="od-tl-header"><div className="od-tl-title">Placed with Vendor</div><div className="od-tl-time">{fmtTs(po.placed_at)}</div></div>
                     </div>
                   </div>
-                )}
-                {po.acknowledged_at && (
+                ))
+                if (po.acknowledged_at) add(po.acknowledged_at, (
                   <div className="od-tl-item">
-                    <div className="od-tl-dot" style={{background:'#ccfbf1',color:'#0d9488'}}><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                    <div className="od-tl-dot ack"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
                     <div className="od-tl-content">
                       <div className="od-tl-header"><div className="od-tl-title">Acknowledged</div><div className="od-tl-time">{fmtTs(po.acknowledged_at)}</div></div>
                     </div>
                   </div>
-                )}
-                {po.received_at && (
+                ))
+                if (po.received_at) add(po.received_at, (
                   <div className="od-tl-item">
                     <div className="od-tl-dot success"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
                     <div className="od-tl-content">
                       <div className="od-tl-header"><div className="od-tl-title">Material Received</div><div className="od-tl-time">{fmtTs(po.received_at)}</div></div>
                     </div>
                   </div>
-                )}
-                {isCancelled && (
+                ))
+                if (isCancelled) add(po.cancelled_at, (
                   <div className="od-tl-item od-tl-cancel">
                     <div className="od-tl-dot cancel"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
                     <div className="od-tl-content">
@@ -2408,8 +2532,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       <div className="od-tl-sub">{po.cancelled_reason}</div>
                     </div>
                   </div>
-                )}
-                {grns.map(g => (
+                ))
+                grns.forEach(g => add(g.received_at || g.created_at, (
                   <div key={'grn-'+g.id} className="od-tl-item">
                     <div className="od-tl-dot invoice"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
                     <div className="od-tl-content">
@@ -2420,14 +2544,18 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       <div onClick={() => navigate('/fc/grn/' + g.id)} style={{ fontSize:11, fontFamily:'var(--mono)', fontWeight:600, color:'#7c3aed', cursor:'pointer' }}>{g.grn_number}</div>
                     </div>
                   </div>
-                ))}
-                {purchaseInvoices.map(pi => {
+                )))
+                purchaseInvoices.forEach(pi => {
                   const piLabel = pi.status === 'inward_complete' ? 'Inward Complete' : pi.status === 'invoice_pending' ? 'Invoice Pending' : '3-Way Check'
-                  const piColor = pi.status === 'inward_complete' ? '#15803d' : pi.status === 'invoice_pending' ? '#1d4ed8' : '#b45309'
+                  const piColor = pi.status === 'inward_complete' ? 'var(--green-text)' : pi.status === 'invoice_pending' ? '#1d4ed8' : '#b45309'
                   const piTs = pi.inward_completed_at || pi.three_way_checked_at || pi.created_at
-                  return (
+                  add(piTs, (
                     <div key={'pi-'+pi.id} className="od-tl-item">
-                      <div className="od-tl-dot" style={{background: piColor+'20', color: piColor}}><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                      {/* color-mix, NOT piColor+'20'. That string-concat produced a 12.5%-alpha
+                          hex, which silently became invalid CSS ("var(--green-text)20") the
+                          moment piColor held a token instead of a literal. Same technique as
+                          crm-redesign.css:266 and .ol-status-pill. */}
+                      <div className="od-tl-dot" style={{background: `color-mix(in srgb, ${piColor} 13%, transparent)`, color: piColor}}><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
                       <div className="od-tl-content">
                         <div className="od-tl-header">
                           <div className="od-tl-title">Billing — {piLabel}</div>
@@ -2438,11 +2566,11 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                         </div>
                       </div>
                     </div>
-                  )
-                })}
-                {comments.map(c => {
+                  ))
+                })
+                comments.forEach(c => {
                   const isSystem = c.is_activity === true
-                  return isSystem ? (
+                  add(c.created_at, isSystem ? (
                     <div key={c.id} className="od-tl-item">
                       <div className="od-tl-dot system"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
                       <div className="od-tl-content">
@@ -2464,8 +2592,12 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                         <div className="od-tl-comment-text">{renderMessage(c.message)}</div>
                       </div>
                     </div>
-                  )
-                })}
+                  ))
+                })
+                  return ev.sort((x, y) => x.ts - y.ts).map((e, i) => (
+                    <Fragment key={e.node.key ?? i}>{e.node}</Fragment>
+                  ))
+                })()}
               </div>
               <div className="od-comment-box">
                 <div className="od-comment-input-wrap">
@@ -2574,10 +2706,10 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 <tbody>
                   {deliveryItemDates.map((item, idx) => (
                     <tr key={item.id} style={{ borderBottom: '1px solid #EEF1F5' }}>
-                      <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12, fontWeight: 600, color: '#1a73e8' }}>{item.item_code}</td>
+                      <td style={{ padding: '10px', fontFamily: 'Geist Mono, monospace', fontSize: 12, fontWeight: 600, color: 'var(--blue-800)' }}>{item.item_code}</td>
                       <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'Geist Mono, monospace' }}>
                         {item.received > 0
-                          ? <span title={`${item.received} of ${item.qty} already received`}>{(Number(item.qty) || 0) - item.received}<span style={{ color:'#94a3b8', fontSize:10 }}> pending of {item.qty}</span></span>
+                          ? <span title={`${item.received} of ${item.qty} already received`}>{(Number(item.qty) || 0) - item.received}<span style={{ color:'var(--gray-400)', fontSize:10 }}> pending of {item.qty}</span></span>
                           : item.qty}
                       </td>
                       <td style={{ padding: '10px', textAlign: 'center', color: '#5B6878', fontSize: 11 }}>{item.original_date ? fmtShort(item.original_date) : '—'}</td>
@@ -2611,7 +2743,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
     {showCancelModal && (
       <div className="od-cancel-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCancelModal(false) }}>
         <div className="od-cancel-modal">
-          <div className="od-cancel-title" style={{ color:'#dc2626' }}>Cancel Purchase Order</div>
+          <div className="od-cancel-title" style={{ color:'var(--red-text)' }}>Cancel Purchase Order</div>
           <div className="od-cancel-sub">This action cannot be undone. Please provide a reason.</div>
           <div style={{ marginTop:16 }}>
             <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', display:'block', marginBottom:4 }}>Cancellation Reason</label>
@@ -2620,7 +2752,11 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
           </div>
           <div className="od-cancel-actions" style={{ marginTop:20 }}>
             <button className="od-btn" onClick={() => setShowCancelModal(false)}>Back</button>
-            <button className="od-btn" onClick={handleCancel} disabled={saving} style={{ background:'#dc2626', color:'white', borderColor:'#dc2626' }}>
+            {/* od-btn-danger, not a hand-rolled solid red. That inline style was
+                the only solid-red button in either detail page and bypassed the
+                shared danger treatment (orderdetail.css:534), which OrderDetail
+                uses for the same action at OrderDetail.jsx:2454. */}
+            <button className="od-btn od-btn-danger" onClick={handleCancel} disabled={saving}>
               {saving ? 'Cancelling…' : 'Cancel PO'}
             </button>
           </div>
@@ -2667,10 +2803,10 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 
             {/* Meta info */}
             <div style={{ padding:'16px 24px 0' }}>
-              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 14px', fontSize:11, color:'#475569', lineHeight:1.7 }}>
-                <div><strong style={{ color:'#0f172a' }}>From:</strong> SSC Procurement &lt;no-reply@ssccontrol.com&gt;</div>
-                <div><strong style={{ color:'#0f172a' }}>Reply-To:</strong> {senderEmail || '—'}</div>
-                <div><strong style={{ color:'#0f172a' }}>Bcc:</strong> the internal team is Bcc'd, so the vendor never sees their addresses</div>
+              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 14px', fontSize:11, color:'var(--gray-600)', lineHeight:1.7 }}>
+                <div><strong style={{ color:'var(--gray-900)' }}>From:</strong> SSC Procurement &lt;no-reply@ssccontrol.com&gt;</div>
+                <div><strong style={{ color:'var(--gray-900)' }}>Reply-To:</strong> {senderEmail || '—'}</div>
+                <div><strong style={{ color:'var(--gray-900)' }}>Bcc:</strong> the internal team is Bcc'd, so the vendor never sees their addresses</div>
               </div>
             </div>
 
@@ -2689,24 +2825,24 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             </div>
 
             <div style={{ padding:'16px 24px 0' }}>
-              <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>Subject</div>
+              <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>Subject</div>
               <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
                 style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'9px 12px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box' }} />
             </div>
 
             {/* Message */}
             <div style={{ padding:'16px 24px 0' }}>
-              <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>Message</div>
+              <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>Message</div>
               <textarea value={emailMessage} onChange={e => setEmailMessage(e.target.value)}
                 rows={9}
                 style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 12px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box', resize:'vertical', lineHeight:1.6 }} />
-              <div style={{ fontSize:10, color:'#94a3b8', marginTop:4 }}>The email will include a PO summary card + this message + attachments.</div>
+              <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:4 }}>The email will include a PO summary card + this message + attachments.</div>
             </div>
 
             {/* Attachments */}
             <div style={{ padding:'16px 24px 0' }}>
-              <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>Attachments</div>
-              <div style={{ fontSize:12, color:'#475569', lineHeight:1.7 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>Attachments</div>
+              <div style={{ fontSize:12, color:'var(--gray-600)', lineHeight:1.7 }}>
                 {po.po_pdf_url && (
                   <AttachmentRow label={`Purchase Order (${po.po_number.split('/')[1] || po.po_number}.pdf)`} excluded={excludePoPdf}
                     onToggle={() => setExcludePoPdf(p => !p)} />
@@ -2727,15 +2863,15 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                 })()}
                 {extraFiles.map((f, i) => (
                   <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <span style={{ color:'#15803d' }}>✓</span>
+                    <span style={{ color:'var(--green-text)' }}>✓</span>
                     <span style={{ flex:1 }}>{f.filename}</span>
                     <button onClick={() => setExtraFiles(p => p.filter((_,j) => j !== i))}
                       title="Remove" style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:14, padding:'2px 6px', borderRadius:4 }}>✕</button>
                   </div>
                 ))}
-                {!po.po_pdf_url && !po.po_document_url && !extraFiles.length && <div style={{ fontStyle:'italic', color:'#94a3b8' }}>No attachments yet.</div>}
+                {!po.po_pdf_url && !po.po_document_url && !extraFiles.length && <div style={{ fontStyle:'italic', color:'var(--gray-400)' }}>No attachments yet.</div>}
               </div>
-              <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:10, padding:'7px 12px', border:'1px dashed #cbd5e1', borderRadius:8, background:'#f8fafc', fontSize:12, cursor:'pointer', color:'#475569', fontWeight:600 }}>
+              <label style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:10, padding:'7px 12px', border:'1px dashed var(--gray-300)', borderRadius:8, background:'#f8fafc', fontSize:12, cursor:'pointer', color:'var(--gray-600)', fontWeight:600 }}>
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 {uploadingFile ? 'Uploading…' : '+ Add file'}
                 <input type="file" style={{ display:'none' }} onChange={e => { uploadExtraFile(e.target.files?.[0]); e.target.value = '' }} disabled={uploadingFile} />
@@ -2747,7 +2883,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
             {/* Action bar — Send sits bottom-left, as in Gmail */}
             <div className="gcompose-foot">
               <button onClick={sendEmailToVendor} disabled={sendingEmail || previewingPdf || emailTo.length === 0}
-                style={{ padding:'10px 26px', border:'none', borderRadius:20, background:'#1a73e8', color:'white', fontSize:14, fontWeight:600,
+                style={{ padding:'10px 26px', border:'none', borderRadius:20, background:'var(--blue-800)', color:'white', fontSize:14, fontWeight:600,
                          cursor: sendingEmail || previewingPdf || emailTo.length === 0 ? 'not-allowed' : 'pointer', fontFamily:'var(--font)',
                          opacity: sendingEmail || previewingPdf || emailTo.length === 0 ? 0.5 : 1 }}>
                 {sendingEmail ? 'Sending…' : 'Send'}
@@ -2755,7 +2891,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               {!excludePoPdf && (
                 <button onClick={previewPoPdf} disabled={previewingPdf || sendingEmail}
                   title="Open the PDF in a new tab to check it before sending — same renderer the email uses"
-                  className="gcompose-btn" style={{ width:'auto', padding:'0 10px', height:34, gap:6, fontSize:12.5, fontWeight:600, color:'#1a73e8' }}>
+                  className="gcompose-btn" style={{ width:'auto', padding:'0 10px', height:34, gap:6, fontSize:12.5, fontWeight:600, color:'var(--blue-800)' }}>
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:13,height:13}}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                   {previewingPdf ? 'Generating…' : 'Preview PDF'}
                 </button>
@@ -2780,11 +2916,11 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
 function AttachmentRow({ label, excluded, onToggle }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:6, opacity: excluded ? 0.5 : 1 }}>
-      <span style={{ color: excluded ? '#94a3b8' : '#15803d' }}>{excluded ? '✕' : '✓'}</span>
+      <span style={{ color: excluded ? 'var(--gray-400)' : 'var(--green-text)' }}>{excluded ? '✕' : '✓'}</span>
       <span style={{ flex:1, textDecoration: excluded ? 'line-through' : 'none' }}>{label}</span>
       <button onClick={onToggle}
         title={excluded ? 'Include' : 'Remove'}
-        style={{ background:'none', border:'none', color: excluded ? '#15803d' : '#dc2626', cursor:'pointer', fontSize:14, padding:'2px 6px', borderRadius:4 }}>
+        style={{ background:'none', border:'none', color: excluded ? 'var(--green-text)' : '#dc2626', cursor:'pointer', fontSize:14, padding:'2px 6px', borderRadius:4 }}>
         {excluded ? '↶' : '✕'}
       </button>
     </div>

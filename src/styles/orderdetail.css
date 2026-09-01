@@ -431,6 +431,9 @@ html:not([data-theme="dark"]) .od-page {
 .od-tl-dot.approved { background: #f0fdf4; color: #16a34a; border-color: rgba(22,163,74,0.3); }
 .od-tl-dot.dispatch { background: #fff7ed; color: #e26500; border-color: rgba(226,101,0,0.3); }
 .od-tl-dot.invoice  { background: #f5f3ff; color: #7c3aed; border-color: rgba(124,58,237,0.25); }
+/* Vendor acknowledgement — teal. Was inline on PurchaseOrderDetail; a named
+   variant so the dot colours stay in one place like every other one here. */
+.od-tl-dot.ack     { background: #ccfbf1; color: #0d9488; }
 .od-tl-dot.cancel   { background: #fef2f2; color: #dc2626; border-color: rgba(220,38,38,0.3); }
 .od-tl-dot.comment  { background: #eef4ff; color: var(--blue-700); border-color: rgba(26,77,171,0.25); }
 .od-tl-dot.success  { background: #f0fdf4; color: #16a34a; border-color: rgba(22,163,74,0.3); }
