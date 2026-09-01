@@ -5,7 +5,7 @@ import { writeDoc } from '../lib/printDoc'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { toast } from '../lib/toast'
 import { fmt, fmtMoneyFull, fmtDateTime } from '../lib/fmt'
-import { ordersTotalValue } from '../lib/orderValue'
+import { ordersTotalValue, lineNetValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import Loading from '../components/Loading'
 import PhoneInput, { PhoneDisplay, isValidPhone, isValidEmail, splitPhone } from '../components/PhoneInput'
@@ -444,7 +444,7 @@ export default function CustomerDetail() {
 
     const ordersHTML = orders.map((o, idx) => {
       const items = itemsByOrder[o.id] || []
-      const orderTotal = items.reduce((s,i) => s + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0)
+      const orderTotal = items.reduce((s,i) => s + lineNetValue(i), 0)
       const deliveredAt = (o.order_dispatches||[]).map(d=>d.delivered_at).filter(Boolean).sort().pop()
       const statusStyle = ['delivered','dispatched_fc'].includes(o.status)
         ? 'background:#f0fdf4;color:#15803d'
@@ -509,7 +509,7 @@ export default function CustomerDetail() {
         </tbody>
       </table>`
 
-    const totalPending = activeOrders.reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0), 0)
+    const totalPending = activeOrders.reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t + lineNetValue(i),0), 0)
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Customer Report — ${esc(customer.customer_name)}</title>
@@ -766,7 +766,7 @@ ${oppsHTML}
               <div className="c360-stat">
                 <span className="c360-stat-label">Pending Value</span>
                 <span className={'c360-stat-value' + (activeOrders.length > 0 ? ' accent' : '')} style={{ fontSize:14 }}>
-                  {fmtINR(activeOrders.reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0), 0))}
+                  {fmtINR(activeOrders.reduce((s,o) => s + (o.order_items||[]).reduce((t,i) => t + lineNetValue(i),0), 0))}
                 </span>
               </div>
               <div className="c360-stat">
@@ -1204,7 +1204,7 @@ ${oppsHTML}
                             </td>
                             <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{fmt(o.created_at)}</td>
                             <td style={{ color:'var(--gray-500)', whiteSpace:'nowrap' }}>{deliveredAt ? fmt(deliveredAt) : '—'}</td>
-                            <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR((o.order_items||[]).reduce((t,i) => t + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))),0))}</td>
+                            <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR((o.order_items||[]).reduce((t,i) => t + lineNetValue(i),0))}</td>
                           </tr>
                           )
                         })}

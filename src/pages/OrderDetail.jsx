@@ -6,7 +6,7 @@ import { writeDoc } from '../lib/printDoc'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
 import { fmt, fmtTs, esc, deliveryDateIssue, deliveryDateMax } from '../lib/fmt'
-import { lineDispatchedValue } from '../lib/orderValue'
+import { lineDispatchedValue, lineNetValue } from '../lib/orderValue'
 import { FC_PIPELINE_STATUSES, TERMINAL_STATUSES, lineIssuedQty,
          linePendingQty, lineHeldInOpenBatch, lineUndispatchedQty } from '../lib/orderStatus'
 import { notify } from '../lib/notify'
@@ -1073,7 +1073,7 @@ if (match) {
   )
   if (!order) return <Layout pageTitle="Order Detail" pageKey="orders"><div className="od-page"><div style={{textAlign:'center',padding:'80px 20px',color:'var(--gray-400)'}}><div style={{fontSize:18,fontWeight:700,marginBottom:8}}>Order not found</div><div style={{fontSize:13}}>This order may have been deleted or you don't have access.</div></div></div></Layout>
 
-  const subtotal       = (order.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+  const subtotal       = (order.order_items || []).reduce((s, i) => s + lineNetValue(i), 0)
   const grandTotal     = subtotal + (order.freight || 0)
   const editSubtotal   = editItems.reduce((s, i) => s + (parseFloat(i.total_price) || 0), 0)
   const editGrandTotal = editSubtotal + (parseFloat(editData.freight) || 0)

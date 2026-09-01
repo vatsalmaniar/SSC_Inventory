@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { lineNetValue } from '../lib/orderValue'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
@@ -178,7 +179,7 @@ export default function OpsOrders() {
                 </thead>
                 <tbody>
                   {filtered.map(o => {
-                    const total = (o.order_items || []).reduce((s, r) => s + ((r.total_price || 0) - ((r.cancelled_qty||0) * (r.unit_price_after_disc || r.unit_price || 0))), 0) + (o.freight || 0)
+                    const total = (o.order_items || []).reduce((s, r) => s + lineNetValue(r), 0) + (o.freight || 0)
                     return (
                       <tr key={o.id} onClick={() => openDetail(o)}>
                         <td className="order-num-cell">{o.order_number}</td>
@@ -208,7 +209,7 @@ export default function OpsOrders() {
             </div>
             {/* Mobile cards */}
             {filtered.map((o, i) => {
-              const total = (o.order_items || []).reduce((s, r) => s + (r.total_price || 0), 0) + (o.freight || 0)
+              const total = (o.order_items || []).reduce((s, r) => s + lineNetValue(r), 0) + (o.freight || 0)
               return (
                 <div key={o.id} className="order-card" style={{ animationDelay: i * 0.04 + 's' }} onClick={() => openDetail(o)}>
                   <div className="order-card-top">
@@ -297,9 +298,9 @@ export default function OpsOrders() {
                   </table>
                 </div>
                 <div className="order-totals" style={{marginTop:8}}>
-                  <div className="totals-row"><span>Subtotal</span><span>₹{(detail.order_items||[]).reduce((s,i)=>s+(i.total_price||0),0).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
+                  <div className="totals-row"><span>Subtotal</span><span>₹{(detail.order_items||[]).reduce((s,i)=>s+lineNetValue(i),0).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
                   <div className="totals-row"><span>Freight</span><span>₹{(detail.freight||0).toLocaleString('en-IN')}</span></div>
-                  <div className="totals-row grand"><span>Grand Total</span><span>₹{((detail.order_items||[]).reduce((s,i)=>s+(i.total_price||0),0)+(detail.freight||0)).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
+                  <div className="totals-row grand"><span>Grand Total</span><span>₹{((detail.order_items||[]).reduce((s,i)=>s+lineNetValue(i),0)+(detail.freight||0)).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
                 </div>
               </div>
 

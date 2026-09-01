@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { lineNetValue } from '../lib/orderValue'
 import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
@@ -236,7 +237,7 @@ export default function ProcurementOrders() {
   const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   const totalUncovered = pendingOrders.reduce((s, o) => s + (o._totalItems - o._coveredItems), 0)
-  const totalValue = pendingOrders.reduce((s, o) => s + (o.order_items || []).reduce((a,i) => a + ((i.total_price||0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0), 0)
+  const totalValue = pendingOrders.reduce((s, o) => s + (o.order_items || []).reduce((a,i) => a + lineNetValue(i), 0), 0)
 
   return (
     <Layout pageTitle="CO Orders" pageKey="procurement">
@@ -358,7 +359,7 @@ export default function ProcurementOrders() {
             ) : (
               <div className="ol-table">
                 {paginated.map(o => {
-                  const val = (o.order_items || []).reduce((s, i) => s + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0)
+                  const val = (o.order_items || []).reduce((s, i) => s + lineNetValue(i), 0)
                   const covered = o._coveredItems || 0
                   const total = o._totalItems || 0
                   const hasPartial = covered > 0 && covered < total

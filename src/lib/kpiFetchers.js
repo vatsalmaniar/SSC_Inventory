@@ -22,6 +22,7 @@
 // Derived KPIs do not query — they compute from the merged month values.
 
 import { sb } from './supabase'
+import { lineNetValue } from './orderValue'
 import { selectByCodes } from './safeCodes'
 
 // ── helper: bucket a date into the matching month range key ──
@@ -44,7 +45,7 @@ export const AUTO_FETCHERS = {
     ;(data || []).forEach(o => {
       const k = bucketKey(new Date(o.created_at), monthRanges)
       if (!k) return
-      const v = (o.order_items || []).reduce((a, i) => a + ((i.total_price || 0) - ((i.cancelled_qty||0) * (i.unit_price_after_disc || i.unit_price || 0))), 0)
+      const v = (o.order_items || []).reduce((a, i) => a + lineNetValue(i), 0)
       result[k] = (result[k] || 0) + v
     })
     return result

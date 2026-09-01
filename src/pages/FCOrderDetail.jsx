@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { lineNetValue } from '../lib/orderValue'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { writeDoc } from '../lib/printDoc'
@@ -600,7 +601,7 @@ export default function FCOrderDetail() {
     if (order.order_type === 'SAMPLE') {
       const batchTotal = activeBatch?.dispatched_items
         ? activeBatch.dispatched_items.reduce((s, i) => s + (i.total_price || 0), 0)
-        : (order.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+        : (order.order_items || []).reduce((s, i) => s + lineNetValue(i), 0)
       if (batchTotal <= 50000) {
         nextOrderStatus = 'eway_generated'
         actSuffix = 'E-Way Bill not required (value ≤ ₹50,000). Ready to deliver.'
@@ -678,7 +679,7 @@ export default function FCOrderDetail() {
   const isDelivered  = batchStatus === 'dispatched_fc'
   const hasAction    = !isCancelled && !isDelivered && !withAccounts
   const tab          = activeTab || 'overview'
-  const subtotal     = (order.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+  const subtotal     = (order.order_items || []).reduce((s, i) => s + lineNetValue(i), 0)
   const grandTotal   = subtotal + (order.freight || 0)
   const activeDC     = activeBatch?.dc_number || order.dc_number  // prefer batch, fall back to legacy
   const isTempDC     = activeDC?.startsWith('Temp/')

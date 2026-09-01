@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { lineNetValue } from '../lib/orderValue'
 import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
@@ -303,7 +304,7 @@ export default function SalesModule() {
                         const activeBatch = (o.order_dispatches || []).sort((a, b) => b.batch_no - a.batch_no)[0]
                         const batchTotal = activeBatch?.dispatched_items
                           ? activeBatch.dispatched_items.reduce((s, i) => s + (i.total_price || (i.unit_price * i.qty) || 0), 0) + (o.freight || 0)
-                          : (o.order_items || []).reduce((s, r) => s + ((r.total_price || 0) - ((r.cancelled_qty||0) * (r.unit_price_after_disc || r.unit_price || 0))), 0) + (o.freight || 0)
+                          : (o.order_items || []).reduce((s, r) => s + lineNetValue(r), 0) + (o.freight || 0)
                         const dcNum  = activeBatch?.dc_number || o.dc_number
                         const invNum = activeBatch?.invoice_number || o.invoice_number
                         return (
@@ -331,7 +332,7 @@ export default function SalesModule() {
                     const activeBatch = (o.order_dispatches || []).sort((a, b) => b.batch_no - a.batch_no)[0]
                     const batchTotal = activeBatch?.dispatched_items
                       ? activeBatch.dispatched_items.reduce((s, i) => s + (i.total_price || (i.unit_price * i.qty) || 0), 0) + (o.freight || 0)
-                      : (o.order_items || []).reduce((s, r) => s + ((r.total_price || 0) - ((r.cancelled_qty||0) * (r.unit_price_after_disc || r.unit_price || 0))), 0) + (o.freight || 0)
+                      : (o.order_items || []).reduce((s, r) => s + lineNetValue(r), 0) + (o.freight || 0)
                     const dcNum  = activeBatch?.dc_number || o.dc_number
                     const invNum = activeBatch?.invoice_number || o.invoice_number
                     return (

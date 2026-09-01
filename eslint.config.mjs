@@ -47,12 +47,25 @@ export default [
           selector: "TemplateElement[value.raw=/(item_code|product_code)\\.ilike/]",
           message: 'No hand-rolled item search inside .or(). Use searchItems() from src/lib/itemSearch.js.',
         },
+        {
+          // ONLY inside a .reduce() — that is the accumulation shape all three
+          // incidents took. Reading one line's total_price to display it, or
+          // writing the field, is legitimate and must not be flagged; a rule
+          // people have to disable is worse than no rule.
+          selector: "CallExpression[callee.property.name='reduce'][callee.object.left.property.name='order_items'] MemberExpression[property.name='total_price'], CallExpression[callee.property.name='reduce'][callee.object.property.name='order_items'] MemberExpression[property.name='total_price']",
+          message: 'Do not read order_items.total_price directly. Order value must net cancelled qty, treat a cancelled order as 0 and exclude SAMPLE — use lineNetValue / orderNetValue / ordersTotalValue from src/lib/orderValue.js. Summing it by hand has shipped three times, most recently a 60.3 lakh overstatement on /orders.',
+        },
       ],
     },
   },
   {
     // The one place allowed to name a search RPC — it owns the rollback switch.
     files: ['src/lib/itemSearch.js'],
+    rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
+    // The definition of order value itself. Everything else reads it from here.
+    files: ['src/lib/orderValue.js'],
     rules: { 'no-restricted-syntax': 'off' },
   },
 ]

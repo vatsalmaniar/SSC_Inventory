@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { lineNetValue } from '../lib/orderValue'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
@@ -1767,7 +1768,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     style={{ padding:'7px 12px', border:'1px solid #fed7aa', borderRadius:7, fontSize:12, fontFamily:'var(--font)', background:'white', minWidth:280, cursor:'pointer' }}>
                     <option value="">— Select new CO (same customer) —</option>
                     {activeCOsForRelink.map(co => {
-                      const v = (co.order_items||[]).reduce((s,i) => s + (i.total_price || 0), 0)
+                      const v = (co.order_items||[]).reduce((s,i) => s + lineNetValue(i), 0)
                       return <option key={co.id} value={co.id}>{co.order_number} · {(co.order_items||[]).length} items · {fmtINR(v)} · {co.status}</option>
                     })}
                   </select>
