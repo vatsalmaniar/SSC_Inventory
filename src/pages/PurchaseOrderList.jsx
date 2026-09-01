@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
@@ -6,7 +6,7 @@ import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import PeopleAvatar from '../components/PeopleAvatar'
-import * as XLSX from 'xlsx'
+import { xlsStatusStyle, xlsFinish, xlsDownload } from '../lib/xlsExport'
 import '../styles/orders-redesign.css'
 
 const REP_PALETTE = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
@@ -19,10 +19,21 @@ const PO_STATUS_LABELS = {
   partially_received:'Partial GRN', material_received:'Material Received',
   closed:'Closed', cancelled:'Cancelled',
 }
+// Colours are shared vocabulary with the Orders module — a status that means the
+// same thing must not be two colours, and a colour must not mean two things.
+// Fixed 2026-09-01 after benchmarking against OrdersList:
+//   closed was #047857 — which is Orders' DISPATCHED_FC (Delivered). A closed PO
+//     rendered in the exact green that trains the team to read "Delivered".
+//     Now #475569, the same slate Orders uses for closed.
+//   partially_received was #D97706 (Orders' goods_issued) AND identical to
+//     delivery_confirmation, so two different PO states were indistinguishable.
+//     Now #C2410C, the deep orange Orders uses for partial_dispatch.
+//   material_received was #22C55E (Orders' eway_generated, a mid-pipeline state)
+//     while the terminal emerald had been given to closed. Now #047857.
 const PO_STATUS_COLORS = {
   draft:'#94A3B8', pending_approval:'#F59E0B', approved:'#1a73e8', placed:'#0EA5E9',
   acknowledged:'#0F766E', delivery_confirmation:'#D97706',
-  partially_received:'#D97706', material_received:'#22C55E', closed:'#047857', cancelled:'#EF4444',
+  partially_received:'#C2410C', material_received:'#047857', closed:'#475569', cancelled:'#EF4444',
 }
 function poValue(po) { return po.total_amount || 0 }
 function isCPO(po) { return !!(po.order_number && po.order_number.includes('/CO')) }
@@ -112,7 +123,9 @@ export default function PurchaseOrderList() {
     const role = profile?.role || 'sales'
     if (!['ops','admin','management','demo'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name: profile?.name || '', role })
-    await loadPos(false)
+    // Demo users get the test dataset, as OrdersList.jsx:201 does. This passed
+    // `false` unconditionally, so a demo account saw real purchase orders.
+    await loadPos(role === 'demo')
   }
 
   async function loadPos(testMode = false) {
@@ -129,10 +142,15 @@ export default function PurchaseOrderList() {
     // POs whose CURRENT revision is an amendment that never reached the vendor.
     // Only the latest revision matters — an old Rev 1 that was superseded by a
     // sent Rev 2 is not outstanding.
-    sb.from('po_revisions').select('po_id, rev_no, sent_to_vendor_at')
-      .order('rev_no', { ascending: false })
-      .then(({ data: revs, error: rErr }) => {
+    // fetchAll, not a bare select: po_revisions passed PostgREST's 1000-row cap
+    // (1,332 rows on 2026-09-01), so a plain query silently dropped the oldest
+    // 300+ and the "Amended · vendor not told" chip under-counted. Same trap
+    // that hid 406 orders from this module's sibling — see lib/fetchAll.js.
+    fetchAll((from, to) => sb.from('po_revisions').select('po_id, rev_no, sent_to_vendor_at')
+      .order('rev_no', { ascending: false }).order('po_id', { ascending: false }).range(from, to))
+      .then(({ data: revs, error: rErr, truncated }) => {
         if (rErr) { console.error('revision load:', rErr); return }
+        if (truncated) console.warn('PO list: po_revisions hit the fetch ceiling — amended counts may be incomplete.')
         const latest = new Map()
         for (const r of (revs || [])) if (!latest.has(r.po_id)) latest.set(r.po_id, r)
         const out = new Set()
@@ -142,36 +160,77 @@ export default function PurchaseOrderList() {
     setLoading(false)
   }
 
-  const timelineOrders = pos.filter(po => inTimeline(po, timeline, customFrom, customTo, dateMode))
-  const counts = FILTERS.reduce((acc, { key }) => { acc[key] = timelineOrders.filter(po => matchFilter(po, key, amendedUnsent)).length; return acc }, {})
+  // Memoised for the same reason OrdersList.jsx:257 is: `counts` alone runs
+  // every filter across every PO, and without this it re-ran on every keystroke
+  // in the search box. Same formulas, they just stop recomputing when nothing
+  // they depend on has changed.
+  const timelineOrders = useMemo(
+    () => pos.filter(po => inTimeline(po, timeline, customFrom, customTo, dateMode)),
+    [pos, timeline, customFrom, customTo, dateMode])
+
+  const counts = useMemo(
+    () => FILTERS.reduce((acc, { key }) => { acc[key] = timelineOrders.filter(po => matchFilter(po, key, amendedUnsent)).length; return acc }, {}),
+    [timelineOrders, amendedUnsent])
+
   const q = search.trim().toLowerCase()
-  const filtered = timelineOrders
+  const filtered = useMemo(() => timelineOrders
     .filter(po => matchFilter(po, filter, amendedUnsent))
-    .filter(po => !q || codeIncludes(po.po_number, q) || po.vendor_name?.toLowerCase().includes(q) || codeIncludes(po.order_number, q) || po.submitted_by_name?.toLowerCase().includes(q))
+    .filter(po => !q || codeIncludes(po.po_number, q) || po.vendor_name?.toLowerCase().includes(q) || codeIncludes(po.order_number, q) || po.submitted_by_name?.toLowerCase().includes(q)),
+    [timelineOrders, filter, amendedUnsent, q])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
-  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
-  const sumTotal = filtered.filter(po => po.status !== 'cancelled').reduce((s, po) => s + poValue(po), 0)
+  const paginated = useMemo(() => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE), [filtered, safePage])
+  const sumTotal = useMemo(() => filtered.filter(po => po.status !== 'cancelled').reduce((s, po) => s + poValue(po), 0), [filtered])
   const activeFilterLabel = FILTERS.find(f => f.key === filter)?.label || 'POs'
   const timelineLabel = timeline === 'custom'
     ? (customFrom || customTo ? `${customFrom || ''}–${customTo || ''}` : 'Custom')
     : TIMELINES.find(t => t.key === timeline)?.label || ''
   const fileName = `SSC_PurchaseOrders_${activeFilterLabel}_${timelineLabel}_${new Date().toISOString().slice(0,10)}`
 
-  function downloadSummary() {
-    const rows = filtered.map(po => ({
-      'PO #': po.po_number, 'Vendor': po.vendor_name || '',
-      'Linked Order': po.order_number || '', 'PO Date': fmt(po.po_date),
-      'Expected Delivery': po.expected_delivery ? fmt(po.expected_delivery) : '',
-      'Submitted By': po.submitted_by_name || '', 'Items': (po.po_items || []).length,
-      'Value (₹)': poValue(po), 'Centre': po.fulfilment_center || '',
-      'Status': PO_STATUS_LABELS[po.status] || po.status,
-    }))
-    const ws = XLSX.utils.json_to_sheet(rows)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'POs')
-    XLSX.writeFile(wb, fileName + '_Summary.xlsx')
+  async function downloadSummary() {
+    // Was raw SheetJS (json_to_sheet + writeFile): no header, no status colours,
+    // no number formats, and it happily exported a blank sheet. The Summary
+    // button looked identical to the Orders one but produced an unrelated file.
+    // Now the same ExcelJS + shared-chrome path as OrdersList.jsx:300.
+    if (!filtered.length) { alert('No POs to export. Adjust filters and try again.'); return }
+    let ExcelJS
+    try { ExcelJS = (await import('exceljs')).default } catch (e) { alert('Failed to load Excel library: ' + e.message); return }
+    try {
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'SSC ERP'; wb.created = new Date()
+      const ws = wb.addWorksheet('POs Summary', { views: [{ state: 'frozen', ySplit: 1 }] })
+      const cols = [
+        { header: 'PO #', key: 'po_number', width: 22 },
+        { header: 'Vendor', key: 'vendor', width: 32 },
+        { header: 'Linked Order', key: 'linked_order', width: 22 },
+        { header: 'PO Date', key: 'po_date', width: 12 },
+        { header: 'Expected Delivery', key: 'expected', width: 15 },
+        { header: 'Submitted By', key: 'submitted_by', width: 18 },
+        { header: 'Items', key: 'items', width: 7 },
+        { header: 'Value (₹)', key: 'value', width: 15, style: { numFmt: '₹#,##,##0.00' } },
+        { header: 'Centre', key: 'centre', width: 12 },
+        { header: 'Status', key: 'status', width: 18 },
+      ]
+      ws.columns = cols
+      filtered.forEach(po => {
+        const sStyle = xlsStatusStyle(po.status)
+        const row = ws.addRow({
+          po_number: po.po_number, vendor: po.vendor_name || '',
+          linked_order: po.order_number || '', po_date: po.po_date ? fmt(po.po_date) : '',
+          expected: po.expected_delivery ? fmt(po.expected_delivery) : '',
+          submitted_by: po.submitted_by_name || '', items: (po.po_items || []).length,
+          value: poValue(po), centre: po.fulfilment_center || '',
+          status: PO_STATUS_LABELS[po.status] || po.status,
+        })
+        const sCell = row.getCell('status')
+        sCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sStyle.bg } }
+        sCell.font = { bold: true, color: { argb: sStyle.fg } }
+        sCell.alignment = { horizontal: 'center', vertical: 'middle' }
+      })
+      xlsFinish(ws, cols.length)
+      await xlsDownload(wb, fileName + '_Summary.xlsx')
+    } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
   }
 
   async function downloadDetailed() {
@@ -199,24 +258,10 @@ export default function PurchaseOrderList() {
         { header: 'Status', key: 'status', width: 18 },
       ]
       ws.columns = cols
-      const statusStyle = (s) => {
-        switch (s) {
-          case 'draft': return { bg: 'FFF1F5F9', fg: 'FF475569' }
-          case 'pending_approval': return { bg: 'FFFEF3C7', fg: 'FF92400E' }
-          case 'approved': return { bg: 'FFDBEAFE', fg: 'FF1E40AF' }
-          case 'placed': return { bg: 'FFCFFAFE', fg: 'FF0E7490' }
-          case 'acknowledged': return { bg: 'FFCCFBF1', fg: 'FF115E59' }
-          case 'delivery_confirmation': case 'partially_received': return { bg: 'FFFFEDD5', fg: 'FF9A3412' }
-          case 'material_received': return { bg: 'FFDCFCE7', fg: 'FF14532D' }
-          case 'closed': return { bg: 'FFBBF7D0', fg: 'FF14532D' }
-          case 'cancelled': return { bg: 'FFFEE2E2', fg: 'FFB91C1C' }
-          default: return { bg: 'FFF1F5F9', fg: 'FF334155' }
-        }
-      }
       let rowCounter = 0
       filtered.forEach(po => {
         const items = po.po_items || []
-        const sStyle = statusStyle(po.status)
+        const sStyle = xlsStatusStyle(po.status)
         const baseRow = {
           po_date: po.po_date ? fmt(po.po_date) : '',
           po_number: po.po_number,
@@ -263,33 +308,8 @@ export default function PurchaseOrderList() {
           })
         }
       })
-      const header = ws.getRow(1)
-      header.height = 24
-      header.eachCell(cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A2540' } }
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
-        cell.alignment = { vertical: 'middle', horizontal: 'left' }
-        cell.border = { bottom: { style: 'thin', color: { argb: 'FF143055' } } }
-      })
-      const lastRow = ws.rowCount
-      for (let r = 2; r <= lastRow; r++) {
-        const row = ws.getRow(r)
-        row.eachCell({ includeEmpty: true }, cell => {
-          cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } }
-        })
-        if (r % 2 === 0) {
-          row.eachCell({ includeEmpty: true }, cell => {
-            const isTinted = cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor?.argb !== 'FFFFFFFF'
-            if (!isTinted) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAFAFA' } }
-          })
-        }
-      }
-      ws.autoFilter = { from: { row:1, column:1 }, to: { row:1, column: cols.length } }
-      const buf = await wb.xlsx.writeBuffer()
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a'); a.href = url; a.download = fileName + '_Detailed.xlsx'
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+      xlsFinish(ws, cols.length)
+      await xlsDownload(wb, fileName + '_Detailed.xlsx')
     } catch (e) { alert('Failed to generate Excel: ' + (e.message || e)); console.error(e) }
   }
 

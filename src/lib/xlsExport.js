@@ -14,6 +14,19 @@ export function xlsStatusStyle(s) {
     case 'delivery_ready': case 'eway_pending': case 'eway_generated': return { bg: 'FFD1FAE5', fg: 'FF065F46' }
     case 'dispatched_fc': return { bg: 'FFBBF7D0', fg: 'FF14532D' }
     case 'cancelled': return { bg: 'FFFEE2E2', fg: 'FFB91C1C' }
+    // Purchase-order statuses. Added 2026-09-01: PurchaseOrderList carried its own
+    // copy of this switch and it had already drifted — that copy gave
+    // pending_approval FFFEF3C7/FF92400E while this gives FFFEF9C3/FF854D0E, so the
+    // same status exported two different colours depending on which page you
+    // pressed Export from. They live here so the next module inherits them.
+    case 'draft': return { bg: 'FFF1F5F9', fg: 'FF475569' }
+    case 'approved': return { bg: 'FFDBEAFE', fg: 'FF1E40AF' }
+    case 'placed': return { bg: 'FFCFFAFE', fg: 'FF0E7490' }
+    case 'acknowledged': return { bg: 'FFCCFBF1', fg: 'FF115E59' }
+    case 'delivery_confirmation': return { bg: 'FFFEF3C7', fg: 'FF92400E' }
+    case 'partially_received': return { bg: 'FFFFF7ED', fg: 'FFC2410C' }  // as partial_dispatch
+    case 'material_received': return { bg: 'FFBBF7D0', fg: 'FF14532D' }   // as dispatched_fc
+    case 'closed': return { bg: 'FFF1F5F9', fg: 'FF334155' }              // slate, as on screen
     default: return { bg: 'FFF1F5F9', fg: 'FF334155' }
   }
 }
