@@ -43,6 +43,13 @@
 -- 5. Sort is (order_date NULLS LAST, order_number, sr_no). An undated order
 --    must never silently jump the queue.
 --
+-- 6. NEVER use a bare DELETE or UPDATE without WHERE on the temp tables. The
+--    API connection preloads Supabase's `safeupdate`, which rejects them
+--    ("DELETE requires a WHERE clause"). It is loaded via
+--    session_preload_libraries at CONNECT time, so `SET LOCAL ROLE
+--    authenticated` in a test session does NOT reproduce it — verify against
+--    the real API path, not just SET ROLE.
+--
 -- READ-ONLY. Writes nothing. The list stays advisory — enforcement remains in
 -- the dispatch flow (FIFO jump warning + dispatch_order_batch).
 -- ═══════════════════════════════════════════════════════════════════════
@@ -77,7 +84,12 @@ BEGIN
   -- Querying `inventory` per line instead measured 3,162 ms vs 100 ms.
   CREATE TEMP TABLE IF NOT EXISTS _atp_known (code text PRIMARY KEY) ON COMMIT DROP;
   CREATE TEMP TABLE IF NOT EXISTS _atp_norm  (norm text PRIMARY KEY) ON COMMIT DROP;
-  DELETE FROM _atp_pool; DELETE FROM _atp_alloc; DELETE FROM _atp_known; DELETE FROM _atp_norm;
+  -- TRUNCATE, never bare DELETE. Supabase loads the `safeupdate` extension via
+  -- session_preload_libraries on the API's connection, which rejects any DELETE
+  -- or UPDATE without a WHERE clause: "DELETE requires a WHERE clause". It loads
+  -- at CONNECT time, so `SET LOCAL ROLE authenticated` does NOT pick it up —
+  -- this passed every test here and failed for every real user (2026-09-01).
+  TRUNCATE _atp_pool, _atp_alloc, _atp_known, _atp_norm;
 
   -- every code the sheet carries in a known godown, INCLUDING qty 0 (see note 4)
   INSERT INTO _atp_known (code)
