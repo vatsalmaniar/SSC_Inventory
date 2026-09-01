@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { MO, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
-import { ordersTotalValue, ordersDispatchedValue } from '../lib/orderValue'
+import { ordersTotalValue, ordersDispatchedValue, orderNetValue, lineNetValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import '../styles/orders-redesign.css'
 
@@ -64,12 +64,15 @@ function buildMonthlyData(orders) {
     const slot = months.find(m => m.year === d.getFullYear() && m.month === d.getMonth())
     if (!slot) return
     slot.ordered++
-    slot.orderedValue += (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+    // ordersTotalValue semantics for ONE order: cancelled -> 0, SAMPLE -> 0,
+    // partial cancels netted out. Summing total_price raw here counted
+    // cancelled business as revenue.
+    slot.orderedValue += (o.order_type === 'SAMPLE' ? 0 : orderNetValue(o))
     // Delivered = fully resolved with goods issued ('closed' = delivered part +
     // cancelled remainder). partial_dispatch is honestly NOT delivered.
     if (o.status === 'dispatched_fc' || o.status === 'closed') {
       slot.delivered++
-      slot.deliveredValue += (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+      slot.deliveredValue += (o.order_type === 'SAMPLE' ? 0 : orderNetValue(o))
     }
   })
   months.forEach((m, i) => { m.isCurrent = i === curIdx; m.isFuture = curIdx >= 0 && i > curIdx })
@@ -139,6 +142,16 @@ export default function Orders() {
   const pendingApproval = orders.filter(o => o.status === 'pending').length
   const activeOrders = orders.filter(o => !['dispatched_fc','cancelled'].includes(o.status)).length
   const todayDispatched = orders.filter(o => (o.order_dispatches || []).some(b => b.created_at?.slice(0,10) === today))
+  // ⚠️ These two sum order_dispatches.dispatched_items — the batch JSON, which
+  // is one of the three competing "dispatched value" formulas orderValue.js was
+  // written to end (they differed by ~43 lakh). It also OVERSTATES: a full
+  // dispatch writes every line at FULL ordered qty even when a line was partly
+  // cancelled (see sql/dispatch_atomic_phase2.sql, "KNOWN PRE-EXISTING QUIRK").
+  //
+  // NOT changed with the rest of the /orders value fix (2026-09-01) because
+  // orderDispatchedValue() is not a drop-in: it is order-level lifetime posted
+  // value, whereas these are "what shipped TODAY, by batch date". Making them
+  // canonical needs a definition first — flagged, not silently altered.
   const todayDispatchValue = todayDispatched.reduce((s, o) => {
     if (o.order_type === 'SAMPLE') return s
     const td = (o.order_dispatches || []).filter(b => b.created_at?.slice(0,10) === today)
@@ -159,7 +172,10 @@ export default function Orders() {
       id: g,
       label: { pending:'Pending Approval', approved:'Approved · Ops', partial:'Partially Dispatched', fc:'At Fulfilment Centre', billing:'Billing / Accounts', delivered:'Delivered', cancelled:'Cancelled' }[g],
       count: list.length,
-      value: list.reduce((s,o) => s + (o.order_items || []).reduce((a,i) => a + (i.total_price || 0), 0), 0),
+      // Canonical value, so the donut totals to the headline above it. The
+      // 'cancelled' group therefore shows its COUNT with a value of 0 — a
+      // cancelled order is not revenue. That is the point of the fix.
+      value: ordersTotalValue(list),
       color: { pending:'#F59E0B', approved:'#1a73e8', partial:'#C2410C', fc:'#0F766E', billing:'#D97706', delivered:'#10B981', cancelled:'#EF4444' }[g],
     }
   }).filter(s => s.count > 0)
@@ -171,7 +187,8 @@ export default function Orders() {
     return {
       id: r.id, name: r.name,
       count: own.length,
-      value: own.reduce((s,o) => s + (o.order_type === 'SAMPLE' ? 0 : (o.order_items || []).reduce((a,i) => a + (i.total_price || 0), 0)), 0),
+      // Was gross: a rep kept full credit for an order that was later cancelled.
+      value: ordersTotalValue(own),
       color: repColor(r.id),
     }
   }).filter(r => r.count > 0).sort((a,b) => b.value - a.value)
@@ -179,7 +196,7 @@ export default function Orders() {
 
   // Top customers
   const customerAgg = Object.values(orders.reduce((m, o) => {
-    const val = o.order_type === 'SAMPLE' ? 0 : (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0)
+    const val = o.order_type === 'SAMPLE' ? 0 : orderNetValue(o)
     if (!m[o.customer_name]) m[o.customer_name] = { name: o.customer_name, value: 0, count: 0, last: o.created_at, delivered: 0 }
     m[o.customer_name].value += val
     m[o.customer_name].count++
@@ -370,7 +387,8 @@ export default function Orders() {
                   {todayDispatched.length === 0 ? (
                     <div className="o-empty">No dispatches scheduled today</div>
                   ) : todayDispatched.slice(0, 6).map(o => {
-                    const val = (o.order_items || []).filter(i => i.dispatch_date === today).reduce((s, i) => s + (i.total_price || 0), 0)
+                    // Per LINE here, so lineNetValue — nets each line's cancelled qty.
+                    const val = (o.order_items || []).filter(i => i.dispatch_date === today).reduce((s, i) => s + lineNetValue(i), 0)
                     return (
                       <div key={o.id} className="o-list-row" onClick={() => navigate('/orders/' + o.id)}>
                         <div style={{ minWidth: 0 }}>
@@ -401,7 +419,7 @@ export default function Orders() {
                     <div style={{ fontSize: 11, color: 'var(--o-muted)', marginTop: 4, fontFamily: 'Geist Mono, monospace' }}>SAMPLES</div>
                   </div>
                   <div style={{ flex: 1, borderLeft: '1px solid var(--o-line-2)', paddingLeft: 16 }}>
-                    <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--o-ink)', lineHeight: 1, fontFamily: 'Geist Mono, monospace' }}>{fmtCr(sampleOrders.reduce((s, o) => s + (o.order_items || []).reduce((a, i) => a + (i.total_price || 0), 0), 0))}</div>
+                    <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--o-ink)', lineHeight: 1, fontFamily: 'Geist Mono, monospace' }}>{fmtCr(sampleOrders.reduce((s, o) => s + orderNetValue(o), 0))}</div>
                     <div style={{ fontSize: 11, color: 'var(--o-muted)', marginTop: 4, fontFamily: 'Geist Mono, monospace' }}>VALUE</div>
                   </div>
                 </div>
@@ -409,7 +427,8 @@ export default function Orders() {
                   {sampleOrders.length === 0 ? (
                     <div className="o-empty">No sample orders yet</div>
                   ) : sampleOrders.slice(0, 5).map(o => {
-                    const val = (o.order_items || []).reduce((s, i) => s + (i.total_price || 0), 0)
+                    // Must match the SAMPLES total above it, which is orderNetValue.
+                    const val = orderNetValue(o)
                     return (
                       <div key={o.id} className="o-list-row" onClick={e => { e.stopPropagation(); navigate('/orders/' + o.id) }}>
                         <div style={{ minWidth: 0 }}>
