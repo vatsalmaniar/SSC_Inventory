@@ -408,8 +408,8 @@ export default function AvailableToPromise() {
           </div>
           <div className="page-meta">
             {lastSynced && (
-              <div className="meta-pill" title="When the allocation you are looking at was computed. Press Sync to recompute.">
-                <span className="meta-label">Last synced</span>
+              <div className="meta-pill" title="When this list was computed. It is recomputed live every time the page opens; Refresh recomputes it now.">
+                <span className="meta-label">Data as of</span>
                 <span className="meta-val">{fmtTs(lastSynced)}</span>
               </div>
             )}
@@ -435,25 +435,34 @@ export default function AvailableToPromise() {
               Export
             </button>
             <button onClick={() => resync(showTest)} disabled={loading}
-              title="Re-read orders and the stock sheet, re-run FIFO allocation"
+              title="Recompute against orders and stock as they are right now. The list is already live on open — this is for when you have had the page open a while."
               style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'8px 14px', border:'1px solid #1a73e8', borderRadius:8, background: loading ? '#dbeafe' : '#1a73e8', color: loading ? '#1e40af' : 'white', fontSize:12, fontWeight:600, cursor: loading ? 'wait' : 'pointer', fontFamily:'var(--font)' }}>
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width:14, height:14 }}><path d="M21 12a9 9 0 11-3.5-7.1M21 4v5h-5"/></svg>
-              {loading ? 'Syncing…' : 'Sync'}
+              {loading ? 'Refreshing…' : 'Refresh'}
             </button>
           </div>
         </div>
 
-        {/* Staleness / integrity warnings — the list must never look fresher than it is */}
-        {lastSynced && freshness.some(f => f.updatedAt > lastSynced) && (
+        {/* Snapshot-staleness warnings — CLIENT PATH ONLY.
+            Under server allocation the list is recomputed live on every open, so
+            a newer stock sheet and a newly created order are already in it: both
+            conditions below are permanently false and the banners would be dead
+            code. They are kept, gated, so that flipping USE_SERVER_ALLOCATION
+            back restores the old behaviour COMPLETE — a rollback that quietly
+            drops a dispatch-safety warning is not a rollback. */}
+        {!USE_SERVER_ALLOCATION && lastSynced && freshness.some(f => f.updatedAt > lastSynced) && (
           <div style={{ border:'1px solid rgba(26,115,232,0.35)', background:'rgba(26,115,232,0.06)', color:'#1a56b8', borderRadius:'var(--o-radius)', padding:'10px 14px', marginBottom:12, fontSize:13 }}>
             <b>A newer stock sheet was uploaded after your last sync.</b> Press Sync to allocate against today's stock.
           </div>
         )}
-        {newSinceSync > 0 && (
+        {!USE_SERVER_ALLOCATION && newSinceSync > 0 && (
           <div style={{ border:'1px solid rgba(180,83,9,0.35)', background:'rgba(180,83,9,0.07)', color:'#92400e', borderRadius:'var(--o-radius)', padding:'10px 14px', marginBottom:12, fontSize:13 }}>
             <b>{newSinceSync} pending order{newSinceSync > 1 ? 's are' : ' is'} not in this list</b> — created after your last sync. Press Sync to include {newSinceSync > 1 ? 'them' : 'it'}.
           </div>
         )}
+
+        {/* Sheet-integrity warnings — these stay live in BOTH paths: they are
+            about the stock sheet itself, not about the list being stale. */}
         {staleState === 'red' && (
           <div style={{ border:'1px solid rgba(185,28,28,0.4)', background:'rgba(185,28,28,0.06)', color:'#B91C1C', borderRadius:'var(--o-radius)', padding:'10px 14px', marginBottom:12, fontSize:13 }}>
             <b>Stock sheet is over {STALE_RED_H - 1}h old.</b> Do not dispatch from this list — ask accounts to upload today's AMD/BRD sheets, then press Sync.
