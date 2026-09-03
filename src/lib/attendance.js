@@ -72,19 +72,41 @@ export function declarationFor(declarations, branch, dateStr) {
 // WFH is recorded as Present with a code so payroll counts it as paid.
 export function applyDeclaration(computed, decl) {
   if (!decl || !computed || computed.status !== 'absent') return computed
-  return { ...computed, status: DECL_TO_STATUS[decl.status] || 'present', declared: decl, code: decl.status === 'wfh' ? 'WFH' : computed.code }
+  // A declared day is paid by definition — the absence it rescues carried is_lop:true, and
+  // spreading it through meant Finalise stamped declared holidays/WFH as Loss of Pay
+  // (Aug 2026: 65 paid days about to be written unpaid). Same for leave_deducted: a
+  // company-declared half day must not charge the employee's leave balance.
+  return { ...computed, status: DECL_TO_STATUS[decl.status] || 'present', declared: decl, code: decl.status === 'wfh' ? 'WFH' : computed.code, is_lop: false, leave_deducted: 0 }
 }
 
 export function toMin(t) { const [h, m] = (t || '0:0').slice(0,5).split(':').map(Number); return h * 60 + m }
 export function minToHrs(min) { if (min == null) return '—'; const h = Math.floor(min/60), m = min%60; return `${h}h ${String(m).padStart(2,'0')}m` }
 export function fmtTime(d) { if (!d) return '—'; const x = new Date(d); return x.toLocaleTimeString('en-IN', { hour:'numeric', minute:'2-digit', hour12:true }) }
 
-// Sundays off; 2nd & 4th Saturday off. Other Saturdays = working.
+// ── Week-off overrides (swaps) ──
+// The company sometimes shifts a weekly off (22 Aug 2026 was worked, 29 Aug given off
+// instead). attendance_weekoff_overrides records those dates; pages load them once per
+// init via loadWeekOffOverrides(sb) and every isWeekOff() call then honours the swap.
+// If a page never loads them, isWeekOff falls back to the standard rule — degraded to
+// the old behaviour, never something new and wrong.
+let _woOverrides = new Map()   // 'YYYY-MM-DD' -> boolean
+export async function loadWeekOffOverrides(sbClient) {
+  const { data, error } = await sbClient.from('attendance_weekoff_overrides').select('work_date,is_weekoff')
+  if (error) return _woOverrides   // keep whatever we had; standard rule still applies
+  _woOverrides = new Map((data || []).map(r => [r.work_date, r.is_weekoff]))
+  return _woOverrides
+}
+export const weekOffOverrides = () => _woOverrides
+
+// Sundays off; 2nd & 4th Saturday off. Other Saturdays = working — unless an override
+// row swaps the specific date.
 export function isWeekOff(date) {
   // Resolved as a plain calendar date. 'YYYY-MM-DD' parses as UTC midnight but getDay() reads
   // the browser's clock, so west of UTC every date landed on the previous weekday and Monday
   // attendance was scored against Sunday.
   const s = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(date) ? date.slice(0, 10) : istYmd(date)
+  const ovr = _woOverrides.get(s)
+  if (ovr != null) return ovr
   const [y, m, dd] = s.split('-').map(Number)
   const d = new Date(Date.UTC(y, m - 1, dd)), dow = d.getUTCDay()
   if (dow === 0) return true

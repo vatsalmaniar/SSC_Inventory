@@ -5,7 +5,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
-import { computeDay, isWeekOff, distanceM, minToHrs, fmtTime, toMin, STATUS_META, DEFAULT_CFG, effShift, currentlyIn, istYmd } from '../lib/attendance'
+import { computeDay, isWeekOff, loadWeekOffOverrides, distanceM, minToHrs, fmtTime, toMin, STATUS_META, DEFAULT_CFG, effShift, currentlyIn, istYmd } from '../lib/attendance'
 import { signPhotos } from '../lib/photos'
 import { adminEmpIds } from '../lib/attScope'
 import Layout from '../components/Layout'
@@ -67,6 +67,7 @@ export default function PeopleAttendance() {
 
   async function load(emp, roleStr) {
     const since = new Date(); since.setDate(since.getDate() - 45)
+    await loadWeekOffOverrides(sb)   // swapped week-offs before any day is scored
     const [c, off, hol, bl, lr, alv] = await Promise.all([
       sb.from('attendance_config').select('*').maybeSingle(),
       sb.from('office_locations').select('*').eq('is_active', true),

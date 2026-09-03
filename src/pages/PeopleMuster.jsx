@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { computeDay, isWeekOff, fmtTime, minToHrs, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration, DECL_LABEL, istYmd } from '../lib/attendance'
+import { computeDay, isWeekOff, loadWeekOffOverrides, fmtTime, minToHrs, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration, DECL_LABEL, istYmd } from '../lib/attendance'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
 import { toast } from '../lib/toast'
@@ -74,6 +74,7 @@ export default function PeopleMuster() {
     setMeId(me?.id || null)
     const mgmt = ['admin','management'].includes(prof?.role)
     if (!mgmt) { setDenied(true); setLoading(false); return }   // Muster is admin/management only
+    await loadWeekOffOverrides(sb)   // swapped week-offs (22/29 Aug) before any day is scored
     let empQ = sb.from('employees').select('id,full_name,employee_code,designation,department,branch,shift_start,shift_end,attendance_exempt,lifecycle_status').neq('lifecycle_status','exited').order('full_name')
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const end = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1)
@@ -160,6 +161,9 @@ export default function PeopleMuster() {
     for (const { emp, days } of musterData) {
       for (const d of days) {
         if (d.status === 'future') continue
+        // Never write TODAY: the day isn't over, so someone yet to punch in scores absent
+        // and someone still in the office scores a missing-out half. Tomorrow's run gets it.
+        if (d.date === todayY) continue
         const imp = imported[`${emp.id}|${d.date}`]
         // Anything this feature did not write is frozen: the sheet import (Apr–Jul) and any
         // HR manual override both stay exactly as they are.
@@ -308,7 +312,16 @@ export default function PeopleMuster() {
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>Attendance
             </button>
             <h1 className="ph-title">Muster</h1>
-            <div className="ph-sub">{emps.length} people · {monthLabel}</div>
+            <div className="ph-sub">{emps.length} people · {monthLabel}
+              {canMark && (() => {
+                // Days computed on screen but never written to the payroll record. Aug 2026
+                // sat unsaved for 6 weeks and nobody could see it — hence this nag.
+                const unsaved = finalisePlan.rows.filter(r => !imported[`${r.employee_id}|${r.work_date}`]).length
+                return unsaved > 0
+                  ? <span style={{marginLeft:8,fontSize:11,fontWeight:600,color:'#B45309',background:'#FCF1E4',borderRadius:6,padding:'2px 8px'}}>{unsaved} day{unsaved>1?'s':''} not saved — Finalise</span>
+                  : <span style={{marginLeft:8,fontSize:11,fontWeight:600,color:'#256F3A',background:'rgba(37,111,58,0.10)',borderRadius:6,padding:'2px 8px'}}>saved ✓</span>
+              })()}
+            </div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <button className="btn btn-primary btn-sm" onClick={()=>setShowDecl(true)} title="Declare a special day (rainfall / WFH / calamity)">+ Declare day</button>
@@ -475,7 +488,7 @@ export default function PeopleMuster() {
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'16px 20px',borderBottom:'1px solid var(--line-2)'}}>
                 <div>
                   <div style={{fontWeight:600,fontSize:16,color:'var(--ink)'}}>Finalise {monthLabel}</div>
-                  <div style={{fontSize:12,color:'var(--muted)',marginTop:2}}>Writes this month's attendance — including LOP — to the payroll record</div>
+                  <div style={{fontSize:12,color:'var(--muted)',marginTop:2}}>Writes this month's attendance — including LOP — to the payroll record. Today is never written (the day isn't over).</div>
                 </div>
                 <button onClick={()=>setShowFinalise(false)} style={{border:0,background:'none',fontSize:20,cursor:'pointer',color:'var(--muted)',lineHeight:1}}>✕</button>
               </div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { currentFyLabel } from '../lib/kpi'
-import { computeDay, isWeekOff, minToHrs, fmtTime, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration, istYmd, istMinutes } from '../lib/attendance'
+import { computeDay, isWeekOff, loadWeekOffOverrides, minToHrs, fmtTime, STATUS_META, DEFAULT_CFG, effShift, declarationFor, applyDeclaration, istYmd, istMinutes } from '../lib/attendance'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
@@ -73,6 +73,7 @@ export default function PeopleMyAttendance() {
   }
 
   async function load(t) {
+    await loadWeekOffOverrides(sb)   // swapped week-offs before any day is scored
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const end = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1)
     const [c, hol, p, lv, ad, dc] = await Promise.all([

@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { isWeekOff } from '../lib/attendance'
+import { isWeekOff, loadWeekOffOverrides } from '../lib/attendance'
 import Layout from '../components/Layout'
 import StatusDonut from '../components/StatusDonut'
 import '../styles/orders-redesign.css'
@@ -29,6 +29,7 @@ export default function PeopleHub() {
     const d0 = new Date(now); d0.setHours(0,0,0,0)
     const startISO = d0.toISOString()
     const safe = p => p.then(r => r.data || []).catch(() => [])
+    await loadWeekOffOverrides(sb)   // swapped week-offs (22/29 Aug) before isWeekOff runs
     const [emps, punches, leaves, pl, pr, exp, dev] = await Promise.all([
       safe(sb.from('employees').select('id,full_name,department,designation,join_date').eq('is_active', true)),
       safe(sb.from('attendance_punches').select('employee_id').gte('punch_at', startISO)),
