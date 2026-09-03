@@ -8,6 +8,7 @@ import AttendanceTabs from '../components/AttendanceTabs'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { Spinner } from '../components/PeopleLoaders'
 import { adminEmpIds } from '../lib/attScope'
+import { istYmd, istMinutes, toMin, DEFAULT_CFG, PUNCH_DEBOUNCE_MS } from '../lib/attendance'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
 
@@ -48,8 +49,11 @@ export default function PeopleSwipes() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [fEmp, setFEmp] = useState('all')
+  const [fBranch, setFBranch] = useState('all')
+  const [fDept, setFDept] = useState('all')
   const [fMethod, setFMethod] = useState('all')
   const [fDir, setFDir] = useState('all')
+  const [fLate, setFLate] = useState(false)   // first punch of the day after grace
   const [page, setPage] = useState(1)
 
   // refetch when the window changes (custom only refetches once both/one bound set)
@@ -63,7 +67,7 @@ export default function PeopleSwipes() {
     setRole(prof?.role || '')
     const { data: me } = await sb.from('employees').select('id').eq('profile_id', session.user.id).maybeSingle()
     const mgmt = ['admin', 'management'].includes(prof?.role)
-    let empQ = sb.from('employees').select('id,full_name').neq('lifecycle_status', 'exited').order('full_name')
+    let empQ = sb.from('employees').select('id,full_name,branch,department').neq('lifecycle_status', 'exited').order('full_name')
     if (!mgmt) { if (!me?.id) { setDenied(true); setLoading(false); return } empQ = empQ.eq('id', me.id) }  // user: own swipes only
     const { data: list } = await empQ
     let scope = list || []
@@ -81,12 +85,47 @@ export default function PeopleSwipes() {
   }
 
   const nameOf = useMemo(() => { const m = {}; emps.forEach(e => m[e.id] = e.full_name); return m }, [emps])
+  const empBy = useMemo(() => { const m = {}; emps.forEach(e => m[e.id] = e); return m }, [emps])
+  const branches = useMemo(() => [...new Set(emps.map(e => e.branch).filter(Boolean))].sort(), [emps])
+  const depts = useMemo(() => [...new Set(emps.map(e => e.department).filter(Boolean))].sort(), [emps])
+
+  // The device's own in/out flag is unreliable and the policy engine IGNORES it
+  // (computeDay derives from punch order). This log now shows the same truth: per person
+  // per IST day, debounced punches alternate In → Out; a repeat scan within the debounce
+  // window is marked Duplicate. `first` marks the day's first kept punch (the arrival).
+  const derived = useMemo(() => {
+    const by = {}
+    rows.forEach(r => { const k = r.employee_id + '|' + istYmd(r.punch_at); (by[k] ||= []).push(r) })
+    const m = {}
+    Object.values(by).forEach(list => {
+      const sorted = list.slice().sort((a, b) => new Date(a.punch_at) - new Date(b.punch_at))
+      let kept = 0, lastKept = null
+      sorted.forEach(r => {
+        const t = new Date(r.punch_at)
+        if (lastKept && (t - lastKept) < PUNCH_DEBOUNCE_MS) { m[r.id] = { dir: 'dup', first: false }; return }
+        lastKept = t
+        m[r.id] = { dir: kept % 2 === 0 ? 'in' : 'out', first: kept === 0 }
+        kept++
+      })
+    })
+    return m
+  }, [rows])
+  // Method options come from the data, not a hardcoded pair — 'web' and 'regularization'
+  // punches exist too and a fixed list silently hides them (stale-filter bug, 2026-09-03).
+  const METHOD_LABEL = { biometric: 'Biometric', mobile: 'Mobile GPS', web: 'Web check-in', regularization: 'Regularization' }
+  const methods = useMemo(() => [...new Set(rows.map(r => r.method).filter(Boolean))].sort(), [rows])
+  const graceMin = toMin(DEFAULT_CFG.grace_until)
+  const isLateIn = r => !!derived[r.id]?.first && istMinutes(r.punch_at) > graceMin
+
   const filtered = useMemo(() => rows.filter(r =>
     (fEmp === 'all' || r.employee_id === fEmp) &&
+    (fBranch === 'all' || empBy[r.employee_id]?.branch === fBranch) &&
+    (fDept === 'all' || empBy[r.employee_id]?.department === fDept) &&
     (fMethod === 'all' || r.method === fMethod) &&
-    (fDir === 'all' || r.direction === fDir)
-  ), [rows, fEmp, fMethod, fDir])
-  useEffect(() => { setPage(1) }, [fEmp, fMethod, fDir])
+    (fDir === 'all' || derived[r.id]?.dir === fDir) &&
+    (!fLate || isLateIn(r))
+  ), [rows, fEmp, fBranch, fDept, fMethod, fDir, fLate, derived, empBy]) // eslint-disable-line
+  useEffect(() => { setPage(1) }, [fEmp, fBranch, fDept, fMethod, fDir, fLate])
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER))
   const safePage = Math.min(page, totalPages)
   const view = filtered.slice((safePage - 1) * PER, safePage * PER)
@@ -118,7 +157,7 @@ export default function PeopleSwipes() {
     ]
     filtered.forEach(r => ws.addRow({
       emp: nameOf[r.employee_id] || '', dt: new Date(r.punch_at).toLocaleString('en-IN'),
-      dir: r.direction === 'in' ? 'In' : 'Out',
+      dir: derived[r.id]?.dir === 'dup' ? 'Duplicate' : derived[r.id]?.dir === 'in' ? 'In' : 'Out',
       method: r.method === 'mobile' ? 'Mobile GPS' : r.method === 'biometric' ? 'Biometric' : r.method,
       loc: r.note || '', lat: r.lat ?? '', lng: r.lng ?? '',
     }))
@@ -166,20 +205,39 @@ export default function PeopleSwipes() {
           )}
         </div>
 
-        {/* person / method / direction filters */}
-        <div className="filters">
+        {/* person / branch / dept / method / derived-direction / late filters */}
+        <div className="filters" style={{flexWrap:'wrap'}}>
           {emps.length > 1 && (
             <div className="f-sel"><select value={fEmp} onChange={e => setFEmp(e.target.value)}>
               <option value="all">All people</option>
               {emps.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
             </select></div>
           )}
+          {branches.length > 1 && (
+            <div className="f-sel"><select value={fBranch} onChange={e => setFBranch(e.target.value)}>
+              <option value="all">All branches</option>
+              {branches.map(b => <option key={b} value={b}>{b}</option>)}
+            </select></div>
+          )}
+          {depts.length > 1 && (
+            <div className="f-sel"><select value={fDept} onChange={e => setFDept(e.target.value)}>
+              <option value="all">All departments</option>
+              {depts.map(d => <option key={d} value={d}>{d}</option>)}
+            </select></div>
+          )}
           <div className="f-sel"><select value={fMethod} onChange={e => setFMethod(e.target.value)}>
-            <option value="all">All methods</option><option value="biometric">Biometric</option><option value="mobile">Mobile GPS</option>
+            <option value="all">All methods</option>
+            {methods.map(m => <option key={m} value={m}>{METHOD_LABEL[m] || m}</option>)}
           </select></div>
           <div className="f-sel"><select value={fDir} onChange={e => setFDir(e.target.value)}>
-            <option value="all">In &amp; Out</option><option value="in">In only</option><option value="out">Out only</option>
+            <option value="all">In &amp; Out</option><option value="in">In only</option><option value="out">Out only</option><option value="dup">Duplicates</option>
           </select></div>
+          <button onClick={() => setFLate(v => !v)} title="First punch of the day after 10:15"
+            className="btn btn-sm" style={fLate
+              ? {background:'rgba(245,158,11,0.14)', color:'#BA7D14', border:'1px solid #F59E0B', fontWeight:600}
+              : {background:'var(--surface)', color:'var(--muted)', border:'1px solid var(--line)'}}>
+            Late in {fLate ? '· on' : ''}
+          </button>
         </div>
 
         <div className="acard" style={{ overflow: 'hidden' }}>
@@ -192,9 +250,12 @@ export default function PeopleSwipes() {
                     <td><div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
                       <PeopleAvatar name={nameOf[r.employee_id] || ''} className="avatar" style={{ width: 24, height: 24, fontSize: 10, fontWeight: 600, flexShrink: 0 }} />
                       <span style={{ fontSize:12.5, color:'var(--ink)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{nameOf[r.employee_id] || '—'}</span></div></td>
-                    <td style={{ color: 'var(--muted)', fontSize: 13 }}>{fmtDT(r.punch_at)}</td>
-                    <td><span className="io-pill" style={{ '--sc': r.direction === 'in' ? '#10B981' : '#F59E0B' }}><span className="io-dot" />{r.direction === 'in' ? 'In' : 'Out'}</span></td>
-                    <td>{r.method === 'mobile' ? <span className="method-tag gps">Mobile GPS</span> : r.method === 'biometric' ? <span className="method-tag biometric">Biometric</span> : <span className="method-tag web">{r.method}</span>}</td>
+                    <td style={{ color: 'var(--muted)', fontSize: 13 }}>{fmtDT(r.punch_at)}{isLateIn(r) && <span style={{marginLeft:7,fontSize:10,fontWeight:600,color:'#BA7D14',background:'rgba(245,158,11,0.12)',borderRadius:5,padding:'1px 6px'}}>late</span>}</td>
+                    <td>{(() => { const d = derived[r.id]?.dir
+                      return d === 'dup'
+                        ? <span className="io-pill" style={{ '--sc': '#94A3B8' }} title="Repeat scan within 2 minutes — ignored by attendance"><span className="io-dot" />Dup</span>
+                        : <span className="io-pill" style={{ '--sc': d === 'in' ? '#10B981' : '#F59E0B' }} title="Derived from punch order (device flag is unreliable)"><span className="io-dot" />{d === 'in' ? 'In' : 'Out'}</span> })()}</td>
+                    <td>{r.method === 'mobile' ? <span className="method-tag gps">Mobile GPS</span> : r.method === 'biometric' ? <span className="method-tag biometric">Biometric</span> : <span className="method-tag web">{METHOD_LABEL[r.method] || r.method}</span>}</td>
                     <td style={{ color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.note || ''}>{r.note || '—'}</td>
                     <td className="r">{r.lat != null && r.lng != null
                       ? <a className="loc-icon" href={`https://maps.google.com/?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer" title="Open location in Maps"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg></a>

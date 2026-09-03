@@ -167,7 +167,7 @@ export default function PeopleMyAttendance() {
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>Attendance
             </button>
             <h1 className="ph-title">{isSelf ? 'My Attendance' : emp.full_name}</h1>
-            <div className="ph-sub">Monthly log{!isSelf && ` · ${emp.designation||''}`}</div>
+            <div className="ph-sub">Day-by-day attendance record{!isSelf && ` · ${emp.designation||''}`}</div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',justifyContent:'flex-end'}}>
             <button onClick={()=>setPolicy(true)} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:12.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}} title="How leave & LOP work">

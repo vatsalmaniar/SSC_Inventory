@@ -270,7 +270,7 @@ export default function PeopleMuster() {
       const row = ws.addRow(obj)
       dayNums.forEach(d => { const cc = cell(e, d); const meta = STATUS_META[cc.status]
         if (meta) { const c = row.getCell('d'+d)
-          c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF'+meta.bg.replace('#','') } }
+          c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF'+meta.xls.replace('#','') } }
           c.font = { color:{ argb:'FF'+meta.color.replace('#','') }, bold:true, size:9 }
           c.alignment = { horizontal:'center' } } })
     })
@@ -318,18 +318,26 @@ export default function PeopleMuster() {
                 // sat unsaved for 6 weeks and nobody could see it — hence this nag.
                 const unsaved = finalisePlan.rows.filter(r => !imported[`${r.employee_id}|${r.work_date}`]).length
                 return unsaved > 0
-                  ? <span style={{marginLeft:8,fontSize:11,fontWeight:600,color:'#B45309',background:'#FCF1E4',borderRadius:6,padding:'2px 8px'}}>{unsaved} day{unsaved>1?'s':''} not saved — Finalise</span>
-                  : <span style={{marginLeft:8,fontSize:11,fontWeight:600,color:'#256F3A',background:'rgba(37,111,58,0.10)',borderRadius:6,padding:'2px 8px'}}>saved ✓</span>
+                  ? <span style={{marginLeft:8,fontSize:11,fontWeight:600,color:'#BA7D14',background:'rgba(245,158,11,0.12)',borderRadius:6,padding:'2px 8px'}}>{unsaved} day{unsaved>1?'s':''} not saved — Finalise</span>
+                  : <span style={{marginLeft:8,fontSize:11,fontWeight:600,color:'#0F926D',background:'rgba(16,185,129,0.12)',borderRadius:6,padding:'2px 8px'}}>saved ✓</span>
               })()}
             </div>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <button className="btn btn-primary btn-sm" onClick={()=>setShowDecl(true)} title="Declare a special day (rainfall / WFH / calamity)">+ Declare day</button>
-            {canMark && <button className="btn btn-neutral btn-sm" onClick={()=>setShowFinalise(true)} title="Write this month's attendance to the payroll record">Finalise month</button>}
-            <button className="btn btn-neutral btn-sm" onClick={downloadMuster} title="Download detailed muster (Excel)">
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Download
+          <div style={{display:'flex',alignItems:'center',gap:9,flexWrap:'wrap'}}>
+            <div className="dl-group">
+              <button className="dl-btn" onClick={downloadMuster} title="Download detailed muster (Excel)">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Detailed muster
+              </button>
+            </div>
+            <button className="btn btn-ghost" onClick={()=>setShowDecl(true)} title="Declare a special day (rainfall / WFH / calamity)">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
+              Declare day
             </button>
+            {canMark && <button className="btn btn-primary" onClick={()=>setShowFinalise(true)} title="Write this month's attendance to the payroll record">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 13 4 4L19 7"/></svg>
+              Finalise month
+            </button>}
           </div>
         </div>
 

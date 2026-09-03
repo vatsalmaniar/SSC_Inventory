@@ -26,10 +26,12 @@ export function computeLedger({ bal, requests, attDays }, isOffDay) {
 
 const fmtD = d => d ? new Date(d + 'T00:00:00+05:30').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : '—'
 const mono = { fontFamily: "'Geist Mono',monospace" }
-const KIND_DOT = { seed: '#8C99A8', request: '#7C5CE0', half: '#F5951E', hr_leave: '#7C5CE0', sandwich: '#D07E1E', encash: '#2E86DE', lop: '#F05252', pending: '#C25A00', rejected: '#BB0000' }
+// Orders-module palette only (green #10B981 / amber #F59E0B / red #EF4444 families) —
+// same dots and tints as .ol-status-pill / STATUS_META. No new colours here.
+const KIND_DOT = { credit: '#10B981', seed: '#94A3B8', request: '#8B5CF6', half: '#F59E0B', hr_leave: '#8B5CF6', sandwich: '#F59E0B', encash: '#1a73e8', lop: '#EF4444', pending: '#F59E0B', rejected: '#EF4444' }
 const NOFLOW_BADGE = {
-  pending: { t: 'not approved yet', c: '#C25A00', b: 'rgba(226,101,0,0.12)' },
-  rejected: { t: 'rejected', c: '#BB0000', b: 'rgba(187,0,0,0.08)' },
+  pending: { t: 'not approved yet', c: '#BA7D14', b: 'rgba(245,158,11,0.12)' },
+  rejected: { t: 'rejected', c: '#B63A3F', b: 'rgba(239,68,68,0.12)' },
 }
 
 // bare=true renders just the transaction list (no card chrome) so it can sit inside an
@@ -57,7 +59,7 @@ export default function LedgerCard({ ledger, fyLabel, title = 'Leave ledger', co
         </div>
       )}
       {totals.reconcileGap !== 0 && (
-        <div style={{ fontSize: 12, color: '#B45309', background: '#FCF1E4', borderRadius: 8, padding: '8px 12px', margin: '10px 0' }}>
+        <div style={{ fontSize: 12, color: '#BA7D14', background: 'rgba(245,158,11,0.12)', borderRadius: 8, padding: '8px 12px', margin: '10px 0' }}>
           Records don't fully tie out (difference {totals.reconcileGap} day) — tell the admin before trusting this ledger.
         </div>
       )}
@@ -72,7 +74,7 @@ export default function LedgerCard({ ledger, fyLabel, title = 'Leave ledger', co
               <div className="e-empty" style={{ padding: '20px 0' }}>No leave movements this year yet.</div>
             ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr 58px 58px', gap: 10, padding: '7px 0 5px', fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', borderBottom: '1px solid var(--line-2)' }}>
+                <div className="tbl-h" style={{ display: 'grid', gridTemplateColumns: '64px 1fr 58px 58px', gap: 10, padding: '8px 0 6px', borderBottom: '1px solid var(--line-2)' }}>
                   <span>Date</span><span>Transaction</span><span style={{ textAlign: 'right' }}>Change</span><span style={{ textAlign: 'right' }}>Balance</span>
                 </div>
                 {flowRows.map((r, i) => (
@@ -85,7 +87,7 @@ export default function LedgerCard({ ledger, fyLabel, title = 'Leave ledger', co
                       {r.reason && <span style={{ color: 'var(--muted-2)', fontSize: 11.5 }}> · {r.reason}</span>}
                       {r.noflow && NOFLOW_BADGE[r.kind] && <span style={{ fontSize: 10, fontWeight: 600, color: NOFLOW_BADGE[r.kind].c, background: NOFLOW_BADGE[r.kind].b, borderRadius: 5, padding: '1px 6px', marginLeft: 7 }}>{NOFLOW_BADGE[r.kind].t}</span>}
                     </span>
-                    <span style={{ textAlign: 'right', fontSize: 12.5, fontWeight: 600, color: r.noflow ? 'var(--muted-2)' : r.delta < 0 ? 'var(--st-absent)' : 'var(--muted-2)', ...mono }}>
+                    <span style={{ textAlign: 'right', fontSize: 12.5, fontWeight: 600, color: r.noflow ? 'var(--muted-2)' : r.delta < 0 ? 'var(--st-absent)' : r.delta > 0 ? 'var(--st-present)' : 'var(--muted-2)', ...mono }}>
                       {r.noflow ? (r.kind === 'pending' && r.days ? `(−${r.days})` : '—') : r.delta < 0 ? r.delta : `+${r.delta}`}
                     </span>
                     <span style={{ textAlign: 'right', fontSize: 12.5, color: 'var(--ink)', ...mono }}>{r.noflow ? '' : r.balance}</span>
@@ -102,8 +104,8 @@ export default function LedgerCard({ ledger, fyLabel, title = 'Leave ledger', co
             )}
             {lopRows.length > 0 && (
               <div style={{ marginTop: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0 5px', borderBottom: '1px solid var(--line-2)' }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--st-absent)' }}>LOP ledger — unpaid absences · {lopRows.length} day{lopRows.length > 1 ? 's' : ''}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0 6px', borderBottom: '1px solid var(--line-2)' }}>
+                  <span className="tbl-h" style={{ color: '#B63A3F' }}>LOP ledger — unpaid absences · {lopRows.length} day{lopRows.length > 1 ? 's' : ''}</span>
                   <span style={{ fontSize: 10.5, color: 'var(--muted-2)' }}>cuts salary, not leave balance</span>
                 </div>
                 {lopRows.map((r, i) => (
@@ -113,7 +115,7 @@ export default function LedgerCard({ ledger, fyLabel, title = 'Leave ledger', co
                       <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 99, background: KIND_DOT.lop, marginRight: 7, verticalAlign: 'baseline' }} />
                       {r.label}
                     </span>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--st-absent)', background: '#FCEBEB', borderRadius: 5, padding: '1px 6px' }}>unpaid</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#B63A3F', background: 'rgba(239,68,68,0.12)', borderRadius: 5, padding: '1px 6px' }}>unpaid</span>
                   </div>
                 ))}
               </div>

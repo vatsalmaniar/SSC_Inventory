@@ -124,6 +124,13 @@ export function buildLedger({ bal, requests = [], attDays = [], isOffDay }) {
   const reconcileGap = Math.round((seedUsed + reqDaysSum - used) * 10) / 10
 
   const rows = []
+  // Credits are transactions too — dated, so the ledger shows WHEN leave arrived.
+  // credited_on is stamped by the probation-confirmation trigger; absent = FY opening.
+  if (carried > 0) rows.push({ date: fyStart(), kind: 'credit', label: 'Carried forward from last FY', delta: carried })
+  if (credited > 0) {
+    const on = bal?.credited_on || fyStart()
+    rows.push({ date: on, kind: 'credit', label: on !== fyStart() ? 'Leave credited on confirmation (pro-rata)' : 'Annual leave credited', delta: credited })
+  }
   const coveredByReq = d => reqs.some(r => r.from_date <= d && d <= r.to_date)
 
   // ── Pre-cutover breakup ──
@@ -211,7 +218,8 @@ export function buildLedger({ bal, requests = [], attDays = [], isOffDay }) {
   if (encashed > 0) rows.push({ date: fyEnd(), kind: 'encash', label: 'Encashed', delta: -encashed })
 
   rows.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
-  let run = opening
+  // Balance runs from zero: the credit rows themselves bring it up to the opening.
+  let run = 0
   for (const r of rows) { run = Math.round((run + r.delta) * 10) / 10; r.balance = run }
 
   const extras = Math.round((halfSum + hrLeaveSum + sandwichSum) * 10) / 10

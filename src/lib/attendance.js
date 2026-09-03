@@ -187,13 +187,28 @@ export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday
   return { status, code, first_in: firstIn, last_out: lastOut, worked_min: worked, late_min: late, early_min: early, ot_min: ot, leave_deducted: leaveDeducted, missing_punch: false }
 }
 
-// Soothing, light palette (eye-friendly) — used across attendance (badges, strips, dots)
+// ONE status palette for the whole attendance suite — the ORDERS module's colours
+// (user benchmark call 2026-09-03: green #10B981 / amber #F59E0B / red #EF4444, pills as
+// 12% tint + text at colour-75%/ink-25%, per orders-redesign.css .ol-status-pill).
+// Never introduce another green/amber/red here — that is how the suite drifted before.
+// `bg` is CSS (rgba tint); `xls` is the SAME tint flattened to hex over white, because
+// Excel ARGB fills cannot take rgba() — the muster export uses xls, never bg.
 export const STATUS_META = {
-  present:  { label:'Present',  color:'#2E9E63', bg:'#E9F6EF', dot:'#34C77B' },
-  half_day: { label:'Half Day', color:'#D07E1E', bg:'#FCF1E4', dot:'#F5951E' },
-  absent:   { label:'Absent',   color:'#D64545', bg:'#FCEBEB', dot:'#F05252' },
-  leave:    { label:'Leave',    color:'#7C5CE0', bg:'#F0EBFC', dot:'#9670F0' },
-  holiday:  { label:'Holiday',  color:'#2E86DE', bg:'#E8F2FC', dot:'#4A9EF0' },
-  weekoff:  { label:'Week-off', color:'#8C99A8', bg:'#F1F3F5', dot:'#C7CFD8' },
-  lop:      { label:'LOP',      color:'#D64545', bg:'#FCEBEB', dot:'#F05252' },
+  present:  { label:'Present',  color:'#0F926D', bg:'rgba(16,185,129,0.12)',  xls:'#E2F6F0', dot:'#10B981' },
+  half_day: { label:'Half Day', color:'#BA7D14', bg:'rgba(245,158,11,0.12)',  xls:'#FDF3E2', dot:'#F59E0B' },
+  absent:   { label:'Absent',   color:'#B63A3F', bg:'rgba(239,68,68,0.12)',   xls:'#FDE8E8', dot:'#EF4444' },
+  leave:    { label:'Leave',    color:'#6B51C4', bg:'rgba(139,92,246,0.12)',  xls:'#F1EBFE', dot:'#8B5CF6' },
+  holiday:  { label:'Holiday',  color:'#165DBA', bg:'rgba(26,115,232,0.12)',  xls:'#E3EEFC', dot:'#1a73e8' },
+  weekoff:  { label:'Week-off', color:'#64748B', bg:'rgba(148,163,184,0.16)', xls:'#EDF0F4', dot:'#CBD5E1' },
+  lop:      { label:'LOP',      color:'#B63A3F', bg:'rgba(239,68,68,0.12)',   xls:'#FDE8E8', dot:'#EF4444' },
+}
+
+// Request-status badges (leave + regularization share the same lifecycle) — same palette,
+// one definition. Both pages import this instead of keeping their own colour maps.
+export const REQ_ST = {
+  pending:      { l:'Pending manager', c:'#BA7D14', b:'rgba(245,158,11,0.12)' },
+  mgr_approved: { l:'Pending HR',      c:'#165DBA', b:'rgba(26,115,232,0.12)' },
+  approved:     { l:'Approved',        c:'#0F926D', b:'rgba(16,185,129,0.12)' },
+  rejected:     { l:'Rejected',        c:'#B63A3F', b:'rgba(239,68,68,0.12)' },
+  cancelled:    { l:'Cancelled',       c:'#64748B', b:'rgba(148,163,184,0.16)' },
 }
