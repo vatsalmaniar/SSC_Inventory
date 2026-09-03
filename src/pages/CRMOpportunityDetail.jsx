@@ -469,6 +469,10 @@ export default function CRMOpportunityDetail() {
         total_price:           parseFloat(item.total_price) || 0,
         dispatch_date:         item.dispatch_date,
         customer_ref_no:       item.customer_ref_no?.trim() || null,
+        // Parity with NewOrder.jsx: these lines are priced by hand here — this
+        // screen does no sell-side SPA lookup — so they record MANUAL rather
+        // than leaving provenance blank and indistinguishable from a legacy row.
+        price_source:          'MANUAL',
       }))
     )
     if (itemsErr) { toast(friendlyError(itemsErr, "Order created but items failed. Please try again.")); setSubmittingSample(false); return }
@@ -527,6 +531,10 @@ export default function CRMOpportunityDetail() {
         total_price:           parseFloat(item.total_price) || 0,
         dispatch_date:         item.dispatch_date,
         customer_ref_no:       item.customer_ref_no?.trim() || null,
+        // Parity with NewOrder.jsx: these lines are priced by hand here — this
+        // screen does no sell-side SPA lookup — so they record MANUAL rather
+        // than leaving provenance blank and indistinguishable from a legacy row.
+        price_source:          'MANUAL',
       }))
     )
     if (itemsErr) { toast(friendlyError(itemsErr, "Order created but items failed. Please try again.")); setSubmittingSample(false); return }

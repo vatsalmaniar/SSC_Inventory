@@ -37,11 +37,15 @@ const MIN_OVERDUE    = 500      // below this, chasing costs more than it collec
 const BATCH          = 12       // ~12 × 1.5s ≈ 18s, inside the invocation limit
 const MAX_PASSES     = 60       // 60 × 12 = 720 customers, then it stops itself
 const GAP_MS         = 400
-// 7, not 3. Monday and Thursday are three days apart, so a 3-day guard let the
-// same customer be reminded on both — roughly nine times a month, every month,
-// about money they already know they owe. That is how a reminder becomes spam
-// and how a WhatsApp number gets blocked.
-const RESEND_GUARD_DAYS = 7
+// The Monday cron IS the cadence — a weekly schedule cannot spam anyone on its
+// own. This guard only exists to stop an accidental double: someone sending by
+// hand on Sunday, then the run going out on Monday.
+//
+// It was 7 while the schedule was Monday AND Thursday, three days apart. With
+// Monday only, 7 actively hurt: a customer reminded on Wednesday was skipped on
+// Monday for being four days old, and then waited until the following Monday —
+// eleven days between reminders on money already overdue.
+const RESEND_GUARD_DAYS = 3
 
 const ALLOWED_ORIGINS = ['https://app.ssccontrol.com', 'https://ssc-inventory.vercel.app', 'http://localhost:5173']
 const corsFor = (o: string | null) => ({
@@ -135,7 +139,7 @@ serve(async (req) => {
       const queued = await queueRun(sb, null, run.as_on)
       if (!queued.ok) return await skip(sb, queued.error!, H)
       await notify(sb, `Scheduled WhatsApp reminders started — ${queued.total} customers queued.`)
-      kick(queued.job_id!)
+      await kick(queued.job_id!)
       return new Response(JSON.stringify({ ok: true, job_id: queued.job_id, total: queued.total }), { headers: H })
     }
 
@@ -169,7 +173,7 @@ serve(async (req) => {
     }
     const queued = await queueRun(sb, user.id, run?.as_on || null, body.customer_ids, body.include_recent === true)
     if (!queued.ok) return fail(queued.error!)
-    kick(queued.job_id!)   // fire and forget; the caller does not wait for the run
+    await kick(queued.job_id!)   // issued before we return, so the chain cannot be cancelled
     return new Response(JSON.stringify({ ok: true, job_id: queued.job_id, total: queued.total }), { headers: H })
 
   } catch (e) {
@@ -230,13 +234,22 @@ async function skip(sb: any, why: string, H: HeadersInit) {
   return new Response(JSON.stringify({ ok: true, skipped: true, reason: why }), { headers: H })
 }
 
-/** Ask ourselves to process the next batch. Deliberately not awaited. */
-function kick(jobId: string) {
-  fetch(`${SB_URL}/functions/v1/run-reminder-job`, {
+/** Ask ourselves to process the next batch.
+ *
+ *  This used to be a bare un-awaited fetch(). Supabase tears the isolate down
+ *  as soon as the handler returns and cancels anything still pending with it,
+ *  so the chain silently never fired — the first run needing a second batch
+ *  stopped dead at twelve of nineteen. waitUntil() is what keeps background
+ *  work alive past the response; awaiting is the fallback where it is absent. */
+function kick(jobId: string): Promise<unknown> {
+  const p = fetch(`${SB_URL}/functions/v1/run-reminder-job`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SB_KEY}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SB_ANON}` },
     body: JSON.stringify({ action: 'process', job_id: jobId, secret: JOB_SECRET }),
-  }).catch(() => { /* the next pass or a manual retry will pick it up */ })
+  }).catch(() => { /* a later pass or a manual resume picks it up */ })
+  // @ts-ignore — provided by the Supabase runtime
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(p)
+  return p
 }
 
 async function processBatch(sb: any, jobId: string, H: HeadersInit) {
@@ -291,7 +304,7 @@ async function processBatch(sb: any, jobId: string, H: HeadersInit) {
   const { count } = await sb.from('whatsapp_reminder_job_items')
     .select('id', { count: 'exact', head: true }).eq('job_id', jobId).eq('status', 'pending')
 
-  if (count && count > 0) kick(jobId)
+  if (count && count > 0) await kick(jobId)
   else await finish(sb, jobId)
 
   return done({ ok: true, sent, failed, remaining: count || 0 })

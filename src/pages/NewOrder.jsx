@@ -9,9 +9,10 @@ import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
 import { friendlyError } from '../lib/errorMsg'
+import { fetchSalesPrices, resolveSalesPrice, salesLineFields, salesOverrideFields } from '../lib/salesPricing'
 
 function emptyItem() {
-  return { item_code: '', item_type: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '', description: '' }
+  return { item_code: '', item_type: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', dispatch_date: '', customer_ref_no: '', description: '', _priceState: '', _priceLabel: '', _priceShort: '', _spaNo: null, _priceRecordId: null, _autoPriced: false, _overridden: false }
 }
 
 export default function NewOrder() {
@@ -97,6 +98,8 @@ export default function NewOrder() {
     setCustomerPending(c.approval_status === 'pending')
     setCustomerBlacklisted(c.account_status === 'Blacklisted')
     setCustomerConverted(c.account_status === 'Converted')
+    // An agreed rate is per customer — re-resolve every line against the new one.
+    repriceAllLines(c.id)
   }
 
   function handlePoFile(e) {
@@ -114,7 +117,17 @@ export default function NewOrder() {
   function updateItem(idx, field, value) {
     setItems(prev => {
       const next = [...prev]
-      next[idx] = { ...next[idx], [field]: value }
+      // The salesperson may always override an agreed rate — it is a default,
+      // not a lock. But the line must stop claiming it came from an SPA the
+      // moment it no longer matches one, or the badge would vouch for a figure
+      // nobody agreed to.
+      const priceEdited = field === 'lp_unit_price' || field === 'discount_pct'
+      const wasAuto = next[idx]._autoPriced
+      next[idx] = {
+        ...next[idx],
+        [field]: value,
+        ...(priceEdited && wasAuto ? salesOverrideFields(true) : {}),
+      }
       const item = next[idx]
       const lp   = parseFloat(item.lp_unit_price) || 0
       const disc = parseFloat(item.discount_pct)  || 0
@@ -137,11 +150,69 @@ export default function NewOrder() {
       next[idx] = { ...next[idx], item_code: item.item_code, item_type: item.type || '' }
       return next
     })
-    // Pull the item's description in, the way New PO does. NOT the price: the
-    // partner discount is what WE pay, so auto-filling it here would quote the
-    // customer at our own cost. Only the description, and only when the line is
-    // blank — a salesperson who has typed their own wording keeps it.
+    // Pull the item's description in, the way New PO does. The PURCHASE price is
+    // still never fetched here — the partner discount is what WE pay, and
+    // auto-filling it would quote the customer at our own cost. Only a SELL-side
+    // agreed rate may price a sales line; see src/lib/salesPricing.js.
     fillDescription(idx, item.item_code)
+    fillAgreedPrice(idx, item.item_code)
+  }
+
+  /**
+   * Fill the line from a sell-side SPA, if this customer has one for this item.
+   * No agreement -> nothing is touched and the line stays manual, which is the
+   * rule: we auto-fill ONLY from what we sell, never from what we pay.
+   */
+  async function fillAgreedPrice(idx, code, customer = customerId) {
+    if (!code || !customer) return
+    const line = items[idx]
+    // Never overwrite a price the salesperson typed or deliberately overrode.
+    if (line?._overridden || (line?.lp_unit_price && !line?._autoPriced)) return
+
+    const { byCode, failed } = await fetchSalesPrices(customer, [code])
+    const res = resolveSalesPrice(byCode.get(code), {
+      qty: parseFloat(line?.qty) || 1, customerId: customer, failed,
+    })
+    // NO_PRICE and ERROR both leave the line alone. They are stored, not acted
+    // on, so the badge can stay silent when we simply do not know.
+    setItems(prev => {
+      const next = [...prev]
+      const cur = next[idx]
+      // The row may have been retyped or removed while the lookup was in flight.
+      if (!cur || cur.item_code !== code) return prev
+      if (cur._overridden) return prev
+      next[idx] = { ...cur, ...salesLineFields(cur, res) }
+      return next
+    })
+  }
+
+  /**
+   * Re-price every auto-priced line when the customer changes — an agreed rate
+   * belongs to a customer, so a line priced for one must not survive onto
+   * another. Lines the salesperson priced by hand are left untouched.
+   */
+  async function repriceAllLines(customer) {
+    const codes = items.map(l => l.item_code).filter(Boolean)
+    if (!codes.length) return
+    const { byCode, failed } = await fetchSalesPrices(customer, codes)
+    setItems(prev => prev.map(line => {
+      if (!line.item_code) return line
+      if (line._overridden) return line
+      // A hand-typed price that was never auto-filled is the salesperson's own.
+      if (line.lp_unit_price && !line._autoPriced) return line
+      const res = resolveSalesPrice(byCode.get(line.item_code), {
+        qty: parseFloat(line.qty) || 1, customerId: customer, failed,
+      })
+      if (res.state !== 'PRICED') {
+        // The previous customer's agreed rate must NOT stay on the line.
+        return line._autoPriced
+          ? { ...line, lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '',
+              total_price: '', _autoPriced: false, _priceShort: '', _priceLabel: '',
+              _spaNo: null, _priceRecordId: null, _priceState: res.state }
+          : line
+      }
+      return { ...line, ...salesLineFields(line, res) }
+    }))
   }
 
   async function fillDescription(idx, code) {
@@ -201,7 +272,7 @@ export default function NewOrder() {
     if (odIssue) { toast(`Order Date ${odIssue}`); return }
     for (const item of validItems) {
       if (!item.qty)             { toast(`Qty is required for item: ${item.item_code}`); return }
-      if (!item.lp_unit_price)   { toast(`LP Price is required for item: ${item.item_code}`); return }
+      if (!item.lp_unit_price)   { toast(`Net Price is required for item: ${item.item_code}`); return }
       const dateIssue = deliveryDateIssue(item.dispatch_date, orderDate)
       if (dateIssue) { toast(`Dispatch Date ${dateIssue} — item: ${item.item_code}`); return }
     }
@@ -269,6 +340,14 @@ export default function NewOrder() {
         dispatch_date:         item.dispatch_date || null,
         customer_ref_no:       item.customer_ref_no?.trim() || null,
         description:           item.description?.trim() || null,
+        // Price provenance — which agreement priced this line, so the figure can
+        // be explained months later. Only a line still carrying the agreed rate
+        // claims an SPA; a hand-typed or overridden line records MANUAL.
+        price_source:          item._autoPriced ? 'SPA' : 'MANUAL',
+        spa_no:                item._autoPriced ? (item._spaNo || null) : null,
+        price_record_id:       item._autoPriced ? (item._priceRecordId || null) : null,
+        price_resolved_at:     item._autoPriced ? new Date().toISOString() : null,
+        price_overridden:      !!item._overridden,
       }))
     )
     if (itemsError) { toast('Order created but items failed to save: ' + itemsError.message); submitGuard.current = false; setSubmitting(false); return }
@@ -480,7 +559,7 @@ export default function NewOrder() {
                   <th className="col-sr">#</th>
                   <th className="col-code">Item Code <span className="req">*</span></th>
                   <th className="col-qty">Qty <span className="req">*</span></th>
-                  <th className="col-lp">LP Price (₹) <span className="req">*</span></th>
+                  <th className="col-lp">Net Price (₹) <span className="req">*</span></th>
                   <th className="col-disc">Disc %</th>
                   <th className="col-unit">Unit Price (₹)</th>
                   <th className="col-total">Total (₹)</th>
@@ -525,6 +604,14 @@ export default function NewOrder() {
                     </td>
                     <td className="col-lp">
                       <input type="number" value={item.lp_unit_price} onChange={e => updateItem(idx, 'lp_unit_price', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                      {item._autoPriced && item._spaNo && (
+                        <div title={'Agreed rate from ' + item._spaNo} style={{ marginTop:3, fontSize:9.5, fontWeight:600, color:'var(--green-text)', fontFamily:'var(--mono)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          {item._spaNo}
+                        </div>
+                      )}
+                      {item._overridden && (
+                        <div style={{ marginTop:3, fontSize:9.5, fontWeight:600, color:'#B45309' }}>Overridden</div>
+                      )}
                     </td>
                     <td className="col-disc">
                       <input type="number" value={item.discount_pct} onChange={e => updateItem(idx, 'discount_pct', e.target.value)} placeholder="0" min="0" max="100" />

@@ -180,9 +180,14 @@ export default function CustomerDetail() {
         .select('as_on,imported_at,source_filename')
         .eq('is_current', true)
         .maybeSingle(),
+      // Payment reminders only. Dispatch invoices live in whatsapp_messages too,
+      // and without this filter they appeared here as reminders owing ₹0 — a
+      // delivery notice has no overdue figure — and labelled "Manual" when in
+      // fact nobody sent them: they fire when FC marks a delivery.
       sb.from('whatsapp_messages')
         .select('sent_at,status,to_number,to_name,overdue_inr,error_message,delivered_at,read_at,source')
         .eq('customer_id', id)
+        .eq('kind', 'statement')
         .order('sent_at', { ascending: false })
         .limit(20),
       // Quotations are documents that NAME this customer — read them from the
