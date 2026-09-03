@@ -7,7 +7,9 @@
 --
 -- One AFTER trigger on both tables:
 --   INSERT (pending)              → notify the reporting manager (in-app + email)
---   pending → mgr_approved        → notify the HR approver
+--   pending → mgr_approved        → notify the HR approver — EXCEPT when the request is
+--                                   the HR approver's own (they cannot self-approve, so
+--                                   the RPC would dead-end): then all admins are notified
 --   → approved / rejected         → notify the requester (with the rejection reason)
 --
 -- Email rides the existing pipeline: inserting into `notifications` fires
@@ -26,10 +28,11 @@ begin
   select e.full_name, e.reporting_manager_id, e.profile_id into emp
     from employees e where e.id = new.employee_id;
   if TG_TABLE_NAME = 'leave_requests' then
-    detail := new.from_date || case when new.to_date <> new.from_date then ' to ' || new.to_date else '' end
+    detail := to_char(new.from_date,'DD Mon YYYY')
+              || case when new.to_date <> new.from_date then ' to ' || to_char(new.to_date,'DD Mon YYYY') else '' end
               || ' (' || new.days || ' day' || case when new.days <> 1 then 's' else '' end || ')';
   else
-    detail := new.work_date::text;
+    detail := to_char(new.work_date,'DD Mon YYYY');
   end if;
 
   if TG_OP = 'INSERT' and new.status = 'pending' then
@@ -47,9 +50,18 @@ begin
     exception when others then null; end;
   elsif TG_OP = 'UPDATE' and new.status = 'mgr_approved' and old.status = 'pending' then
     begin
-      select e2.full_name, e2.profile_id into hr from employees e2
+      select e2.full_name, e2.profile_id, e2.id into hr from employees e2
         where e2.id = (select hr_approver_employee_id from attendance_config limit 1);
-      if hr.profile_id is not null then
+      if hr.id = new.employee_id then
+        -- HR's own request: leave_decide/reg_decide block self-approval, so route the
+        -- second step to the admins who can actually complete it.
+        insert into notifications (user_id, user_name, message, from_name, email_type)
+        select p.id, p.name,
+          kind || ' request from ' || emp.full_name || ' (the HR approver) — ' || detail
+            || '. Manager approved. HR cannot approve their own request — an admin must complete this step.',
+          emp.full_name, 'approval_request'
+        from profiles p where p.role = 'admin';
+      elsif hr.profile_id is not null then
         insert into notifications (user_id, user_name, message, from_name, email_type)
         values (hr.profile_id, hr.full_name,
           kind || ' request from ' || emp.full_name || ' — ' || detail
