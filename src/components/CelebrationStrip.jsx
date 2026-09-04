@@ -18,11 +18,20 @@ export default function CelebrationStrip() {
     const { data, error } = await sb.rpc('celebrations_today')
     if (error) { console.warn('CelebrationStrip:', error.message); return }
     setItems(data || [])
-    // Fire bell notifications + emails once per day (server-deduped via celebration_log).
-    // Piggyback on app load; guard per browser session to avoid redundant calls.
-    if ((data || []).length && !sessionStorage.getItem('cel_dispatched')) {
-      sessionStorage.setItem('cel_dispatched', '1')
-      sb.rpc('celebrations_dispatch').catch(() => {})
+    // Fire bell notifications + emails once per DAY (server-deduped via celebration_log).
+    //
+    // This guard used to store a bare '1' in sessionStorage, which meant "once per browser
+    // tab, forever" — not once per day. It worked while sessions were forced to re-login
+    // every 24h, but once that widened to 7 days (68d56b7, 5 Aug) people kept tabs open
+    // for days, the flag stayed set, and the dispatcher was never called again: the last
+    // run was 28 Jul and six birthdays passed silently. Keyed on the date now, so a
+    // long-lived tab still asks on each new day.
+    const today = new Date().toLocaleDateString('en-CA')   // IST-agnostic local day
+    if ((data || []).length && sessionStorage.getItem('cel_dispatched') !== today) {
+      sessionStorage.setItem('cel_dispatched', today)
+      // Log failures instead of swallowing them — the previous no-op catch is why this
+      // outage left no trace anywhere for six weeks.
+      sb.rpc('celebrations_dispatch').catch(e => console.warn('celebrations_dispatch:', e?.message || e))
     }
   }
 
