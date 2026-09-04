@@ -143,6 +143,24 @@ function birthdayVariant(seed: string, year: number): number {
   return h % BIRTHDAY_MESSAGES.length
 }
 
+// Every celebration mail is plain text (user rule 2026-09-04) — including the team
+// announcement. The DB dispatcher already writes the sentence; this just wraps it in a
+// greeting and the standard sign-off, with no HTML part at all.
+function buildCelebrationText(recipientName: string, r: any): string {
+  if (r.email_type === 'birthday_self') return buildBirthdayText(recipientName, r)
+  const first = (recipientName || '').split(' ')[0] || 'there'
+  return `Hello ${first},
+
+${(r.message || '').trim()}
+
+Warm Wishes,
+
+People and Culture Team
+
+--
+SSC Control Pvt. Ltd. | Engineering Industry. Powering Progress.`
+}
+
 function buildBirthdayText(recipientName: string, r: any): string {
   const first = (recipientName || '').split(' ')[0] || 'there'
   const idx = birthdayVariant(String(r.user_id || r.id || first), new Date().getFullYear())
@@ -509,11 +527,13 @@ async function handleNotification(sb: any, r: any) {
 
     // The birthday wish to the person themselves is text-only: no HTML part at all,
     // so every client shows the plain note rather than a styled card.
-    const isBirthdaySelf = r.email_type === 'birthday_self'
-    const res = await resendSend(isBirthdaySelf
+    // Celebrations: text only, no HTML part. The wish to the person themselves also
+    // copies People (visible) and the owner (Bcc); team announcements go direct.
+    const isCelebration = CELEBRATION_TYPES.includes(r.email_type)
+    const res = await resendSend(isCelebration
       ? { from: FROM, to: [email], subject: subject(r),
-          cc: [BIRTHDAY_CC], bcc: [BIRTHDAY_BCC],
-          text: buildBirthdayText(recipientName, r) }
+          ...(r.email_type === 'birthday_self' ? { cc: [BIRTHDAY_CC], bcc: [BIRTHDAY_BCC] } : {}),
+          text: buildCelebrationText(recipientName, r) }
       : { from: FROM, to: [email], subject: subject(r),
           html: buildEmail(recipientName, r, extra),
           ...(textPart ? { text: textPart } : {}) })
