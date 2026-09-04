@@ -504,15 +504,10 @@ Please find attached our Purchase Order ${po.po_number} dated ${fmtDC(po.po_date
 
 Kindly acknowledge receipt of this PO and confirm the expected dispatch date at your earliest.
 
-For any clarification, reply to this email — it will reach our Procurement team directly.
-
-Thank you.
-
-Regards,
-${userName}
-Procurement Team
-SSC Control Pvt. Ltd.`
+We request that you check all the details and contact our Procurement team — or ${userName}, who placed this PO — if you have any queries. Replying to this email reaches our Procurement team directly.`
     )
+    // NOTE: no sign-off here — buildPOEmailText() appends the summary, the terms and the
+    // signature. Repeating it in the default message put two sign-offs in one email.
 
     // Prefill: vendor's primary contact in To, the standing internal list in Bcc.
     // Bcc rather than Cc so the vendor never sees internal addresses and a
@@ -578,8 +573,8 @@ SSC Control Pvt. Ltd.`
     if (!toEmails.length) { toast('Add at least one recipient.'); return }
     if (!emailSubject.trim()) { toast('Subject is required.'); return }
 
-    // Build HTML body from message + PO summary card
-    const htmlBody = buildPOEmailHTML()
+    // Plain text: message + PO summary + the three agreed T&C (see buildPOEmailText)
+    const textBody = buildPOEmailText()
 
     // Gather attachments (respect user-removed items)
     const attachments = []
@@ -641,7 +636,7 @@ SSC Control Pvt. Ltd.`
           sender_name: userName,
           sender_email: senderEmail,
           subject: emailSubject,
-          html_body: htmlBody,
+          text_body: textBody,
           attachments,
         }),
       })
@@ -666,41 +661,34 @@ SSC Control Pvt. Ltd.`
     }
   }
 
-  function buildPOEmailHTML() {
-    const msgHTML = (emailMessage || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')
+
+  // Vendor POs go out as PLAIN TEXT (user decision 2026-09-04). A PO is a contractual
+  // document, not a newsletter: text renders identically in every vendor's mail client,
+  // prints cleanly, and cannot be mangled by an HTML-stripping gateway.
+  // The T&C below are the three the user specified — do not add clauses without asking.
+  function buildPOEmailText() {
     const fc = po.fulfilment_center === 'Customer' ? (po.delivery_customer_name || 'Customer') : (po.fulfilment_center || '—')
-    return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;-webkit-font-smoothing:antialiased">
-<div style="max-width:600px;margin:0 auto;padding:32px 16px">
-  <div style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
-    <div style="height:4px;background:#1a73e8"></div>
-    <div style="padding:28px 28px 24px;text-align:center;border-bottom:1px solid #f1f5f9">
-      <img src="https://app.ssccontrol.com/logo/ssc-60-years.png" alt="SSC Control — 60 Years" style="height:80px;width:auto;margin-bottom:10px"/>
-      <div style="font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-0.2px">SSC Control Pvt. Ltd.</div>
-      <div style="font-size:11px;color:#64748b;margin-top:2px">Engineering Industry. Powering Progress.</div>
-    </div>
-    <div style="padding:24px 28px 16px;font-size:14px;color:#334155;line-height:1.7">${msgHTML}</div>
-    <div style="padding:0 28px 20px">
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;margin-bottom:10px">Purchase Order Summary</div>
-        <table width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;color:#475569">
-          <tr><td style="padding:4px 0;color:#64748b;width:140px">PO Number</td><td style="padding:4px 0;font-weight:700;color:#0f172a;font-family:'Courier New',monospace">${esc(po.po_number || '')}</td></tr>
-          <tr><td style="padding:4px 0;color:#64748b">PO Date</td><td style="padding:4px 0;color:#0f172a">${fmtDC(po.po_date || po.created_at)}</td></tr>
-          <tr><td style="padding:4px 0;color:#64748b">Vendor</td><td style="padding:4px 0;color:#0f172a">${esc(vendorDetail?.vendor_name || po.vendor_name || '')}</td></tr>
-          <tr><td style="padding:4px 0;color:#64748b">Total Value</td><td style="padding:4px 0;font-weight:700;color:#0f172a">₹${Number(po.total_amount || 0).toLocaleString('en-IN')}</td></tr>
-          ${po.expected_delivery ? `<tr><td style="padding:4px 0;color:#64748b">Expected Delivery</td><td style="padding:4px 0;color:#0f172a">${fmtDC(po.expected_delivery)}</td></tr>` : ''}
-          <tr><td style="padding:4px 0;color:#64748b">Delivery To</td><td style="padding:4px 0;color:#0f172a">${esc(fc)}</td></tr>
-          ${po.payment_terms ? `<tr><td style="padding:4px 0;color:#64748b">Payment Terms</td><td style="padding:4px 0;color:#0f172a">${esc(po.payment_terms)}</td></tr>` : ''}
-        </table>
-      </div>
-    </div>
-  </div>
-  <div style="text-align:center;padding:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.8">
-    SSC Control Pvt. Ltd. · 60 Years of Excellence · 1966 – 2026
-  </div>
-</div>
-</body></html>`
+    const line = (label, value) => value ? `${label.padEnd(18)}: ${value}\n` : ''
+    const rule = '-'.repeat(58)
+    return `${(emailMessage || '').trim()}
+
+PURCHASE ORDER SUMMARY
+${rule}
+${line('PO Number', po.po_number)}${line('PO Date', fmtDC(po.po_date || po.created_at))}${line('Vendor', vendorDetail?.vendor_name || po.vendor_name)}${line('Total Value', `Rs ${Number(po.total_amount || 0).toLocaleString('en-IN')}`)}${line('Expected Delivery', po.expected_delivery ? fmtDC(po.expected_delivery) : '')}${line('Delivery To', fc)}${line('Payment Terms', po.payment_terms)}${rule}
+
+TERMS & CONDITIONS
+1. Please mention our purchase order number in your invoice and generate an
+   invoice in accordance with the purchase order. Invoice variance is not
+   acceptable.
+2. Delivery only to the Fulfilment Centre mentioned above.
+3. Acceptance of this PO - by acknowledgement or by dispatch of material -
+   constitutes acceptance of these terms.
+
+Thanks & regards,
+${userName}
+SSC Control Pvt. Ltd.
+Engineering Industry. Powering Progress.
+60 Years of Excellence | 1966 - 2026`
   }
 
   function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
@@ -2837,7 +2825,7 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
               <textarea value={emailMessage} onChange={e => setEmailMessage(e.target.value)}
                 rows={9}
                 style={{ width:'100%', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 12px', fontSize:13, fontFamily:'var(--font)', outline:'none', boxSizing:'border-box', resize:'vertical', lineHeight:1.6 }} />
-              <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:4 }}>The email will include a PO summary card + this message + attachments.</div>
+              <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:4 }}>Sent as plain text: this message, then the PO summary, terms &amp; conditions, and attachments.</div>
             </div>
 
             {/* Attachments */}

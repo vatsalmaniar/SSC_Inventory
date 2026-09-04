@@ -82,7 +82,7 @@ serve(async (req) => {
 
     // ── INPUT ─────────────────────────────────────────────────────────────
     const body = await req.json()
-    const { po_id, html_body, attachments } = body
+    const { po_id, html_body, text_body, attachments } = body
 
     if (!po_id || typeof po_id !== 'string') return fail('Missing purchase order.')
     const to  = addrList(body.to_emails)
@@ -147,13 +147,29 @@ serve(async (req) => {
         ...(ccFinal.length  ? { cc: ccFinal }   : {}),
         ...(bccFinal.length ? { bcc: bccFinal } : {}),
         reply_to: replyTo,
-        html: html_body,
+        // Vendor POs are plain text by decision (2026-09-04): a marketing-styled HTML
+        // mail is the wrong register for a contractual document, and text survives every
+        // vendor mail client and print-out intact. html_body stays supported for any
+        // caller that still sends one.
+        ...(text_body ? { text: text_body } : { html: html_body }),
         ...(atts.length ? { attachments: atts } : {}),
       }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       const errMsg = data?.message || data?.error || `Resend ${res.status}`
+      // A failed vendor send used to vanish: no log row, no activity line — the PO simply
+      // looked un-emailed with no reason recorded. Both are now written before returning.
+      try {
+        await sb.from('email_log').insert(to.map((addr: string) => ({
+          recipient_email: addr, email_type: 'po_vendor', po_id, status: 'failed',
+          error_message: errMsg, last_event: 'failed', last_event_at: new Date().toISOString(),
+        })))
+      } catch (_) { /* logging must not mask the real error */ }
+      try {
+        await sb.from('po_comments').insert({ po_id, author_name: senderName, is_activity: true,
+          message: `⚠️ ${po.po_number} email FAILED to ${to.join(', ')} — ${errMsg}` })
+      } catch (_) { /* ditto */ }
       return new Response(JSON.stringify({ ok: false, error: errMsg, failed_attachments: failedAtts }),
         { status: 200, headers: JSON_HEADERS })
     }
@@ -167,6 +183,17 @@ serve(async (req) => {
       + (atts.length ? ` — ${atts.length} attachment${atts.length !== 1 ? 's' : ''}` : '')
     try {
       await sb.from('po_comments').insert({ po_id, author_name: senderName, message: msg, is_activity: true })
+    } catch (_) { /* never fail a sent email on a log write */ }
+
+    // Durable delivery record, one row per To recipient, keyed by the Resend id so the
+    // webhook can flip it to delivered/bounced later. Vendor sends previously left NO
+    // record anywhere — "was this PO ever actually e-mailed?" was unanswerable.
+    try {
+      await sb.from('email_log').insert(to.map((addr: string) => ({
+        recipient_email: addr, email_type: 'po_vendor', po_id,
+        resend_id: data?.id || null, status: 'sent',
+        last_event: 'sent', last_event_at: new Date().toISOString(),
+      })))
     } catch (_) { /* never fail a sent email on a log write */ }
 
     return new Response(JSON.stringify({
