@@ -323,8 +323,11 @@ export default function PurchaseOrderDetail() {
       }
     } catch (e) { console.error('linked orders lookup:', e) }
 
-    // Detect most recent "PO emailed" activity
-    const emailActivity = (commentsRes.data || []).filter(c => c.is_activity && (c.message || '').includes('📧 PO emailed')).pop()
+    // Most recent "…emailed to…" activity. This looked for the literal '📧 PO emailed',
+    // which the logged message never contained — it is "<PO number> emailed to <addr>" —
+    // so "last emailed" was permanently blank. Matched on the real wording now, and the
+    // emoji is gone from outbound text entirely.
+    const emailActivity = (commentsRes.data || []).filter(c => c.is_activity && / emailed to /.test(c.message || '')).pop()
     setLastEmailed(emailActivity?.created_at || null)
 
     // Fetch GRNs linked to this PO via grn_items

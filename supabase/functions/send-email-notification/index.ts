@@ -45,6 +45,7 @@ const PREF_MAP: Record<string, string> = {
   order_dispatched: 'status_changes', goods_issued: 'status_changes',
   order_delivered: 'status_changes', order_cancelled: 'status_changes',
   pi_issued: 'status_changes', pi_payment_confirmed: 'status_changes',
+  proforma_issued: 'status_changes', eway_ready: 'status_changes',
   new_customer_approval: 'status_changes', credit_override: 'status_changes',
   po_linked_co_cancelled: 'status_changes',
   po_mention: 'mentions',
@@ -59,6 +60,8 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string; bg: string; la
   order_delivered:      { emoji: '✅', color: '#15803d', bg: '#f0fdf4', label: 'Order Delivered' },
   order_cancelled:      { emoji: '❌', color: '#dc2626', bg: '#fef2f2', label: 'Order Cancelled' },
   pi_issued:            { emoji: '🧾', color: '#7c3aed', bg: '#f5f3ff', label: 'Invoice Generated' },
+  proforma_issued:      { emoji: '🧾', color: '#7c3aed', bg: '#f5f3ff', label: 'Proforma Invoice Issued' },
+  eway_ready:           { emoji: '🚚', color: '#1d4ed8', bg: '#eff6ff', label: 'E-Way Bill Ready' },
   pi_payment_confirmed: { emoji: '💰', color: '#15803d', bg: '#f0fdf4', label: 'Payment Confirmed' },
   new_customer_approval:{ emoji: '🏢', color: '#b45309', bg: '#fffbeb', label: 'Approval Required' },
   credit_override:      { emoji: '⚠️', color: '#dc2626', bg: '#fef2f2', label: 'Credit Override' },
@@ -80,12 +83,12 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string; bg: string; la
 const CELEBRATION_TYPES = ['birthday_self', 'birthday_team', 'anniv_self', 'anniv_team', 'welcome_self', 'welcome_team']
 
 function subject(r: any): string {
-  if (r.email_type === 'birthday_self') return '🎂 Happy Birthday from Team SSC!'
-  if (r.email_type === 'birthday_team') return `🎂 It's ${r.from_name}'s Birthday today!`
-  if (r.email_type === 'anniv_self')    return '🎉 Happy Work Anniversary — Team SSC'
-  if (r.email_type === 'anniv_team')    return `🎉 ${r.from_name} celebrates a work anniversary!`
-  if (r.email_type === 'welcome_self')  return '👋 Welcome to SSC Control!'
-  if (r.email_type === 'welcome_team')  return `👋 Please welcome ${r.from_name} to SSC!`
+  if (r.email_type === 'birthday_self') return 'Happy Birthday from Team SSC'
+  if (r.email_type === 'birthday_team') return `It's ${r.from_name}'s birthday today`
+  if (r.email_type === 'anniv_self')    return 'Happy Work Anniversary — Team SSC'
+  if (r.email_type === 'anniv_team')    return `${r.from_name} celebrates a work anniversary`
+  if (r.email_type === 'welcome_self')  return 'Welcome to SSC Control'
+  if (r.email_type === 'welcome_team')  return `Please welcome ${r.from_name} to SSC`
   const t = r.email_type
   const on = r.order_number || ''
   const cfg = TYPE_CONFIG[t]
@@ -94,10 +97,10 @@ function subject(r: any): string {
   // 05 Sep 2026 (1 day)") rather than the generic label or a mid-word truncation.
   if (t === 'approval_request' || t === 'approval_decision') {
     const head = (r.message || '').split(/\.\s|\s—\s(?=Reason)/)[0].trim().replace(/[.\s]+$/, '')
-    return head ? `${cfg.emoji} ${cfg.label} — ${head}` : `${cfg.emoji} ${cfg.label}`
+    return head ? `${cfg.label} — ${head}` : cfg.label
   }
-  if (cfg && on) return `${cfg.emoji} ${cfg.label} — ${on}`
-  if (cfg) return `${cfg.emoji} ${cfg.label}`
+  if (cfg && on) return `${cfg.label} — ${on}`
+  if (cfg) return cfg.label
   // Last-resort subject: keep whole words so it never cuts mid-word.
   const snip = (r.message || '').slice(0, 60).replace(/\s+\S*$/, '')
   return on ? `[SSC] ${on} — ${snip}` : `[SSC] ${snip}`
@@ -155,7 +158,8 @@ function buildCelebrationEmail(r: any): string {
   const isWelcome = r.email_type === 'welcome_self' || r.email_type === 'welcome_team'
   const isBday = r.email_type === 'birthday_self' || r.email_type === 'birthday_team'
   const isSelf = r.email_type === 'birthday_self' || r.email_type === 'anniv_self' || r.email_type === 'welcome_self'
-  const emoji = isWelcome ? '👋' : isBday ? '🎂' : '🎉'
+  // No emoji anywhere in outbound mail (user rule 2026-09-04) — the colour band
+  // below carries the tone instead.
   const grad = isWelcome
     ? 'linear-gradient(90deg,#0ea5e9 0%,#10b981 60%,#22c55e 100%)'
     : isBday
@@ -178,7 +182,6 @@ function buildCelebrationEmail(r: any): string {
     </tr></table>
     <div style="background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0">
       <div style="background:${grad};padding:30px 24px;text-align:center">
-        <div style="font-size:44px;line-height:1">${emoji}</div>
         <div style="font-size:22px;font-weight:800;color:#ffffff;margin-top:8px">${esc(heading)}</div>
       </div>
       <div style="padding:28px 30px 32px">${paras}</div>
@@ -227,13 +230,13 @@ function buildEmail(recipientName: string, r: any, extra: { customer?: string; d
 
         <!-- Greeting -->
         <div style="font-size:17px;font-weight:700;color:#0f172a;margin-bottom:24px;line-height:1.3">
-          ${esc(greeting(recipientName))} 👋
+          ${esc(greeting(recipientName))},
         </div>
 
         <!-- Event pill -->
         <div style="margin-bottom:18px">
           <span style="display:inline-block;padding:6px 14px;border-radius:24px;font-size:12px;font-weight:600;color:${cfg.color};background:${cfg.bg}">
-            ${cfg.emoji}&nbsp;&nbsp;${cfg.label}
+            ${cfg.label}
           </span>
         </div>
 
@@ -318,7 +321,7 @@ function buildSecurityAlert(adminName: string, userName: string, userEmail: stri
 
         <div style="margin-bottom:18px">
           <span style="display:inline-block;padding:6px 14px;border-radius:24px;font-size:12px;font-weight:600;color:#dc2626;background:#fef2f2">
-            🚨&nbsp;&nbsp;Security Alert
+            Security Alert
           </span>
         </div>
 
@@ -469,11 +472,11 @@ function buildLoginEmail(userName: string, recipientName: string, loginTime: str
       <div style="height:4px;background:#1a4dab"></div>
       <div style="padding:32px 28px 28px">
         <div style="font-size:17px;font-weight:700;color:#0f172a;margin-bottom:24px;line-height:1.3">
-          ${esc(greeting(recipientName))} 👋
+          ${esc(greeting(recipientName))},
         </div>
         <div style="margin-bottom:18px">
           <span style="display:inline-block;padding:6px 14px;border-radius:24px;font-size:12px;font-weight:600;color:#1a4dab;background:#eff6ff">
-            🔐&nbsp;&nbsp;Welcome back
+            Welcome back
           </span>
         </div>
         <div style="font-size:14px;color:#334155;line-height:1.7;margin-bottom:20px">
@@ -509,7 +512,7 @@ async function handleLogin(sb: any, r: any) {
         headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from: FROM, to: [r.email],
-          subject: `🔐 Welcome back, ${name.split(' ')[0]}`,
+          subject: `Welcome back, ${name.split(' ')[0]}`,
           html: buildLoginEmail(name, name, r.created_at || new Date().toISOString(), device),
         }),
       })
@@ -533,7 +536,7 @@ async function handleLogin(sb: any, r: any) {
             headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               from: FROM, to: [email],
-              subject: `🚨 Failed Login Alert — ${r.user_name}`,
+              subject: `Failed Login Alert — ${r.user_name}`,
               html: buildSecurityAlert(a.name || a.username, r.user_name || '', r.email || ''),
             }),
           })

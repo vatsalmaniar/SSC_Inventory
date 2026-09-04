@@ -389,7 +389,7 @@ export default function BillingOrderDetail() {
     // multi-batch orders keep their overall header state.
     if (order.status === 'pi_requested') { await sb.from('orders').update({ status: 'pi_generated', updated_at: new Date().toISOString() }).eq('id', id) }
     await logActivity(`Proforma Invoice issued — ${piNumberInput.trim()}. Awaiting customer payment.`)
-    await notifyUsers([], `${order.order_number} — Proforma Invoice issued (${piNumberInput.trim()}). Awaiting customer payment.`, 'pi_issued')
+    await notifyUsers([], `${order.order_number} — Proforma Invoice issued (${piNumberInput.trim()}). Awaiting customer payment.`, 'proforma_issued')
     toast('Proforma Invoice issued', 'success')
     setSaving(false); await loadOrder()
   }
@@ -497,7 +497,7 @@ export default function BillingOrderDetail() {
     }
     await logActivity(`E-Way Bill generated — #${ewayNumber.trim()}. Handed to FC for final delivery.`)
     const ewayFcRole = (activeBatch?.fulfilment_center === 'Godawari') ? 'fc_godawari' : 'fc_kaveri'
-    await notifyUsers([ewayFcRole], `${order.order_number} — E-Way Bill ready. Order handed back for delivery.`, 'pi_issued')
+    await notifyUsers([ewayFcRole], `${order.order_number} — E-Way Bill ready. Order handed back for delivery.`, 'eway_ready')
     toast('E-Way Bill generated', 'success')
     setSaving(false); await loadOrder()
     navigate('/billing')

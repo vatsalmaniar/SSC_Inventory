@@ -168,7 +168,7 @@ serve(async (req) => {
       } catch (_) { /* logging must not mask the real error */ }
       try {
         await sb.from('po_comments').insert({ po_id, author_name: senderName, is_activity: true,
-          message: `⚠️ ${po.po_number} email FAILED to ${to.join(', ')} — ${errMsg}` })
+          message: `${po.po_number} email FAILED to ${to.join(', ')} — ${errMsg}` })
       } catch (_) { /* ditto */ }
       return new Response(JSON.stringify({ ok: false, error: errMsg, failed_attachments: failedAtts }),
         { status: 200, headers: JSON_HEADERS })
@@ -176,7 +176,7 @@ serve(async (req) => {
 
     // Activity log. Bcc recipients are counted, never named — writing them into
     // a comment every colleague can read would defeat the point of Bcc.
-    const msg = `📧 ${po.po_number} emailed to ${to.join(', ')}`
+    const msg = `${po.po_number} emailed to ${to.join(', ')}`
       + (ccFinal.length ? ` (+${ccFinal.length} Cc)` : '')
       + (bccFinal.length ? ` (+${bccFinal.length} Bcc)` : '')
       + ` by ${senderName}`

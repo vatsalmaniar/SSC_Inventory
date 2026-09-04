@@ -102,10 +102,10 @@ serve(async (req) => {
       // Put the outcome on the PO's own timeline — that is where procurement looks.
       // Only the outcomes that change a decision; opens/clicks would be noise.
       if (row.po_id && !isEngagement && beats && status !== 'sent') {
-        const label = status === 'delivered' ? `✅ PO email delivered to ${row.recipient_email}`
-          : status === 'bounced'    ? `⛔ PO email BOUNCED — ${row.recipient_email}${reason ? ` — ${reason}` : ''}. The vendor did NOT receive it.`
-          : status === 'complained' ? `⚠️ PO email marked as spam by ${row.recipient_email}`
-          : `⏳ PO email delayed — ${row.recipient_email}${reason ? ` — ${reason}` : ''}`
+        const label = status === 'delivered' ? `PO email delivered to ${row.recipient_email}`
+          : status === 'bounced'    ? `PO email BOUNCED — ${row.recipient_email}${reason ? ` — ${reason}` : ''}. The vendor did NOT receive it.`
+          : status === 'complained' ? `PO email marked as spam by ${row.recipient_email}`
+          : `PO email delayed — ${row.recipient_email}${reason ? ` — ${reason}` : ''}`
         try {
           await sb.from('po_comments').insert({
             po_id: row.po_id, author_name: 'Email delivery', message: label, is_activity: true,
