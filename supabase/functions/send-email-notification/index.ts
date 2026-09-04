@@ -132,8 +132,9 @@ function buildBirthdayText(recipientName: string, r: any): string {
   const idx = birthdayVariant(String(r.user_id || r.id || first), new Date().getFullYear())
   return `${BIRTHDAY_MESSAGES[idx](first)}
 
-Warm wishes,
-Team SSC Control
+Warm Wishes,
+
+People and Culture Team
 
 --
 SSC Control Pvt. Ltd. | Engineering Industry. Powering Progress.`
