@@ -82,6 +82,63 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string; bg: string; la
 
 const CELEBRATION_TYPES = ['birthday_self', 'birthday_team', 'anniv_self', 'anniv_team', 'welcome_self', 'welcome_team']
 
+// Birthday wishes go PLAIN TEXT (user decision 2026-09-04) — a personal note should
+// read like one, not like a branded banner. Four variants, rotated so the same person
+// gets a different message each year and two people sharing a date do not get identical
+// mail. The pick is deterministic (id + year), never random: a resend must reproduce the
+// exact message that was sent.
+// People team sees the wish (Cc, visible to the recipient); the owner is Bcc'd so the
+// greeting still reads as coming from the team rather than from management.
+const BIRTHDAY_CC  = 'people@ssccontrol.com'
+const BIRTHDAY_BCC = 'vatsal.maniar@ssccontrol.com'
+
+const BIRTHDAY_MESSAGES = [
+  (n: string) => `Dear ${n},
+
+Wishing you a very happy birthday.
+
+May the year ahead bring you good health, happiness and success in
+everything you take up. Enjoy your day.`,
+  (n: string) => `Dear ${n},
+
+Happy birthday.
+
+Thank you for everything you bring to SSC - your work and the spirit you
+bring to the team are genuinely valued. We hope your day is a good one,
+spent with the people who matter most to you.`,
+  (n: string) => `Dear ${n},
+
+Wishing you a wonderful birthday.
+
+Here's to a year of good health, new milestones and moments worth
+remembering - at work and beyond. Have a great celebration.`,
+  (n: string) => `Dear ${n},
+
+Happy birthday.
+
+Take the day to celebrate properly - you have earned it. The whole team
+sends their best wishes for a joyful year ahead.`,
+]
+
+/** Stable variant pick: same person + same year => same message, always. */
+function birthdayVariant(seed: string, year: number): number {
+  let h = year
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return h % BIRTHDAY_MESSAGES.length
+}
+
+function buildBirthdayText(recipientName: string, r: any): string {
+  const first = (recipientName || '').split(' ')[0] || 'there'
+  const idx = birthdayVariant(String(r.user_id || r.id || first), new Date().getFullYear())
+  return `${BIRTHDAY_MESSAGES[idx](first)}
+
+Warm wishes,
+Team SSC Control
+
+--
+SSC Control Pvt. Ltd. | Engineering Industry. Powering Progress.`
+}
+
 function subject(r: any): string {
   if (r.email_type === 'birthday_self') return 'Happy Birthday from Team SSC'
   if (r.email_type === 'birthday_team') return `It's ${r.from_name}'s birthday today`
@@ -433,9 +490,16 @@ async function handleNotification(sb: any, r: any) {
     try { textPart = buildEmailText(recipientName, r, extra) }
     catch (err) { console.error('text part build failed:', err) }
 
-    const res = await resendSend({ from: FROM, to: [email], subject: subject(r),
-      html: buildEmail(recipientName, r, extra),
-      ...(textPart ? { text: textPart } : {}) })
+    // The birthday wish to the person themselves is text-only: no HTML part at all,
+    // so every client shows the plain note rather than a styled card.
+    const isBirthdaySelf = r.email_type === 'birthday_self'
+    const res = await resendSend(isBirthdaySelf
+      ? { from: FROM, to: [email], subject: subject(r),
+          cc: [BIRTHDAY_CC], bcc: [BIRTHDAY_BCC],
+          text: buildBirthdayText(recipientName, r) }
+      : { from: FROM, to: [email], subject: subject(r),
+          html: buildEmail(recipientName, r, extra),
+          ...(textPart ? { text: textPart } : {}) })
     const data = await res.json()
 
     try {
