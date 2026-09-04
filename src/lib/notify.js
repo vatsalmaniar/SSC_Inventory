@@ -85,3 +85,84 @@ export async function notify(eventKey, payload = {}) {
 
   return { sent: rows.length, recipients, error: null }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDER-JOURNEY DISPATCH  (added 2026-09-04)
+//
+// The order journey used to hardcode role arrays inside BillingOrderDetail,
+// FCOrderDetail and OrderDetail — three copies, unchangeable without a deploy,
+// and the reason ~31,000 emails went out every 60 days (520/day). Recipients and
+// channels now come from `notification_rules`, so who-gets-what is a data change
+// you make from the admin screen.
+//
+// Two lists per event:
+//   roles        -> receives the BELL
+//   email_roles  -> ALSO receives an email (a subset of the above)
+//
+// Both accept static roles (accounts, ops, fc_kaveri…) plus three tokens resolved
+// per order: 'creator' (who raised it), 'owner' (account owner) and 'fc' (this
+// order's own fulfilment centre).
+//
+// Per-recipient email control works by setting email_type only on the rows that
+// should be mailed — the edge function skips any notification without one. So a
+// bell-only recipient costs nothing and still sees the event in-app.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Expand role tokens for one order into a set of profile ids. */
+function expandTargets(tokens, { profiles, order, fcRole }) {
+  const ids = new Set()
+  const has = t => (tokens || []).includes(t)
+  const staticRoles = (tokens || []).filter(t => !['creator', 'owner', 'fc'].includes(t))
+  const roles = has('fc') && fcRole ? [...staticRoles, fcRole] : staticRoles
+  if (roles.length) profiles.filter(p => roles.includes(p.role)).forEach(p => ids.add(p.id))
+  if (has('creator') && order?.created_by) ids.add(order.created_by)
+  if (has('owner')) {
+    const ownerName = order?.account_owner || order?.engineer_name || ''
+    const owner = ownerName ? profiles.find(p => p.name === ownerName) : null
+    if (owner) ids.add(owner.id)
+  }
+  return ids
+}
+
+/**
+ * Notify an order-journey event from notification_rules.
+ *
+ * @param eventKey  e.g. 'order_dispatched', 'invoice_generated'
+ * @param ctx       { message, order, orderId, profiles, actorId, actorName, fcRole }
+ * Never throws: a notification must not be able to fail the business action.
+ */
+export async function notifyOrderEvent(eventKey, ctx = {}) {
+  const { message, order, orderId, profiles = [], actorId = null, actorName = null, fcRole = null } = ctx
+  try {
+    const { data: rule, error } = await sb
+      .from('notification_rules').select('*').eq('event_key', eventKey).maybeSingle()
+    // No rule, inactive, or a lookup failure must not silence the event — fall back to
+    // notifying the order's own people so nothing is ever lost by a missing config row.
+    const fallback = { roles: ['creator', 'owner'], email_roles: ['creator', 'owner'], bell_enabled: true, email_enabled: true, exclude_actor: true, is_active: true }
+    const r = (error || !rule || !rule.is_active) ? fallback : rule
+    if (error) console.warn('notifyOrderEvent: rule lookup failed, using fallback', eventKey, error.message)
+    if (!r.bell_enabled) return { sent: 0 }
+
+    const bell  = expandTargets(r.roles, { profiles, order, fcRole })
+    const mail  = r.email_enabled ? expandTargets(r.email_roles, { profiles, order, fcRole }) : new Set()
+    if (r.exclude_actor && actorId) { bell.delete(actorId); mail.delete(actorId) }
+    ;(r.exclude_user_ids || []).forEach(id => { bell.delete(id); mail.delete(id) })
+    if (!bell.size) return { sent: 0 }
+
+    const byId = new Map(profiles.map(p => [p.id, p]))
+    const rows = [...bell].filter(id => byId.has(id)).map(id => ({
+      user_id: id, user_name: byId.get(id).name, message,
+      order_id: orderId || null, order_number: order?.order_number || '',
+      from_name: actorName,
+      // email_type present => the edge function mails it; absent => bell only.
+      email_type: mail.has(id) ? eventKey : null,
+    }))
+    if (!rows.length) return { sent: 0 }
+    const { error: insErr } = await sb.from('notifications').insert(rows)
+    if (insErr) { console.error('notifyOrderEvent insert:', eventKey, insErr); return { sent: 0, error: insErr } }
+    return { sent: rows.length, emailed: rows.filter(x => x.email_type).length }
+  } catch (e) {
+    console.error('notifyOrderEvent:', eventKey, e)
+    return { sent: 0, error: e }
+  }
+}

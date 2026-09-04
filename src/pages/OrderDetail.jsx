@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { searchItems, itemSuggestionBreak } from '../lib/itemSearch'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import { notifyOrderEvent } from '../lib/notify'
 import { writeDoc } from '../lib/printDoc'
 import { useRealtimeSubscription } from '../hooks/useRealtime'
 import { toast } from '../lib/toast'
@@ -540,36 +541,16 @@ export default function OrderDetail() {
     // silently ignore activity log failures
   }
 
+  // Order-journey notifications now resolve from `notification_rules` (see
+  // src/lib/notify.js). Recipients and email-vs-bell are DATA, editable from the
+  // admin screen — this used to be a hardcoded role array copied across three pages.
   async function notifyUsers(roles, message, emailType = null) {
-    const ownerName = order?.account_owner || order?.engineer_name || ''
-    const seen = new Set()
-    const targets = []
-    // Caller passes the exact operational roles (e.g. a specific FC). Sales and admin are never
-    // role-broadcast — they only get notified as account owner, creator, or via @tag below.
-    const broadcastRoles = (roles || []).filter(r => r !== 'sales' && r !== 'admin' && r !== 'management')
-    if (broadcastRoles.length) {
-      profiles.filter(p => broadcastRoles.includes(p.role)).forEach(p => {
-        if (!seen.has(p.id)) { seen.add(p.id); targets.push(p) }
-      })
-    }
-    // Always include account owner
-    if (ownerName) {
-      const ownerProfile = profiles.find(p => p.name === ownerName)
-      if (ownerProfile && !seen.has(ownerProfile.id)) { seen.add(ownerProfile.id); targets.push(ownerProfile) }
-    }
-    // Always include order creator
-    if (order?.created_by) {
-      const creatorProfile = profiles.find(p => p.id === order.created_by)
-      if (creatorProfile && !seen.has(creatorProfile.id)) { seen.add(creatorProfile.id); targets.push(creatorProfile) }
-    }
-    // Don't notify the person performing the action
-    const final = targets.filter(t => t.id !== user.id)
-    if (!final.length) return
-    await sb.from('notifications').insert(final.map(t => ({
-      user_name: t.name, user_id: t.id, message, order_id: id,
-      order_number: order?.order_number || '', from_name: user.name,
-      email_type: emailType,
-    })))
+    if (!emailType) return
+    const fcRole = (order?.fulfilment_center === 'Godawari') ? 'fc_godawari' : 'fc_kaveri'
+    await notifyOrderEvent(emailType, {
+      message, order, orderId: id, profiles,
+      actorId: user?.id, actorName: user?.name, fcRole,
+    })
   }
 
   // ── Stock status update (inventory check stage) ──
