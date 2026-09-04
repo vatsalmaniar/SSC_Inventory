@@ -65,6 +65,8 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string; bg: string; la
   mention:              { emoji: '💬', color: '#1d4ed8', bg: '#eff6ff', label: 'You were mentioned' },
   po_linked_co_cancelled: { emoji: '⚠️', color: '#ea580c', bg: '#fff7ed', label: 'PO needs action — CO cancelled' },
   po_mention:           { emoji: '💬', color: '#1d4ed8', bg: '#eff6ff', label: 'You were tagged on a PO' },
+  approval_request:     { emoji: '📋', color: '#b45309', bg: '#fffbeb', label: 'Approval needed' },
+  approval_decision:    { emoji: '✅', color: '#15803d', bg: '#f0fdf4', label: 'Your request was decided' },
   opportunity_won:      { emoji: '🎉', color: '#15803d', bg: '#f0fdf4', label: 'Opportunity Won' },
   opportunity_lost:     { emoji: '📉', color: '#dc2626', bg: '#fef2f2', label: 'Opportunity Lost' },
   overdue_followup:     { emoji: '⏰', color: '#b45309', bg: '#fffbeb', label: 'Overdue Follow-Up' },
@@ -87,9 +89,18 @@ function subject(r: any): string {
   const t = r.email_type
   const on = r.order_number || ''
   const cfg = TYPE_CONFIG[t]
+  // Leave / regularization approvals carry no order number, and the WHO + WHAT is the
+  // point of the subject. Use the message's first sentence ("Leave request from X —
+  // 05 Sep 2026 (1 day)") rather than the generic label or a mid-word truncation.
+  if (t === 'approval_request' || t === 'approval_decision') {
+    const head = (r.message || '').split(/\.\s|\s—\s(?=Reason)/)[0].trim().replace(/[.\s]+$/, '')
+    return head ? `${cfg.emoji} ${cfg.label} — ${head}` : `${cfg.emoji} ${cfg.label}`
+  }
   if (cfg && on) return `${cfg.emoji} ${cfg.label} — ${on}`
   if (cfg) return `${cfg.emoji} ${cfg.label}`
-  return `[SSC] ${on} — ${(r.message || '').slice(0, 60)}`
+  // Last-resort subject: keep whole words so it never cuts mid-word.
+  const snip = (r.message || '').slice(0, 60).replace(/\s+\S*$/, '')
+  return on ? `[SSC] ${on} — ${snip}` : `[SSC] ${snip}`
 }
 
 
@@ -112,8 +123,8 @@ function buildEmailText(recipientName: string, r: any, extra: any): string {
   if (r.from_name)     lines.push(`By         : ${r.from_name}`)
   if (r.created_at)    lines.push(`Time       : ${fmtTime(r.created_at)}`)
 
-  const link = r.po_id ? `${APP_URL}/procurement/po/${r.po_id}`
-             : r.order_id ? `${APP_URL}/orders/${r.order_id}` : null
+  const link = approvalLink(r) || (r.po_id ? `${APP_URL}/procurement/po/${r.po_id}`
+             : r.order_id ? `${APP_URL}/orders/${r.order_id}` : null)
   if (link) { lines.push(''); lines.push(`Open in SSC ERP: ${link}`) }
 
   lines.push('')
@@ -177,12 +188,22 @@ function buildCelebrationEmail(r: any): string {
 </body></html>`
 }
 
+// Approval mail carries no order/PO id — send the reader to the page that holds the
+// action instead of leaving the button off entirely.
+function approvalLink(r: any): string {
+  if (r.email_type !== 'approval_request' && r.email_type !== 'approval_decision') return ''
+  return /regulariz/i.test(r.message || '')
+    ? `${APP_URL}/people/attendance/regularize`
+    : `${APP_URL}/people/attendance/leave`
+}
+
 function buildEmail(recipientName: string, r: any, extra: { customer?: string; dc?: string; fc?: string } = {}): string {
   if (CELEBRATION_TYPES.includes(r.email_type)) return buildCelebrationEmail(r)
   const cfg = TYPE_CONFIG[r.email_type] || { emoji: '🔔', color: '#1a4dab', bg: '#eff6ff', label: 'Notification' }
-  const link = (r.email_type === 'po_linked_co_cancelled' || r.email_type === 'po_mention')
-    ? (r.po_id ? `${APP_URL}/procurement/po/${r.po_id}` : '')
-    : (r.order_id ? `${APP_URL}/orders/${r.order_id}` : '')
+  const link = approvalLink(r)
+    || ((r.email_type === 'po_linked_co_cancelled' || r.email_type === 'po_mention')
+      ? (r.po_id ? `${APP_URL}/procurement/po/${r.po_id}` : '')
+      : (r.order_id ? `${APP_URL}/orders/${r.order_id}` : ''))
   const time = fmtTime(r.created_at)
 
   return `<!DOCTYPE html>
@@ -375,8 +396,12 @@ async function handleNotification(sb: any, r: any) {
   const email = profile.email || (profile.username + '@ssccontrol.com')
   const recipientName = profile.name || profile.username
 
-  // Celebrations always send — they bypass the opt-out preferences
-  if (!CELEBRATION_TYPES.includes(r.email_type)) {
+  // Celebrations always send — they bypass the opt-out preferences.
+  // Approvals do too: they are an ASK, not a status update. Without this they fall into
+  // the 'status_changes' bucket, so anyone who muted status mail would silently stop
+  // receiving leave/regularization requests waiting on them.
+  const ALWAYS_SEND = [...CELEBRATION_TYPES, 'approval_request', 'approval_decision']
+  if (!ALWAYS_SEND.includes(r.email_type)) {
     const prefKey = PREF_MAP[r.email_type] || 'status_changes'
     const { data: pref } = await sb.from('email_preferences').select(prefKey).eq('user_id', r.user_id).maybeSingle()
     if (pref && pref[prefKey] === false) {
