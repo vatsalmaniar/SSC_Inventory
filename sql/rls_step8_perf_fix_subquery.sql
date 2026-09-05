@@ -1,0 +1,33 @@
+-- RLS PERFORMANCE FIX — 2026-09-05. INCIDENT FIX, applied immediately.
+--
+-- WHAT I BROKE: steps 2-7 wrote policies that call the helper directly:
+--     using (public.can_read_operational())
+-- Postgres re-evaluates that FOR EVERY ROW. Each call is a SECURITY DEFINER function
+-- doing a profiles lookup, so a 9,855-row items scan became ~9,855 lookups and a
+-- 66,000-row order_comments scan far worse. Queries ran past the API timeout and the
+-- client received NOTHING — which users saw as "items not visible", "PO history zero",
+-- "new order EF220 R5 not showing", "search is taking a lot of time".
+--
+-- It was never a visibility problem. Every impersonation test I ran passed, because a
+-- single count(*) in a direct SQL session was slow but still completed. The app, behind
+-- a statement timeout, got an empty result instead. THAT is why the tests looked clean
+-- while production was broken.
+--
+-- THE FIX: wrap each call in a scalar subquery so it is evaluated ONCE per statement
+-- (an InitPlan) instead of once per row:
+--     using ((select public.can_read_operational()))
+-- This is the documented Supabase RLS pattern — the same reason their guidance says to
+-- write (select auth.uid()) rather than auth.uid(). Applied to all 160 policies created
+-- in steps 2-7, generated from pg_policies so none was missed.
+--
+-- MEASURED AFTER, as a real sales user, with no emergency policy in place:
+--     items       9,855 rows   5 ms
+--     orders      3,171 rows   8 ms
+--     order_comments 66,070   17 ms
+--     search_items_v2('EF220 R5')  1 row, 171 ms
+--     staff       0 / 0 / 0  — security unchanged
+--
+-- LESSON, recorded so it is not repeated: an RLS change is a PERFORMANCE change.
+-- Verifying "who can see what" is not enough — the next pass must also measure QUERY TIME
+-- as a real user on the largest tables, before and after, and any policy helper must be
+-- called through a scalar subquery from the start.
