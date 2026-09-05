@@ -50,6 +50,9 @@ export default function PeopleMuster() {
   const [personId, setPersonId] = useState('')
   const [tip, setTip] = useState(null)            // { emp, rec, x, y }
   const [decls, setDecls] = useState([])          // special-day declarations covering this month
+  const [otMap, setOtMap] = useState({})          // employee_id -> OT minutes this month, FROM THE DB
+                                                  // (att_month_ot); never recomputed here, so the
+                                                  // figure on screen matches attendance_days exactly
   const [showDecl, setShowDecl] = useState(false)
   const [declForm, setDeclForm] = useState({ from_date:'', to_date:'', branch:'', status:'wfh', reason:'rainfall', note:'' })
   const savingDecl = useRef(false)
@@ -99,7 +102,11 @@ export default function PeopleMuster() {
       const lm={}; (lv.data||[]).forEach(r=>{ let d=new Date(r.from_date),e=new Date(r.to_date); while(d<=e){ lm[`${r.employee_id}|${ymd(d)}`]=r; d.setDate(d.getDate()+1) } }); setLeaveMap(lm)
       const im={}; (ad.data||[]).forEach(r=>{ im[`${r.employee_id}|${r.work_date}`]={ s:r.status, c:r.source_code, src:r.source } }); setImported(im)
       const rm={}; (rg.data||[]).forEach(r=>{ rm[`${r.employee_id}|${r.work_date}`]=r }); setRegMap(rm)
-    } else { setPunchMap({}); setLeaveMap({}); setImported({}); setRegMap({}) }
+      // OT is owned by the database (sql/attendance_ot_fc_staff.sql). Only the fulfilment
+      // team earns it, so this returns ~9 rows; an empty result simply means no OT.
+      const { data: ot } = await sb.rpc('att_month_ot', { p_month: ymd(start) })
+      const om={}; (ot||[]).forEach(r=>{ om[r.employee_id] = r.ot_minutes||0 }); setOtMap(om)
+    } else { setPunchMap({}); setLeaveMap({}); setImported({}); setRegMap({}); setOtMap({}) }
     setLoading(false)
   }
 
@@ -173,7 +180,10 @@ export default function PeopleMuster() {
           first_in: r.first_in ? new Date(r.first_in).toISOString() : null,
           last_out: r.last_out ? new Date(r.last_out).toISOString() : null,
           worked_minutes: r.worked_min ?? null,
-          late_minutes: r.late_min || 0, early_minutes: r.early_min || 0, ot_minutes: r.ot_min || 0,
+          late_minutes: r.late_min || 0, early_minutes: r.early_min || 0,
+          // ot_minutes is sent for shape only — trg_att_set_ot OVERWRITES it with the
+          // database formula (sql/attendance_ot_fc_staff.sql). Do not compute OT here.
+          ot_minutes: 0,
           leave_deducted: r.leave_deducted || 0, is_lop: !!r.is_lop,
           source: FINALISE_SOURCE, source_code: r.code || null,
           computed_at: new Date().toISOString(),
@@ -433,6 +443,7 @@ export default function PeopleMuster() {
                   {stat('Leave',c.leave,'var(--st-leave)')}
                   {stat('Late',c.late,'var(--st-half)')}
                   {stat('Regularized',c.reg,'var(--accent)')}
+                  {otMap[p.id] > 0 && stat('OT', `${Math.floor(otMap[p.id]/60)}h ${otMap[p.id]%60}m`, 'var(--st-half)')}
                 </div>
               </div>
               <div className="mcal">
