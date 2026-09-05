@@ -194,7 +194,7 @@ export default function OrderDetail() {
     }
     const [{ data: profile }, { data: profileList }] = await Promise.all([
       sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
-      sb.from('profiles').select('id,name,username,role').order('name'),
+      sb.from('profiles').select('id,name,username,role').neq('role','staff').order('name'),
       loadOrder(),
     ])
     setProfiles(profileList || [])

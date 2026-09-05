@@ -128,7 +128,7 @@ export default function BillingOrderDetail() {
     }
     const [{ data: profile }, { data: pList }] = await Promise.all([
       sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
-      sb.from('profiles').select('id,name,username,role'),
+      sb.from('profiles').select('id,name,username,role').neq('role','staff'),
     ])
     const name   = profile?.name || session.user.email.split('@')[0]
     const role   = profile?.role || 'accounts'
