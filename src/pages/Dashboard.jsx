@@ -14,8 +14,14 @@ import '../styles/dashboard.css'
 // default and granted on purpose, never included because nobody remembered to exclude it.
 const BIZ = ['sales','ops','admin','management','accounts','fc_kaveri','fc_godawari','demo']
 
+// Who can read CRM data at all — mirrors can_read_crm() in sql/rls_step2_crm.sql.
+// ops and accounts are in it because Customer 360 shows opportunities, visits and quotes.
+// FC and staff are not: they would have been served a ₹0 pipeline tile they cannot open.
+// If you change one side, change the other, or the tile lies.
+const CRM_VIEW = ['sales','ops','admin','management','accounts','demo']
+
 const APPS = [
-  { key:'crm', label:'CRM', desc:'Leads & opportunities', path:'/crm', roles:BIZ, color:{ bg:'#eef2ff', icon:'#4338ca' },
+  { key:'crm', label:'CRM', desc:'Leads & opportunities', path:'/crm', roles:CRM_VIEW, color:{ bg:'#eef2ff', icon:'#4338ca' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> },
   { key:'customer360', label:'Customer 360', desc:'Accounts & profiles', path:'/customers', roles:['sales','ops','admin','management'], color:{ bg:'#f0fdfa', icon:'#0f766e' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> },
@@ -135,7 +141,7 @@ export default function Dashboard() {
 
   // Build module KPI tiles based on role access
   const moduleKpis = []
-  if (role(BIZ)) {
+  if (role(CRM_VIEW)) {
     moduleKpis.push({
       key:'crm', tone:'deep', label:'CRM · Open Pipeline', value: fmtMoneyShort(m.crmOpenValue), sub:`${m.crmOpenCount} active opportunities`,
       path:'/crm', icon:'pipeline'
