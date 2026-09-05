@@ -50,6 +50,9 @@ export default function PeopleMuster() {
   const [personId, setPersonId] = useState('')
   const [tip, setTip] = useState(null)            // { emp, rec, x, y }
   const [decls, setDecls] = useState([])          // special-day declarations covering this month
+  const [satWorkers, setSatWorkers] = useState(() => new Set())  // employee ids who work the
+                                                  // 2nd/4th Saturday — from att_saturday_workers(),
+                                                  // the same DB rule that decides OT eligibility
   const [otMap, setOtMap] = useState({})          // employee_id -> OT minutes this month, FROM THE DB
                                                   // (att_month_ot); never recomputed here, so the
                                                   // figure on screen matches attendance_days exactly
@@ -106,7 +109,9 @@ export default function PeopleMuster() {
       // team earns it, so this returns ~9 rows; an empty result simply means no OT.
       const { data: ot } = await sb.rpc('att_month_ot', { p_month: ymd(start) })
       const om={}; (ot||[]).forEach(r=>{ om[r.employee_id] = r.ot_minutes||0 }); setOtMap(om)
-    } else { setPunchMap({}); setLeaveMap({}); setImported({}); setRegMap({}); setOtMap({}) }
+      const { data: sw } = await sb.rpc('att_saturday_workers')
+      setSatWorkers(new Set((sw||[]).map(r => r.employee_id)))
+    } else { setPunchMap({}); setLeaveMap({}); setImported({}); setRegMap({}); setOtMap({}); setSatWorkers(new Set()) }
     setLoading(false)
   }
 
@@ -124,7 +129,7 @@ export default function PeopleMuster() {
     // always compute from live swipes first, so we have real in/out/worked times…
     const punches = punchMap[`${emp.id}|${key}`]
     const lv = leaveMap[`${emp.id}|${key}`]
-    const computed = computeDay({ date:key, punches: punches||[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!lv, leaveHalf:!!lv?.is_half_day, leavePeriod:lv?.half_period||'first', isFC:(emp.branch||'').startsWith('FC'), exempt:emp.attendance_exempt, probation:emp.lifecycle_status==='probation' })
+    const computed = computeDay({ date:key, punches: punches||[], config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!lv, leaveHalf:!!lv?.is_half_day, leavePeriod:lv?.half_period||'first', isFC:(emp.branch||'').startsWith('FC'), exempt:emp.attendance_exempt, probation:emp.lifecycle_status==='probation', satWorker: satWorkers.has(emp.id) })
     // …but the official muster status (imported/synced) wins for the status/code shown.
     const imp = imported[`${emp.id}|${key}`]
     const result = imp ? { ...computed, status: imp.s, code: imp.c != null ? imp.c : computed.code } : computed
@@ -142,7 +147,7 @@ export default function PeopleMuster() {
       const regRow = regMap[`${e.id}|${key}`] || null
       // raw is carried through so "Finalise month" can persist the payroll figures
       // (is_lop / leave_deducted) rather than recomputing them somewhere else.
-      return { day: dd, date: key, dow: dt.getDay(), we: isWeekOff(key), status,
+      return { day: dd, date: key, dow: dt.getDay(), we: isWeekOff(key, satWorkers.has(e.id)), status,
         late: (cc.late_min||0) > 0, reg: regRow, inM: cc.first_in || null, outM: cc.last_out || null,
         worked: cc.worked_min || 0, code: cc.code || null, declared: cc.declared || null,
         raw: cc, imported: !!imported[`${e.id}|${key}`] }
@@ -150,7 +155,7 @@ export default function PeopleMuster() {
     const c = { present:0, half:0, absent:0, leave:0, holiday:0, weekoff:0, reg:0, late:0 }
     days.forEach(d => { if (d.status!=='future' && c[d.status]!=null) c[d.status]++; if (d.reg) c.reg++; if (d.late) c.late++ })
     return { emp: e, days, c }
-  }), [emps, dayNums, cursor, punchMap, leaveMap, imported, regMap, cfg, holidays, decls]) // eslint-disable-line
+  }), [emps, dayNums, cursor, punchMap, leaveMap, imported, regMap, cfg, holidays, decls, satWorkers]) // eslint-disable-line
 
   // ── Finalise month → persist the payroll figures (ATT-3) ──────────────────────
   // Until now is_lop and leave_deducted were computed and thrown away: attendance_days

@@ -100,7 +100,16 @@ export const weekOffOverrides = () => _woOverrides
 
 // Sundays off; 2nd & 4th Saturday off. Other Saturdays = working — unless an override
 // row swaps the specific date.
-export function isWeekOff(date) {
+//
+// satWorker = this person works the 2nd and 4th Saturday too. That is the fulfilment team
+// (FC + staff, MINUS the Office Boys) — the set comes from the database via
+// att_saturday_workers(), never from a list retyped here, so it stays identical to the OT
+// rule which uses the same att_ot_eligible().
+//
+// An explicit override still wins for everyone, satWorker included: if the company
+// declares a particular Saturday off (as with the 22-Aug/29-Aug swap), the fulfilment team
+// is off too. Only the STANDING 2nd/4th rule is set aside for them.
+export function isWeekOff(date, satWorker = false) {
   // Resolved as a plain calendar date. 'YYYY-MM-DD' parses as UTC midnight but getDay() reads
   // the browser's clock, so west of UTC every date landed on the previous weekday and Monday
   // attendance was scored against Sunday.
@@ -110,7 +119,7 @@ export function isWeekOff(date) {
   const [y, m, dd] = s.split('-').map(Number)
   const d = new Date(Date.UTC(y, m - 1, dd)), dow = d.getUTCDay()
   if (dow === 0) return true
-  if (dow === 6) { const nth = Math.ceil(dd / 7); return nth === 2 || nth === 4 }
+  if (dow === 6) { if (satWorker) return false; const nth = Math.ceil(dd / 7); return nth === 2 || nth === 4 }
   return false
 }
 
@@ -128,9 +137,11 @@ export function distanceM(a, b) {
 // the device's in/out flag is unreliable, so it is ignored.
 //   exempt    → non-punching admins: never absent from no-punch (always Present)
 //   probation → probation/notice: leave & absence are unpaid (is_lop)
-export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday = false, onLeave = false, leaveHalf = false, leavePeriod = 'first', isFC = false, exempt = false, probation = false }) {
+export function computeDay({ date, punches = [], config = DEFAULT_CFG, isHoliday = false, onLeave = false, leaveHalf = false, leavePeriod = 'first', isFC = false, exempt = false, probation = false, satWorker = false }) {
   if (isHoliday) return { status: 'holiday' }
-  if (isWeekOff(date)) return { status: 'weekoff' }
+  // satWorker threads through so a fulfilment-team Saturday scores as a real working day
+  // (present / absent / late) instead of collapsing to 'weekoff' before any punch is read.
+  if (isWeekOff(date, satWorker)) return { status: 'weekoff' }
   if (onLeave) {
     // Half-day leave: the request stores is_half_day/half_period and charges the balance 0.5,
     // but this used to collapse to a full 'leave' day — so the company paid 1.0 for a 0.5

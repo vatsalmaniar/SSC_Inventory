@@ -27,6 +27,8 @@ export default function PeopleMyAttendance() {
   const [role, setRole] = useState('')
   const [emp, setEmp] = useState(null)      // target employee
   const [meId, setMeId] = useState(null)
+  const [satWorker, setSatWorker] = useState(false)  // works the 2nd/4th Saturday —
+                                                    // from att_saturday_workers() in the DB
   const [picks, setPicks] = useState([])    // employees this viewer may open
   const [cfg, setCfg] = useState(DEFAULT_CFG)
   const [policy, setPolicy] = useState(false)
@@ -65,11 +67,18 @@ export default function PeopleMyAttendance() {
     const canView = (picksData || []).some(e => e.id === targetId)
     if (!canView) { setDenied(true); setLoading(false); return }
     setEmp(t)
-    await load(t)
+    // Ask the database who works the 2nd/4th Saturday (same rule as OT eligibility)
+    // rather than re-deriving role+designation here.
+    const { data: sw } = await sb.rpc('att_saturday_workers')
+    const isSat = (sw || []).some(r => r.employee_id === t.id)
+    setSatWorker(isSat)
+    // passed explicitly: setSatWorker has not committed yet, so load() would read
+    // the stale false and score the first render's Saturdays as week-offs.
+    await load(t, isSat)
     setLoading(false)
   }
 
-  async function load(t) {
+  async function load(t, sat = satWorker) {
     await loadWeekOffOverrides(sb)   // swapped week-offs before any day is scored
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const end = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1)
@@ -101,7 +110,9 @@ export default function PeopleMyAttendance() {
       const pch = byDate[key]
       let res
       const lvr = leaveDates[key]
-      const dayArgs = { config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!lvr, leaveHalf:!!lvr?.is_half_day, leavePeriod:lvr?.half_period||'first', isFC, exempt:emp?.attendance_exempt, probation:emp?.lifecycle_status==='probation' }
+      // satWorker: the fulfilment team works the 2nd and 4th Saturday, so those days must
+      // score as real working days on their OWN attendance page too — not just the muster.
+      const dayArgs = { config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!lvr, leaveHalf:!!lvr?.is_half_day, leavePeriod:lvr?.half_period||'first', isFC, exempt:emp?.attendance_exempt, probation:emp?.lifecycle_status==='probation', satWorker: sat }
       if (pch && pch.length) res = { date:key, dd, ...computeDay({ date:key, punches:pch, ...dayArgs }) }
       else if (imported[key]) res = { date:key, dd, status: imported[key] }
       else res = { date:key, dd, ...computeDay({ date:key, punches:[], ...dayArgs }) }
