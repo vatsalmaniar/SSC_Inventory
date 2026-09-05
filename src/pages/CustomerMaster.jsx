@@ -6,6 +6,7 @@ import { fmt, fmtDateTime } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import ReminderRunModal from '../components/ReminderRunModal'
+import MessageLogModal from '../components/MessageLogModal'
 import '../styles/orders-redesign.css'
 
 const PAGE_SIZE = 50
@@ -47,6 +48,7 @@ export default function CustomerMaster() {
   const [creditCheck, setCreditCheck] = useState([])
   const [userRole, setUserRole] = useState('')
   const [showReminders, setShowReminders] = useState(false)
+  const [showMsgLog, setShowMsgLog] = useState(false)
   const [lastBulk, setLastBulk] = useState(null)   // { sent_at, n } of the last bulk run
   const [queue, setQueue] = useState(null)         // { n, overdue } — prefetched so the modal opens instantly
   const [liveJob, setLiveJob] = useState(null)    // a run in flight, started by anyone
@@ -342,6 +344,10 @@ export default function CustomerMaster() {
               </button>
             )}
             <div className="o-dl-group">
+              <button className="o-dl-btn" onClick={() => setShowMsgLog(true)} title="WhatsApp message log">
+                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                Message Log
+              </button>
               <button className="o-dl-btn" onClick={downloadSummary} disabled={downloading} title="Summary Excel">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 {downloading ? 'Exporting…' : 'Summary'}
@@ -530,6 +536,7 @@ export default function CustomerMaster() {
           </div>
         )}
       </div>
+      {showMsgLog && <MessageLogModal onClose={() => setShowMsgLog(false)} />}
       {showReminders && <ReminderRunModal onClose={() => setShowReminders(false)} onSent={() => { loadLastBulk(); loadQueue(); loadLiveJob() }} />}
     </Layout>
   )
