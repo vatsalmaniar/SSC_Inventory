@@ -30,7 +30,11 @@ export default function PunchButton() {
       sb.from('profiles').select('role').eq('id', session.user.id).maybeSingle(),
     ])
     if (!emp) return
-    setCanPunch(['sales','admin','management'].includes(prof?.role))
+    // MIRRORS enforce_web_punch_role() in sql/web_punch_fc_staff.sql — the database
+    // raises on a web punch from any other role, so the two lists must stay identical
+    // or the button appears and then errors. FC and staff added 2026-09-05; their
+    // geofences (FC Kaveri, FC Godawari) already exist in office_locations.
+    setCanPunch(['sales','admin','management','fc_kaveri','fc_godawari','staff'].includes(prof?.role))
     setMe(emp)
     const [{ data: off }, { data: tp }] = await Promise.all([
       sb.from('office_locations').select('*').eq('is_active', true),
