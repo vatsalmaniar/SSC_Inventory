@@ -495,3 +495,21 @@
 @media (max-width: 560px) {
   .c360-dues-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ── WhatsApp log: what we sent, what they replied ─────────────────────── */
+.c360-wa-feed { display: flex; flex-direction: column; gap: 2px; }
+.c360-wa-row { display: flex; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--gray-100); }
+.c360-wa-row:last-child { border-bottom: 0; }
+.c360-wa-arrow { font-size: 13px; color: var(--gray-300); line-height: 1.5; flex-shrink: 0; width: 12px; }
+.c360-wa-arrow.in { color: #16a34a; }
+.c360-wa-main { min-width: 0; flex: 1; }
+.c360-wa-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.c360-wa-sub { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+.c360-wa-amt { color: var(--gray-600); font-family: var(--mono); font-size: 11.5px; }
+.c360-wa-reply { font-size: 13px; color: var(--gray-800); line-height: 1.45; white-space: pre-wrap; }
+.c360-wa-tag {
+  font-size: 10px; font-weight: var(--fw-semibold, 600); letter-spacing: 0.3px;
+  padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+}
+.c360-wa-tag.pay  { background: #eff6ff; color: #1d4ed8; }
+.c360-wa-tag.disp { background: #e7fce3; color: #15803d; }

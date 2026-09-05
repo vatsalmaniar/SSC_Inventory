@@ -108,7 +108,8 @@ export default function CustomerDetail() {
   const [payments, setPayments]       = useState(null)  // { outstanding_inr, overdue_inr } | null
   const [dues, setDues]               = useState([])    // bill-wise rows from the last Tally upload
   const [duesRun, setDuesRun]         = useState(null)  // { as_on, imported_at, source_filename }
-  const [waLog, setWaLog]             = useState([])    // reminder history for this customer
+  const [waLog, setWaLog]             = useState([])    // what we sent this customer
+  const [waReplies, setWaReplies]     = useState([])    // what they sent back
   const [waSending, setWaSending]     = useState(false)
   const [activeTab, setActiveTab]     = useState('summary')
   // Agreements with this customer — SALES side only. This page is used in front
@@ -145,7 +146,7 @@ export default function CustomerDetail() {
     const custRes = await sb.from('customers').select('*').eq('id', id).single()
     if (!custRes.data) { navigate('/customers'); return }
 
-    const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes, duesRes, duesRunRes, waLogRes, quotesRes] = await Promise.all([
+    const [ordersRes, contactsRes, oppsRes, visitsRes, paymentsRes, duesRes, duesRunRes, waLogRes, waRepliesRes, quotesRes] = await Promise.all([
       fetchAll((from, to) => sb.from('orders')
         .select('id,order_number,customer_name,status,order_type,order_items(qty,total_price,unit_price_after_disc,cancelled_qty,line_status),created_at,po_number,order_dispatches(delivered_at)')
         .eq('is_test', false)
@@ -180,16 +181,20 @@ export default function CustomerDetail() {
         .select('as_on,imported_at,source_filename')
         .eq('is_current', true)
         .maybeSingle(),
-      // Payment reminders only. Dispatch invoices live in whatsapp_messages too,
-      // and without this filter they appeared here as reminders owing ₹0 — a
-      // delivery notice has no overdue figure — and labelled "Manual" when in
-      // fact nobody sent them: they fire when FC marks a delivery.
+      // Both kinds, labelled. They were previously shown together under a
+      // "Reminders" heading, so a delivery notice appeared as a reminder owing
+      // ₹0 — a delivery has no overdue figure — and read "Manual" when nobody
+      // sent it: dispatch notices fire when FC marks a delivery.
       sb.from('whatsapp_messages')
-        .select('sent_at,status,to_number,to_name,overdue_inr,error_message,delivered_at,read_at,source')
+        .select('id,kind,sent_at,status,to_number,to_name,overdue_inr,error_message,delivered_at,read_at,source,dispatch_id')
         .eq('customer_id', id)
-        .eq('kind', 'statement')
         .order('sent_at', { ascending: false })
-        .limit(20),
+        .limit(30),
+      sb.from('whatsapp_replies')
+        .select('id,body,from_number,received_at')
+        .eq('customer_id', id)
+        .order('received_at', { ascending: false })
+        .limit(30),
       // Quotations are documents that NAME this customer — read them from the
       // quotes table, the way SAP lists sales documents by partner. Deriving
       // them from crm_opportunities.quotation_ref only worked while every quote
@@ -212,6 +217,7 @@ export default function CustomerDetail() {
     setDues(duesRes?.data || [])
     setDuesRun(duesRunRes?.data || null)
     setWaLog(waLogRes?.data || [])
+    setWaReplies(waRepliesRes?.data || [])
     setLoading(false)
   }
 
@@ -1421,44 +1427,63 @@ ${oppsHTML}
                       </tbody>
                     </table>
 
-                    {/* What was sent, and what came back. Delivery status only
-                        exists for messages sent after the webhook went live —
-                        earlier ones stay at 'sent' forever. */}
-                    {waLog.length > 0 && (
-                      <div className="c360-card-body" style={{ borderTop:'1px solid var(--gray-100)' }}>
-                        {waLog.length > 0 && (<>
-                          <div className="c360-section-label">WhatsApp Reminders ({waLog.length})</div>
-                          <table className="c360-table" style={{ marginBottom: 0 }}>
-                            <thead><tr>
-                              <th>Sent</th><th>To</th><th>Status</th>
-                              <th style={{ textAlign:'right' }}>Overdue then</th><th>By</th>
-                            </tr></thead>
-                            <tbody>
-                              {waLog.map((m, i) => (
-                                <tr key={m.sent_at + i}>
-                                  <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(m.sent_at)}</td>
-                                  <td className="mono" style={{ fontSize:12 }}>
-                                    {m.to_number}{m.to_name ? <div style={{ color:'var(--gray-400)', fontSize:11 }}>{m.to_name}</div> : null}
-                                  </td>
-                                  <td>
-                                    <span style={{ fontWeight:600, color: WA_STATUS_COLOR[m.status] || 'var(--gray-500)' }}>
-                                      {m.status}
+                    {/* One log, both directions. Payment statements and dispatch
+                        invoices are different things and are labelled as such —
+                        a delivery notice has no overdue figure, and nobody sends
+                        it by hand. Replies sit inline so Monday's run and the
+                        answer to it read as one conversation. */}
+                    {(waLog.length > 0 || waReplies.length > 0) && (() => {
+                      const feed = [
+                        ...waLog.map(m => ({ dir: 'out', at: m.sent_at, m })),
+                        ...waReplies.map(r => ({ dir: 'in', at: r.received_at, r })),
+                      ].sort((a, b) => String(b.at).localeCompare(String(a.at)))
+                      const nOut = waLog.length, nIn = waReplies.length
+                      return (
+                        <div className="c360-card-body" style={{ borderTop:'1px solid var(--gray-100)' }}>
+                          <div className="c360-section-label">
+                            WhatsApp · {nOut} sent{nIn ? ` · ${nIn} ${nIn === 1 ? 'reply' : 'replies'}` : ''}
+                          </div>
+                          <div className="c360-wa-feed">
+                            {feed.map(f => f.dir === 'in' ? (
+                              <div key={'r' + f.r.id} className="c360-wa-row in">
+                                <span className="c360-wa-arrow in">←</span>
+                                <div className="c360-wa-main">
+                                  <div className="c360-wa-reply">{f.r.body}</div>
+                                  <div className="c360-wa-sub">{f.r.from_number} · {fmtDateTime(f.r.received_at)}</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div key={'m' + f.m.id} className="c360-wa-row">
+                                <span className="c360-wa-arrow">→</span>
+                                <div className="c360-wa-main">
+                                  <div className="c360-wa-line">
+                                    <span className={'c360-wa-tag ' + (f.m.kind === 'dispatch' ? 'disp' : 'pay')}>
+                                      {f.m.kind === 'dispatch' ? 'Dispatch' : 'Payment'}
                                     </span>
-                                    {m.read_at ? <div style={{ fontSize:11, color:'var(--gray-400)' }}>read {fmtDateTime(m.read_at)}</div>
-                                      : m.delivered_at ? <div style={{ fontSize:11, color:'var(--gray-400)' }}>delivered {fmtDateTime(m.delivered_at)}</div>
-                                      : null}
-                                    {m.error_message ? <div style={{ fontSize:11, color:'#b91c1c' }}>{m.error_message}</div> : null}
-                                  </td>
-                                  <td style={{ textAlign:'right', fontWeight:600 }}>{fmtINR(m.overdue_inr)}</td>
-                                  <td style={{ fontSize:12, color:'var(--gray-500)' }}>{m.source === 'bulk' ? 'Bulk run' : 'Manual'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </>)}
-
-                      </div>
-                    )}
+                                    <span style={{ fontWeight:600, color: WA_STATUS_COLOR[f.m.status] || 'var(--gray-500)' }}>
+                                      {f.m.status}
+                                    </span>
+                                    {f.m.kind === 'statement' && f.m.overdue_inr > 0 && (
+                                      <span className="c360-wa-amt">{fmtINR(f.m.overdue_inr)} overdue</span>
+                                    )}
+                                    {f.m.error_message && <span style={{ color:'#b91c1c' }}>{f.m.error_message}</span>}
+                                  </div>
+                                  <div className="c360-wa-sub">
+                                    {fmtDateTime(f.m.sent_at)}
+                                    {f.m.read_at ? ` · read ${fmtDateTime(f.m.read_at)}`
+                                      : f.m.delivered_at ? ` · delivered ${fmtDateTime(f.m.delivered_at)}` : ''}
+                                    {' · '}
+                                    {f.m.kind === 'dispatch' ? 'on delivery'
+                                      : f.m.source === 'bulk' ? 'scheduled run' : 'sent by hand'}
+                                    {f.m.to_name ? ` · ${f.m.to_name}` : ''}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </>)}
                 </div>
               )
