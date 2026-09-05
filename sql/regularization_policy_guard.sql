@@ -4,13 +4,17 @@
 --    today or up to 2 days back. Older days are HR's to fix via the Muster mark
 --    (att_mark_day), which is admin/HR only.
 -- 2. At most 7 live regularizations (pending/mgr_approved/approved) per calendar month.
--- Admin/management are exempt so HR corrections stay possible.
+-- ONLY ADMIN is exempt (user rule, 2026-09-05 — tightened from admin+management to match
+-- the expense entry window, which is admin-only). Management losing the bypass costs
+-- nothing: Ankit is the only management user who has ever raised a regularization — 3 of
+-- them, all inside 48 hours — so no HR workflow depended on it. HR's route for older days
+-- was never this table anyway; it is the Muster mark (att_mark_day), which is unaffected.
 -- The Regularize form mirrors both rules for UX; this trigger is the actual gate.
 
 create or replace function reg_policy_guard() returns trigger language plpgsql as $body$
 declare ist_today date := (now() at time zone 'Asia/Kolkata')::date;
 begin
-  if expense_role() = any(array['admin','management']) then return new; end if;
+  if expense_role() = 'admin' then return new; end if;
   if new.work_date > ist_today or new.work_date < ist_today - 2 then
     raise exception 'Regularization must be raised within 48 hours of the day — older days need HR (Muster mark).';
   end if;
