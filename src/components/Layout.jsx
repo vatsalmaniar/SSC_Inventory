@@ -92,8 +92,14 @@ const NAV_ITEMS = [
     key: 'people',
     label: 'People 360',
     path: '/people',
-    roles: ['sales', 'ops', 'admin', 'management', 'accounts', 'fc_kaveri', 'fc_godawari'],
+    // 'staff' (warehouse + back office) gets People 360 and NOTHING else in the whole app.
+    // Every other NAV_ITEM omits them, and Layout's accessDenied (below) turns that
+    // omission into a hard block rather than just a hidden link.
+    roles: ['sales', 'ops', 'admin', 'management', 'accounts', 'fc_kaveri', 'fc_godawari', 'staff'],
     icon: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
+    // A sub-item with no `roles` shows to everyone who can see People — so anything
+    // 'staff' must not have needs an explicit list. Attendance is what carries Leave
+    // and Regularization, which is the whole reason these logins exist.
     sub: [
       { key: 'people-hub',        label: 'Dashboard',     path: '/people' },
       { key: 'people-team',       label: 'Team',          path: '/people/team' },
@@ -101,7 +107,8 @@ const NAV_ITEMS = [
       { key: 'people-org',        label: 'Organisation',  path: '/people/org' },
       { key: 'people-assets',     label: 'Devices',       path: '/people/assets', roles: ['admin','management'] },
       { key: 'people-kpi',        label: 'Performance',   path: '/people/kpi', roles: ['sales','admin','management'] },
-      { key: 'people-expenses',   label: 'Expenses',      path: '/people/expenses' },
+      // Staff do not claim expenses (user decision 2026-09-05) — everyone else keeps it.
+      { key: 'people-expenses',   label: 'Expenses',      path: '/people/expenses', roles: ['sales','ops','admin','management','accounts','fc_kaveri','fc_godawari','demo'] },
       { key: 'people-salary-calc', label: 'Salary Calculator', path: '/people/salary-calculator', roles: ['admin','management'] },
       { key: 'people-config',     label: 'Configuration', path: '/people/config', roles: ['admin','management'] },
     ],

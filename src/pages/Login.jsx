@@ -79,6 +79,15 @@ export default function Login() {
       return
     }
 
+    // Warehouse / back office: People 360 is the only module they have, so send them
+    // there directly. /dashboard would render a single tile and read as broken.
+    if (role === 'staff') {
+      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading People...' })
+      setView('overlay')
+      setTimeout(() => navigate('/people'), 1600)
+      return
+    }
+
     if (role === 'accounts') {
       setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading Billing Module...' })
       setView('overlay')

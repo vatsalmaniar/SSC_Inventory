@@ -7,14 +7,21 @@ import { ordersTotalValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import '../styles/dashboard.css'
 
+// Every business role EXCEPT 'staff'. Used where the old code said roles:['all'] —
+// which was fine while every login was a business user, but 'staff' (warehouse and back
+// office, People-360 only) must not land on CRM pipeline value or total sales value.
+// 'all' is deliberately gone from the role lists below: a future role should be denied by
+// default and granted on purpose, never included because nobody remembered to exclude it.
+const BIZ = ['sales','ops','admin','management','accounts','fc_kaveri','fc_godawari','demo']
+
 const APPS = [
-  { key:'crm', label:'CRM', desc:'Leads & opportunities', path:'/crm', roles:['all'], color:{ bg:'#eef2ff', icon:'#4338ca' },
+  { key:'crm', label:'CRM', desc:'Leads & opportunities', path:'/crm', roles:BIZ, color:{ bg:'#eef2ff', icon:'#4338ca' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> },
   { key:'customer360', label:'Customer 360', desc:'Accounts & profiles', path:'/customers', roles:['sales','ops','admin','management'], color:{ bg:'#f0fdfa', icon:'#0f766e' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> },
   { key:'inventory', label:'Inventory', desc:'Stock & availability', path:'/inventory', roles:['sales','admin','management','ops'], color:{ bg:'#f0fdf4', icon:'#15803d' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 21H3M21 21V3M9 21V9m4 12V5m4 16v-6"/></svg> },
-  { key:'orders', label:'Orders', desc:'Create & track orders', path:'/orders', roles:['all'], color:{ bg:'#fffbeb', icon:'#b45309' },
+  { key:'orders', label:'Orders', desc:'Create & track orders', path:'/orders', roles:BIZ, color:{ bg:'#fffbeb', icon:'#b45309' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg> },
   { key:'fc', label:'Fulfilment Center', desc:'Dispatch & delivery', path:'/fc', roles:['fc_kaveri','fc_godawari','ops','admin','management'], color:{ bg:'#fff7ed', icon:'#c2410c' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg> },
@@ -26,7 +33,10 @@ const APPS = [
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg> },
   { key:'vendor360', label:'Vendor 360', desc:'Vendor profiles & contacts', path:'/vendors', roles:['ops','admin','management'], color:{ bg:'#e0f2fe', icon:'#0369a1' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg> },
-  { key:'people', label:'People', desc:'KRA / KPI & team', path:'/people/kpi', roles:['sales','ops','admin','management','accounts','fc_kaveri','fc_godawari'], color:{ bg:'#ecfeff', icon:'#0e7490' },
+  // The only tile 'staff' sees. Note the tile path is /people/kpi, which Performance
+  // itself bounces them out of (PeopleKpi.jsx) back to /people — harmless, but it is why
+  // Login sends staff straight to /people rather than through the dashboard.
+  { key:'people', label:'People', desc:'KRA / KPI & team', path:'/people/kpi', roles:['sales','ops','admin','management','accounts','fc_kaveri','fc_godawari','staff'], color:{ bg:'#ecfeff', icon:'#0e7490' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> },
   { key:'upload', label:'Upload', desc:'Sync inventory data', path:'/uploads', roles:['admin','accounts'], color:{ bg:'#e8f2fc', icon:'#1a73e8' },
     icon:<svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> },
@@ -125,13 +135,13 @@ export default function Dashboard() {
 
   // Build module KPI tiles based on role access
   const moduleKpis = []
-  if (role(['all'])) {
+  if (role(BIZ)) {
     moduleKpis.push({
       key:'crm', tone:'deep', label:'CRM · Open Pipeline', value: fmtMoneyShort(m.crmOpenValue), sub:`${m.crmOpenCount} active opportunities`,
       path:'/crm', icon:'pipeline'
     })
   }
-  if (role(['all'])) {
+  if (role(BIZ)) {
     moduleKpis.push({
       key:'orders', tone:'forest', label:'Orders · Total Sales', value: fmtMoneyShort(m.ordersValue), sub: m.ordersPending > 0 ? `${m.ordersActive} active · ${m.ordersPending} pending approval` : `${m.ordersActive} active orders`,
       path:'/orders', icon:'cart'
