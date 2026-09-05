@@ -361,8 +361,14 @@ export default function Layout({ children, pageTitle, pageKey }) {
       if (n.po_id) navigate('/procurement/po/' + n.po_id)
       return
     }
-    // Order-linked notifications
-    if (n.order_id) navigate('/orders/' + n.order_id)
+    // Order-linked notifications.
+    // FC roles are NOT on the Orders nav, so /orders/:id lands them on "access denied" —
+    // which made every order bell useless to the two fulfilment centres. The same order
+    // opens as /fc/:id (FCOrderDetail), which is the view they actually work from.
+    if (n.order_id) {
+      const fc = user.role === 'fc_kaveri' || user.role === 'fc_godawari'
+      navigate((fc ? '/fc/' : '/orders/') + n.order_id)
+    }
   }
 
   function fmtNotifTime(d) {
