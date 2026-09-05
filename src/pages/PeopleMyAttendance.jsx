@@ -8,7 +8,7 @@ import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
 import LeavePolicyDrawer from '../components/LeavePolicyDrawer'
 import { Spinner } from '../components/PeopleLoaders'
-import { adminEmpIds } from '../lib/attScope'
+import { visibleEmployees } from '../lib/peopleScope'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
 
@@ -51,21 +51,18 @@ export default function PeopleMyAttendance() {
     const { data: myEmp } = await sb.from('employees').select('id').eq('profile_id', session.user.id).maybeSingle()
     setMeId(myEmp?.id || null)
     const mgmt = ['admin','management'].includes(prof?.role)
-    const adminIds = prof?.role === 'management' ? await adminEmpIds() : []
-    // viewable-employee list for the picker: admin → all; management → all except admin; user → self only
-    if (mgmt) {
-      const { data } = await sb.from('employees').select('id,full_name').neq('lifecycle_status','exited').order('full_name')
-      setPicks((data || []).filter(e => !adminIds.includes(e.id)))
-    } else if (myEmp?.id) {
-      const { data } = await sb.from('employees').select('id,full_name').eq('id', myEmp.id)
-      setPicks(data || [])
-    }
+    // Picker roster comes from the DB: admin → all; management → all but admin; user → self.
+    const { data: picksData } = await visibleEmployees('attendance')
+    setPicks(picksData || [])
     const targetId = empParam || myEmp?.id
     if (!targetId) { setDenied(true); setLoading(false); return }
-    // access: self; admin → anyone; management → anyone except admin
     const { data: t } = await sb.from('employees').select('*').eq('id', targetId).maybeSingle()
     if (!t) { setDenied(true); setLoading(false); return }
-    const canView = targetId === myEmp?.id || prof?.role === 'admin' || (prof?.role === 'management' && !adminIds.includes(targetId))
+    // Access = "is this person in the roster the DB just handed me?". Previously the page
+    // re-derived it (self / admin / management-not-admin) from its own admin-id list; that
+    // was the rule written a second time. att_visible_employees already answers it, so a
+    // target outside the roster is refused outright rather than rendering an empty month.
+    const canView = (picksData || []).some(e => e.id === targetId)
     if (!canView) { setDenied(true); setLoading(false); return }
     setEmp(t)
     await load(t)

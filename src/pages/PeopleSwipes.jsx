@@ -7,7 +7,7 @@ import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { Spinner } from '../components/PeopleLoaders'
-import { adminEmpIds } from '../lib/attScope'
+import { visibleEmployees } from '../lib/peopleScope'
 import { istYmd, istMinutes, toMin, DEFAULT_CFG, PUNCH_DEBOUNCE_MS } from '../lib/attendance'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
@@ -67,11 +67,10 @@ export default function PeopleSwipes() {
     setRole(prof?.role || '')
     const { data: me } = await sb.from('employees').select('id').eq('profile_id', session.user.id).maybeSingle()
     const mgmt = ['admin', 'management'].includes(prof?.role)
-    let empQ = sb.from('employees').select('id,full_name,branch,department').neq('lifecycle_status', 'exited').order('full_name')
-    if (!mgmt) { if (!me?.id) { setDenied(true); setLoading(false); return } empQ = empQ.eq('id', me.id) }  // user: own swipes only
-    const { data: list } = await empQ
-    let scope = list || []
-    if (prof?.role === 'management') { const ex = await adminEmpIds(); scope = scope.filter(e => !ex.includes(e.id)) }
+    if (!mgmt && !me?.id) { setDenied(true); setLoading(false); return }
+    // The DB decides the roster (admin all / management all-but-admin / everyone else self).
+    const { data: list } = await visibleEmployees('attendance')
+    const scope = list || []
     setEmps(scope)
     const ids = scope.map(e => e.id)
     if (!ids.length) { setRows([]); setLoading(false); return }

@@ -7,7 +7,6 @@ import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
 import { computeDay, isWeekOff, loadWeekOffOverrides, distanceM, minToHrs, fmtTime, toMin, STATUS_META, DEFAULT_CFG, effShift, currentlyIn, istYmd } from '../lib/attendance'
 import { signPhotos } from '../lib/photos'
-import { adminEmpIds } from '../lib/attScope'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
 import SyncAlert from '../components/SyncAlert'
@@ -116,7 +115,8 @@ export default function PeopleAttendance() {
         presRows = list.map(e => ({ employee_id:e.id, full_name:e.full_name, designation:e.designation, department:e.department, photo_url:e.photo_url, is_in:!!byIn[e.id], on_leave:onLv.has(e.id) }))
       }
     }
-    if (roleStr === 'management') { const ex = await adminEmpIds(); presRows = presRows.filter(p => !ex.includes(p.employee_id)) }
+    // "management never sees admin" now lives inside office_presence() — see
+    // sql/people_access_rules.sql. The page renders what the DB gives it.
     const presById = {}; presRows.forEach(p => { presById[p.employee_id] = p })
 
     // presence board + "on leave today" (everyone except me)

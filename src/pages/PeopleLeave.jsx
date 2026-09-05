@@ -10,7 +10,7 @@ import { buildLedger, sandwichDays, fyStart, fyEnd } from '../lib/leaveLedger.js
 import LedgerCard, { fetchLedgerInputs } from '../components/LeaveLedger'
 import PeoplePager from '../components/PeoplePager'
 import { fetchAll } from '../lib/fetchAll'
-import { adminEmpIds } from '../lib/attScope'
+import { visibleEmployees } from '../lib/peopleScope'
 import Layout from '../components/Layout'
 import PeopleAvatar from '../components/PeopleAvatar'
 import AttendanceTabs from '../components/AttendanceTabs'
@@ -106,14 +106,13 @@ export default function PeopleLeave() {
   async function loadTeam(r) {
     try {
       const [empRes, balRes, reqRes, attRes] = await Promise.all([
-        sb.from('employees').select('id,full_name,department,lifecycle_status').neq('lifecycle_status','exited').order('full_name'),
+        visibleEmployees('requests'),   // who this user may pick — decided in the DB
         fetchAll((f,t) => sb.from('leave_balances').select('*').eq('fy_label', currentFyLabel()).order('employee_id').range(f,t)),
         fetchAll((f,t) => sb.from('leave_requests').select('employee_id,from_date,to_date,days,is_half_day,half_period,reason,status').in('status',['approved','pending','mgr_approved','rejected']).gte('from_date', fyStart()).lte('from_date', fyEnd()).order('from_date').order('id').range(f,t)),
         // a month of team attendance rows already exceeds the 1000-row cap — must page
         fetchAll((f,t) => sb.from('attendance_days').select('employee_id,work_date,status,source,source_code,first_in,is_lop').gte('work_date', fyStart()).lte('work_date', fyEnd()).in('status',['half_day','leave','absent']).order('work_date').order('id').range(f,t)),
       ])
-      let list = empRes.data || []
-      if (r === 'management') { const ex = await adminEmpIds(); list = list.filter(e => !ex.includes(e.id)) }
+      const list = empRes.data || []
       const err = empRes.error || balRes.error || reqRes.error || attRes.error
       if (err) toast('Team leave data loaded partially — some figures may be missing.', 'error')
       setTeam({ emps: list, bals: balRes.data || [], reqs: reqRes.data || [], atts: attRes.data || [] })

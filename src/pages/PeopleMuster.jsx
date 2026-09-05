@@ -10,7 +10,7 @@ import AttendanceTabs from '../components/AttendanceTabs'
 import SyncAlert from '../components/SyncAlert'
 import { Spinner } from '../components/PeopleLoaders'
 import PeopleAvatar from '../components/PeopleAvatar'
-import { adminEmpIds } from '../lib/attScope'
+import { visibleEmployees } from '../lib/peopleScope'
 import { fetchAll } from '../lib/fetchAll'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
@@ -75,12 +75,10 @@ export default function PeopleMuster() {
     const mgmt = ['admin','management'].includes(prof?.role)
     if (!mgmt) { setDenied(true); setLoading(false); return }   // Muster is admin/management only
     await loadWeekOffOverrides(sb)   // swapped week-offs (22/29 Aug) before any day is scored
-    let empQ = sb.from('employees').select('id,full_name,employee_code,designation,department,branch,shift_start,shift_end,attendance_exempt,lifecycle_status').neq('lifecycle_status','exited').order('full_name')
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const end = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1)
-    const [empRes, c, hol, decl] = await Promise.all([empQ, sb.from('attendance_config').select('*').maybeSingle(), sb.from('holidays').select('holiday_date').eq('is_active',true), sb.from('attendance_declarations').select('*').lt('from_date', ymd(end)).gte('to_date', ymd(start))])
-    let list = empRes.data || []
-    if (prof?.role === 'management') { const ex = await adminEmpIds(); list = list.filter(e => !ex.includes(e.id)) }
+    const [empRes, c, hol, decl] = await Promise.all([visibleEmployees('attendance'), sb.from('attendance_config').select('*').maybeSingle(), sb.from('holidays').select('holiday_date').eq('is_active',true), sb.from('attendance_declarations').select('*').lt('from_date', ymd(end)).gte('to_date', ymd(start))])
+    const list = empRes.data || []
     setEmps(list); setCfg(c?.data || DEFAULT_CFG); setHolidays(new Set((hol?.data||[]).map(h=>h.holiday_date))); setDecls(decl?.data || [])
     const ids = list.map(e=>e.id)
     if (ids.length) {

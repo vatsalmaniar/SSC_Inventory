@@ -9,7 +9,7 @@ import PeopleAvatar from '../components/PeopleAvatar'
 import AttendanceTabs from '../components/AttendanceTabs'
 import { Spinner } from '../components/PeopleLoaders'
 import { fetchAll } from '../lib/fetchAll'
-import { adminEmpIds } from '../lib/attScope'
+import { visibleEmployees } from '../lib/peopleScope'
 import { REQ_ST, fmtTime } from '../lib/attendance'
 import PeoplePager from '../components/PeoplePager'
 import '../styles/people.css'
@@ -94,12 +94,10 @@ export default function PeopleRegularize() {
         fetchAll((f,t) => sb.from('regularizations')
           .select('id,employee_id,work_date,requested_in,requested_out,reason,status,decision_note, emp:employees!regularizations_employee_id_fkey(full_name,department)')
           .order('work_date',{ascending:false}).order('id').range(f,t)),
-        sb.from('employees').select('id,full_name,department').neq('lifecycle_status','exited').order('full_name'),
+        visibleEmployees('requests'),   // who this user may pick — decided in the DB
       ])
       setTeamRegs(all.data || [])
-      let list = empRes.data || []
-      if (r === 'management') { const ex = await adminEmpIds(); list = list.filter(e => !ex.includes(e.id)) }
-      setTeam(list)
+      setTeam(empRes.data || [])
     }
   }
 
