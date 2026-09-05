@@ -51,7 +51,7 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
   const [err, setErr] = useState({})
   const guard = useRef(false)
   const today = new Date().toISOString().slice(0, 10)
-  const minDate = (parseInt(today.slice(0, 4)) - 1) + today.slice(4)
+  const minDate = EX.oldestOpenExpenseDate(me.role)
 
   const cat = categories.find(c => c.id === categoryId)
   const vendorOpts = cat?.vendor_options || []
@@ -66,7 +66,7 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
   function validate() {
     const er = {}
     if (!categoryId) er.category = 'Pick a category'
-    const d = EX.expenseDateIssue(date); if (d) er.date = `Date ${d}`
+    const d = EX.expenseDateIssue(date, me.role); if (d) er.date = `Date ${d}`
     const amt = Number(amount)
     if (!amount || isNaN(amt) || amt <= 0) er.amount = 'Enter the bill amount'
     else if (amt > 200000) er.amount = 'Max ₹2,00,000 per claim'

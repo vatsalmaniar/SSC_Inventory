@@ -67,14 +67,28 @@ export function meterColor(spent, budget) {
   return '#10b981'
 }
 
+// ── The entry window ────────────────────────────────────────────
+// The current month may be filed at any time; the previous month closes after the
+// 6th of this month. Admin may file any date. MIRRORS trg_expense_window — the
+// database is the gate (sql/expense_entry_window.sql); this is only so the picker
+// shows the limit instead of letting someone fill a form that will be refused.
+// Keep the two in step: change one, change the other.
+export function oldestOpenExpenseDate(role) {
+  if (role === 'admin') return '2000-01-01'
+  const d = new Date()
+  const back = d.getDate() <= 6 ? 1 : 0   // on or before the 6th, last month is still open
+  const m = new Date(d.getFullYear(), d.getMonth() - back, 1)
+  return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}-01`
+}
+
 // ── Date guard (expenses are already incurred → past/today only) ─
-export function expenseDateIssue(d) {
+export function expenseDateIssue(d, role) {
   if (!d) return 'is required'
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return `(${d}) is not a valid date — check the year`
   const today = new Date().toISOString().slice(0, 10)
   if (d > today) return `(${fmt(d)}) is in the future — an expense must already be incurred`
-  const min = (parseInt(today.slice(0, 4)) - 1) + today.slice(4)
-  if (d < min) return `(${fmt(d)}) is more than a year old — check the year`
+  const min = oldestOpenExpenseDate(role)
+  if (d < min) return `(${fmt(d)}) is closed — you can file this month any time, and last month only until the 6th`
   return null
 }
 export function monthStartOf(dateStr) { return (dateStr || '').slice(0, 7) + '-01' }
