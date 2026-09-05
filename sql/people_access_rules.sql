@@ -62,14 +62,19 @@ create policy auth_read on public.kpi_snapshots for select to authenticated
 --                 see attendance. Without the split the picker would offer a name whose
 --                 data then comes back empty.
 create or replace function public.att_visible_employees(p_scope text default 'attendance')
+-- The column list is not cosmetic: PeopleMuster scores each day with shift_start /
+-- shift_end (effShift), attendance_exempt (non-punchers must NEVER be auto-absent) and
+-- lifecycle_status (probation -> LOP). Dropping them silently mis-marks people.
 returns table (
   employee_id uuid, full_name text, employee_code text,
-  designation text, department text, branch text, photo_url text
+  designation text, department text, branch text, photo_url text,
+  shift_start time, shift_end time, attendance_exempt boolean, lifecycle_status text
 )
 language sql stable security definer set search_path = public as $$
   with me as (select public.my_employee_id() as eid),
        caller as (select public.expense_role() as role)
-  select e.id, e.full_name, e.employee_code, e.designation, e.department, e.branch, e.photo_url
+  select e.id, e.full_name, e.employee_code, e.designation, e.department, e.branch, e.photo_url,
+         e.shift_start, e.shift_end, e.attendance_exempt, e.lifecycle_status
     from public.employees e, me, caller
    where e.lifecycle_status <> 'exited'
      and (
