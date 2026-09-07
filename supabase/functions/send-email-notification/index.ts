@@ -104,6 +104,9 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string; bg: string; la
 const CELEBRATION_TYPES = ['birthday_self', 'birthday_team', 'anniv_self', 'anniv_team', 'welcome_self', 'welcome_team']
 const PEOPLE_TYPES = [...CELEBRATION_TYPES, 'approval_request', 'approval_decision']
 const fromFor = (t: string) => PEOPLE_TYPES.includes(t) ? FROM_PEOPLE : FROM
+// The wordmark INSIDE the email body, which is separate from the sender name — an
+// HR mail arriving from "SSC People" but headed "SSC ERP" reads as the wrong system.
+const brandFor = (t: string) => PEOPLE_TYPES.includes(t) ? 'SSC People' : 'SSC ERP'
 
 // Birthday wishes go PLAIN TEXT (user decision 2026-09-04) — a personal note should
 // read like one, not like a branded banner. Four variants, rotated so the same person
@@ -227,7 +230,7 @@ function buildEmailText(recipientName: string, r: any, extra: any): string {
 
   const link = approvalLink(r) || (r.po_id ? `${APP_URL}/procurement/po/${r.po_id}`
              : r.order_id ? `${APP_URL}/orders/${r.order_id}` : null)
-  if (link) { lines.push(''); lines.push(`Open in SSC ERP: ${link}`) }
+  if (link) { lines.push(''); lines.push(`Open in ${brandFor(r.email_type)}: ${link}`) }
 
   lines.push('')
   lines.push('—')
@@ -277,7 +280,7 @@ function buildCelebrationEmail(r: any): string {
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif">
   <div style="max-width:560px;margin:0 auto;padding:40px 16px 32px">
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px"><tr>
-      <td style="font-size:20px;font-weight:700;color:#1a4dab;letter-spacing:-0.5px;padding-left:4px">SSC ERP</td>
+      <td style="font-size:20px;font-weight:700;color:#1a4dab;letter-spacing:-0.5px;padding-left:4px">SSC People</td>
     </tr></table>
     <div style="background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0">
       <div style="background:${grad};padding:30px 24px;text-align:center">
@@ -315,7 +318,7 @@ function buildEmail(recipientName: string, r: any, extra: { customer?: string; d
 
     <!-- Logo header -->
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px"><tr>
-      <td style="font-size:20px;font-weight:700;color:#1a4dab;letter-spacing:-0.5px;padding-left:4px">SSC ERP</td>
+      <td style="font-size:20px;font-weight:700;color:#1a4dab;letter-spacing:-0.5px;padding-left:4px">${brandFor(r.email_type)}</td>
       <td style="text-align:right;font-size:11px;color:#94a3b8;padding-right:4px">${time}</td>
     </tr></table>
 
@@ -388,7 +391,7 @@ function buildEmail(recipientName: string, r: any, extra: { customer?: string; d
     <!-- Footer -->
     <div style="text-align:center;padding:24px 0 0;font-size:11px;color:#94a3b8;line-height:1.8">
       <div style="margin-bottom:8px">
-        <a href="${APP_URL}" style="color:#64748b;text-decoration:none;font-weight:600">Open SSC ERP</a>
+        <a href="${APP_URL}" style="color:#64748b;text-decoration:none;font-weight:600">Open ${brandFor(r.email_type)}</a>
       </div>
       SSC Control Pvt. Ltd.&nbsp;&nbsp;·&nbsp;&nbsp;Internal notification
     </div>
