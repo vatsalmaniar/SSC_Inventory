@@ -3,7 +3,8 @@
 ## Project Overview
 Internal inventory management system for SSC Control Pvt. Ltd.
 Built with plain HTML + Supabase (no framework).
-Deployed on Vercel: https://ssc-inventory.vercel.app
+Live at **https://app.ssccontrol.com** (hosted on Vercel, auto-deploys from `main`).
+The old `ssc-inventory.vercel.app` address still resolves but is not the one to give people.
 
 ## Tech Stack
 - **Frontend**: React + Vite (SPA). Page components in `src/pages`, shared UI in `src/components`, styles in `src/styles`.
