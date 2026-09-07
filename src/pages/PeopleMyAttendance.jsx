@@ -70,15 +70,14 @@ export default function PeopleMyAttendance() {
     // Ask the database who works the 2nd/4th Saturday (same rule as OT eligibility)
     // rather than re-deriving role+designation here.
     const { data: sw } = await sb.rpc('att_saturday_workers')
-    const isSat = (sw || []).some(r => r.employee_id === t.id)
-    setSatWorker(isSat)
-    // passed explicitly: setSatWorker has not committed yet, so load() would read
-    // the stale false and score the first render's Saturdays as week-offs.
-    await load(t, isSat)
+    setSatWorker((sw || []).some(r => r.employee_id === t.id))
+    // No need to pass it down: the days useMemo lists satWorker as a dependency,
+    // so it re-scores the month as soon as the state commits.
+    await load(t)
     setLoading(false)
   }
 
-  async function load(t, sat = satWorker) {
+  async function load(t) {
     await loadWeekOffOverrides(sb)   // swapped week-offs before any day is scored
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const end = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1)
@@ -112,14 +111,14 @@ export default function PeopleMyAttendance() {
       const lvr = leaveDates[key]
       // satWorker: the fulfilment team works the 2nd and 4th Saturday, so those days must
       // score as real working days on their OWN attendance page too — not just the muster.
-      const dayArgs = { config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!lvr, leaveHalf:!!lvr?.is_half_day, leavePeriod:lvr?.half_period||'first', isFC, exempt:emp?.attendance_exempt, probation:emp?.lifecycle_status==='probation', satWorker: sat }
+      const dayArgs = { config:effShift(emp, cfg), isHoliday:holidays.has(key), onLeave:!!lvr, leaveHalf:!!lvr?.is_half_day, leavePeriod:lvr?.half_period||'first', isFC, exempt:emp?.attendance_exempt, probation:emp?.lifecycle_status==='probation', satWorker }
       if (pch && pch.length) res = { date:key, dd, ...computeDay({ date:key, punches:pch, ...dayArgs }) }
       else if (imported[key]) res = { date:key, dd, status: imported[key] }
       else res = { date:key, dd, ...computeDay({ date:key, punches:[], ...dayArgs }) }
       out.push(applyDeclaration(res, declarationFor(decls, emp?.branch, key)))
     }
     return out
-  }, [cursor, byDate, cfg, holidays, leaveDates, isFC, imported, emp, decls])
+  }, [cursor, byDate, cfg, holidays, leaveDates, isFC, imported, emp, decls, satWorker])
 
   const stats = useMemo(() => {
     const c = { present:0, half_day:0, absent:0, leave:0, holiday:0, weekoff:0 }
