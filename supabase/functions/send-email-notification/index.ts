@@ -5,6 +5,11 @@ const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!
 const SB_URL = Deno.env.get('SUPABASE_URL')!
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const FROM = 'SSC ERP <notifications@ssccontrol.com>'
+// HR mail goes out as "SSC People" — leave, attendance, celebrations. Business mail
+// (orders, PI, credit, dispatch) stays "SSC ERP"; vendor POs are already "SSC Procurement"
+// in send-po-to-vendor. Same address throughout, only the display name differs.
+const FROM_PEOPLE = 'SSC People <notifications@ssccontrol.com>'
+
 
 // Resend caps at 10 requests/sec. Celebration/welcome dispatches insert many
 // notifications at once → the webhook fires a burst of function calls → some get
@@ -97,6 +102,8 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string; bg: string; la
 }
 
 const CELEBRATION_TYPES = ['birthday_self', 'birthday_team', 'anniv_self', 'anniv_team', 'welcome_self', 'welcome_team']
+const PEOPLE_TYPES = [...CELEBRATION_TYPES, 'approval_request', 'approval_decision']
+const fromFor = (t: string) => PEOPLE_TYPES.includes(t) ? FROM_PEOPLE : FROM
 
 // Birthday wishes go PLAIN TEXT (user decision 2026-09-04) — a personal note should
 // read like one, not like a branded banner. Four variants, rotated so the same person
@@ -530,11 +537,12 @@ async function handleNotification(sb: any, r: any) {
     // Celebrations: text only, no HTML part. The wish to the person themselves also
     // copies People (visible) and the owner (Bcc); team announcements go direct.
     const isCelebration = CELEBRATION_TYPES.includes(r.email_type)
-    const res = await resendSend(isCelebration
-      ? { from: FROM, to: [email], subject: subject(r),
+    const res = await resendSend(
+      isCelebration
+      ? { from: fromFor(r.email_type), to: [email], subject: subject(r),
           ...(r.email_type === 'birthday_self' ? { cc: [BIRTHDAY_CC], bcc: [BIRTHDAY_BCC] } : {}),
           text: buildCelebrationText(recipientName, r) }
-      : { from: FROM, to: [email], subject: subject(r),
+      : { from: fromFor(r.email_type), to: [email], subject: subject(r),
           html: buildEmail(recipientName, r, extra),
           ...(textPart ? { text: textPart } : {}) })
     const data = await res.json()
