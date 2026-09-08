@@ -5,6 +5,7 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
+import { fetchLedgerInputs, computeLedger } from '../components/LeaveLedger'
 import { computeDay, isWeekOff, loadWeekOffOverrides, distanceM, minToHrs, fmtTime, toMin, STATUS_META, DEFAULT_CFG, effShift, currentlyIn, istYmd } from '../lib/attendance'
 import { signPhotos } from '../lib/photos'
 import Layout from '../components/Layout'
@@ -71,7 +72,10 @@ export default function PeopleAttendance() {
       sb.from('attendance_config').select('*').maybeSingle(),
       sb.from('office_locations').select('*').eq('is_active', true),
       sb.from('holidays').select('holiday_date').eq('is_active', true),
-      emp ? sb.from('leave_balances').select('*').eq('employee_id', emp.id).eq('fy_label', currentFyLabel()).maybeSingle() : Promise.resolve({data:null}),
+      // The ONE leave formula. A bare leave_balances row misses everything the muster
+      // charges — half-days, HR marks, the sandwich rule — and overstated this tile by up
+      // to 4 days against the Leave page, which is what the apply form already gates on.
+      emp ? fetchLedgerInputs(sb, emp.id, currentFyLabel()) : Promise.resolve(null),
       emp ? sb.from('leave_requests').select('id,status').eq('employee_id', emp.id).eq('status','pending') : Promise.resolve({data:[]}),
       emp ? sb.from('leave_requests').select('from_date,to_date,is_half_day,half_period').eq('employee_id', emp.id).eq('status','approved') : Promise.resolve({data:[]}),
     ])
@@ -81,7 +85,7 @@ export default function PeopleAttendance() {
     setLeaveMap(lmap)
     const config = c?.data || DEFAULT_CFG
     setCfg(config); setOffices(off?.data || [])
-    setHolidays(new Set((hol?.data || []).map(h => h.holiday_date))); setBal(bl?.data || null)
+    setHolidays(new Set((hol?.data || []).map(h => h.holiday_date))); setBal(bl || null)
     setPending((lr?.data || []).length)
     if (!emp) return
 
@@ -252,6 +256,12 @@ export default function PeopleAttendance() {
     finally { guard.current = false; setPunching(false) }
   }
 
+  const leaveLedger = useMemo(() => {
+    if (!bal?.bal) return null
+    const isOff = d => holidays.has(d) ? 'holiday' : (isWeekOff(d) ? 'weekoff' : null)
+    return computeLedger(bal, isOff)
+  }, [bal, holidays])
+
   if (loading) return <Layout pageKey="people" pageTitle="Attendance"><div className="people-app"><Spinner label="Loading attendance…" /></div></Layout>
   if (!me) return <Layout pageKey="people" pageTitle="Attendance"><div className="people-app"><div className="e-empty">No employee record linked to your login. Ask HR to link you in the Team directory.</div></div></Layout>
 
@@ -269,7 +279,7 @@ export default function PeopleAttendance() {
   const dseg = [['present','var(--st-present)'],['half_day','var(--st-half)'],['leave','var(--st-leave)'],['absent','var(--st-absent)'],['holiday','var(--st-holiday)']]
   const stColor = Object.fromEntries(dseg)
   let dacc=0; const conic = dseg.map(([k,c])=>{ const s=dacc/donutTot*360, e=(dacc+ (donutC[k]||0))/donutTot*360; dacc+=donutC[k]||0; return `${c} ${s}deg ${e}deg` }).join(',')
-  const balNum = bal ? Number(bal.credited)+Number(bal.carried_forward)-Number(bal.used)-Number(bal.encashed) : null
+  const balNum = leaveLedger ? leaveLedger.closing : null
   const avgInStr = monthStats.avgInMin!=null ? `${String(Math.floor(monthStats.avgInMin/60)).padStart(2,'0')}:${String(monthStats.avgInMin%60).padStart(2,'0')}` : '—'
   const showWho = scope.length > 0
   const nowMin = now.getHours()*60 + now.getMinutes()
@@ -277,7 +287,7 @@ export default function PeopleAttendance() {
   const tlPct = Math.max(0, Math.min(1, (nowMin - shiftStart)/((shiftEnd-shiftStart)||1)))
   const overtime = nowMin > shiftEnd
   const workedSoFarMin = firstIn ? (todayComputed.last_out ? (todayComputed.worked_min||0) : Math.round((now - firstIn)/60000)) : 0
-  const credited = bal ? Number(bal.credited)+Number(bal.carried_forward) : 25
+  const credited = leaveLedger ? leaveLedger.opening : 25
 
   const Icon = ({ d }) => <svg viewBox="0 0 16 16" width="13" fill="none" stroke="currentColor" strokeWidth="1.6"><path d={d} /></svg>
 
@@ -365,7 +375,7 @@ export default function PeopleAttendance() {
 
         {/* ── stat tiles ── */}
         <div className="stiles">
-          <div className="stile"><div className="stile-top"><span className="stile-ic" style={{background:'var(--accent-soft)',color:'var(--accent)'}}><Icon d="M8 2v6l4 2" /></span><span className="stile-l">Leave balance</span></div><div className="stile-v">{balNum ?? '—'}<small> / {credited}</small></div><div className="stile-foot"><b>{bal?Number(bal.used):0}</b> used · FY {currentFyLabel()}</div></div>
+          <div className="stile"><div className="stile-top"><span className="stile-ic" style={{background:'var(--accent-soft)',color:'var(--accent)'}}><Icon d="M8 2v6l4 2" /></span><span className="stile-l">Leave balance</span></div><div className="stile-v">{balNum ?? '—'}<small> / {credited}</small></div><div className="stile-foot"><b>{leaveLedger ? Math.round((leaveLedger.opening - leaveLedger.closing) * 10) / 10 : 0}</b> used · FY {currentFyLabel()}</div></div>
           <div className="stile"><div className="stile-top"><span className="stile-ic" style={{background:'var(--pos-bg)',color:'var(--st-present)'}}><Icon d="M3 8l3 3 7-7" /></span><span className="stile-l">Present · this mo</span></div><div className="stile-v">{donutC.present}<small> / {donutTot}</small></div><div className="stile-foot"><b>{donutC.half_day||0}</b> half · <b>{donutC.leave||0}</b> leave</div></div>
           <div className="stile"><div className="stile-top"><span className="stile-ic" style={{background:'var(--crit-bg)',color:'var(--crit)'}}><Icon d="M8 4v4l3 2" /></span><span className="stile-l">On-time</span></div><div className="stile-v">{monthStats.onTimePct!=null?monthStats.onTimePct+'%':'—'}</div><div className="stile-foot">arrivals this month</div></div>
           <div className="stile"><div className="stile-top"><span className="stile-ic" style={{background:'rgba(124,92,224,.10)',color:'var(--st-leave)'}}><Icon d="M2 13h12M4 13V7M8 13V4M12 13V9" /></span><span className="stile-l">Avg hours / day</span></div><div className="stile-v">{minToHrs(monthStats.avgWork)}</div><div className="stile-foot">clock-in avg <b>{avgInStr}</b></div></div>

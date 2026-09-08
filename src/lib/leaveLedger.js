@@ -31,6 +31,15 @@
 //                         LEAVE_DEDUCT_FROM (older leave lives in the old-HRMS baseline).
 //   LOP days appear in the ledger as ₹-side information (unpaid) but never touch the
 //   leave balance — that is the whole point of LOP.
+//
+//   · muster    ±     THE MUSTER IS WHAT ACTUALLY HAPPENED. A request is only what was
+//                     asked for; once HR has marked the day, the muster wins. Where the two
+//                     disagree the difference is posted as its OWN attributed row — the
+//                     original charge is never rewritten or hidden, so the ledger reads as a
+//                     history ("charged, then credited back by HR") rather than a silent
+//                     restatement. Absent on an approved-leave day credits the leave and
+//                     leaves the day as LOP: an absence costs pay, never leave.
+//                     Dates with no muster row yet keep the request's own charge.
 
 import { fyRange } from './kpi.js'   // explicit extension so node can unit-test this file
 
@@ -49,6 +58,14 @@ export const fyEnd = () => FY().end
 // Approved half-day LEAVE codes (leave one half, present the other) — charged via the
 // request, never via the muster row.
 export const isHalfLeaveCode = c => c === 'L:P' || c === 'P:L'
+
+// What a muster row actually cost in LEAVE. Absent is deliberately 0: an absence is LOP
+// (unpaid) and must never also eat the leave balance. Week-off / holiday cost nothing.
+export const musterLeaveCharge = a =>
+  !a ? null
+  : a.status === 'leave'    ? 1
+  : a.status === 'half_day' ? 0.5
+  : 0
 
 // ── date helpers (string 'YYYY-MM-DD' domain; UTC math so the viewer's TZ is irrelevant) ──
 export const addDays = (ymd, n) => {
@@ -102,7 +119,10 @@ export function sandwichDays(requests, isOffDay, { from = deductFrom(), to = fyE
 // attDays:  attendance_days rows work_date ∈ [DEDUCT_FROM, FY_END], any status —
 //           needs {work_date,status,source,source_code,first_in,is_lop}
 // isOffDay: as above
-export function buildLedger({ bal, requests = [], attDays = [], isOffDay }) {
+// musterEdits: attendance_audit rows [{work_date, actor}] — names who changed a muster day,
+//              so a correction reads "Credited by muster — Vatsal Maniar" instead of appearing
+//              from nowhere. Optional: without it the row still posts, just unattributed.
+export function buildLedger({ bal, requests = [], attDays = [], isOffDay, musterEdits = [] }) {
   // No balance row = nothing credited (new joiners / probation until HR seeds one).
   // Defaulting to 25 here would invent leave that HR never granted.
   const credited = bal ? Number(bal.credited) : 0
@@ -176,6 +196,59 @@ export function buildLedger({ bal, requests = [], attDays = [], isOffDay }) {
     })
   }
 
+  // ── muster reconciliation ────────────────────────────────────────────────
+  // Two independent corrections, both posted as their own rows so nothing is rewritten:
+  //   per-day   the muster contradicts the request for a date HR has marked
+  //   at-apply  the request charged for days that are off (leaveDays() ran before a
+  //             holiday or week-off override existed, so it over-charged at apply time)
+  const attByDate = new Map(attDays.map(a => [a.work_date, a]))
+  const actorByDate = new Map()
+  for (const m of musterEdits) if (m?.work_date && m.actor) actorByDate.set(m.work_date, m.actor)
+  const by = d => { const a = actorByDate.get(d); return a ? ` — ${a}` : '' }
+  const r1 = n => Math.round(n * 10) / 10
+
+  let musterAdj = 0
+  for (const r of reqs) {
+    if (r.to_date < deductFrom() || r.from_date > fyEnd()) continue
+    const perDay = r.is_half_day ? 0.5 : 1
+    let expected = 0, sawMuster = false
+    for (let d = r.from_date; d <= r.to_date; d = addDays(d, 1)) {
+      if (d < deductFrom() || d > fyEnd()) continue
+      const a = attByDate.get(d)
+      if (a) sawMuster = true            // set BEFORE the off-day skip: a request that covers
+                                         // only off days (e.g. a single day that later became a
+                                         // week-off) still has a muster row to reconcile against
+      if (isOffDay(d)) continue                       // off days were never chargeable
+      expected += perDay
+      if (!a) continue                                // day not processed yet — request stands
+      const delta = r1(perDay - musterLeaveCharge(a))
+      if (delta === 0) continue
+      musterAdj += delta
+      rows.push({
+        date: d,
+        kind: delta > 0 ? 'muster_credit' : 'muster_debit',
+        label: (delta > 0 ? 'Credited by muster' : 'Debited by muster') + by(d),
+        sub: a.status === 'present' ? 'marked present — leave returned'
+           : a.status === 'absent'  ? 'marked absent — unpaid, leave returned'
+           : `marked ${a.status.replace('_', ' ')}`,
+        delta,
+      })
+    }
+    // What the request actually charged, minus what its working days could account for.
+    // Positive = it charged for an off day (holiday/week-off added after it was approved).
+    const residual = r1(Number(r.days || 0) - expected)
+    if (sawMuster && residual !== 0) {
+      musterAdj += residual
+      rows.push({
+        date: r.from_date,
+        kind: residual > 0 ? 'muster_credit' : 'muster_debit',
+        label: residual > 0 ? 'Credited — off day charged when applied' : 'Debited — working day missed when applied',
+        sub: `request charged ${r.days}, muster shows ${r1(expected)} working day(s)`,
+        delta: residual,
+      })
+    }
+  }
+
   const HALF_CAUSE = { 'A:P': 'Late arrival', 'P:A': 'Left early' }
   const sd = sandwichDays(reqs, isOffDay)
   const sandwichSet = new Set(sd.map(s => s.date))
@@ -215,6 +288,33 @@ export function buildLedger({ bal, requests = [], attDays = [], isOffDay }) {
     })
   }
 
+  // ── sandwich vs the muster ───────────────────────────────────────────────
+  // The sandwich charge is raised from APPROVED REQUESTS, which is what the handbook says
+  // and what HR signed off. But if the muster later shows a flanking day was actually
+  // worked, the block was never sandwiched and the charge must come back. The original
+  // sandwich row stays visible and the reversal posts beneath it, so the ledger reads
+  // "sandwich applied, then credited when the muster was corrected".
+  // Only an unambiguous contradiction counts: the flank has a muster row and it is neither
+  // leave nor a half day. A missing row means the day is not processed yet.
+  let sandwichBack = 0
+  for (const s of sd) {
+    if (hrLeaveChargedDates.has(s.date)) continue          // never charged, nothing to give back
+    const broken = [s.before, s.after].find(f => {
+      const a = attByDate.get(f)
+      return a && a.status !== 'leave' && a.status !== 'half_day'
+    })
+    if (!broken) continue
+    sandwichBack += 1
+    rows.push({
+      date: s.date,
+      kind: 'muster_credit',
+      label: 'Sandwich credited back' + by(broken),
+      sub: `${broken} was marked ${attByDate.get(broken).status.replace('_', ' ')} — the block was not sandwiched`,
+      delta: 1,
+    })
+  }
+  musterAdj = r1(musterAdj + sandwichBack)
+
   if (encashed > 0) rows.push({ date: fyEnd(), kind: 'encash', label: 'Encashed', delta: -encashed })
 
   rows.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
@@ -223,10 +323,12 @@ export function buildLedger({ bal, requests = [], attDays = [], isOffDay }) {
   for (const r of rows) { run = Math.round((run + r.delta) * 10) / 10; r.balance = run }
 
   const extras = Math.round((halfSum + hrLeaveSum + sandwichSum) * 10) / 10
-  const closing = Math.round((opening - used - encashed - extras) * 10) / 10
+  // musterAdj is signed: + gives leave back, − takes more. It is ADDED (not subtracted)
+  // because a credit must raise the closing balance.
+  const closing = Math.round((opening - used - encashed - extras + musterAdj) * 10) / 10
   return {
     opening, closing, rows, noBalance: !bal,
-    totals: { credited, carried, used, seedUsed, requestDays: reqDaysSum, encashed, halfDays: halfSum, hrLeave: hrLeaveSum, sandwich: sandwichSum, extras, reconcileGap },
+    totals: { credited, carried, used, seedUsed, requestDays: reqDaysSum, encashed, halfDays: halfSum, hrLeave: hrLeaveSum, sandwich: sandwichSum, extras, musterAdj: r1(musterAdj), reconcileGap },
   }
 }
 

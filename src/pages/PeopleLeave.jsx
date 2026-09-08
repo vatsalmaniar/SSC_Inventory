@@ -6,7 +6,7 @@ import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
 import { isWeekOff, istYmd, loadWeekOffOverrides, REQ_ST } from '../lib/attendance'
-import { buildLedger, sandwichDays, fyStart, fyEnd } from '../lib/leaveLedger.js'
+import { buildLedger, sandwichDays, deductFrom, fyStart, fyEnd } from '../lib/leaveLedger.js'
 import LedgerCard, { fetchLedgerInputs } from '../components/LeaveLedger'
 import PeoplePager from '../components/PeoplePager'
 import { fetchAll } from '../lib/fetchAll'
@@ -105,24 +105,44 @@ export default function PeopleLeave() {
   // Bulk inputs for every employee, pushed through the same buildLedger — never a second formula.
   async function loadTeam(r) {
     try {
-      const [empRes, balRes, reqRes, attRes] = await Promise.all([
+      const [empRes, balRes, reqRes, attRes, presRes, audRes] = await Promise.all([
         visibleEmployees('requests'),   // who this user may pick — decided in the DB
         fetchAll((f,t) => sb.from('leave_balances').select('*').eq('fy_label', currentFyLabel()).order('employee_id').range(f,t)),
         fetchAll((f,t) => sb.from('leave_requests').select('employee_id,from_date,to_date,days,is_half_day,half_period,reason,status').in('status',['approved','pending','mgr_approved','rejected']).gte('from_date', fyStart()).lte('from_date', fyEnd()).order('from_date').order('id').range(f,t)),
         // a month of team attendance rows already exceeds the 1000-row cap — must page
         fetchAll((f,t) => sb.from('attendance_days').select('employee_id,work_date,status,source,source_code,first_in,is_lop').gte('work_date', fyStart()).lte('work_date', fyEnd()).in('status',['half_day','leave','absent']).order('work_date').order('id').range(f,t)),
+        // 'present' rows let the ledger see a day charged as leave that was actually worked.
+        // Only from DEDUCT_FROM: corrections cannot apply earlier, and pulling present across
+        // the whole FY is ~4x the rows (4,088 vs 1,076) for no extra answer.
+        fetchAll((f,t) => sb.from('attendance_days').select('employee_id,work_date,status,source,source_code,first_in,is_lop').gte('work_date', deductFrom()).lte('work_date', fyEnd()).eq('status','present').order('work_date').order('id').range(f,t)),
+        // who edited which muster day (RLS: admin/management/HR only — absent for everyone
+        // else, and the correction then posts unattributed rather than failing)
+        fetchAll((f,t) => sb.from('attendance_audit').select('employee_id,work_date,actor_profile_id,created_at').gte('work_date', deductFrom()).order('created_at').order('id').range(f,t)),
       ])
       const list = empRes.data || []
-      const err = empRes.error || balRes.error || reqRes.error || attRes.error
+      const err = empRes.error || balRes.error || reqRes.error || attRes.error || presRes.error
       if (err) toast('Team leave data loaded partially — some figures may be missing.', 'error')
-      setTeam({ emps: list, bals: balRes.data || [], reqs: reqRes.data || [], atts: attRes.data || [] })
+      // resolve actor names once for the whole team, then key edits by employee+date
+      const actorIds = [...new Set((audRes.data || []).map(a => a.actor_profile_id).filter(Boolean))]
+      const nameById = new Map()
+      if (actorIds.length) {
+        const { data: profs } = await sb.from('profiles').select('id,name').in('id', actorIds)
+        for (const pr of profs || []) nameById.set(pr.id, pr.name)
+      }
+      const editsBy = {}
+      for (const a of audRes.data || []) {          // oldest-first, so the last write wins
+        (editsBy[a.employee_id] ||= new Map()).set(a.work_date, { work_date: a.work_date, actor: nameById.get(a.actor_profile_id) || null })
+      }
+      setTeam({ emps: list, bals: balRes.data || [], reqs: reqRes.data || [],
+                atts: [...(attRes.data || []), ...(presRes.data || [])],
+                edits: Object.fromEntries(Object.entries(editsBy).map(([k, v]) => [k, [...v.values()]])) })
     } catch (e) { toast(e?.message || friendlyError(e), 'error'); setTeam({ emps: [], bals: [], reqs: [], atts: [] }) }
   }
 
   // Off-day judge for the ledger/sandwich maths — holidays table + week-off rule (overrides loaded in init)
   const isOffDay = useMemo(() => d => holidays.has(d) ? 'holiday' : (isWeekOff(d) ? 'weekoff' : null), [holidays])
   const myLedger = useMemo(() => selfInputs
-    ? buildLedger({ bal: selfInputs.bal, requests: selfInputs.requests, attDays: selfInputs.attDays, isOffDay })
+    ? buildLedger({ bal: selfInputs.bal, requests: selfInputs.requests, attDays: selfInputs.attDays, isOffDay, musterEdits: selfInputs.musterEdits || [] })
     : null, [selfInputs, isOffDay])
   // Tile shows a number only when HR has seeded a balance row (old behaviour) —
   // the ledger card still lists movements either way.
@@ -132,7 +152,7 @@ export default function PeopleLeave() {
     const balBy = {}; team.bals.forEach(b => { balBy[b.employee_id] = b })
     const group = (arr) => { const m = {}; arr.forEach(x => { (m[x.employee_id] ||= []).push(x) }); return m }
     const reqBy = group(team.reqs), attBy = group(team.atts)
-    return team.emps.map(e => ({ emp: e, bal: balBy[e.id] || null, ledger: buildLedger({ bal: balBy[e.id] || null, requests: reqBy[e.id] || [], attDays: attBy[e.id] || [], isOffDay }) }))
+    return team.emps.map(e => ({ emp: e, bal: balBy[e.id] || null, ledger: buildLedger({ bal: balBy[e.id] || null, requests: reqBy[e.id] || [], attDays: attBy[e.id] || [], isOffDay, musterEdits: (team.edits || {})[e.id] || [] }) }))
   }, [team, isOffDay])
   // Whole-page person switch (My Attendance pattern): picking a name in the header shows
   // THAT person's balance tile + ledger; empty selection = me.

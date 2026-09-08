@@ -2,12 +2,12 @@
 // Purely presentational: the maths lives in src/lib/leaveLedger.js (buildLedger) and the
 // page passes the computed result in, so the tile, this card and the team table can never
 // disagree. fetchLedgerInputs() is the one query-shape for a single employee's inputs.
-import { buildLedger, fyStart, fyEnd } from '../lib/leaveLedger.js'
+import { buildLedger, fyStart, fyEnd, deductFrom } from '../lib/leaveLedger.js'
 
 // One employee's raw inputs for buildLedger. RLS scopes this to what the viewer may see
 // (att_can_see), so a normal employee can only ever fetch their own.
 export async function fetchLedgerInputs(sb, employeeId, fyLabel) {
-  const [bal, reqs, att] = await Promise.all([
+  const [bal, reqs, att, pres, aud] = await Promise.all([
     sb.from('leave_balances').select('*').eq('employee_id', employeeId).eq('fy_label', fyLabel).maybeSingle(),
     sb.from('leave_requests').select('from_date,to_date,days,is_half_day,half_period,reason,status')
       .eq('employee_id', employeeId).in('status', ['approved', 'pending', 'mgr_approved', 'rejected'])
@@ -15,20 +15,48 @@ export async function fetchLedgerInputs(sb, employeeId, fyLabel) {
     sb.from('attendance_days').select('work_date,status,source,source_code,first_in,is_lop')
       .eq('employee_id', employeeId).gte('work_date', fyStart()).lte('work_date', fyEnd())
       .in('status', ['half_day', 'leave', 'absent']).order('work_date'),
+    // 'present' rows are what let the ledger see that a day charged as leave was actually
+    // worked. Only from DEDUCT_FROM — that is the earliest a correction can apply, and
+    // pulling present from the FY start would be ~4x the rows for no extra answer.
+    sb.from('attendance_days').select('work_date,status,source,source_code,first_in,is_lop')
+      .eq('employee_id', employeeId).gte('work_date', deductFrom()).lte('work_date', fyEnd())
+      .eq('status', 'present').order('work_date'),
+    // Who changed a muster day, so a correction can name them. RLS scopes this to
+    // admin / management / the HR approver; for everyone else it returns nothing and the
+    // correction simply posts unattributed.
+    sb.from('attendance_audit').select('work_date,actor_profile_id,created_at')
+      .eq('employee_id', employeeId).gte('work_date', deductFrom()).order('created_at'),
   ])
-  const error = bal.error || reqs.error || att.error
-  return { bal: bal.data || null, requests: reqs.data || [], attDays: att.data || [], error }
+  const error = bal.error || reqs.error || att.error || pres.error
+  const musterEdits = await withActorNames(sb, aud.data || [])
+  return { bal: bal.data || null, requests: reqs.data || [],
+           attDays: [...(att.data || []), ...(pres.data || [])], musterEdits, error }
 }
 
-export function computeLedger({ bal, requests, attDays }, isOffDay) {
-  return buildLedger({ bal, requests, attDays, isOffDay })
+// attendance_audit has no FK to profiles, so PostgREST cannot embed the name — resolve it
+// in a second small lookup. Newest edit per date wins: that is the change in force.
+async function withActorNames(sb, auditRows) {
+  if (!auditRows.length) return []
+  const ids = [...new Set(auditRows.map(a => a.actor_profile_id).filter(Boolean))]
+  const byId = new Map()
+  if (ids.length) {
+    const { data } = await sb.from('profiles').select('id,name').in('id', ids)
+    for (const p of data || []) byId.set(p.id, p.name)
+  }
+  const latest = new Map()
+  for (const a of auditRows) latest.set(a.work_date, a)   // rows arrive oldest-first
+  return [...latest.values()].map(a => ({ work_date: a.work_date, actor: byId.get(a.actor_profile_id) || null }))
+}
+
+export function computeLedger({ bal, requests, attDays, musterEdits }, isOffDay) {
+  return buildLedger({ bal, requests, attDays, isOffDay, musterEdits })
 }
 
 const fmtD = d => d ? new Date(d + 'T00:00:00+05:30').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : '—'
 const mono = { fontFamily: "'Geist Mono',monospace" }
 // Orders-module palette only (green #10B981 / amber #F59E0B / red #EF4444 families) —
 // same dots and tints as .ol-status-pill / STATUS_META. No new colours here.
-const KIND_DOT = { credit: '#10B981', seed: '#94A3B8', request: '#8B5CF6', half: '#F59E0B', hr_leave: '#8B5CF6', sandwich: '#F59E0B', encash: '#1a73e8', lop: '#EF4444', pending: '#F59E0B', rejected: '#EF4444' }
+const KIND_DOT = { credit: '#10B981', seed: '#94A3B8', request: '#8B5CF6', half: '#F59E0B', hr_leave: '#8B5CF6', sandwich: '#F59E0B', encash: '#1a73e8', lop: '#EF4444', pending: '#F59E0B', rejected: '#EF4444', muster_credit: '#10B981', muster_debit: '#F59E0B' }
 const NOFLOW_BADGE = {
   pending: { t: 'not approved yet', c: '#BA7D14', b: 'rgba(245,158,11,0.12)' },
   rejected: { t: 'rejected', c: '#B63A3F', b: 'rgba(239,68,68,0.12)' },

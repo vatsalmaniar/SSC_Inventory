@@ -6,6 +6,8 @@ import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
 import { signPhotos } from '../lib/photos'
+import { isWeekOff, loadWeekOffOverrides } from '../lib/attendance'
+import { fetchLedgerInputs, computeLedger } from '../components/LeaveLedger'
 import { calculateTax } from '../lib/tax'
 import PhotoCropper from '../components/PhotoCropper'
 import SalaryHelpDrawer from '../components/SalaryHelpDrawer'
@@ -92,7 +94,8 @@ export default function EmployeeDetail() {
   const [docs, setDocs] = useState([])
   const [kpi, setKpi] = useState(null)
   const [kpiMonthly, setKpiMonthly] = useState([])
-  const [leaveBal, setLeaveBal] = useState(null)
+  const [leaveInputs, setLeaveInputs] = useState(null)
+  const [holidays, setHolidays] = useState(new Set())
   const [secUser, setSecUser] = useState(null)
   const [tab, setTab] = useState('overview')
   const [reveal, setReveal] = useState({})
@@ -145,20 +148,27 @@ export default function EmployeeDetail() {
   }
 
   async function load(r) {
+    // Swapped week-offs (e.g. 22 Aug working / 29 Aug off) must be known before any off-day
+    // maths, or the ledger judges the sandwich rule against the wrong calendar.
+    await loadWeekOffOverrides(sb)
     const mgmt = ['admin','management'].includes(r)
     const { data: e } = await sb.from('employees').select('*').eq('id', id).maybeSingle()
     if (!e) { setNotFound(true); return }
     setEmp(e)
-    const [pv, pr, all, cp, aa, dc, lb] = await Promise.all([
+    const [pv, pr, all, cp, aa, dc, lb, hol] = await Promise.all([
       sb.from('employee_private').select('*').eq('employee_id', id).maybeSingle(),
       e.profile_id ? sb.from('profiles').select('id,username,role').eq('id', e.profile_id).maybeSingle() : Promise.resolve({data:null}),
       sb.from('employees').select('id,full_name,designation,department,reporting_manager_id,profile_id,lifecycle_status').eq('is_test', false),
       sb.from('employee_compensation').select('*').eq('employee_id', id).order('is_current',{ascending:false}).order('effective_from',{ascending:false}).order('fy_label',{ascending:false}),
       sb.from('asset_assignments').select('*').eq('employee_id', id).is('assigned_to', null),
       sb.from('employee_documents').select('*').eq('employee_id', id),
-      sb.from('leave_balances').select('*').eq('employee_id', id).eq('fy_label', currentFyLabel()).maybeSingle(),
+      // The ONE leave formula — a bare leave_balances row omits muster consumption
+      // (half-days, HR marks, the sandwich rule) and overstated the balance here by up to
+      // 4 days against the Leave page.
+      fetchLedgerInputs(sb, id, currentFyLabel()),
+      sb.from('holidays').select('holiday_date').eq('is_active', true),
     ])
-    setLeaveBal(lb?.data || null)
+    setLeaveInputs(lb || null); setHolidays(new Set((hol?.data || []).map(h => h.holiday_date)))
     const allRows = all?.data || []
     setPriv(pv?.data || null); setProfile(pr?.data || null); setAllEmps(allRows)
     signPhotos(allRows).then(() => setAllEmps([...allRows])).catch(() => {})   // photos async
@@ -214,8 +224,13 @@ export default function EmployeeDetail() {
     if (error) { toast(error.message, 'error'); return }
     setEmp({ ...emp, tax_regime: r }); toast(`Regime set to ${r==='old'?'Old':'New'}`, 'success')
   }
-  const leaveNum = leaveBal ? Number(leaveBal.credited)+Number(leaveBal.carried_forward)-Number(leaveBal.used)-Number(leaveBal.encashed) : null
-  const leaveCredited = leaveBal ? Number(leaveBal.credited)+Number(leaveBal.carried_forward) : null
+  const leaveLedger = useMemo(() => {
+    if (!leaveInputs?.bal) return null
+    const isOffDay = d => holidays.has(d) ? 'holiday' : (isWeekOff(d) ? 'weekoff' : null)
+    return computeLedger(leaveInputs, isOffDay)
+  }, [leaveInputs, holidays])
+  const leaveNum = leaveLedger ? leaveLedger.closing : null
+  const leaveCredited = leaveLedger ? leaveLedger.opening : null
 
   // KPI headline metric graph (actual_sales else first key)
   const kpiSeries = useMemo(() => {
