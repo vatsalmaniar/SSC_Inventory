@@ -488,6 +488,9 @@ export default function PeopleExpenses() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: p } = await sb.from('profiles').select('id,name,role,location').eq('id', session.user.id).single()
+    // Hiding the nav link is not access control — /people/expenses typed directly still
+    // rendered for ops, staff and FC (empty, but reachable). Refuse it outright.
+    if (!EX.CAN_OPEN.includes(p?.role)) { navigate('/people'); return }
     setMe({ id: session.user.id, name: p?.name || '', role: p?.role || 'sales', location: p?.location || null })
   }
 

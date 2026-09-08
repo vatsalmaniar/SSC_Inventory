@@ -108,7 +108,7 @@ const NAV_ITEMS = [
       { key: 'people-assets',     label: 'Devices',       path: '/people/assets', roles: ['admin','management'] },
       { key: 'people-kpi',        label: 'Performance',   path: '/people/kpi', roles: ['sales','admin','management'] },
       // Staff do not claim expenses (user decision 2026-09-05) — everyone else keeps it.
-      { key: 'people-expenses',   label: 'Expenses',      path: '/people/expenses', roles: ['sales','ops','admin','management','accounts','fc_kaveri','fc_godawari','demo'] },
+      { key: 'people-expenses',   label: 'Expenses',      path: '/people/expenses', roles: ['sales','admin','management','accounts'] },
       { key: 'people-salary-calc', label: 'Salary Calculator', path: '/people/salary-calculator', roles: ['admin','management'] },
       { key: 'people-config',     label: 'Configuration', path: '/people/config', roles: ['admin','management'] },
     ],

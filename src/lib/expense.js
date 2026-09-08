@@ -12,6 +12,13 @@ export const CAN_APPROVE = ['admin', 'management']   // review (L1/L2)
 export const CAN_PAY     = ['admin', 'accounts']     // Pay Now
 export const CAN_SEE_ALL = ['admin', 'management', 'accounts']
 export const CAN_CONFIG  = ['admin', 'management']
+// Who may OPEN the Expenses page at all. ops / staff / fc / demo are out entirely —
+// user rule 2026-09-08: "ops can not even see this page". sales file their own claims,
+// accounts pay them, admin/management approve.
+export const CAN_OPEN    = ['sales', 'admin', 'management', 'accounts']
+// Who may FILE a claim. Accounts can see and pay but never file (same rule), and only
+// people switched ON in Expenses > Configure. Mirrored by trg_expense_upload_guard.
+export const CAN_FILE    = ['sales', 'admin', 'management']
 
 // ── Locations (drive the mileage budget) ─────────────────────────
 // Mileage is the ONLY budgeted track. Budget resolves:
