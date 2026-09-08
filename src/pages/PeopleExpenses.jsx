@@ -703,10 +703,26 @@ export default function PeopleExpenses() {
               <select className="exp-card-select" value={fPerson}
                 onChange={e => { setFPerson(e.target.value); setPage(0) }}>
                 <option value="">All people</option>
-                {/* only active (non-suspended) people toggled ON in the budget config */}
-                {summary.filter(sm => sm.in_budget && !sm.suspended).map(sm => (
-                  <option key={sm.profile_id} value={sm.profile_id}>{profiles[sm.profile_id]?.name || '—'}</option>
-                ))}
+                {/* This is a PEOPLE filter, not the budget list — the two are different
+                    questions and the page used to conflate them. Budgets exist for mileage
+                    and are sales-only, so anyone outside that (accounts, ops, admin,
+                    management) was unselectable here even with claims on screen: Maunang
+                    had 9 expenses and no way to filter to them. So: budgeted people, PLUS
+                    anyone who actually has a claim in the month being shown. */}
+                {(() => {
+                  const seen = new Set()
+                  const ids = []
+                  summary.filter(sm => sm.in_budget && !sm.suspended).forEach(sm => {
+                    if (!seen.has(sm.profile_id)) { seen.add(sm.profile_id); ids.push(sm.profile_id) }
+                  })
+                  rows.forEach(r => {
+                    if (r.profile_id && !seen.has(r.profile_id)) { seen.add(r.profile_id); ids.push(r.profile_id) }
+                  })
+                  return ids
+                    .map(id => ({ id, name: profiles[id]?.name || '—' }))
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(o => <option key={o.id} value={o.id}>{o.name}</option>)
+                })()}
               </select>
             ) : (
               cardLoc && <div className="exp-card-pill">{cardLoc}</div>
