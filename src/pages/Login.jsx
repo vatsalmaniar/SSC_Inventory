@@ -72,32 +72,23 @@ export default function Login() {
       return
     }
 
-    if (role === 'fc_kaveri' || role === 'fc_godawari') {
-      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading FC Module...' })
+    // /people is the home page for everyone. It is the one screen every role can open
+    // (see NAV_ITEMS 'people' in Layout) and the only one that greets a person with
+    // their own attendance, leave and claims rather than a module index.
+    //
+    // 'demo' is the single exception: it appears in NO nav item's roles, so Layout's
+    // accessDenied would hard-block /people. It keeps /dashboard, the only page it can
+    // open. Any new role must be added to the People nav list before it can land here.
+    if (role === 'demo') {
+      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading dashboard...' })
       setView('overlay')
-      setTimeout(() => navigate('/fc'), 1600)
+      setTimeout(() => navigate('/dashboard'), 1600)
       return
     }
 
-    // Warehouse / back office: People 360 is the only module they have, so send them
-    // there directly. /dashboard would render a single tile and read as broken.
-    if (role === 'staff') {
-      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading People...' })
-      setView('overlay')
-      setTimeout(() => navigate('/people'), 1600)
-      return
-    }
-
-    if (role === 'accounts') {
-      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading Billing Module...' })
-      setView('overlay')
-      setTimeout(() => navigate('/billing'), 1600)
-      return
-    }
-
-    setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading dashboard...' })
+    setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading People...' })
     setView('overlay')
-    setTimeout(() => navigate('/dashboard'), 1600)
+    setTimeout(() => navigate('/people'), 1600)
   }
 
   async function doLogin() {
