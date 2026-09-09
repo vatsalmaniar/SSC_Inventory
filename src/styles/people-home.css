@@ -1,0 +1,291 @@
+/* People home — BENTO LAYOUT ONLY.
+ *
+ * Scoped under .orders-app so it inherits the whole existing design language: the
+ * --o-* tokens, Geist, the #1a73e8 accent, the 14px radius, the 600-max weights.
+ * Nothing here introduces a new colour, font or weight — it only changes how the
+ * tiles are SIZED and PLACED, because a flat row of identical tiles read as an
+ * undifferentiated wall.
+ *
+ * Desktop shape (one visual line, mixed sizes):
+ *
+ *   ┌───┬───┬───┬───┬───┬──────────┐
+ *   │ s │ s │ s │ s │ s │          │   s = compact stat
+ *   ├───┴───┴───┴───┴───┤  agenda  │   wide = the anchor card
+ *   │        wide       │  (tall)  │
+ *   └───────────────────┴──────────┘
+ */
+
+.orders-app .ph-bento {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(290px, 330px);
+  gap: 12px;
+  margin-top: 4px;
+  align-items: stretch;
+}
+/* The anchor spans the five stat columns; the agenda spans both rows beside them. */
+.orders-app .ph-wide { grid-column: 1 / 6; min-width: 0; }
+.orders-app .ph-tall { grid-column: 6; grid-row: 1 / 3; min-width: 0; }
+
+/* ── compact stat ───────────────────────────────────────────────────────── */
+.orders-app .ph-stat {
+  background: var(--o-surface);
+  border: 1px solid var(--o-line);
+  border-radius: var(--o-radius);
+  box-shadow: var(--o-shadow);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.orders-app .ph-stat:hover { border-color: var(--o-muted-2); }
+.orders-app .ph-stat-l {
+  font-size: var(--fs-sm);
+  color: var(--o-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.orders-app .ph-stat-v {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.1;
+}
+/* Footer strip — the inset band that carries the context line. */
+.orders-app .ph-stat-f {
+  margin-top: auto;
+  background: var(--o-bg-2);
+  border: 1px solid var(--o-line-2);
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  color: var(--o-muted);
+  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.orders-app .ph-stat-f b { color: var(--o-ink); font-weight: var(--fw-semibold); }
+.orders-app .ph-stat.is-warn { border-left: 3px solid var(--o-warn); }
+
+/* ── wide anchor — a plain surface card, same as every other card ─────────── */
+.orders-app .ph-anchor {
+  background: var(--o-surface);
+  border: 1px solid var(--o-line);
+  border-radius: var(--o-radius);
+  box-shadow: var(--o-shadow);
+  padding: 18px 20px;
+  color: var(--o-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  overflow: hidden;
+}
+.orders-app .ph-anchor-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.orders-app .ph-anchor-eyebrow {
+  font-family: var(--mono);
+  font-size: var(--fs-eyebrow);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--o-muted);
+  margin-bottom: 5px;
+}
+.orders-app .ph-anchor-v { font-size: var(--fs-3xl); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-tight); line-height: 1; color: var(--o-ink); }
+.orders-app .ph-anchor-sub { font-size: 12px; color: var(--o-muted); margin-top: 5px; font-family: var(--mono); }
+
+/* inline stat set on the anchor */
+.orders-app .ph-anchor-stats { display: flex; gap: 22px; flex-wrap: wrap; }
+.orders-app .ph-as-l { font-size: 11px; color: var(--o-muted); font-family: var(--mono); letter-spacing: 0.03em; text-transform: uppercase; }
+.orders-app .ph-as-v { font-size: var(--fs-lg); font-weight: var(--fw-semibold); margin-top: 3px; color: var(--o-ink); }
+
+/* daily attendance — area + line, market-chart style */
+.orders-app .ph-chart { position: relative; margin-top: auto; }
+/* The line, the fill and the head dot all paint from currentColor, so the accent is
+   set once here instead of being hardcoded three times in the SVG. */
+.orders-app .ph-chart-svg { display: block; overflow: visible; color: var(--ssc-blue); }
+/* Points carry their own <title>; drawn at true pixel size so they stay circular. */
+.orders-app .ph-chart-pt  { fill: var(--o-surface); stroke: currentColor; stroke-width: 2; cursor: help; }
+.orders-app .ph-chart-head{ fill: currentColor; cursor: help; }
+.orders-app .ph-chart-base{ stroke: var(--o-line); stroke-width: 1; }
+.orders-app .ph-chart-axis {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--o-muted); margin-top: 6px;
+}
+.orders-app .ph-chart-empty {
+  margin-top: auto; padding: 22px 0 6px;
+  font-size: 12px; color: var(--o-muted); font-family: var(--mono);
+}
+
+/* ── tall agenda ─────────────────────────────────────────────────────────── */
+.orders-app .ph-agenda { display: flex; flex-direction: column; min-height: 0; }
+.orders-app .ph-agenda-list { overflow-y: auto; margin: 0 -20px -18px; padding: 0 20px 14px; }
+.orders-app .ph-ag-row { display: flex; align-items: center; gap: 11px; padding: 9px 0; border-top: 1px solid var(--o-line-2); }
+.orders-app .ph-ag-row:first-child { border-top: 0; }
+.orders-app .ph-ag-ic { width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0; background: var(--o-bg-2); display: grid; place-items: center; font-size: 15px; }
+.orders-app .ph-ag-b { min-width: 0; flex: 1; }
+.orders-app .ph-ag-n { font-size: 13px; font-weight: var(--fw-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orders-app .ph-ag-s { font-size: 11px; color: var(--o-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.orders-app .ph-ag-r { font-size: 11.5px; color: var(--o-muted); font-family: var(--mono); flex-shrink: 0; }
+.orders-app .ph-ag-r.is-soon { color: var(--ssc-blue); font-weight: var(--fw-semibold); }
+
+/* ── name chips (Always On Time) ─────────────────────────────────────────── */
+.orders-app .ph-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.orders-app .ph-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 100px;
+  background: rgba(16,185,129,0.10); color: #047857;
+  font-size: 12.5px; font-weight: var(--fw-medium);
+  white-space: nowrap; cursor: pointer;
+}
+.orders-app .ph-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--o-good); flex-shrink: 0; }
+
+/* ── responsive ──────────────────────────────────────────────────────────────
+   1280: agenda drops below, stats stay 5-across.
+   1040: stats go 3-across so they do not squeeze.
+   860:  2-across (the reference's own 2x2 shape).
+   560:  single column. */
+@media (max-width: 1280px) {
+  .orders-app .ph-bento { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .orders-app .ph-wide { grid-column: 1 / -1; }
+  .orders-app .ph-tall { grid-column: 1 / -1; grid-row: auto; }
+  .orders-app .ph-agenda-list { max-height: 320px; }
+}
+@media (max-width: 1040px) {
+  .orders-app .ph-bento { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .orders-app .ph-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .orders-app .ph-bento { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .orders-app .ph-anchor-stats { gap: 16px; }
+  .orders-app .ph-anchor-v { font-size: var(--fs-2xl); }
+}
+
+/* Person picker on the KPI card (admin / management only) */
+.orders-app .ph-picker {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--o-ink);
+  background: var(--o-surface);
+  border: 1px solid var(--o-line);
+  border-radius: 9px;
+  padding: 6px 10px;
+  cursor: pointer;
+  max-width: 220px;
+}
+.orders-app .ph-picker:hover { border-color: var(--o-muted-2); }
+
+/* ── in-tile mini picker (Expenses) ───────────────────────────────────────── */
+.orders-app .ph-stat-lrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.orders-app .ph-mini {
+  font: inherit; font-size: 11px; font-family: var(--mono);
+  color: var(--o-muted); background: var(--o-bg-2);
+  border: 1px solid var(--o-line-2); border-radius: 7px;
+  padding: 2px 5px; cursor: pointer; max-width: 108px;
+}
+.orders-app .ph-mini:hover { border-color: var(--o-muted-2); color: var(--o-ink); }
+
+/* ── ranked list (Most Absent / Most Late) — no bars ──────────────────────── */
+.orders-app .ph-rank { margin-top: 4px; }
+.orders-app .ph-rank-row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 0; border-top: 1px solid var(--o-line-2); cursor: pointer;
+}
+.orders-app .ph-rank-row:first-child { border-top: 0; }
+.orders-app .ph-rank-n {
+  width: 20px; height: 20px; flex-shrink: 0; border-radius: 6px;
+  background: var(--o-bg-2); color: var(--o-muted);
+  font-family: var(--mono); font-size: 10.5px;
+  display: grid; place-items: center;
+}
+.orders-app .ph-rank-name { flex: 1; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orders-app .ph-rank-v { font-family: var(--mono); font-size: 13px; font-weight: var(--fw-semibold); flex-shrink: 0; }
+.orders-app .ph-rank-v small { font-weight: var(--fw-regular); opacity: .65; margin-left: 1px; }
+.orders-app .ph-rank-v.is-bad  { color: #C2255C; }
+.orders-app .ph-rank-v.is-warn { color: #C25A00; }
+
+/* ── KPI scorecard — dial + point pills (not a bar list) ──────────────────── */
+.orders-app .ph-score { display: flex; align-items: flex-start; gap: 20px; margin-top: 6px; flex-wrap: wrap; }
+.orders-app .ph-score-dial {
+  --pct: 0;
+  width: 104px; height: 104px; flex-shrink: 0; border-radius: 50%;
+  display: grid; place-items: center;
+  background: conic-gradient(var(--ssc-blue) calc(var(--pct) * 360deg), var(--o-bg-2) 0);
+}
+.orders-app .ph-score-inner {
+  width: 78px; height: 78px; border-radius: 50%;
+  background: var(--o-surface);
+  display: grid; place-items: center; text-align: center;
+}
+.orders-app .ph-score-n  { font-size: var(--fs-xl); font-weight: var(--fw-semibold); line-height: 1; }
+.orders-app .ph-score-of { font-size: 10.5px; color: var(--o-muted); font-family: var(--mono); margin-top: 2px; }
+.orders-app .ph-score-grid {
+  flex: 1; min-width: 220px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px;
+}
+.orders-app .ph-kpi-pill {
+  border: 1px solid var(--o-line); border-left-width: 3px;
+  border-radius: 9px; padding: 8px 10px; background: var(--o-bg-2);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.orders-app .ph-kpi-pill.is-good { border-left-color: var(--o-good); }
+.orders-app .ph-kpi-pill.is-warn { border-left-color: var(--o-warn); }
+.orders-app .ph-kpi-pill.is-bad  { border-left-color: #C2255C; }
+.orders-app .ph-kpi-l { font-size: 11.5px; color: var(--o-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orders-app .ph-kpi-p { font-family: var(--mono); font-size: 13px; font-weight: var(--fw-semibold); flex-shrink: 0; }
+.orders-app .ph-kpi-p small { font-weight: var(--fw-regular); color: var(--o-muted); }
+
+/* ── monthly expense columns ──────────────────────────────────────────────── */
+.orders-app .ph-cols {
+  display: flex; align-items: stretch; gap: 10px;
+  height: 190px; margin-top: 8px;
+}
+.orders-app .ph-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.orders-app .ph-col-v {
+  font-family: var(--mono); font-size: 10.5px; color: var(--o-muted);
+  text-align: center; height: 14px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.orders-app .ph-col-track { flex: 1; display: flex; align-items: flex-end; }
+.orders-app .ph-col-fill {
+  width: 100%; border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, var(--ssc-blue) 0%, #4f9bf0 100%);
+  transition: height .25s ease;
+}
+/* Current month is still accruing — hatched so a short bar is not read as a drop. */
+.orders-app .ph-col-fill.is-partial {
+  background: repeating-linear-gradient(135deg,
+    rgba(26,115,232,0.55) 0 5px, rgba(26,115,232,0.18) 5px 10px);
+  border: 1px solid rgba(26,115,232,0.45);
+}
+.orders-app .ph-col-l {
+  font-family: var(--mono); font-size: 10.5px; color: var(--o-muted);
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 560px) {
+  .orders-app .ph-cols { height: 150px; gap: 5px; }
+  .orders-app .ph-col-v { display: none; }
+}
+
+/* ── left column: department panel + recent joiners stacked ───────────────── */
+.orders-app .ph-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.orders-app .ph-join-row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 0; border-top: 1px solid var(--o-line-2); cursor: pointer;
+}
+.orders-app .ph-join-row:first-child { border-top: 0; }
+.orders-app .ph-join-av {
+  width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; color: #fff;
+  display: grid; place-items: center; font-size: 12px; font-weight: var(--fw-semibold);
+}
+.orders-app .ph-join-n { font-size: 13px; font-weight: var(--fw-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orders-app .ph-join-s { font-size: 11px; color: var(--o-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orders-app .ph-join-d { font-size: 11.5px; color: var(--o-muted); font-family: var(--mono); flex-shrink: 0; }

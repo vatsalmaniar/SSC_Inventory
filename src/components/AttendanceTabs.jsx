@@ -5,7 +5,6 @@ export default function AttendanceTabs({ role, isManager }) {
   const loc = useLocation()
   const isMgmt = ['admin', 'management'].includes(role)
   const tabs = [
-    { k: '/people/attendance', l: 'Dashboard' },
     { k: '/people/attendance/me', l: 'My Attendance' },
     { k: '/people/attendance/leave', l: 'Leave' },
     { k: '/people/attendance/regularize', l: 'Regularize' },

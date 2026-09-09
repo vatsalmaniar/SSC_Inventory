@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
@@ -60,6 +60,9 @@ export default function PeopleLeave() {
   const [inbox, setInbox] = useState([])
   const [holidays, setHolidays] = useState(new Set())
   const [show, setShow] = useState(false)
+  // /people/attendance/leave?apply=1 opens the form straight away, so the "+ Leave"
+  // button on the People home lands on the form the way "New Order" does.
+  const [sp, setSp] = useSearchParams()
   const [policy, setPolicy] = useState(false)
   const [form, setForm] = useState({ from:'', to:'', is_half:false, half_period:'first', reason_type:'personal', reason:'' })
   const guard = useRef(false)
@@ -158,6 +161,13 @@ export default function PeopleLeave() {
   // THAT person's balance tile + ledger; empty selection = me.
   const viewed = teamSel ? (teamRows || []).find(x => x.emp.id === teamSel) : null
   const viewingOther = !!viewed && teamSel !== meId
+
+  useEffect(() => {
+    if (sp.get('apply') !== '1' || !meId || viewingOther) return
+    setShow(true)
+    // Drop the param so a refresh or a back-navigation does not reopen the form.
+    const next = new URLSearchParams(sp); next.delete('apply'); setSp(next, { replace: true })
+  }, [sp, meId, viewingOther, setSp])
   const viewLedger = viewed ? viewed.ledger : myLedger
   const viewBal = viewed ? viewed.bal : bal
   const viewBalNum = viewLedger && !viewLedger.noBalance ? viewLedger.closing : null
@@ -252,8 +262,8 @@ export default function PeopleLeave() {
       <div className="people-app">
         <div className="ph">
           <div>
-            <button onClick={()=>navigate('/people/attendance')} style={{background:'none',border:0,cursor:'pointer',color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:4,fontSize:13,padding:0,marginBottom:4}}>
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>Attendance
+            <button onClick={()=>navigate('/people')} style={{background:'none',border:0,cursor:'pointer',color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:4,fontSize:13,padding:0,marginBottom:4}}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
             </button>
             <h1 className="ph-title">Leave</h1>
             <div className="ph-sub">Financial year {currentFyLabel()} · one combined leave pool</div>

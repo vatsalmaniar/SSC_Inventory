@@ -115,11 +115,11 @@ export default function PunchButton() {
 
   return (
     <>
-      <button onClick={openPunch} title="Check in / out"
-        style={{display:'inline-flex',alignItems:'center',gap:7,height:34,padding:'0 12px',borderRadius:8,cursor:'pointer',
-          font:'inherit',fontSize:13,fontWeight:500,color:'#0B1B30',background:'#fff',border:'1px solid #E8EBF0',whiteSpace:'nowrap'}}>
-        <span style={{width:7,height:7,borderRadius:'50%',flexShrink:0,background:isOut?'#F59E0B':'#1a73e8'}} />
-        Check {isOut ? 'Out' : 'In'}
+      <button onClick={openPunch} aria-label={`Check ${isOut ? 'out' : 'in'}`}
+        title={isOut ? 'Check out — you are currently checked in' : 'Check in'}
+        className={`ly-punch-btn${isOut ? ' is-out' : ''}`}>
+        <span className="ly-punch-dot" />
+        <span className="ly-punch-label">Check {isOut ? 'Out' : 'In'}</span>
       </button>
 
       {camOpen && createPortal(

@@ -52,7 +52,6 @@ const GRNDetail = lazy(() => import('./pages/GRNDetail'))
 const StockTransferList = lazy(() => import('./pages/StockTransferList'))
 const NewStockTransfer = lazy(() => import('./pages/NewStockTransfer'))
 const StockTransferDetail = lazy(() => import('./pages/StockTransferDetail'))
-const PeopleHub = lazy(() => import('./pages/PeopleHub'))
 const PeopleKpi = lazy(() => import('./pages/PeopleKpi'))
 const PeopleKpiConfig = lazy(() => import('./pages/PeopleKpiConfig'))
 const PeopleExpenses = lazy(() => import('./pages/PeopleExpenses'))
@@ -62,7 +61,7 @@ const EmployeeDetail = lazy(() => import('./pages/EmployeeDetail'))
 const PeopleOrg = lazy(() => import('./pages/PeopleOrg'))
 const PeopleAssets = lazy(() => import('./pages/PeopleAssets'))
 const PeopleConfig = lazy(() => import('./pages/PeopleConfig'))
-const PeopleAttendance = lazy(() => import('./pages/PeopleAttendance'))
+const PeopleHome = lazy(() => import('./pages/PeopleHome'))
 const PeopleMyAttendance = lazy(() => import('./pages/PeopleMyAttendance'))
 const PeopleLeave = lazy(() => import('./pages/PeopleLeave'))
 const SalaryCalculator = lazy(() => import('./pages/SalaryCalculator'))
@@ -149,7 +148,7 @@ export default function App() {
           <Route path="/fc/transfers" element={<StockTransferList />} />
           <Route path="/fc/transfers/new" element={<NewStockTransfer />} />
           <Route path="/fc/transfers/:id" element={<StockTransferDetail />} />
-          <Route path="/people" element={<PeopleHub />} />
+          <Route path="/people" element={<PeopleHome />} />
           <Route path="/people/team" element={<PeopleTeam />} />
           <Route path="/people/team/:id" element={<EmployeeDetail />} />
           <Route path="/people/org" element={<PeopleOrg />} />
@@ -157,7 +156,7 @@ export default function App() {
           <Route path="/people/config" element={<PeopleConfig />} />
           <Route path="/people/salary-calculator" element={<SalaryCalculator />} />
           <Route path="/people/handbook" element={<Handbook />} />
-          <Route path="/people/attendance" element={<PeopleAttendance />} />
+          <Route path="/people/attendance" element={<Navigate to="/people/attendance/me" replace />} />
           <Route path="/people/attendance/me" element={<PeopleMyAttendance />} />
           <Route path="/people/attendance/leave" element={<PeopleLeave />} />
           <Route path="/people/attendance/regularize" element={<PeopleRegularize />} />

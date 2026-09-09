@@ -521,6 +521,38 @@ html.has-celebration .ly-main    { min-height: calc(100vh - var(--cel-h)); }
   background: #fafafa;
 }
 
+/* Attendance punch — lives in the topbar beside the bell, so it takes the SAME
+   chip palette as .ly-bell-btn / .ly-user-chip. It used to be a white #E8EBF0 box,
+   which read as a stray tile dropped among the round controls. */
+.ly-punch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: 24px;
+  border: 1px solid #e4e8f3;
+  background: #f4f6fb;
+  color: #4b5c8a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.ly-punch-btn:hover { background: #eaeffa; color: #1a73e8; border-color: #d7deef; }
+.ly-punch-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #1a73e8;
+}
+/* Checked in → the next action is Check Out. Amber marks "you are on the clock". */
+.ly-punch-btn.is-out .ly-punch-dot { background: #f59e0b; }
+.ly-punch-btn.is-out:hover { color: #b45309; }
+
 /* ══════════════════════════════════════
    RESPONSIVE SHELL
    ≤820px: sidebar becomes an off-canvas drawer; topbar reflows.
@@ -626,6 +658,10 @@ html.has-celebration .ly-main    { min-height: calc(100vh - var(--cel-h)); }
   .ly-topbar-sep { display: none; }
   .ly-user-name { display: none; }
   .ly-user-chip { padding: 4px; }
+  /* Punch collapses to a dot-only circle — same footprint as the bell at 390px.
+     The title attribute keeps it labelled for screen readers and on hover. */
+  .ly-punch-label { display: none; }
+  .ly-punch-btn { width: 36px; padding: 0; justify-content: center; border-radius: 50%; }
   .ly-notif-dropdown { width: min(320px, calc(100vw - 20px)); }
   .ly-user-menu { width: min(280px, calc(100vw - 20px)); }
 }
