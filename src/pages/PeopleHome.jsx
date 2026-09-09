@@ -9,6 +9,8 @@ import { fmtMoneyShort } from '../lib/fmt'
 import { currentFyLabel, fyRange, scoreFor, computeDerived, fmtVal } from '../lib/kpi'
 import Layout from '../components/Layout'
 import StatusDonut from '../components/StatusDonut'
+import Stat from '../components/StatTile'
+import LeavePolicyDrawer from '../components/LeavePolicyDrawer'
 import '../styles/orders-redesign.css'
 import '../styles/people-home.css'
 
@@ -38,6 +40,7 @@ export default function PeopleHome() {
   const [exp, setExp] = useState(null)       // { rows, month, uid } — this month only
   const [expWho, setExpWho] = useState('all')// 'all' | profile_id
   const [pickable, setPickable] = useState(null)
+  const [policy, setPolicy] = useState(false)   // Leave & LOP drawer
 
   useEffect(() => { init() }, [])
 
@@ -67,6 +70,7 @@ export default function PeopleHome() {
       fetchAll((f,t) => sb.from('expenses').select('id,status,amount,approved_amount,profile_id,month_start')
         .gte('month_start', fyStart).eq('is_test', false).order('month_start').order('id').range(f,t))
         .then(r => r.data || []).catch(() => []),
+      // assigned_to is the RETURN date; null = still issued to someone.
       safe(sb.from('asset_assignments').select('id').is('assigned_to', null)),
       // Upcoming holidays: the table is readable by any signed-in user (hol_read).
       safe(sb.from('holidays').select('id,holiday_date,name').eq('is_active', true).gte('holiday_date', today).order('holiday_date').limit(5)),
@@ -447,6 +451,17 @@ export default function PeopleHome() {
           <div className="page-meta">
             <div className="meta-pill live"><span className="meta-dot"/> Live</div>
             <button className="btn-ghost" onClick={() => navigate('/people/attendance')}>Attendance</button>
+            {/* Both of these were on the old People page and my rebuild dropped them, so
+                the handbook and the leave rules were unreachable from here. Same buttons
+                as the My Attendance header. */}
+            <button className="ph-link" onClick={()=>setPolicy(true)} title="How leave & LOP work">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
+              Leave &amp; LOP
+            </button>
+            <button className="ph-link" onClick={()=>navigate('/people/handbook')} title="Employee Handbook">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4h9a2 2 0 0 1 2 2v10a1.5 1.5 0 0 0-1.5-1.5H4z" strokeLinejoin="round"/><path d="M4 4v11"/></svg>
+              Handbook
+            </button>
             <button className="btn-primary" onClick={() => navigate('/people/attendance/leave?apply=1')}>
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
               Leave
@@ -645,10 +660,11 @@ export default function PeopleHome() {
                 <div className="rp-foot" style={{gridTemplateColumns:'repeat(3, 1fr)'}}>
                   <div className="rp-foot-cell"><div className="rp-foot-label">DEPARTMENTS</div><div className="rp-foot-val">{deptAgg.length}</div></div>
                   <div className="rp-foot-cell"><div className="rp-foot-label">HEADCOUNT</div><div className="rp-foot-val">{headcount}</div></div>
-                  {/* This counts asset_assignments rows with assigned_to IS NULL, i.e. kit
-                      that is NOT with anyone. The old tile showed the same number labelled
-                      "Devices Assigned · in use", which said the exact opposite. */}
-                  <div className="rp-foot-cell" style={{cursor:'pointer'}} onClick={()=>navigate('/people/assets')}><div className="rp-foot-label">UNASSIGNED KIT</div><div className="rp-foot-val">{data.devices}</div></div>
+                  {/* asset_assignments.assigned_to is a DATE — the day the device came
+                      back — NOT a person. So `assigned_to IS NULL` means the device is
+                      STILL ISSUED. I previously read it as "nobody has it" and relabelled
+                      this tile "unassigned", which inverted a correct figure. */}
+                  <div className="rp-foot-cell" style={{cursor:'pointer'}} onClick={()=>navigate('/people/assets')}><div className="rp-foot-label">DEVICES IN USE</div><div className="rp-foot-val">{data.devices}</div></div>
                 </div>
               </div>
 
@@ -763,6 +779,7 @@ export default function PeopleHome() {
           </>
         )}
       </div>
+      <LeavePolicyDrawer open={policy} onClose={()=>setPolicy(false)} />
     </Layout>
   )
 }
@@ -786,17 +803,6 @@ function ExpenseColumns({ series }) {
           <div className="ph-col-l">{m.label}{m.partial ? ' · MTD' : ''}</div>
         </div>
       ))}
-    </div>
-  )
-}
-
-// Compact bento stat.
-function Stat({ label, value, foot, warn, onClick }) {
-  return (
-    <div className={`ph-stat${warn ? ' is-warn' : ''}`} onClick={onClick}>
-      <div className="ph-stat-l">{label}</div>
-      <div className="ph-stat-v">{value}</div>
-      <div className="ph-stat-f">{foot}</div>
     </div>
   )
 }

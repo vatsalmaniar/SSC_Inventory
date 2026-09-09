@@ -8,8 +8,10 @@ import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { signPhotos } from '../lib/photos'
 import Layout from '../components/Layout'
-import { AssetsSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
+import '../styles/orders-redesign.css'
+import '../styles/people-home.css'
+import Stat from '../components/StatTile'
 
 const TYPES = ['Laptop','Desktop','Mobile','Tablet','Monitor','Printer','Scanner','SIM','Other']
 const STICKERS = ['Asset Tag','QR Code','Barcode','None']
@@ -194,46 +196,56 @@ export default function PeopleAssets() {
   }
 
   if (denied) return (
-    <Layout pageKey="people" pageTitle="Devices"><div className="people-app"><div className="e-empty">This page is restricted to Admin &amp; Management.</div></div></Layout>
+    <Layout pageKey="people" pageTitle="Devices"><div className="orders-app"><div className="o-empty">This page is restricted to Admin &amp; Management.</div></div></Layout>
   )
-  if (loading) return <Layout pageKey="people" pageTitle="Devices"><div className="people-app"><AssetsSkeleton /></div></Layout>
-
-  const Sel = ({ value, onChange, children }) => <div className="f-sel"><select value={value} onChange={e=>onChange(e.target.value)}>{children}</select></div>
+  if (loading) return <Layout pageKey="people" pageTitle="Devices"><div className="orders-app"><div className="o-loading">Loading devices…</div></div></Layout>
 
   return (
     <Layout pageKey="people" pageTitle="Devices">
-      <div className="people-app">
-        <div className="ph">
+      <div className="orders-app">
+        <div className="page-head">
           <div>
-            <button onClick={()=>navigate('/people')} style={{background:'none',border:0,cursor:'pointer',color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:4,fontSize:13,padding:0,marginBottom:4}}>
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
+            <button className="ph-back" onClick={()=>navigate('/people')}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
             </button>
-            <h1 className="ph-title">Devices</h1>
-            <div className="ph-sub">Company device register — add devices, then assign to people</div>
+            <h1 className="page-title">Devices</h1>
+            <div className="page-sub">Company device register — add devices, then assign to people</div>
           </div>
-          <div className="ph-actions">
-            <button className="btn btn-primary" onClick={openAdd}>
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M8 3v10M3 8h10" strokeLinecap="round"/></svg>Add Device
+          <div className="page-meta">
+            <button className="btn-primary" onClick={openAdd}>
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
+              Add Device
             </button>
           </div>
         </div>
 
-        <div className="astats">
-          <div className="astat"><div className="astat-l">Total Devices</div><div className="astat-v">{stats.total}</div></div>
-          <div className="astat"><div className="astat-l">Assigned</div><div className="astat-v" style={{color:'var(--accent)'}}>{stats.assigned}</div></div>
-          <div className="astat"><div className="astat-l">Unassigned</div><div className="astat-v">{stats.free}</div></div>
-          <div className="astat"><div className="astat-l">In Repair</div><div className="astat-v" style={{color:'var(--crit)'}}>{stats.repair}</div></div>
+        <div className="ph-bento lv-bento">
+          <Stat label="Total devices" value={stats.total} foot="in the register" />
+          <Stat label="Assigned" value={stats.assigned}
+            foot={stats.total ? `${Math.round((stats.assigned / stats.total) * 100)}% of the fleet` : '—'} />
+          <Stat label="Unassigned" value={stats.free} foot={stats.free > 0 ? 'available to issue' : 'all issued'} />
+          <Stat label="In repair" value={stats.repair} warn={stats.repair > 0}
+            foot={stats.repair > 0 ? 'out of service' : 'none in repair'} />
+          <Stat label="Types" value={new Set(assets.map(a => a.asset_type).filter(Boolean)).size} foot="device categories" />
         </div>
 
-        <div className="filters">
-          <div className="f-search">
+        <div className="ph-filters">
+          <span className="ph-search">
             <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M11 11 L14 14"/></svg>
             <input placeholder="Search by tag, name, model, serial…" value={search} onChange={e=>setSearch(e.target.value)} />
-          </div>
-          <Sel value={fType} onChange={setFType}><option value="all">All Types</option>{TYPES.map(t=><option key={t}>{t}</option>)}</Sel>
-          <Sel value={fAssigned} onChange={setFAssigned}><option value="all">All</option><option value="assigned">Assigned</option><option value="free">Unassigned</option></Sel>
+          </span>
+          <select className="ph-picker" value={fType} onChange={e=>setFType(e.target.value)}>
+            <option value="all">All Types</option>{TYPES.map(t=><option key={t}>{t}</option>)}
+          </select>
+          <select className="ph-picker" value={fAssigned} onChange={e=>setFAssigned(e.target.value)}>
+            <option value="all">All</option><option value="assigned">Assigned</option><option value="free">Unassigned</option>
+          </select>
+          <span className="ph-count"><b>{filtered.length}</b> shown</span>
         </div>
 
+        {/* The device table is a bespoke div-grid with its own classes; it keeps its own
+            shell so every one of them still resolves. */}
+        <div className="people-app">
         <div className="card">
           <div className="tbl-wrap">
             <div style={{minWidth:1040}}>
@@ -259,8 +271,11 @@ export default function PeopleAssets() {
                       {a.sticker_type || '—'}{a.serial_no && <div className="a-sub">{a.serial_no}</div>}
                     </div>
                     <div>
-                      <div className="f-sel" style={{display:'inline-block'}}>
-                        <select value={a.condition||'returned'} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();setCondition(a, e.target.value)}} style={{padding:'6px 28px 6px 10px',fontSize:12}}>
+                      {/* Fills its cell rather than sizing to "Spare / Returned" — as an
+                          inline-block it grew past the 120px column and ran under the
+                          avatar in the next one. */}
+                      <div className="f-sel" style={{display:'block',minWidth:0}}>
+                        <select value={a.condition||'returned'} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();setCondition(a, e.target.value)}} style={{padding:'6px 26px 6px 10px',fontSize:12,width:'100%',maxWidth:'100%'}}>
                           <option value="inuse">In use</option><option value="repair">In repair</option><option value="returned">Spare / Returned</option>
                         </select>
                       </div>
@@ -280,6 +295,7 @@ export default function PeopleAssets() {
               })}
             </div>
           </div>
+        </div>
         </div>
       </div>
 

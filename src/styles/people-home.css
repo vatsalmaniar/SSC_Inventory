@@ -17,6 +17,7 @@
 
 .orders-app .ph-bento {
   display: grid;
+  margin-bottom: 16px;
   grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(290px, 330px);
   gap: 12px;
   margin-top: 4px;
@@ -26,51 +27,44 @@
 .orders-app .ph-wide { grid-column: 1 / 6; min-width: 0; }
 .orders-app .ph-tall { grid-column: 6; grid-row: 1 / 3; min-width: 0; }
 
-/* ── compact stat ───────────────────────────────────────────────────────── */
+/* ── compact stat ───────────────────────────────────────────────────────────
+   Sized to match .kpi-tile in orders-redesign.css exactly -- 22px value, 10px
+   uppercase label, 12x14 padding, 11px radius, 100px min-height. The first pass
+   used a 30px value, a 13px label and an inset footer band, which made these
+   noticeably larger than every other tile in the app. */
 .orders-app .ph-stat {
+  position: relative;
   background: var(--o-surface);
   border: 1px solid var(--o-line);
-  border-radius: var(--o-radius);
-  box-shadow: var(--o-shadow);
-  padding: 14px 16px;
+  border-radius: 11px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  min-height: 100px;
   min-width: 0;
   cursor: pointer;
   transition: border-color .15s;
 }
 .orders-app .ph-stat:hover { border-color: var(--o-muted-2); }
 .orders-app .ph-stat-l {
-  font-size: var(--fs-sm);
-  color: var(--o-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--o-muted); font-weight: var(--fw-medium);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .orders-app .ph-stat-v {
-  font-size: var(--fs-2xl);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--tracking-tight);
-  line-height: 1.1;
+  font-size: 22px; font-weight: var(--fw-semibold);
+  letter-spacing: -0.025em; line-height: 1; color: var(--o-ink);
 }
-/* Footer strip — the inset band that carries the context line. */
+.orders-app .ph-stat-v small { font-size: 12px; font-weight: var(--fw-regular); color: var(--o-muted-2); }
+/* Plain caption, like .kt-sub -- no inset band, which was pure added height. */
 .orders-app .ph-stat-f {
-  margin-top: auto;
-  background: var(--o-bg-2);
-  border: 1px solid var(--o-line-2);
-  border-radius: 9px;
-  padding: 7px 10px;
-  font-size: 11.5px;
-  color: var(--o-muted);
+  margin-top: auto; font-size: 10.5px; color: var(--o-muted-2);
   font-family: var(--mono);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  overflow: hidden;
+  display: flex; align-items: center; gap: 6px;
+  min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
-.orders-app .ph-stat-f b { color: var(--o-ink); font-weight: var(--fw-semibold); }
+.orders-app .ph-stat-f b { color: var(--o-muted); font-weight: var(--fw-semibold); }
 .orders-app .ph-stat.is-warn { border-left: 3px solid var(--o-warn); }
 
 /* ── wide anchor — a plain surface card, same as every other card ─────────── */
@@ -289,3 +283,550 @@
 .orders-app .ph-join-n { font-size: 13px; font-weight: var(--fw-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .orders-app .ph-join-s { font-size: 11px; color: var(--o-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .orders-app .ph-join-d { font-size: 11.5px; color: var(--o-muted); font-family: var(--mono); flex-shrink: 0; }
+
+/* ── people-module variable aliases for .orders-app ───────────────────────────
+   LeaveLedger, PeoplePager and friends are written against the people-module token
+   names (--ink, --muted, --st-present ...), and those are declared ONLY on
+   .people-app in attendance-ui.css. Rendered inside .orders-app every one of them
+   resolved to nothing -- which is why the ledger lost its red debits and green
+   credits along with its greys and rules.
+   attendance-ui.css states these are the EXACT order-module tokens, so this maps
+   them 1:1 onto the --o-* equivalents. Nothing here overrides an existing
+   .orders-app variable; these names are not otherwise declared in that scope. */
+.orders-app {
+  --ink: var(--o-ink);
+  --muted: var(--o-muted);
+  --muted-2: var(--o-muted-2);
+  --line: var(--o-line);
+  --line-2: var(--o-line-2);
+  --surface: var(--o-surface);
+  --bg: var(--o-bg);
+  --bg-2: var(--o-bg-2);
+  --accent: var(--ssc-blue);
+  --accent-soft: rgba(26,115,232,0.10);
+  --radius: var(--o-radius);
+  --shadow: var(--o-shadow);
+  /* locked status palette — same literals as attendance-ui.css */
+  --st-present: #10B981;
+  --st-half:    #B45309;
+  --st-absent:  #EF4444;
+  --st-leave:   #7C5CE0;
+  --st-holiday: #1a73e8;
+  --st-weekoff: #94A3B8;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   My Attendance — same bento language as the People home.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.orders-app .ph-stat.is-static { cursor: default; }
+.orders-app .ph-stat.is-static:hover { border-color: var(--o-line); }
+.orders-app .ph-stat-v small { font-size: var(--fs-sm); font-weight: var(--fw-regular); color: var(--o-muted); }
+
+/* back link + month input in the page head */
+.orders-app .ph-back {
+  background: none; border: 0; cursor: pointer; padding: 0; margin-bottom: 4px;
+  color: var(--o-muted); font: inherit; font-size: 13px;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.orders-app .ph-back:hover { color: var(--ssc-blue); }
+.orders-app .ph-back svg { width: 14px; height: 14px; }
+.orders-app .ph-month {
+  font: inherit; font-size: 12.5px; color: var(--o-ink);
+  background: var(--o-surface); border: 1px solid var(--o-line);
+  border-radius: 9px; padding: 6px 10px; cursor: pointer;
+}
+.orders-app .ph-month:hover { border-color: var(--o-muted-2); }
+
+/* reference line on the arrival chart */
+.orders-app .ph-chart-ref { stroke: var(--o-muted-2); stroke-width: 1; stroke-dasharray: 3 3; }
+.orders-app .ph-chart-reflabel { fill: var(--o-muted); font-family: var(--mono); font-size: 9.5px; }
+.orders-app .ph-chart-pt.is-bad { fill: #C2255C; stroke: #C2255C; }
+
+/* OT columns share the worked-hours strip */
+.orders-app .ph-col-fill.is-ot { background: linear-gradient(180deg, #0F926D 0%, #34D399 100%); }
+
+/* legend */
+.orders-app .ph-legend { display: flex; flex-wrap: wrap; gap: 10px; }
+.orders-app .ph-lg { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--o-muted); white-space: nowrap; }
+.orders-app .ph-lg-dot { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
+
+/* ── weekday-aligned calendar ─────────────────────────────────────────────── */
+.orders-app .ph-cal {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px; margin-top: 10px;
+}
+.orders-app .ph-cal-h {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--o-muted);
+  text-align: center; padding-bottom: 2px;
+}
+.orders-app .ph-cal-cell {
+  min-height: 68px; border-radius: 9px; padding: 4px;
+  border: 1px solid var(--o-line);
+  background: var(--o-surface);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; min-width: 0; position: relative;
+}
+.orders-app .ph-cal-cell.is-blank { border: 0; background: none; }
+.orders-app .ph-cal-d { font-size: 12.5px; font-weight: var(--fw-semibold); line-height: 1; }
+.orders-app .ph-cal-cell.is-today { box-shadow: 0 0 0 2px var(--ssc-blue); border-color: transparent; }
+/* A declared day (rainfall / WFH) is paid but not a normal attendance — mark it. */
+.orders-app .ph-cal-cell.is-decl::after {
+  content: ''; position: absolute; top: 4px; right: 4px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--ssc-blue);
+}
+.orders-app .ph-cal-cell.st-present  { background: rgba(16,185,129,0.12);  border-color: rgba(16,185,129,0.25);  color: #0F926D; }
+.orders-app .ph-cal-cell.st-half_day { background: rgba(245,158,11,0.12);  border-color: rgba(245,158,11,0.28);  color: #BA7D14; }
+.orders-app .ph-cal-cell.st-absent   { background: rgba(239,68,68,0.12);   border-color: rgba(239,68,68,0.25);   color: #B63A3F; }
+.orders-app .ph-cal-cell.st-leave    { background: rgba(139,92,246,0.12);  border-color: rgba(139,92,246,0.25);  color: #6B51C4; }
+.orders-app .ph-cal-cell.st-holiday  { background: rgba(26,115,232,0.12);  border-color: rgba(26,115,232,0.25);  color: #165DBA; }
+.orders-app .ph-cal-cell.st-weekoff  { background: var(--o-bg-2);          color: var(--o-muted-2); }
+.orders-app .ph-cal-cell.st-future   { background: var(--o-bg-2);          color: var(--o-muted-2); opacity: .55; }
+
+/* ── daily records table ──────────────────────────────────────────────────── */
+.orders-app .ph-tbl-wrap { overflow-x: auto; margin-top: 6px; }
+.orders-app .ph-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.orders-app .ph-tbl th {
+  text-align: left; font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--o-muted);
+  font-weight: var(--fw-regular); padding: 8px 10px; border-bottom: 1px solid var(--o-line);
+  white-space: nowrap;
+}
+.orders-app .ph-tbl td { padding: 9px 10px; border-bottom: 1px solid var(--o-line-2); white-space: nowrap; }
+.orders-app .ph-tbl tr:last-child td { border-bottom: 0; }
+.orders-app .ph-tbl tr.is-today td { background: rgba(26,115,232,0.05); }
+.orders-app .ph-tbl .r { text-align: right; }
+.orders-app .ph-tbl .b { font-weight: var(--fw-semibold); }
+.orders-app .ph-tbl .m { font-family: var(--mono); color: var(--o-muted); }
+.orders-app .ph-late { color: #C25A00; }
+.orders-app .ph-ot   { color: var(--ssc-blue); }
+
+/* Text link, not a button. The Leave page sets the reference: accent colour, no
+   chrome, small icon. Reference material (the handbook, the leave rules) should not
+   compete visually with the actions beside it. */
+.orders-app .ph-link {
+  background: none; border: 0; cursor: pointer; padding: 0;
+  color: var(--ssc-blue); font: inherit; font-size: 12.5px;
+  font-weight: var(--fw-medium);
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.orders-app .ph-link:hover { text-decoration: underline; }
+.orders-app .ph-link svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+@media (max-width: 560px) {
+  .orders-app .ph-cal { gap: 4px; }
+  .orders-app .ph-cal-t { font-size: 8px; }
+}
+
+/* ── attendance tabs under .orders-app ────────────────────────────────────────
+   .ptabs2/.ptab2 are defined in people.css scoped to .people-app. My Attendance
+   now renders inside .orders-app, so none of those rules reached it and the tabs
+   fell back to bare browser buttons. Same component, same look, expressed in the
+   orders tokens. The .people-app copy stays for the sub-pages still using it. */
+.orders-app .ptabs2 {
+  display: flex; gap: 2px;
+  border-bottom: 1px solid var(--o-line);
+  overflow-x: auto; margin-bottom: 16px;
+}
+.orders-app .ptabs2::-webkit-scrollbar { height: 0; }
+.orders-app .ptab2 {
+  position: relative; border: 0; background: transparent;
+  font: inherit; font-size: 13.5px; font-weight: var(--fw-medium);
+  color: var(--o-muted); padding: 11px 4px; margin: 0 14px;
+  cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.orders-app .ptab2:first-child { margin-left: 2px; }
+.orders-app .ptab2:hover { color: var(--o-ink); }
+.orders-app .ptab2.on { color: var(--ssc-blue); }
+.orders-app .ptab2.on::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 2.5px; border-radius: 3px 3px 0 0; background: var(--ssc-blue);
+}
+
+/* ── segmented Calendar / List toggle ─────────────────────────────────────── */
+.orders-app .ph-seg {
+  display: inline-flex; padding: 2px; gap: 2px;
+  background: var(--o-bg-2); border: 1px solid var(--o-line);
+  border-radius: 9px;
+}
+.orders-app .ph-seg button {
+  border: 0; background: transparent; cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: var(--fw-medium);
+  color: var(--o-muted); padding: 5px 12px; border-radius: 7px;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.orders-app .ph-seg button:hover { color: var(--o-ink); }
+.orders-app .ph-seg button.on {
+  background: var(--o-surface); color: var(--o-ink);
+  box-shadow: var(--o-shadow);
+}
+.orders-app .ph-seg svg { width: 13px; height: 13px; }
+
+/* ── raw swipes + regularization markers ──────────────────────────────────── */
+.orders-app .ph-swipes { white-space: normal; max-width: 240px; }
+.orders-app .ph-swipe {
+  display: inline-block; margin: 1px 4px 1px 0; padding: 2px 7px;
+  background: var(--o-bg-2); border: 1px solid var(--o-line-2);
+  border-radius: 6px; font-family: var(--mono); font-size: 11px;
+  color: var(--o-ink); white-space: nowrap;
+}
+.orders-app .ph-noswipe { color: var(--o-muted-2); font-style: italic; font-size: 11.5px; }
+/* R badge: solid = approved, hollow = still pending */
+.orders-app .ph-reg {
+  display: inline-grid; place-items: center; margin-left: 6px;
+  width: 15px; height: 15px; border-radius: 4px;
+  background: var(--ssc-blue); color: #fff;
+  font-family: var(--mono); font-size: 9.5px; font-weight: var(--fw-semibold);
+  vertical-align: middle;
+}
+.orders-app .ph-reg.is-pending { background: transparent; color: var(--o-warn); box-shadow: inset 0 0 0 1px var(--o-warn); }
+.orders-app .ph-regtime { color: var(--ssc-blue); margin-left: 5px; white-space: nowrap; }
+
+/* calendar cells now carry the times */
+.orders-app .ph-cal-t { font-family: var(--mono); font-size: 9px; line-height: 1.25; opacity: .9; }
+.orders-app .ph-cal-t.dim { opacity: .6; }
+.orders-app .ph-cal-r {
+  position: absolute; top: 3px; left: 4px;
+  font-family: var(--mono); font-size: 8.5px; font-weight: var(--fw-semibold);
+  color: var(--ssc-blue);
+}
+
+/* ── shared People components used inside .orders-app ─────────────────────────
+   LedgerCard (att-card*, e-empty, tbl-h), PeoplePager (p-*) and PeopleAvatar
+   (avatar) are styled in people.css / attendance-ui.css scoped to .people-app.
+   The Leave page now renders inside .orders-app, so those rules no longer reach
+   them. These are ADDITIVE mirrors expressed in the orders tokens -- the
+   .people-app originals are untouched, so EmployeeDetail and PeopleRegularize
+   keep exactly the styling they have today. */
+.orders-app .att-card {
+  background: var(--o-surface); border: 1px solid var(--o-line);
+  border-radius: var(--o-radius); box-shadow: var(--o-shadow);
+  padding: 18px 20px;
+}
+.orders-app .att-card-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
+.orders-app .att-card-t { font-size: var(--fs-card); font-weight: var(--fw-semibold); color: var(--o-ink); letter-spacing: var(--tracking-tight); }
+.orders-app .e-empty { padding: 40px 20px; text-align: center; color: var(--o-muted); font-size: 13px; }
+.orders-app .tbl-h {
+  font-family: var(--mono); font-size: 10px; color: var(--o-muted);
+  letter-spacing: 0.04em; text-transform: uppercase; font-weight: var(--fw-regular);
+}
+.orders-app .p-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 4px 0; font-size: 12px; color: var(--o-muted);
+  border-top: 1px solid var(--o-line-2); margin-top: 8px; flex-wrap: wrap; gap: 8px;
+}
+.orders-app .p-pages { display: flex; gap: 4px; flex-wrap: wrap; }
+.orders-app .p-page-btn {
+  padding: 5px 10px; border-radius: 6px; border: 1px solid var(--o-line);
+  background: var(--o-surface); cursor: pointer; color: var(--o-ink);
+  font: inherit; font-size: 12.5px;
+}
+.orders-app .p-page-btn:hover { border-color: var(--o-muted-2); }
+.orders-app .p-page-btn.on { background: var(--ssc-blue); border-color: var(--ssc-blue); color: #fff; }
+.orders-app .avatar {
+  border-radius: 50%; color: #fff; font-weight: var(--fw-semibold);
+  display: grid; place-items: center; flex-shrink: 0; overflow: hidden;
+  background-size: cover; background-position: center;
+}
+
+/* ── Leave page ───────────────────────────────────────────────────────────── */
+/* Five equal tiles, the same size as the People home row. The first version gave
+   the balance a full-width anchor with the stats stretched beside it, which blew
+   the tiles up to a third of the anchor's height each. */
+.orders-app .lv-bento { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.orders-app .lv-mini { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.orders-app .lv-mini-bar {
+  flex: 1; min-width: 24px; height: 5px; border-radius: 4px;
+  background: var(--o-line); overflow: hidden; display: block;
+}
+.orders-app .lv-mini-bar > span { display: block; height: 100%; border-radius: 4px; transition: width .3s ease; }
+
+/* request rows (approvals + my requests) */
+.orders-app .lv-req {
+  display: grid; grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) auto;
+  gap: 12px; align-items: center;
+  padding: 11px 0; border-top: 1px solid var(--o-line-2);
+}
+.orders-app .lv-req:first-of-type { border-top: 0; }
+.orders-app .lv-req-b { min-width: 0; }
+.orders-app .lv-req-n { font-size: 13.5px; font-weight: var(--fw-semibold); }
+.orders-app .lv-req-s { font-size: 11.5px; color: var(--o-muted); margin-top: 1px; }
+.orders-app .lv-req-s b { color: var(--o-ink); }
+.orders-app .lv-req-d { font-size: 12.5px; color: var(--o-muted); font-family: var(--mono); }
+.orders-app .lv-req-a { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.orders-app .btn-xs { padding: 4px 10px; font-size: 12px; border-radius: 7px; }
+
+/* team table employee cell */
+.orders-app .lv-emp { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.orders-app .lv-emp-n { font-size: 13px; font-weight: var(--fw-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orders-app .lv-emp-d { font-size: 11px; color: var(--o-muted); }
+
+@media (max-width: 1040px) { .orders-app .lv-bento { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 860px)  { .orders-app .lv-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) {
+  .orders-app .lv-bento { grid-template-columns: minmax(0, 1fr); }
+  .orders-app .lv-req { grid-template-columns: minmax(0,1fr); gap: 6px; }
+  .orders-app .lv-req-a { justify-content: flex-start; }
+}
+
+/* swipe chip label + reason cell (Regularize) */
+.orders-app .ph-swipe-l {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--o-muted-2); margin-right: 4px;
+}
+.orders-app .lv-reason {
+  font-size: 11.5px; color: var(--o-muted);
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* month input + clear, shared by My Attendance and Regularize */
+.orders-app .ph-monthwrap { display: inline-flex; align-items: center; gap: 6px; }
+.orders-app .ph-month-x {
+  border: 1px solid var(--o-line); background: var(--o-surface);
+  color: var(--o-muted); font: inherit; font-size: 11.5px;
+  padding: 5px 9px; border-radius: 8px; cursor: pointer;
+}
+.orders-app .ph-month-x:hover { color: var(--o-ink); border-color: var(--o-muted-2); }
+
+/* ── Swipes: filter row, method tags, map link ────────────────────────────── */
+.orders-app .ph-filters {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px;
+}
+.orders-app .ph-dash { font-size: 12px; color: var(--o-muted); }
+/* toggle chip (Late in) — same weight as a picker, on-state uses the warn tone */
+.orders-app .ph-chip {
+  font: inherit; font-size: 12.5px; cursor: pointer;
+  padding: 6px 11px; border-radius: 9px;
+  border: 1px solid var(--o-line); background: var(--o-surface); color: var(--o-muted);
+  white-space: nowrap;
+}
+.orders-app .ph-chip:hover { border-color: var(--o-muted-2); color: var(--o-ink); }
+.orders-app .ph-chip.on {
+  background: rgba(245,158,11,0.14); color: #BA7D14;
+  border-color: var(--o-warn); font-weight: var(--fw-semibold);
+}
+/* punch method */
+.orders-app .ph-tag {
+  display: inline-block; padding: 3px 9px; border-radius: 6px;
+  font-size: 11px; font-weight: var(--fw-medium); white-space: nowrap;
+}
+.orders-app .ph-tag.is-gps { background: rgba(16,185,129,0.12);  color: #0F926D; }
+.orders-app .ph-tag.is-bio { background: rgba(26,115,232,0.12);  color: #165DBA; }
+.orders-app .ph-tag.is-web { background: var(--o-bg-2);          color: var(--o-muted); }
+.orders-app .ph-loc { color: var(--ssc-blue); display: inline-flex; }
+.orders-app .ph-loc:hover { opacity: .75; }
+
+/* inline count beside a filter row */
+.orders-app .ph-count { font-size: 12.5px; color: var(--o-muted); white-space: nowrap; }
+.orders-app .ph-count b { color: var(--o-ink); font-size: 15px; font-weight: var(--fw-semibold); }
+
+/* ── Sync status ──────────────────────────────────────────────────────────── */
+.orders-app .sync-banner {
+  color: #fff; border-radius: var(--o-radius);
+  padding: 18px 22px; font-size: 18px; font-weight: var(--fw-semibold);
+  margin-bottom: 16px;
+}
+
+/* ── nested .kpi-app (Expenses claim surface) ─────────────────────────────────
+   .kpi-app is written as a PAGE container: padding 24/28/48, min-height 100vh and
+   its own background. Nested inside .orders-app that doubles the padding and adds a
+   full viewport of height below the claims, which is what made the list look inset
+   and adrift. Neutralise the container bits only — every --k* token and all 67
+   expense classes inside are untouched (and the palette already matches the orders
+   one 1:1, so nothing needs recolouring). */
+.orders-app .kpi-app {
+  padding: 0;
+  min-height: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+/* ── KPI metric entry ─────────────────────────────────────────────────────────
+   The tile used to be one big click-to-edit target, so reading a metric could
+   start an override; the value and points vanished while typing; and the only way
+   to commit was a tiny unlabelled tick. Editing is now an explicit action with a
+   real form row. */
+.orders-app .kpi-card.is-editing { outline: 2px solid var(--ssc-blue); outline-offset: -2px; }
+.orders-app .kpi-edit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.orders-app .kpi-edit-field {
+  flex: 1; min-width: 96px; display: flex; align-items: center; gap: 4px;
+  border: 1.5px solid var(--ssc-blue); border-radius: 7px;
+  background: var(--o-surface); padding: 0 8px;
+}
+.orders-app .kpi-edit-unit { font-family: var(--mono); font-size: 13px; color: var(--o-muted); }
+.orders-app .kpi-edit-field input {
+  flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+  padding: 7px 0; font: inherit; font-size: 14px; font-family: var(--mono); color: var(--o-ink);
+}
+.orders-app .kpi-btn {
+  font: inherit; font-size: 12px; font-weight: var(--fw-medium); cursor: pointer;
+  padding: 7px 11px; border-radius: 7px;
+  border: 1px solid var(--o-line); background: var(--o-surface); color: var(--o-ink);
+  white-space: nowrap;
+}
+.orders-app .kpi-btn:hover { border-color: var(--o-muted-2); }
+.orders-app .kpi-btn.primary { background: var(--ssc-blue); border-color: var(--ssc-blue); color: #fff; }
+.orders-app .kpi-btn.primary:hover { background: #174ea6; }
+.orders-app .kpi-btn:disabled { opacity: .6; cursor: wait; }
+.orders-app .kpi-edit-was {
+  flex-basis: 100%; font-family: var(--mono); font-size: 10.5px; color: var(--o-muted-2);
+}
+
+/* Dashboard at full width: the team panel moved to a header dropdown, so the metric
+   grid gets the whole row (~5 columns instead of ~3) and 12 metrics fit in far fewer
+   rows. The card is also no longer a click target, so drop the pointer cursor. */
+.orders-app .kpi-app .page-body { grid-template-columns: minmax(0, 1fr); }
+.orders-app .kpi-app .kpi-card { cursor: default; }
+.orders-app .kpi-app .kpi-card:hover { transform: none; border-color: var(--kline); background: var(--kbg-2); }
+
+/* ── KPI dashboard layout ─────────────────────────────────────────────────────
+   Performance and the monthly trend share the top row; the metric matrix runs full
+   width beneath at 4 across; the KRA breakdown closes the page in landscape, where
+   the radar and bars have room side by side. Earlier arrangements squeezed the
+   matrix into ~3 columns beside a 320px panel, or crushed the radar into a narrow
+   sticky column. */
+.orders-app .kpi-app .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.orders-app .kpi-breakdown .kra-split { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 28px; }
+
+/* PWA / mobile — verified shape at 390px. */
+@media (max-width: 1200px) {
+  .orders-app .kpi-app .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .orders-app .kpi-app .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .orders-app .kpi-breakdown .kra-split { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+}
+@media (max-width: 560px) {
+  .orders-app .kpi-app .kpi-grid { grid-template-columns: minmax(0, 1fr); }
+  /* the trend SVG has a fixed 720-unit viewBox; scale it rather than overflow */
+  .orders-app .trend { width: 100%; height: auto; }
+}
+
+/* ── KPI metric entry ─────────────────────────────────────────────────────────
+   The tile used to be one big click-to-edit target, so reading a metric could
+   start an override; the value and points vanished while typing; and the only way
+   to commit was a tiny unlabelled tick. Editing is now an explicit action with a
+   real form row. */
+.orders-app .kpi-card.is-editing { outline: 2px solid var(--ssc-blue); outline-offset: -2px; }
+.orders-app .kpi-edit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.orders-app .kpi-edit-field {
+  flex: 1; min-width: 96px; display: flex; align-items: center; gap: 4px;
+  border: 1.5px solid var(--ssc-blue); border-radius: 7px;
+  background: var(--o-surface); padding: 0 8px;
+}
+.orders-app .kpi-edit-unit { font-family: var(--mono); font-size: 13px; color: var(--o-muted); }
+.orders-app .kpi-edit-field input {
+  flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+  padding: 7px 0; font: inherit; font-size: 14px; font-family: var(--mono); color: var(--o-ink);
+}
+.orders-app .kpi-btn {
+  font: inherit; font-size: 12px; font-weight: var(--fw-medium); cursor: pointer;
+  padding: 7px 11px; border-radius: 7px;
+  border: 1px solid var(--o-line); background: var(--o-surface); color: var(--o-ink);
+  white-space: nowrap;
+}
+.orders-app .kpi-btn:hover { border-color: var(--o-muted-2); }
+.orders-app .kpi-btn.primary { background: var(--ssc-blue); border-color: var(--ssc-blue); color: #fff; }
+.orders-app .kpi-btn.primary:hover { background: #174ea6; }
+.orders-app .kpi-btn:disabled { opacity: .6; cursor: wait; }
+.orders-app .kpi-edit-was {
+  flex-basis: 100%; font-family: var(--mono); font-size: 10.5px; color: var(--o-muted-2);
+}
+
+/* Dashboard at full width: the team panel moved to a header dropdown, so the metric
+   grid gets the whole row (~5 columns instead of ~3) and 12 metrics fit in far fewer
+   rows. The card is also no longer a click target, so drop the pointer cursor. */
+.orders-app .kpi-app .page-body { grid-template-columns: minmax(0, 1fr); }
+.orders-app .kpi-app .kpi-card { cursor: default; }
+.orders-app .kpi-app .kpi-card:hover { transform: none; border-color: var(--kline); background: var(--kbg-2); }
+
+
+
+/* search field in a filter row (Devices) */
+.orders-app .ph-search {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--o-line); background: var(--o-surface);
+  border-radius: 9px; padding: 0 10px; color: var(--o-muted);
+  min-width: 220px; flex: 1 1 220px; max-width: 340px;
+}
+.orders-app .ph-search:focus-within { border-color: var(--ssc-blue); }
+.orders-app .ph-search input {
+  flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+  font: inherit; font-size: 12.5px; color: var(--o-ink); padding: 7px 0;
+}
+
+/* ── Devices table row ────────────────────────────────────────────────────────
+   The condition column was 120px, too narrow for the "Spare / Returned" option
+   plus the chevron, so the select spilled into ASSIGNED TO and sat under the
+   avatar. Widen that column and give the holder cell room to truncate. */
+.orders-app .people-app .arow {
+  grid-template-columns: 130px minmax(150px, 1.4fr) 100px 140px 150px minmax(150px, 1fr) auto;
+}
+.orders-app .people-app .arow > div { min-width: 0; }
+.orders-app .people-app .a-holder {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-width: 0; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Dashboard: company overview embedded in the home page ────────────────────
+   The dashboard shell is .hd-content, not .orders-app, so the overview block
+   carries its own .orders-app wrapper to pick up the tokens and shared
+   components. dash-embed strips the page padding/background that wrapper would
+   otherwise add inside an existing page. */
+.orders-app.dash-embed {
+  padding: 0;
+  background: transparent;
+  min-height: 0;
+  overflow: visible;
+}
+/* The dashboard tile count varies by role (5 for sales, 11 for admin), so a fixed
+   5-column grid always left a ragged last row — 11 tiles gave two full rows plus one
+   tile beside four empty cells. Flex-wrap with grow means the final row stretches to
+   fill the width whatever the count. */
+.orders-app.dash-embed .ph-bento {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.orders-app.dash-embed .ph-bento > .ph-stat { flex: 1 1 172px; }
+
+/* Same for the chart row: cards grow to close any gap on the last line. */
+.dash-charts { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; margin-bottom: 18px; }
+.dash-charts > .card { flex: 1 1 300px; min-width: 0; }
+
+/* sales vs purchase comparison bars */
+.orders-app .dash-vs { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.orders-app .dash-vs-row { display: grid; grid-template-columns: 76px minmax(0,1fr) auto; gap: 12px; align-items: center; }
+.orders-app .dash-vs-l { font-size: 12.5px; color: var(--o-muted); white-space: nowrap; }
+.orders-app .dash-vs-track { height: 12px; border-radius: 7px; background: var(--o-bg-2); overflow: hidden; display: block; }
+.orders-app .dash-vs-track > span { display: block; height: 100%; border-radius: 7px; transition: width .3s ease; }
+.orders-app .dash-vs-v { font-family: var(--mono); font-size: 13px; font-weight: var(--fw-semibold); white-space: nowrap; }
+
+/* chart hover tooltip + cursor line */
+.orders-app .ph-chart-cursor { stroke: var(--o-muted-2); stroke-width: 1; stroke-dasharray: 3 3; }
+.orders-app .ph-chart-tip {
+  position: absolute; transform: translate(-50%, calc(-100% - 12px));
+  background: var(--o-ink); color: #fff;
+  border-radius: 8px; padding: 7px 10px;
+  pointer-events: none; white-space: nowrap; z-index: 3;
+  box-shadow: 0 6px 18px rgba(11,27,48,0.22);
+}
+.orders-app .ph-chart-tip-l {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em;
+  text-transform: uppercase; opacity: .7;
+}
+.orders-app .ph-chart-tip-v { font-size: 14px; font-weight: var(--fw-semibold); margin-top: 1px; }
+.orders-app .ph-chart-tip-n { font-size: 11px; opacity: .75; margin-top: 2px; }
+
+/* up/down delta beside a stat value */
+.orders-app .ph-delta {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-family: var(--mono); font-size: 11px; font-weight: var(--fw-semibold);
+  margin-left: 7px; vertical-align: middle;
+}
+.orders-app .ph-delta.up   { color: #0F926D; }
+.orders-app .ph-delta.down { color: #C2255C; }

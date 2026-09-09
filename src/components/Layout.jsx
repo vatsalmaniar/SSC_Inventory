@@ -361,6 +361,24 @@ export default function Layout({ children, pageTitle, pageKey }) {
       if (n.po_id) navigate('/procurement/po/' + n.po_id)
       return
     }
+    // People notifications. These carry no entity id — the table has order_id and po_id
+    // but nothing for a leave or regularization request — so the destination is read from
+    // the message text. Crude, but the alternative is a dead click, which is what these
+    // did before: approval_request had no branch at all and fell through to the order_id
+    // check, which is null for them.
+    if (['approval_request', 'approval_decision'].includes(n.email_type)) {
+      const msg = (n.message || '').toLowerCase()
+      if (msg.includes('regulariz') || msg.includes('punch')) { navigate('/people/attendance/regularize'); return }
+      if (msg.includes('leave')) { navigate('/people/attendance/leave'); return }
+      if (msg.includes('expense') || msg.includes('claim')) { navigate('/people/expenses'); return }
+      navigate('/people')
+      return
+    }
+    if (['birthday_self','birthday_team','anniv_self','anniv_team','welcome_self','welcome_team'].includes(n.email_type)) {
+      navigate('/people'); return
+    }
+    if (n.email_type === 'sync_down') { navigate('/people/attendance/status'); return }
+
     // Order-linked notifications.
     // FC roles are NOT on the Orders nav, so /orders/:id lands them on "access denied" —
     // which made every order bell useless to the two fulfilment centres. The same order

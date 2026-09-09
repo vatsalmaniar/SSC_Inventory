@@ -9,13 +9,15 @@ import { isWeekOff, istYmd, loadWeekOffOverrides, REQ_ST } from '../lib/attendan
 import { buildLedger, sandwichDays, deductFrom, fyStart, fyEnd } from '../lib/leaveLedger.js'
 import LedgerCard, { fetchLedgerInputs } from '../components/LeaveLedger'
 import PeoplePager from '../components/PeoplePager'
+import Stat from '../components/StatTile'
 import { fetchAll } from '../lib/fetchAll'
+import '../styles/orders-redesign.css'
+import '../styles/people-home.css'
 import { visibleEmployees } from '../lib/peopleScope'
 import Layout from '../components/Layout'
 import PeopleAvatar from '../components/PeopleAvatar'
 import AttendanceTabs from '../components/AttendanceTabs'
 import LeavePolicyDrawer from '../components/LeavePolicyDrawer'
-import { Spinner } from '../components/PeopleLoaders'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
 
@@ -255,71 +257,72 @@ export default function PeopleLeave() {
     finally { guard.current = false }
   }
 
-  if (loading) return <Layout pageKey="people" pageTitle="Leave"><div className="people-app"><Spinner /></div></Layout>
+  if (loading) return <Layout pageKey="people" pageTitle="Leave"><div className="orders-app"><div className="o-loading">Loading leave…</div></div></Layout>
 
   return (
     <Layout pageKey="people" pageTitle="Leave">
-      <div className="people-app">
-        <div className="ph">
+      <div className="orders-app">
+        <div className="page-head">
           <div>
-            <button onClick={()=>navigate('/people')} style={{background:'none',border:0,cursor:'pointer',color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:4,fontSize:13,padding:0,marginBottom:4}}>
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
+            <button className="ph-back" onClick={()=>navigate('/people')}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
             </button>
-            <h1 className="ph-title">Leave</h1>
-            <div className="ph-sub">Financial year {currentFyLabel()} · one combined leave pool</div>
+            <h1 className="page-title">Leave</h1>
+            <div className="page-sub">FY {currentFyLabel()} · one combined leave pool</div>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-            {teamRows && <div className="f-sel"><select value={teamSel} onChange={e=>setTeamSel(e.target.value)}>
-              <option value="">My leave</option>
-              {teamRows.map(t=><option key={t.emp.id} value={t.emp.id}>{t.emp.full_name}</option>)}
-            </select></div>}
-            {meId && !viewingOther && <button className="btn btn-primary" onClick={()=>setShow(true)}>+ Apply Leave</button>}
+          <div className="page-meta">
+            <button className="ph-link" onClick={()=>setPolicy(true)} title="How leave & LOP work">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
+              Leave &amp; LOP
+            </button>
+            <button className="ph-link" onClick={()=>navigate('/people/handbook')} title="Employee Handbook">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4h9a2 2 0 0 1 2 2v10a1.5 1.5 0 0 0-1.5-1.5H4z" strokeLinejoin="round"/><path d="M4 4v11"/></svg>
+              Handbook
+            </button>
+            {teamRows && (
+              <select className="ph-picker" value={teamSel} onChange={e=>setTeamSel(e.target.value)}>
+                <option value="">My leave</option>
+                {teamRows.map(t=><option key={t.emp.id} value={t.emp.id}>{t.emp.full_name}</option>)}
+              </select>
+            )}
+            {meId && !viewingOther && (
+              <button className="btn-primary" onClick={()=>setShow(true)}>
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
+                Apply Leave
+              </button>
+            )}
           </div>
         </div>
 
         <AttendanceTabs role={role} isManager={inbox.length>0 || isMgmt} />
 
-        {/* leave balance — single KPI tile */}
+        {/* Leave balance. Every figure below is read straight from buildLedger /
+            leave_balances -- the rebuild changed presentation only, no arithmetic. */}
         {(() => {
           const credited = viewBal ? Number(viewBal.credited)+Number(viewBal.carried_forward) : 25
           const used = viewBal ? Number(viewBal.used) : 0
           const carried = viewBal ? Number(viewBal.carried_forward) : 0
           const lop = viewBal ? Number(viewBal.lop_days||0) : 0
           const pct = credited>0 && viewBalNum!=null ? Math.max(0,Math.min(100, Math.round((viewBalNum/credited)*100))) : 0
-          // Traffic-light health (orders palette): ≤20% left = red, ≤50% = amber, else green
-          const health = viewBalNum == null ? { dot:'var(--accent)', text:'var(--ink)', bg:'var(--accent-soft)', label:null }
-            : pct <= 20 ? { dot:'#EF4444', text:'#B63A3F', bg:'rgba(239,68,68,0.12)', label:'Low balance' }
-            : pct <= 50 ? { dot:'#F59E0B', text:'#BA7D14', bg:'rgba(245,158,11,0.12)', label:'Running low' }
-            : { dot:'#10B981', text:'#0F926D', bg:'rgba(16,185,129,0.12)', label:'Healthy' }
+          // Traffic-light health (orders palette): <=20% left = red, <=50% = amber, else green
+          const health = viewBalNum == null ? { dot:'#1a73e8', text:'#0B1B30', label:null }
+            : pct <= 20 ? { dot:'#EF4444', text:'#B63A3F', label:'Low balance' }
+            : pct <= 50 ? { dot:'#F59E0B', text:'#BA7D14', label:'Running low' }
+            : { dot:'#10B981', text:'#0F926D', label:'Healthy' }
           return (
-            <div className="acard" style={{marginBottom:14,padding:'18px 20px',display:'flex',alignItems:'flex-start',gap:16,flexWrap:'wrap',borderLeft:`3px solid ${health.dot}`}}>
-              <span style={{width:44,height:44,borderRadius:12,background:health.bg,color:health.text,display:'grid',placeItems:'center',flexShrink:0}}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="m9 15.5 2 2 4-4"/></svg>
-              </span>
-              <div style={{flex:1,minWidth:220}}>
-                <div className="lv-tile-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                  <div style={{fontSize:10,fontWeight:500,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--muted)'}}>{viewingOther ? `${viewed.emp.full_name} · ` : ''}Leave balance · FY {currentFyLabel()}</div>
-                  <div style={{display:'inline-flex',alignItems:'center',gap:12,flexShrink:0}}>
-                    <button onClick={()=>setPolicy(true)} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:11.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}}>
-                      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v4M10 6.5h.01" strokeLinecap="round"/></svg>
-                      How leave &amp; LOP work
-                    </button>
-                    <button onClick={()=>navigate('/people/handbook')} style={{background:'none',border:0,cursor:'pointer',color:'var(--accent)',fontSize:11.5,fontWeight:500,display:'inline-flex',alignItems:'center',gap:4,padding:0}} title="Employee Handbook">
-                      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 4h9a2 2 0 0 1 2 2v10a1.5 1.5 0 0 0-1.5-1.5H4z" strokeLinejoin="round"/><path d="M4 4v11"/></svg>
-                      Handbook
-                    </button>
-                  </div>
-                </div>
-                <div style={{display:'flex',alignItems:'baseline',gap:10,marginTop:6,flexWrap:'wrap'}}>
-                  <div style={{fontSize:30,fontWeight:600,letterSpacing:'-0.025em',lineHeight:1,fontFamily:"'Geist Mono',monospace",color:health.text}}>{viewBalNum ?? '—'}<small style={{fontSize:14,color:'var(--muted-2)',fontWeight:500,fontFamily:"'Geist',sans-serif"}}> / {credited} left</small></div>
-                  {health.label && <span className="att-badge" style={{color:health.text,background:health.bg}}><span style={{width:6,height:6,borderRadius:99,background:health.dot,display:'inline-block'}} />{health.label}</span>}
-                </div>
-                <div style={{height:7,borderRadius:5,background:'var(--bg)',overflow:'hidden',marginTop:12,maxWidth:420}}><div style={{height:'100%',width:pct+'%',background:health.dot,borderRadius:5}} /></div>
-                <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginTop:9}}>
-                  <div style={{fontSize:11.5,color:'var(--muted)'}}><b style={{color:'var(--ink)'}}>{used}</b> used · <b style={{color:'var(--ink)'}}>{carried}</b> carried forward · <b style={{color:'var(--ink)'}}>{viewBal?Number(viewBal.credited):0}</b> credited{viewLedger?.totals.extras>0 && <> · <b style={{color:'var(--ink)'}}>{viewLedger.totals.extras}</b> policy deductions since Aug</>}</div>
-                  {lop>0 && <span title="Loss of Pay — unpaid days deducted from salary. Separate from your paid leave." style={{fontSize:11,fontWeight:600,color:'#B63A3F',background:'rgba(239,68,68,0.12)',borderRadius:6,padding:'3px 8px',fontFamily:"'Geist Mono',monospace"}}>{lop} LOP · unpaid</span>}
-                </div>
-              </div>
+            <div className="ph-bento lv-bento">
+              <Stat label={viewingOther ? `${viewed.emp.full_name} · balance` : 'Leave balance'}
+                value={<span style={{color:health.text}}>{viewBalNum ?? '—'}</span>} unit={`/ ${credited}`}
+                foot={<span className="lv-mini">
+                  <span className="lv-mini-bar"><span style={{width:pct+'%',background:health.dot}} /></span>
+                  {health.label}
+                </span>} />
+              <Stat label="Credited" value={viewBal?Number(viewBal.credited):0} foot="this FY" />
+              <Stat label="Carried forward" value={carried} foot="from last year" />
+              <Stat label="Used" value={used}
+                foot={viewLedger?.totals.extras>0 ? <><b>{viewLedger.totals.extras}</b> policy ded.</> : 'approved leave'} />
+              <Stat label="LOP" value={lop} warn={lop>0}
+                foot={lop>0 ? 'unpaid days' : 'none — all paid'} />
             </div>
           )
         })()}
@@ -343,13 +346,16 @@ export default function PeopleLeave() {
             const canHr  = r.status==='mgr_approved' && (iAmHr || isMgmt)
             const s = ST[r.status]
             return (
-              <div key={r.id} className="lv-row" style={{display:'grid',gridTemplateColumns:'1.4fr 1fr auto',gap:12,alignItems:'center',padding:'11px 0',borderBottom:'1px solid var(--line-2)'}}>
-                <div><div style={{fontWeight:600,fontSize:13.5}}>{r.emp?.full_name}</div><div style={{fontSize:11.5,color:'var(--muted-2)'}}>{r.reason||'—'}{showWaiting && <> · waiting on <b style={{color:'var(--ink)'}}>{r.status==='pending' ? rmName(r.emp?.reporting_manager_id) : 'HR'}</b></>}</div></div>
-                <div style={{fontSize:12.5}}>{fmtRange(r.from_date, r.to_date)} · <b>{r.days}d</b>{r.is_half_day?' (half)':''}</div>
-                <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end'}}>
-                  <span className="att-badge" style={{color:s.c,background:s.b}}>{s.l}</span>
-                  {canMgr && <><button className="btn btn-ghost btn-sm" onClick={()=>decide(r,'mgr',true)}>Approve</button><button className="btn btn-neutral btn-sm" onClick={()=>decide(r,'mgr',false)}>✕</button></>}
-                  {canHr && <><button className="btn btn-ghost btn-sm" onClick={()=>decide(r,'hr',true)}>HR Approve</button><button className="btn btn-neutral btn-sm" onClick={()=>decide(r,'hr',false)}>✕</button></>}
+              <div key={r.id} className="lv-req">
+                <div className="lv-req-b">
+                  <div className="lv-req-n">{r.emp?.full_name}</div>
+                  <div className="lv-req-s">{r.reason||'—'}{showWaiting && <> · waiting on <b>{r.status==='pending' ? rmName(r.emp?.reporting_manager_id) : 'HR'}</b></>}</div>
+                </div>
+                <div className="lv-req-d">{fmtRange(r.from_date, r.to_date)} · <b>{r.days}d</b>{r.is_half_day?' (half)':''}</div>
+                <div className="lv-req-a">
+                  <span className="ol-status-pill" style={{ '--stage-color': s.dot }}><span className="ol-status-dot" />{s.l}</span>
+                  {canMgr && <><button className="btn-primary btn-xs" onClick={()=>decide(r,'mgr',true)}>Approve</button><button className="btn-ghost btn-xs" onClick={()=>decide(r,'mgr',false)}>Reject</button></>}
+                  {canHr && <><button className="btn-primary btn-xs" onClick={()=>decide(r,'hr',true)}>HR Approve</button><button className="btn-ghost btn-xs" onClick={()=>decide(r,'hr',false)}>Reject</button></>}
                 </div>
               </div>
             )
@@ -357,16 +363,19 @@ export default function PeopleLeave() {
           return (
             <>
               {forMe.length > 0 && (
-                <div className="att-card" style={{marginBottom:14}}>
-                  <div className="att-card-h"><span className="att-card-t">Approvals for you · {forMe.length}</span></div>
+                <div className="card" style={{marginTop:16}}>
+                  <div className="card-head">
+                    <div><div className="card-eyebrow">Waiting on you</div><div className="card-title">Approvals</div></div>
+                    <span className="trend-pill mono">{forMe.length}</span>
+                  </div>
                   {forMe.map(r => row(r, false))}
                 </div>
               )}
               {others.length > 0 && (
-                <div className="att-card" style={{marginBottom:14}}>
-                  <div className="att-card-h">
-                    <span className="att-card-t" style={{color:'var(--muted)'}}>Waiting on other approvers · {others.length}</span>
-                    <span className="card-sub">admin view — step in only if needed</span>
+                <div className="card" style={{marginTop:16}}>
+                  <div className="card-head">
+                    <div><div className="card-eyebrow">Admin view — step in only if needed</div><div className="card-title">Waiting on Other Approvers</div></div>
+                    <span className="trend-pill mono">{others.length}</span>
                   </div>
                   {others.map(r => row(r, true))}
                 </div>
@@ -376,43 +385,65 @@ export default function PeopleLeave() {
         })()}
 
         {/* my requests (hidden while viewing someone else — their ledger holds the record) */}
-        {!viewingOther && <div className="att-card">
-          <div className="att-card-h"><span className="att-card-t">My requests</span></div>
-          {mine.length===0 ? <div className="e-empty" style={{padding:'24px 0'}}>No leave requests yet.</div> : mine.map(r => { const s=ST[r.status]; return (
-            <div key={r.id} className="lv-row" style={{display:'grid',gridTemplateColumns:'1fr auto',gap:12,alignItems:'center',padding:'11px 0',borderBottom:'1px solid var(--line-2)'}}>
-              <div><div style={{fontSize:13.5,fontWeight:600}}>{fmtRange(r.from_date, r.to_date)} · {r.days}d{r.is_half_day?' (half)':''}</div><div style={{fontSize:11.5,color:'var(--muted-2)'}}>{r.reason||'—'}{r.decision_note?` · ${r.decision_note}`:''}</div></div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}><span className="att-badge" style={{color:s.c,background:s.b}}>{s.l}</span>{['pending','mgr_approved'].includes(r.status) && <button className="btn btn-neutral btn-sm" onClick={()=>cancelMine(r)}>Cancel</button>}</div>
+        {!viewingOther && (
+          <div className="card" style={{marginTop:16}}>
+            <div className="card-head">
+              <div><div className="card-eyebrow">Your history</div><div className="card-title">My Requests</div></div>
+              <span className="trend-pill mono">{mine.length}</span>
             </div>
-          )})}
-        </div>}
+            {mine.length===0 ? <div className="o-empty">No leave requests yet.</div> : mine.map(r => { const s=ST[r.status]; return (
+              <div key={r.id} className="lv-req">
+                <div className="lv-req-b">
+                  <div className="lv-req-n">{fmtRange(r.from_date, r.to_date)} · {r.days}d{r.is_half_day?' (half)':''}</div>
+                  <div className="lv-req-s">{r.reason||'—'}{r.decision_note?` · ${r.decision_note}`:''}</div>
+                </div>
+                <div className="lv-req-a">
+                  <span className="ol-status-pill" style={{ '--stage-color': s.dot }}><span className="ol-status-dot" />{s.l}</span>
+                  {['pending','mgr_approved'].includes(r.status) && <button className="btn-ghost btn-xs" onClick={()=>cancelMine(r)}>Cancel</button>}
+                </div>
+              </div>
+            )})}
+          </div>
+        )}
 
         {/* team overview — balances at a glance; clicking a row switches the whole page
             to that person (same as picking them in the header) */}
         {teamRows && !viewingOther && (
-          <div className="att-card" style={{marginTop:14}}>
-            <div className="att-card-h"><span className="att-card-t">Team leave · {teamRows.length}</span><span className="card-sub">click a person for their full record</span></div>
-            <div style={{overflowX:'auto'}}>
-              <div style={{minWidth:560}}>
-                <div className="tbl-h" style={{display:'grid',gridTemplateColumns:'minmax(160px,1.4fr) 70px 70px 84px 70px 56px',gap:10,padding:'8px 0 6px',borderBottom:'1px solid var(--line-2)'}}>
-                  <span>Employee</span><span style={{textAlign:'right'}}>Credited</span><span style={{textAlign:'right'}}>Used</span><span style={{textAlign:'right'}}>Policy ded.</span><span style={{textAlign:'right'}}>Balance</span><span style={{textAlign:'right'}}>LOP</span>
-                </div>
-                {teamRows.slice((Math.min(teamPage, Math.ceil(teamRows.length/50)||1)-1)*50, Math.min(teamPage, Math.ceil(teamRows.length/50)||1)*50).map(({emp:e, ledger:l}) => {
-                  const lop = l.rows.filter(x=>x.lop).length
-                  return (
-                    <div key={e.id} onClick={()=>setTeamSel(e.id)} title="Open full record" style={{display:'grid',gridTemplateColumns:'minmax(160px,1.4fr) 70px 70px 84px 70px 56px',gap:10,alignItems:'center',padding:'8px 0',borderBottom:'1px solid var(--line-2)',cursor:'pointer'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
-                        <PeopleAvatar name={e.full_name} className="avatar" style={{width:30,height:30,fontSize:11,flexShrink:0}} />
-                        <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.full_name}</div><div style={{fontSize:11,color:'var(--muted-2)'}}>{e.department||'—'}</div></div>
-                      </div>
-                      <span style={{textAlign:'right',fontSize:12.5,fontFamily:"'Geist Mono',monospace"}}>{l.opening}</span>
-                      <span style={{textAlign:'right',fontSize:12.5,fontFamily:"'Geist Mono',monospace"}}>{l.totals.used}</span>
-                      <span style={{textAlign:'right',fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:l.totals.extras>0?'var(--st-half)':'var(--muted-2)'}}>{l.totals.extras||'—'}</span>
-                      <span style={{textAlign:'right',fontSize:12.5,fontWeight:600,fontFamily:"'Geist Mono',monospace",color:l.closing<0?'var(--st-absent)':'var(--ink)'}}>{l.closing}</span>
-                      <span style={{textAlign:'right',fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:lop>0?'var(--st-absent)':'var(--muted-2)'}}>{lop||'—'}</span>
-                    </div>
-                  )
-                })}
-              </div>
+          <div className="card" style={{marginTop:16}}>
+            <div className="card-head">
+              <div><div className="card-eyebrow">Click a person for their full record</div><div className="card-title">Team Leave</div></div>
+              <span className="trend-pill mono">{teamRows.length}</span>
+            </div>
+            <div className="ph-tbl-wrap">
+              <table className="ph-tbl">
+                <thead><tr>
+                  <th>Employee</th><th className="r">Credited</th><th className="r">Used</th>
+                  <th className="r">Policy ded.</th><th className="r">Balance</th><th className="r">LOP</th>
+                </tr></thead>
+                <tbody>
+                  {teamRows.slice((Math.min(teamPage, Math.ceil(teamRows.length/50)||1)-1)*50, Math.min(teamPage, Math.ceil(teamRows.length/50)||1)*50).map(({emp:e, ledger:l}) => {
+                    const lop = l.rows.filter(x=>x.lop).length
+                    return (
+                      <tr key={e.id} onClick={()=>setTeamSel(e.id)} title="Open full record" style={{cursor:'pointer'}}>
+                        <td>
+                          <div className="lv-emp">
+                            <PeopleAvatar name={e.full_name} className="avatar" style={{width:30,height:30,fontSize:11,flexShrink:0}} />
+                            <div style={{minWidth:0}}>
+                              <div className="lv-emp-n">{e.full_name}</div>
+                              <div className="lv-emp-d">{e.department||'—'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="r m">{l.opening}</td>
+                        <td className="r m">{l.totals.used}</td>
+                        <td className="r m" style={{color:l.totals.extras>0?'#BA7D14':'var(--o-muted-2)'}}>{l.totals.extras||'—'}</td>
+                        <td className="r m" style={{fontWeight:'var(--fw-semibold)',color:l.closing<0?'#B63A3F':'var(--o-ink)'}}>{l.closing}</td>
+                        <td className="r m" style={{color:lop>0?'#B63A3F':'var(--o-muted-2)'}}>{lop||'—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
             <PeoplePager page={teamPage} setPage={setTeamPage} total={teamRows.length} />
           </div>

@@ -14,6 +14,8 @@ import { visibleEmployees } from '../lib/peopleScope'
 import { fetchAll } from '../lib/fetchAll'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
+import '../styles/orders-redesign.css'
+import '../styles/people-home.css'
 
 const ymd = istYmd   // IST work date — never the viewer's timezone
 const monthKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
@@ -264,6 +266,15 @@ export default function PeopleMuster() {
     finally { markGuard.current = false }
   }
   const gridRows = useMemo(() => musterData.filter(m => dept==='all' || m.emp.department===dept), [musterData, dept])
+  // Calendar person list, narrowed by the same department filter.
+  const calPeople = useMemo(() => emps
+    .filter(e => dept==='all' || e.department===dept)
+    .slice().sort((a,b)=>a.full_name.localeCompare(b.full_name)), [emps, dept])
+  // Narrowing the department must not leave the calendar on someone the filter excludes.
+  useEffect(() => {
+    if (view !== 'cal' || !calPeople.length) return
+    if (!calPeople.find(e => e.id === personId)) setPersonId(calPeople[0].id)
+  }, [calPeople, view]) // eslint-disable-line
 
   async function downloadMuster() {
     if (!emps.length) return
@@ -296,8 +307,8 @@ export default function PeopleMuster() {
   const moveTip = ev => setTip(t => t ? { ...t, x: ev.clientX + 14, y: ev.clientY + 16 } : t)
   const hideTip = () => setTip(null)
 
-  if (loading) return <Layout pageKey="people" pageTitle="Muster"><div className="people-app att-alt"><Spinner label="Building muster…" /></div></Layout>
-  if (denied) return <Layout pageKey="people" pageTitle="Muster"><div className="people-app att-alt"><div className="e-empty">Muster is for managers and admin/management.</div></div></Layout>
+  if (loading) return <Layout pageKey="people" pageTitle="Muster"><div className="orders-app"><div className="o-loading">Building muster…</div></div></Layout>
+  if (denied) return <Layout pageKey="people" pageTitle="Muster"><div className="orders-app"><div className="o-empty">Muster is for managers and admin/management.</div></div></Layout>
 
   const seg = (v, scheduled, color) => v>0 ? <i style={{width:(v/scheduled*100)+'%',background:color}} /> : null
   const legend = (
@@ -318,36 +329,34 @@ export default function PeopleMuster() {
 
   return (
     <Layout pageKey="people" pageTitle="Muster">
-      <div className="people-app att-alt">
-        <div className="ph">
+      <div className="orders-app">
+        <div className="page-head">
           <div>
-            <button onClick={()=>navigate('/people')} style={{background:'none',border:0,cursor:'pointer',color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:4,fontSize:13,padding:0,marginBottom:4}}>
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
+            <button className="ph-back" onClick={()=>navigate('/people')}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
             </button>
-            <h1 className="ph-title">Muster</h1>
-            <div className="ph-sub">{emps.length} people · {monthLabel}
+            <h1 className="page-title">Muster</h1>
+            <div className="page-sub">{emps.length} people · {monthLabel}
               {canMark && (() => {
                 // Days computed on screen but never written to the payroll record. Aug 2026
                 // sat unsaved for 6 weeks and nobody could see it — hence this nag.
                 const unsaved = finalisePlan.rows.filter(r => !imported[`${r.employee_id}|${r.work_date}`]).length
                 return unsaved > 0
-                  ? <span style={{marginLeft:8,fontSize:11,fontWeight:600,color:'#BA7D14',background:'rgba(245,158,11,0.12)',borderRadius:6,padding:'2px 8px'}}>{unsaved} day{unsaved>1?'s':''} not saved — Finalise</span>
-                  : <span style={{marginLeft:8,fontSize:11,fontWeight:600,color:'#0F926D',background:'rgba(16,185,129,0.12)',borderRadius:6,padding:'2px 8px'}}>saved ✓</span>
+                  ? <span className="ol-status-pill" style={{ '--stage-color': '#F59E0B', marginLeft: 8 }}><span className="ol-status-dot" />{unsaved} day{unsaved>1?'s':''} not saved — Finalise</span>
+                  : <span className="ol-status-pill" style={{ '--stage-color': '#10B981', marginLeft: 8 }}><span className="ol-status-dot" />saved</span>
               })()}
             </div>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:9,flexWrap:'wrap'}}>
-            <div className="dl-group">
-              <button className="dl-btn" onClick={downloadMuster} title="Download detailed muster (Excel)">
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Detailed muster
-              </button>
-            </div>
-            <button className="btn btn-ghost" onClick={()=>setShowDecl(true)} title="Declare a special day (rainfall / WFH / calamity)">
+          <div className="page-meta">
+            <button className="btn-ghost" onClick={downloadMuster} title="Download detailed muster (Excel)">
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+            <button className="btn-ghost" onClick={()=>setShowDecl(true)} title="Declare a special day (rainfall / WFH / calamity)">
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
               Declare day
             </button>
-            {canMark && <button className="btn btn-primary" onClick={()=>setShowFinalise(true)} title="Write this month's attendance to the payroll record">
+            {canMark && <button className="btn-primary" onClick={()=>setShowFinalise(true)} title="Write this month's attendance to the payroll record">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 13 4 4L19 7"/></svg>
               Finalise month
             </button>}
@@ -356,35 +365,45 @@ export default function PeopleMuster() {
 
         <AttendanceTabs role={role} isManager={true} />
 
-        {/* month timeline (Order-List style) */}
-        <div className="swf-tl" style={{marginBottom:12}}>
+        {/* The muster grid is a bespoke visualisation with ~70 classes of its own, all
+            scoped to .people-app. Rather than restyle a payroll-critical screen, it keeps
+            its own shell nested here: every class and every computation below is exactly
+            as it was, and only the page chrome above moved to the new language. */}
+        <div className="people-app att-alt">
+        {/* Filters live in the page chrome, above the grid's own shell. */}
+        <div className="ph-filters">
           {(() => {
             const n=new Date(); const thisMK=monthKey(new Date(n.getFullYear(),n.getMonth(),1)); const lastMK=monthKey(new Date(n.getFullYear(),n.getMonth()-1,1)); const curMK=monthKey(cursor)
             return <>
-              <button className={curMK===thisMK?'on':''} onClick={()=>setCursor(new Date(n.getFullYear(),n.getMonth(),1))}>This Month</button>
-              <button className={curMK===lastMK?'on':''} onClick={()=>setCursor(new Date(n.getFullYear(),n.getMonth()-1,1))}>Last Month</button>
-              <div className="swf-custom"><span>Month</span><input type="month" value={curMK} max={thisMK} onChange={e=>{ if(e.target.value){ const [y,m]=e.target.value.split('-').map(Number); setCursor(new Date(y,m-1,1)) } }} /></div>
+              <div className="ph-seg" role="group" aria-label="Month">
+                <button className={curMK===thisMK?'on':''} onClick={()=>setCursor(new Date(n.getFullYear(),n.getMonth(),1))}>This Month</button>
+                <button className={curMK===lastMK?'on':''} onClick={()=>setCursor(new Date(n.getFullYear(),n.getMonth()-1,1))}>Last Month</button>
+              </div>
+              <input className="ph-month" type="month" value={curMK} max={thisMK}
+                onChange={e=>{ if(e.target.value){ const [y,m]=e.target.value.split('-').map(Number); setCursor(new Date(y,m-1,1)) } }} />
             </>
           })()}
-        </div>
 
-        {/* toolbar: count + view toggle + filter */}
-        <div className="mb16" style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',color:'var(--muted)',fontSize:13}}>
-          <span><b style={{color:'var(--ink)',fontSize:15}}>{emps.length}</b> people · {monthLabel}</span>
-          <div className="mtoggle">
-            <div className="mseg">
-              <button className={view==='grid'?'on':''} onClick={()=>{setView('grid');hideTip()}}>Grid</button>
-              <button className={view==='cal'?'on':''} onClick={()=>{setView('cal');hideTip()}}>Calendar</button>
-            </div>
-            {view==='cal'
-              ? <div className="f-sel"><select value={personId} onChange={e=>setPersonId(e.target.value)}>
-                  {emps.slice().sort((a,b)=>a.full_name.localeCompare(b.full_name)).map(e=><option key={e.id} value={e.id}>{e.full_name}</option>)}
-                </select></div>
-              : depts.length>0 && <div className="f-sel"><select value={dept} onChange={e=>setDept(e.target.value)}>
-                  <option value="all">All departments</option>
-                  {depts.map(d=><option key={d} value={d}>{d}</option>)}
-                </select></div>}
+          <div className="ph-seg" role="group" aria-label="View">
+            <button className={view==='grid'?'on':''} onClick={()=>{setView('grid');hideTip()}}>Grid</button>
+            <button className={view==='cal'?'on':''} onClick={()=>{setView('cal');hideTip()}}>Calendar</button>
           </div>
+
+          {/* Department applies to BOTH views: in Grid it narrows the rows, in Calendar it
+              narrows the person list. It used to exist only in Grid, so switching to
+              Calendar silently dropped the filter. */}
+          {depts.length>0 && (
+            <select className="ph-picker" value={dept} onChange={e=>setDept(e.target.value)}>
+              <option value="all">All departments</option>
+              {depts.map(d=><option key={d} value={d}>{d}</option>)}
+            </select>
+          )}
+          {view==='cal' && (
+            <select className="ph-picker" value={personId} onChange={e=>setPersonId(e.target.value)}>
+              {calPeople.map(e=><option key={e.id} value={e.id}>{e.full_name}</option>)}
+            </select>
+          )}
+          <span className="ph-count"><b>{view==='grid' ? gridRows.length : calPeople.length}</b> {view==='grid' ? 'people' : 'to choose from'} · {monthLabel}</span>
         </div>
 
         {view==='grid' ? (
@@ -614,6 +633,7 @@ export default function PeopleMuster() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </Layout>
   )

@@ -182,7 +182,12 @@ export default function EmployeeDetail() {
     if (e.profile_id) {
       // mgmt sees any employee's assignment; a self-viewer reads kpi_self (target only, NO multiplier/CTC)
       const kq = mgmt
-        ? sb.from('kpi_assignments').select('*').eq('profile_id', e.profile_id).eq('is_active', true).order('fy_label',{ascending:false}).limit(1)
+        // Explicit columns, never '*': kpi_assignments carries annual_ctc_inr (salary
+        // behind the secret multiplier) and this card only needs the targets. The CTC
+        // shown on the Salary tab comes from employee_compensation, which has its own
+        // comp_read / comp_read_self policies.
+        ? sb.from('kpi_assignments').select('id,fy_label,annual_target_inr,monthly_target_inr,team_id,profile_id')
+            .eq('profile_id', e.profile_id).eq('is_active', true).order('fy_label',{ascending:false}).limit(1)
         : sb.from('kpi_self').select('*').eq('is_active', true).order('fy_label',{ascending:false}).limit(1)
       const { data: k } = await kq.maybeSingle()
       setKpi(k || null)

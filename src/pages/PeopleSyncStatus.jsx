@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
+import { siteFromDevice } from '../lib/deviceLabel'
 import { Spinner } from '../components/PeopleLoaders'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
+import '../styles/orders-redesign.css'
+import '../styles/people-home.css'
 
 // How long the connector may stay quiet before we call it down. It polls every 2 minutes, so
 // 15 covers roughly seven missed beats — past any transient blip, well short of a lost morning.
@@ -83,29 +86,34 @@ export default function PeopleSyncStatus() {
 
   return (
     <Layout pageKey="people" pageTitle="Sync status">
-      <div className="people-app">
-        <AttendanceTabs role={role} />
-
-        <div className="ph-head" style={{ marginBottom: 14 }}>
+      <div className="orders-app">
+        <div className="page-head">
           <div>
-            <h1 className="ph-title">Attendance sync</h1>
-            <div className="ph-sub">Fingerprint devices → eTimeTrackLite → this app</div>
+            <button className="ph-back" onClick={()=>navigate('/people')}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
+            </button>
+            <h1 className="page-title">Attendance Sync</h1>
+            <div className="page-sub">Fingerprint devices → eTimeTrackLite → this app</div>
+          </div>
+          <div className="page-meta">
+            <div className={'meta-pill' + (stale ? '' : ' live')}>
+              {!stale && <span className="meta-dot" />}{stale ? 'Down' : 'Live'}
+            </div>
           </div>
         </div>
 
+        <AttendanceTabs role={role} />
+
         {err && <div className="o-empty" style={{ marginBottom: 14 }}>{err}</div>}
 
-        <div style={{ background: banner.bg, color: '#fff', borderRadius: 'var(--o-radius, 14px)', padding: '18px 22px',
-                      fontSize: 18, fontWeight: 600, marginBottom: 22 }}>
-          {banner.text}
-        </div>
+        <div className="sync-banner" style={{ background: banner.bg }}>{banner.text}</div>
 
-        <div className="o-card" style={{ padding: '18px 20px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>Connector <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(office PC)</span></div>
-            <div style={{ fontWeight: 600, color: stale ? 'var(--st-absent, #D64545)' : 'var(--st-present, #2E9E63)' }}>
-              {stale ? 'Down' : 'Operational'}
-            </div>
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-head">
+            <div><div className="card-eyebrow">Office PC</div><div className="card-title">Connector</div></div>
+            <span className="ol-status-pill" style={{ '--stage-color': stale ? '#EF4444' : '#10B981' }}>
+              <span className="ol-status-dot" />{stale ? 'Down' : 'Operational'}
+            </span>
           </div>
 
           <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 40, margin: '14px 0 6px' }}>
@@ -130,8 +138,11 @@ export default function PeopleSyncStatus() {
           </div>
         </div>
 
-        <div className="o-card" style={{ padding: '18px 20px' }}>
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>Devices</div>
+        <div className="card">
+          <div className="card-head">
+            <div><div className="card-eyebrow">Biometric readers</div><div className="card-title">Devices</div></div>
+            <span className="trend-pill mono">{devices.length}</span>
+          </div>
           {devices.length === 0 ? (
             <div style={{ fontSize: 13.5, color: 'var(--muted)' }}>
               No device information yet. The connector reports this on its next run.
@@ -140,9 +151,17 @@ export default function PeopleSyncStatus() {
             <div key={d.device_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                             gap: 12, padding: '10px 0', borderTop: '1px solid var(--line-2)' }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{d.name || d.device_id}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  {[d.location, d.serial_no].filter(Boolean).join(' · ') || '—'}
+                {/* Show the site people use (Kaveri / HO / Godawari), keeping the
+                    device's own reported name underneath so the row is still
+                    traceable to the physical unit. */}
+                {/* Truncate rather than overflow: a long device string
+                    ("Manual Entry(Attendance)" · location · serial) ran underneath the
+                    status on the right, which is fixed-width. */}
+                <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{siteFromDevice(d)}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  title={[d.name, d.location, d.serial_no].filter(Boolean).join(' · ')}>
+                  {[d.name && d.name !== siteFromDevice(d) ? `“${d.name}”` : null, d.location, d.serial_no]
+                    .filter(Boolean).join(' · ') || '—'}
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>

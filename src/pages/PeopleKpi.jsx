@@ -11,6 +11,9 @@ import {
 import { AUTO_FETCHERS, DERIVED_FETCHERS } from '../lib/kpiFetchers'
 import KpiConfigurator from '../components/KpiConfigurator'
 import '../styles/kpi-dashboard.css'
+import '../styles/orders-redesign.css'
+import '../styles/people-home.css'
+import Stat from '../components/StatTile'
 
 // Default KRA palette — used as a fallback only. Real KRAs come from kpi_kra_categories per team.
 const FALLBACK_KRA_COLOR = '#64748B'
@@ -129,7 +132,14 @@ export default function PeopleKpi() {
       sb.from('kpi_teams_safe').select('*').eq('is_active', true).order('name'),
       // employees read kpi_self (target amounts only, NO multiplier / CTC); admins read the full table
       (isAdminRole
-        ? sb.from('kpi_assignments').select('*, profiles(id,name,role)').eq('fy_label', fy).eq('is_active', true)
+        // Columns listed EXPLICITLY, never select('*'): kpi_assignments carries
+        // annual_ctc_inr — the CTC behind the secret target multiplier, i.e. salary. The
+        // page was pulling it into the browser for every admin/management user and
+        // assigning it to a `ctc` field that nothing ever rendered. Do not reintroduce
+        // '*' here; add the specific column you need instead.
+        ? sb.from('kpi_assignments')
+            .select('id,profile_id,team_id,fy_label,annual_target_inr,monthly_target_inr,is_active, profiles(id,name,role)')
+            .eq('fy_label', fy).eq('is_active', true)
         : sb.from('kpi_self').select('*').eq('fy_label', fy).eq('is_active', true)),
       sb.from('kpi_thresholds').select('*').eq('fy_label', fy),
       sb.from('kpi_hero_products').select('month_start, brand, category, subcategory, series'),
@@ -334,17 +344,34 @@ export default function PeopleKpi() {
       const m = computeMonthForAssignment(a, monthIdx)
       return {
         id: a.profile_id, assignmentId: a.id, name: a.profiles?.name || '—', role: a.profiles?.role || '',
-        team: a.team_id, ctc: Number(a.annual_ctc_inr) || 0, target: Number(a.annual_target_inr) || 0,
+        team: a.team_id, target: Number(a.annual_target_inr) || 0,
         initials: initialsFor(a.profiles?.name), color: colorFor(a.profile_id),
         score: m.total, max: m.max,
       }
     }).sort((a, b) => b.score - a.score)
   }, [assignments, filter, query, isAdmin, user.id, monthIdx, allMonthlyData, kpiSnapshots, defsByTeam, thresholdsByTeam])
 
+  // Team roll-up for the summary tiles. Derived from employeeList, so the tiles can
+  // never disagree with the board below them.
+  const board = useMemo(() => {
+    const scored = employeeList.filter(e => e.max > 0)
+    const pct = e => Math.round((e.score / e.max) * 100)
+    const avg = scored.length ? Math.round(scored.reduce((a, e) => a + pct(e), 0) / scored.length) : null
+    const top = scored.length ? scored.reduce((a, e) => (pct(e) > pct(a) ? e : a)) : null
+    return {
+      n: employeeList.length,
+      scored: scored.length,
+      avg,
+      top: top ? { name: top.name, pct: pct(top) } : null,
+      onTarget: scored.filter(e => pct(e) >= 80).length,
+      attention: scored.filter(e => pct(e) < 50).length,
+    }
+  }, [employeeList])
+
   const selectedEmps = selectedIds.map(id => employeeList.find(e => e.id === id) || assignments.find(a => a.profile_id === id) && (() => {
     const a = assignments.find(x => x.profile_id === id)
     if (!a) return null
-    return { id: a.profile_id, assignmentId: a.id, name: a.profiles?.name || '—', role: a.profiles?.role || '', team: a.team_id, ctc: Number(a.annual_ctc_inr)||0, target: Number(a.annual_target_inr)||0, initials: initialsFor(a.profiles?.name), color: colorFor(a.profile_id), score: 0, max: 0 }
+    return { id: a.profile_id, assignmentId: a.id, name: a.profiles?.name || '—', role: a.profiles?.role || '', team: a.team_id, target: Number(a.annual_target_inr)||0, initials: initialsFor(a.profiles?.name), color: colorFor(a.profile_id), score: 0, max: 0 }
   })()).filter(Boolean)
 
   function handleSelect(id, multi) {
@@ -357,7 +384,7 @@ export default function PeopleKpi() {
   // matching the Orders/GRN pattern instead of blanking the whole page.
   return (
     <Layout pageKey="people">
-      <div className={`kpi-app density-${tweaks.density} accent-${tweaks.accent}`}>
+      <div className="orders-app">
 
         {/* Page head */}
         <div className="page-head">
@@ -367,7 +394,33 @@ export default function PeopleKpi() {
           </div>
           <div className="page-meta">
             <div className="meta-pill"><span className="meta-label">FY</span><span className="meta-val">20{fy.split('-')[0]}–20{fy.split('-')[1]}</span></div>
-            <div className="meta-pill"><span className="meta-label">Period</span><span className="meta-val">{MONTHS_LABELS[monthIdx]} {months[monthIdx].getFullYear()}</span></div>
+            {/* Month picker in the header, like My Attendance. Replaces the 12-button
+                scrubber that used to sit inside each dashboard — the selection is a
+                page-level control, so it belongs with the page-level filters. Future
+                months of the FY stay listed but disabled. */}
+            {isAdmin && teams.length > 1 && (
+              <select className="ph-picker" value={filter} onChange={e => setFilter(e.target.value)} title="Team">
+                <option value="all">All teams</option>
+                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            )}
+            {isAdmin && employeeList.length > 0 && (
+              <select className="ph-picker" title="Person"
+                value={selectedIds[0] || ''}
+                onChange={e => handleSelect(e.target.value, false)}>
+                {employeeList.map(e => (
+                  <option key={e.id} value={e.id}>{e.name}{e.max > 0 ? ` — ${Math.round((e.score / e.max) * 100)}%` : ''}</option>
+                ))}
+              </select>
+            )}
+            <select className="ph-picker" value={monthIdx} onChange={e => setMonthIdx(Number(e.target.value))}
+              title="Performance month">
+              {months.map((m, i) => (
+                <option key={i} value={i} disabled={m > new Date()}>
+                  {MONTHS_LABELS[i]} {m.getFullYear()}{m > new Date() ? ' — upcoming' : ''}
+                </option>
+              ))}
+            </select>
             {(() => {
               const stamps = Object.values(snapshotMeta).map(m => m?.synced_at).filter(Boolean)
               if (!stamps.length) return <div className="meta-pill" style={{ background:'rgba(180,83,9,0.10)', borderColor:'rgba(180,83,9,0.35)', color:'#92400e' }}><span className="meta-label">Snapshot</span><span className="meta-val">Not synced yet</span></div>
@@ -376,6 +429,19 @@ export default function PeopleKpi() {
               const ageHr = Math.round(ageMs / 3600000)
               const ageStr = ageHr < 1 ? 'just now' : ageHr < 24 ? `${ageHr}h ago` : `${Math.round(ageHr/24)}d ago`
               return <div className="meta-pill"><span className="meta-label">Last sync</span><span className="meta-val">{ageStr}</span></div>
+            })()}
+            {isAdmin && selectedEmps[0] && (() => {
+              // Same placement as every other People page: a ghost button in the header
+              // rather than one buried in the person hero.
+              const a = assignments.find(x => x.profile_id === selectedEmps[0].id)
+              if (!a) return null
+              return (
+                <button className="btn-ghost" onClick={() => { setCfgTeamId(a.team_id); setCfgOpen(true) }}
+                  title="Configure scoring for this team">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5 V3.5 M8 12.5 V14.5 M14.5 8 H12.5 M3.5 8 H1.5 M12.6 3.4 L11.2 4.8 M4.8 11.2 L3.4 12.6 M12.6 12.6 L11.2 11.2 M4.8 4.8 L3.4 3.4"/></svg>
+                  Configure
+                </button>
+              )
             })()}
             {['admin','management'].includes(user.role) && (
               <button onClick={syncSnapshots} disabled={syncing}
@@ -388,16 +454,32 @@ export default function PeopleKpi() {
           </div>
         </div>
 
-        {/* Body: team panel + dashboard */}
+        {/* Team summary — derived from the same employeeList the board below renders. */}
+        {!loading && board.n > 0 && (
+          <div className="ph-bento lv-bento">
+            <Stat label="People" value={board.n}
+              foot={board.scored < board.n ? <><b>{board.n - board.scored}</b> not scored yet</> : 'all scored'} />
+            <Stat label="Average score" value={board.avg != null ? `${board.avg}%` : '—'}
+              foot={`${MONTHS_LABELS[monthIdx]} ${months[monthIdx].getFullYear()}`} />
+            <Stat label="Top performer" value={board.top ? `${board.top.pct}%` : '—'}
+              foot={board.top ? board.top.name : 'nothing scored'} />
+            <Stat label="On target" value={board.onTarget} foot="80% or above" />
+            <Stat label="Needs attention" value={board.attention} warn={board.attention > 0}
+              foot={board.attention > 0 ? 'below 50%' : 'nobody below 50%'} />
+          </div>
+        )}
+
+        {/* The scorecard keeps its own .kpi-app shell — a purpose-built board with its
+            own classes. Only the chrome above moved to the shared language. */}
+        <div className={`kpi-app density-${tweaks.density} accent-${tweaks.accent}`}>
+
+        {/* Body: the dashboard at full width. The 320px team panel that used to sit
+            beside it squeezed the metric grid to ~3 columns, so 12 metrics became four
+            rows of scrolling; person and team are dropdowns in the header now. */}
         {loading ? (
           <div className="o-loading">Loading…</div>
         ) : (
           <div className="page-body">
-            <TeamPanel
-              list={employeeList} teams={teams} filter={filter} setFilter={setFilter}
-              query={query} setQuery={setQuery} selectedIds={selectedIds} onSelect={handleSelect}
-              monthIdx={monthIdx} showRanks={tweaks.showRanks}
-            />
             <Dashboard
               selectedEmps={selectedEmps} assignments={assignments} teams={teams}
               months={months} monthIdx={monthIdx} setMonthIdx={setMonthIdx}
@@ -407,7 +489,6 @@ export default function PeopleKpi() {
               isAdmin={isAdmin} saving={saving} onSave={saveValue}
               hasOwnAssignment={!!assignments.find(a => a.profile_id === user.id)}
               userName={user.name}
-              onConfigOpen={(teamId) => { setCfgTeamId(teamId); setCfgOpen(true) }}
             />
           </div>
         )}
@@ -470,71 +551,13 @@ export default function PeopleKpi() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </Layout>
   )
 }
 
 // ── Team Panel ──
-function TeamPanel({ list, teams, filter, setFilter, query, setQuery, selectedIds, onSelect, showRanks }) {
-  const total = list.length
-  const teamCounts = {}; list.forEach(e => { teamCounts[e.team] = (teamCounts[e.team] || 0) + 1 })
-  return (
-    <div className="team-panel">
-      <div className="tp-head">
-        <div>
-          <div className="tp-title">Team</div>
-          <div className="tp-sub">{total} member{total === 1 ? '' : 's'}</div>
-        </div>
-      </div>
-      <div className="tp-filters">
-        <button className={`tp-chip ${filter==='all'?'on':''}`} onClick={() => setFilter('all')}>All <span className="tp-chip-n">{total}</span></button>
-        {teams.map(t => (
-          <button key={t.id} className={`tp-chip ${filter===t.id?'on':''}`} onClick={() => setFilter(t.id)}>
-            <span className="tp-chip-dot" style={{ background: t.name === 'Growth' ? '#7C3AED' : '#0EA5E9' }}/>
-            {t.name === 'Customer Success' ? 'CS' : t.name}
-          </button>
-        ))}
-      </div>
-      <div style={{ padding: '0 16px 10px' }}>
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search…"
-          style={{ width: '100%', padding: '7px 10px', border: '1px solid #E8EBF0', borderRadius: 8, fontSize: 12, outline: 'none', fontFamily: 'inherit' }} />
-      </div>
-      <div className="tp-list">
-        {list.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: '#94A3B8', fontSize: 12 }}>No matching members.</div>}
-        {list.map((emp, idx) => (
-          <button key={emp.id} className={`tp-row ${selectedIds.includes(emp.id) ? 'selected' : ''}`}
-            onClick={(e) => onSelect(emp.id, e.metaKey || e.ctrlKey || e.shiftKey)}>
-            {showRanks && <div className="tp-rank">{idx + 1}</div>}
-            {!showRanks && <div className="tp-rank"/>}
-            <div className="tp-avatar" style={{ background: emp.color }}>{emp.initials}</div>
-            <div className="tp-info">
-              <div className="tp-name">{emp.name}</div>
-              <div className="tp-role">{emp.role || '—'}</div>
-            </div>
-            <div className="tp-score">
-              <div className="tp-score-num"><span className="tp-score-val">{emp.score}</span><span className="tp-score-max">/{emp.max || 80}</span></div>
-              <ScoreSpark value={emp.score} max={emp.max || 80}/>
-            </div>
-          </button>
-        ))}
-      </div>
-      {list.length > 0 && (
-        <div className="tp-foot">
-          <div className="tp-foot-cell">
-            <div className="tp-foot-label">Avg score</div>
-            <div className="tp-foot-val">{(list.reduce((s, e) => s + e.score, 0) / list.length).toFixed(1)}</div>
-          </div>
-          <div className="tp-foot-cell">
-            <div className="tp-foot-label">Top performer</div>
-            <div className="tp-foot-val">{list[0]?.name.split(' ')[0] || '—'}</div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function ScoreSpark({ value, max }) {
   const pct = Math.max(0, Math.min(1, max > 0 ? value / max : 0))
   const color = pct >= 0.7 ? '#10B981' : pct >= 0.5 ? '#F59E0B' : pct >= 0.3 ? '#F97316' : '#EF4444'
@@ -542,7 +565,7 @@ function ScoreSpark({ value, max }) {
 }
 
 // ── Dashboard (single + compare) ──
-function Dashboard({ selectedEmps, assignments, teams, months, monthIdx, setMonthIdx, computeMonth, ytdAvg, thresholdsByTeam, defsByTeam, krasByTeam, allMonthlyData, isAdmin, saving, onSave, hasOwnAssignment, userName, onConfigOpen }) {
+function Dashboard({ selectedEmps, assignments, teams, months, monthIdx, setMonthIdx, computeMonth, ytdAvg, thresholdsByTeam, defsByTeam, krasByTeam, allMonthlyData, isAdmin, saving, onSave, hasOwnAssignment, userName }) {
   if (selectedEmps.length === 0) {
     // Sales / non-admin user with no assignment of their own
     if (!isAdmin && !hasOwnAssignment) {
@@ -567,28 +590,14 @@ function Dashboard({ selectedEmps, assignments, teams, months, monthIdx, setMont
     )
   }
   if (selectedEmps.length === 1) {
-    return <SingleEmployee emp={selectedEmps[0]} assignments={assignments} teams={teams} months={months} monthIdx={monthIdx} setMonthIdx={setMonthIdx} computeMonth={computeMonth} ytdAvg={ytdAvg} thresholdsByTeam={thresholdsByTeam} defsByTeam={defsByTeam} krasByTeam={krasByTeam} isAdmin={isAdmin} saving={saving} onSave={onSave} onConfigOpen={onConfigOpen} />
+    return <SingleEmployee emp={selectedEmps[0]} assignments={assignments} teams={teams} months={months} monthIdx={monthIdx} setMonthIdx={setMonthIdx} computeMonth={computeMonth} ytdAvg={ytdAvg} thresholdsByTeam={thresholdsByTeam} defsByTeam={defsByTeam} krasByTeam={krasByTeam} isAdmin={isAdmin} saving={saving} onSave={onSave} />
   }
-  return <CompareView selectedEmps={selectedEmps} assignments={assignments} months={months} monthIdx={monthIdx} setMonthIdx={setMonthIdx} computeMonth={computeMonth} thresholdsByTeam={thresholdsByTeam} defsByTeam={defsByTeam} krasByTeam={krasByTeam} onConfigOpen={onConfigOpen} />
+  return <CompareView selectedEmps={selectedEmps} assignments={assignments} months={months} monthIdx={monthIdx} setMonthIdx={setMonthIdx} computeMonth={computeMonth} thresholdsByTeam={thresholdsByTeam} defsByTeam={defsByTeam} krasByTeam={krasByTeam} />
 }
 
 // ── Month scrubber ──
-function MonthScrubber({ months, monthIdx, onChange }) {
-  const today = new Date()
-  return (
-    <div className="scrubber">
-      {months.map((m, i) => (
-        <button key={i} className={`scrub-btn ${i === monthIdx ? 'on' : ''} ${m > today ? 'future' : ''}`} onClick={() => onChange(i)}>
-          <div className="scrub-month">{MONTHS_LABELS[i]}</div>
-          <div className="scrub-year">{String(m.getFullYear()).slice(2)}</div>
-        </button>
-      ))}
-    </div>
-  )
-}
-
 // ── Single employee dashboard ──
-function SingleEmployee({ emp, assignments, teams, months, monthIdx, setMonthIdx, computeMonth, ytdAvg, thresholdsByTeam, defsByTeam, krasByTeam, isAdmin, saving, onSave, onConfigOpen }) {
+function SingleEmployee({ emp, assignments, teams, months, monthIdx, setMonthIdx, computeMonth, ytdAvg, thresholdsByTeam, defsByTeam, krasByTeam, isAdmin, saving, onSave }) {
   const a = assignments.find(x => x.profile_id === emp.id)
   if (!a) return null
   const team = teams.find(t => t.id === a.team_id)
@@ -614,76 +623,94 @@ function SingleEmployee({ emp, assignments, teams, months, monthIdx, setMonthIdx
             </div>
           </div>
         </div>
-        <div className="hero-right">
-          {isAdmin && (
-            <button className="btn-ghost" onClick={() => onConfigOpen(a.team_id)}>
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5 V3.5 M8 12.5 V14.5 M14.5 8 H12.5 M3.5 8 H1.5 M12.6 3.4 L11.2 4.8 M4.8 11.2 L3.4 12.6 M12.6 12.6 L11.2 11.2 M4.8 4.8 L3.4 3.4"/></svg>
-              Configure scoring
-            </button>
-          )}
-        </div>
       </div>
 
-      <MonthScrubber months={months} monthIdx={monthIdx} onChange={setMonthIdx} />
 
+      {/* Performance and the trend share the top row; the matrix runs full width
+          beneath at 4 across; score breakdown closes the page in landscape. */}
       <div className="row top-row">
-        <div className="card hero-score">
-          <div className="card-head">
-            <div>
-              <div className="card-eyebrow">Month score · {MONTHS_LABELS[monthIdx]} {months[monthIdx].getFullYear()}</div>
-              <div className="card-title">Performance</div>
-            </div>
-            {delta != null && (
-              <div className={`delta ${delta >= 0 ? 'up' : 'down'}`}>
-                <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2"><path d={delta >= 0 ? "M3 8 L6 4 L9 8" : "M3 4 L6 8 L9 4"}/></svg>
-                {Math.abs(delta)} vs {MONTHS_LABELS[monthIdx - 1]}
+          <div className="card hero-score">
+            <div className="card-head">
+              <div>
+                <div className="card-eyebrow">Month score · {MONTHS_LABELS[monthIdx]} {months[monthIdx].getFullYear()}</div>
+                <div className="card-title">Performance</div>
               </div>
-            )}
-          </div>
-          <div className="hero-score-body">
-            <RadialGauge value={m.total} max={m.max} size={188}/>
-            <div className="hero-score-side">
-              <div className="mini-stat"><div className="mini-stat-label">YTD avg</div><div className="mini-stat-val">{ytd.toFixed(1)}<span className="mini-stat-max">/{m.max}</span></div></div>
-              <div className="mini-stat"><div className="mini-stat-label">Annual target</div><div className="mini-stat-val">{fmtInrCeil(emp.target)}</div></div>
-              <div className="mini-stat"><div className="mini-stat-label">Monthly target</div><div className="mini-stat-val">{fmtInrCeil(m.monthlyTarget)}</div></div>
+              {delta != null && (
+                <div className={`delta ${delta >= 0 ? 'up' : 'down'}`}>
+                  <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2"><path d={delta >= 0 ? "M3 8 L6 4 L9 8" : "M3 4 L6 8 L9 4"}/></svg>
+                  {Math.abs(delta)} vs {MONTHS_LABELS[monthIdx - 1]}
+                </div>
+              )}
+            </div>
+            <div className="hero-score-body">
+              <RadialGauge value={m.total} max={m.max} size={188}/>
+              <div className="hero-score-side">
+                <div className="mini-stat"><div className="mini-stat-label">YTD avg</div><div className="mini-stat-val">{ytd.toFixed(1)}<span className="mini-stat-max">/{m.max}</span></div></div>
+                <div className="mini-stat"><div className="mini-stat-label">Annual target</div><div className="mini-stat-val">{fmtInrCeil(emp.target)}</div></div>
+                <div className="mini-stat"><div className="mini-stat-label">Monthly target</div><div className="mini-stat-val">{fmtInrCeil(m.monthlyTarget)}</div></div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-eyebrow">By KRA category</div>
-              <div className="card-title">Score breakdown</div>
+          <div className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-eyebrow">FY 20{currentFyLabel().split('-')[0]}–20{currentFyLabel().split('-')[1]}</div>
+                <div className="card-title">Monthly trend</div>
+              </div>
+              <div className="legend">
+                <div className="legend-item"><span className="legend-dot" style={{ background: emp.color }}/>{emp.name}</div>
+              </div>
             </div>
+            <TrendChart series={[{ emp, points: months.map((_, i) => computeMonth(a, i).total) }]} months={months} monthIdx={monthIdx} max={m.max}/>
           </div>
-          <div className="kra-split">
-            <RadarChart scores={m.scores} defs={teamDefs} kras={teamKras} size={220}/>
-            <KraBars scores={m.scores} defs={teamDefs} kras={teamKras}/>
-          </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-head">
-          <div>
-            <div className="card-eyebrow">FY 20{currentFyLabel().split('-')[0]}–20{currentFyLabel().split('-')[1]}</div>
-            <div className="card-title">Monthly trend</div>
-          </div>
-          <div className="legend">
-            <div className="legend-item"><span className="legend-dot" style={{ background: emp.color }}/>{emp.name}</div>
-          </div>
-        </div>
-        <TrendChart series={[{ emp, points: months.map((_, i) => computeMonth(a, i).total) }]} months={months} monthIdx={monthIdx} max={m.max}/>
       </div>
 
       <KpiGrid emp={emp} a={a} m={m} monthIdx={monthIdx} months={months} defs={teamDefs} kras={teamKras} isAdmin={isAdmin} saving={saving} onSave={onSave}/>
+
+      {/* Monthly sales — the ₹ figure behind the Sales Achievement metric, on the same
+          chart treatment as the score trend. Axis is compacted to L/Cr; plotting raw
+          rupees would print 39297706 down the side. */}
+      {(() => {
+        const sales = months.map((_, i) => Number(computeMonth(a, i).all?.actual_sales) || 0)
+        const target = Number(m.monthlyTarget) || 0
+        const peak = Math.max(...sales, target, 1)
+        const compact = v => v >= 1e7 ? `${(v / 1e7).toFixed(1)}Cr` : v >= 1e5 ? `${(v / 1e5).toFixed(1)}L` : Math.round(v)
+        return (
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div className="card-head">
+              <div>
+                <div className="card-eyebrow">FY 20{currentFyLabel().split('-')[0]}–20{currentFyLabel().split('-')[1]} · monthly target {fmtInrCeil(target)}</div>
+                <div className="card-title">Monthly sales</div>
+              </div>
+              <div className="legend">
+                <div className="legend-item"><span className="legend-dot" style={{ background: emp.color }}/>{emp.name}</div>
+              </div>
+            </div>
+            <TrendChart series={[{ emp, points: sales, tip: v => fmtInrCeil(v) }]}
+              months={months} monthIdx={monthIdx} max={peak} fmtTick={compact}/>
+          </div>
+        )
+      })()}
+
+      <div className="card kpi-breakdown">
+        <div className="card-head">
+          <div>
+            <div className="card-eyebrow">By KRA category</div>
+            <div className="card-title">Score breakdown</div>
+          </div>
+        </div>
+        <div className="kra-split">
+          <RadarChart scores={m.scores} defs={teamDefs} kras={teamKras} size={220}/>
+          <KraBars scores={m.scores} defs={teamDefs} kras={teamKras}/>
+        </div>
+      </div>
     </div>
   )
 }
 
 // ── Compare view ──
-function CompareView({ selectedEmps, assignments, months, monthIdx, setMonthIdx, computeMonth, thresholdsByTeam, defsByTeam, krasByTeam, onConfigOpen }) {
+function CompareView({ selectedEmps, assignments, months, monthIdx, setMonthIdx, computeMonth, thresholdsByTeam, defsByTeam, krasByTeam }) {
   const data = selectedEmps.map(emp => {
     const a = assignments.find(x => x.profile_id === emp.id)
     return { emp, a, m: a ? computeMonth(a, monthIdx) : null }
@@ -709,7 +736,6 @@ function CompareView({ selectedEmps, assignments, months, monthIdx, setMonthIdx,
         </div>
       </div>
 
-      <MonthScrubber months={months} monthIdx={monthIdx} onChange={setMonthIdx}/>
 
       <div className="card">
         <div className="card-head">
@@ -793,31 +819,63 @@ function RadialGauge({ value, max = 80, size = 168 }) {
   )
 }
 
-function TrendChart({ series, months, monthIdx, max = 80 }) {
+function TrendChart({ series, months, monthIdx, max = 80, fmtTick = v => v }) {
+  // Same market-chart treatment as the People dashboard: smooth curves and a soft area
+  // fill instead of the old straight polyline, with the grid and labels reading from the
+  // design tokens rather than hardcoded greys. Still multi-series, so the compare view
+  // keeps working.
   const W = 720, H = 220, P = { l: 40, r: 16, t: 16, b: 28 }
   const innerW = W - P.l - P.r, innerH = H - P.t - P.b
-  const x = i => P.l + (i / (months.length - 1)) * innerW
-  const y = v => P.t + innerH - (v / max) * innerH
+  const x = i => P.l + (i / Math.max(1, months.length - 1)) * innerW
+  const y = v => P.t + innerH - (v / (max || 1)) * innerH
   const ticks = [0, max*0.25, max*0.5, max*0.75, max].map(v => Math.round(v))
+  // Symmetric cubic through the points — the same curve the shared TrendChart draws.
+  const smooth = pts => {
+    if (pts.length < 2) return ''
+    let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]
+      const cx = (x0 + x1) / 2
+      d += ` C ${cx.toFixed(1)} ${y0.toFixed(1)}, ${cx.toFixed(1)} ${y1.toFixed(1)}, ${x1.toFixed(1)} ${y1.toFixed(1)}`
+    }
+    return d
+  }
+  const single = series.length === 1
   return (
     <svg className="trend" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+      <defs>
+        {series.map(s => (
+          <linearGradient key={s.emp.id} id={`kpi-fill-${s.emp.id}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={s.emp.color} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={s.emp.color} stopOpacity="0.01" />
+          </linearGradient>
+        ))}
+      </defs>
       {ticks.map(v => (
         <g key={v}>
-          <line x1={P.l} x2={W - P.r} y1={y(v)} y2={y(v)} stroke="#EEF1F5" strokeWidth="1"/>
-          <text x={P.l - 8} y={y(v) + 3} fontSize="10" fill="#94A3B8" textAnchor="end" fontFamily="Geist Mono, monospace">{v}</text>
+          <line x1={P.l} x2={W - P.r} y1={y(v)} y2={y(v)} stroke="var(--o-line-2, #EEF1F5)" strokeWidth="1"/>
+          <text x={P.l - 8} y={y(v) + 3} fontSize="10" fill="var(--o-muted-2, #94A3B8)" textAnchor="end" fontFamily="var(--mono)">{fmtTick(v)}</text>
         </g>
       ))}
       {months.map((_, i) => (
-        <text key={i} x={x(i)} y={H - 10} fontSize="10" fill={i === monthIdx ? '#1a73e8' : '#94A3B8'} fontWeight={i === monthIdx ? 600 : 400} textAnchor="middle" fontFamily="Geist Mono, monospace">{MONTHS_LABELS[i]}</text>
+        <text key={i} x={x(i)} y={H - 10} fontSize="10"
+          fill={i === monthIdx ? 'var(--ssc-blue, #1a73e8)' : 'var(--o-muted-2, #94A3B8)'}
+          fontWeight={i === monthIdx ? 600 : 400} textAnchor="middle" fontFamily="var(--mono)">{MONTHS_LABELS[i]}</text>
       ))}
-      <line x1={x(monthIdx)} x2={x(monthIdx)} y1={P.t} y2={H - P.b} stroke="#3DD9D6" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.7"/>
-      {series.map((s, sIdx) => {
-        const path = s.points.map((v, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(v)}`).join(' ')
+      <line x1={x(monthIdx)} x2={x(monthIdx)} y1={P.t} y2={H - P.b}
+        stroke="var(--ssc-blue, #1a73e8)" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.45"/>
+      {series.map(s => {
+        const pts = s.points.map((v, i) => [x(i), y(v)])
+        const line = smooth(pts)
+        const base = H - P.b
         return (
           <g key={s.emp.id}>
-            <path d={path} stroke={s.emp.color} strokeWidth="2.2" fill="none" strokeLinejoin="round" strokeLinecap="round"/>
-            {s.points.map((v, i) => (
-              <circle key={i} cx={x(i)} cy={y(v)} r={i === monthIdx ? 4 : 2.5} fill="#fff" stroke={s.emp.color} strokeWidth={i === monthIdx ? 2.5 : 1.5}/>
+            {single && line && <path d={`${line} L ${pts[pts.length-1][0].toFixed(1)} ${base} L ${pts[0][0].toFixed(1)} ${base} Z`} fill={`url(#kpi-fill-${s.emp.id})`} />}
+            <path d={line} stroke={s.emp.color} strokeWidth="2.2" fill="none" strokeLinejoin="round" strokeLinecap="round"/>
+            {pts.map(([px, py], i) => (
+              <circle key={i} cx={px} cy={py} r={i === monthIdx ? 4 : 2.5} fill="#fff" stroke={s.emp.color} strokeWidth={i === monthIdx ? 2.5 : 1.5}>
+                <title>{`${MONTHS_LABELS[i]} · ${s.tip ? s.tip(s.points[i]) : `${s.points[i]}/${max} pts`}`}</title>
+              </circle>
             ))}
           </g>
         )
@@ -900,6 +958,12 @@ function KpiGrid({ emp, a, m, monthIdx, months, defs = [], kras = {}, isAdmin, s
   }
   function commit() { onSave(a.id, editing, draft, monthIso); setEditing(null); setDraft('') }
   function cancel() { setEditing(null); setDraft('') }
+  // Enter saves, Escape abandons — the box was mouse-only before, so every value
+  // needed a trip to a tiny tick button.
+  function onKey(e) {
+    if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); commit() }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel() }
+  }
 
   return (
     <div className="card">
@@ -908,7 +972,7 @@ function KpiGrid({ emp, a, m, monthIdx, months, defs = [], kras = {}, isAdmin, s
           <div className="card-eyebrow">Inputs · {MONTHS_LABELS[monthIdx]} {months[monthIdx].getFullYear()}</div>
           <div className="card-title">KPI metrics</div>
         </div>
-        <div className="card-sub">{isAdmin ? 'Admin / Management can edit. Click any tile to override.' : 'View-only.'}</div>
+        <div className="card-sub">{isAdmin ? 'Use “Edit value” on a metric to override. AUTO metrics are computed.' : 'View-only.'}</div>
       </div>
       <div className="kpi-grid">
         {defs.map(def => {
@@ -932,7 +996,7 @@ function KpiGrid({ emp, a, m, monthIdx, months, defs = [], kras = {}, isAdmin, s
           if (def.kpi_key === 'sales_achievement') support = <>{fmtInr(m.all?.actual_sales || 0)} of {fmtInr(m.monthlyTarget)}</>
 
           return (
-            <div key={def.kpi_key} className={`kpi-card kpi-${tone}`} onClick={() => def.source !== 'derived' && startEdit(def.kpi_key, value)}>
+            <div key={def.kpi_key} className={`kpi-card kpi-${tone}${isEditing ? ' is-editing' : ''}`}>
               <div className="kpi-card-top">
                 <div className="kpi-tag" style={{ background: kra?.color || FALLBACK_KRA_COLOR }}>{def.kra}</div>
                 <div className="kpi-name">{def.label}</div>
@@ -942,11 +1006,18 @@ function KpiGrid({ emp, a, m, monthIdx, months, defs = [], kras = {}, isAdmin, s
               </div>
               <div className="kpi-target">{def.is_scored ? `Target: ${targetText} for ${s.max} pts` : 'Input value (feeds derived KPI)'}</div>
               {isEditing ? (
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input type="number" step="any" autoFocus value={draft} onChange={e => setDraft(e.target.value)} onClick={e => e.stopPropagation()}
-                    style={{ flex: 1, padding: '6px 8px', fontSize: 14, border: '1.5px solid #1a73e8', borderRadius: 5, fontFamily: 'Geist Mono, monospace', outline: 'none' }} />
-                  <button onClick={(e) => { e.stopPropagation(); commit() }} disabled={saving} style={{ padding: '6px 10px', background: '#1a73e8', color: 'white', border: 0, borderRadius: 5, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✓</button>
-                  <button onClick={(e) => { e.stopPropagation(); cancel() }} style={{ padding: '6px 10px', background: 'white', border: '1.5px solid #E8EBF0', borderRadius: 5, fontSize: 12, cursor: 'pointer' }}>×</button>
+                <div className="kpi-edit-row">
+                  <div className="kpi-edit-field">
+                    {def.format === 'inr' && <span className="kpi-edit-unit">₹</span>}
+                    <input type="number" step="any" min="0" inputMode="decimal" autoFocus
+                      value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKey}
+                      aria-label={`${def.label} value`} />
+                  </div>
+                  <button className="kpi-btn primary" onClick={commit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+                  <button className="kpi-btn" onClick={cancel}>Cancel</button>
+                  {/* The previous value stays on screen while typing — it used to vanish,
+                      so there was nothing to check the new number against. */}
+                  <div className="kpi-edit-was">was {displayValue} · {s.pts}/{s.max} pts · Enter to save</div>
                 </div>
               ) : (
                 <div className="kpi-value-row">

@@ -216,10 +216,14 @@ export const STATUS_META = {
 
 // Request-status badges (leave + regularization share the same lifecycle) — same palette,
 // one definition. Both pages import this instead of keeping their own colour maps.
+// `c` is the darkened TEXT colour and `b` the 12% tint — the pair the older cards use.
+// `dot` is the BASE colour, added so these statuses can drive the shared Orders pill
+// (.ol-status-pill derives both tint and text from one base via color-mix; handing it
+// the already-darkened `c` renders muddy). Same field name and role as STATUS_META.dot.
 export const REQ_ST = {
-  pending:      { l:'Pending manager', c:'#BA7D14', b:'rgba(245,158,11,0.12)' },
-  mgr_approved: { l:'Pending HR',      c:'#165DBA', b:'rgba(26,115,232,0.12)' },
-  approved:     { l:'Approved',        c:'#0F926D', b:'rgba(16,185,129,0.12)' },
-  rejected:     { l:'Rejected',        c:'#B63A3F', b:'rgba(239,68,68,0.12)' },
-  cancelled:    { l:'Cancelled',       c:'#64748B', b:'rgba(148,163,184,0.16)' },
+  pending:      { l:'Pending manager', c:'#BA7D14', b:'rgba(245,158,11,0.12)',  dot:'#F59E0B' },
+  mgr_approved: { l:'Pending HR',      c:'#165DBA', b:'rgba(26,115,232,0.12)',  dot:'#1a73e8' },
+  approved:     { l:'Approved',        c:'#0F926D', b:'rgba(16,185,129,0.12)',  dot:'#10B981' },
+  rejected:     { l:'Rejected',        c:'#B63A3F', b:'rgba(239,68,68,0.12)',   dot:'#EF4444' },
+  cancelled:    { l:'Cancelled',       c:'#64748B', b:'rgba(148,163,184,0.16)', dot:'#94A3B8' },
 }

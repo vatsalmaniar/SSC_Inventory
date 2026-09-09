@@ -6,6 +6,11 @@ import { fetchAll } from '../lib/fetchAll'
 import { ordersTotalValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
 import '../styles/dashboard.css'
+import '../styles/orders-redesign.css'
+import '../styles/people-home.css'
+import Stat from '../components/StatTile'
+import TrendChart from '../components/TrendChart'
+import StatusDonut from '../components/StatusDonut'
 
 // Every business role EXCEPT 'staff'. Used where the old code said roles:['all'] —
 // which was fine while every login was a business user, but 'staff' (warehouse and back
@@ -13,6 +18,12 @@ import '../styles/dashboard.css'
 // 'all' is deliberately gone from the role lists below: a future role should be denied by
 // default and granted on purpose, never included because nobody remembered to exclude it.
 const BIZ = ['sales','ops','admin','management','accounts','fc_kaveri','fc_godawari','demo']
+
+// Who sees the company overview (the percentage KPIs and the four charts).
+// Decision 2026-09-09: admin, management, accounts and ops — NOT the fulfilment roles
+// and NOT staff. Staff never land here anyway (login sends them to /people); FC users
+// keep their dispatch tiles below but not the company money view.
+const COMPANY_VIEW = ['admin','management','accounts','ops']
 
 // Who can read CRM data at all — mirrors can_read_crm() in sql/rls_step2_crm.sql.
 // ops and accounts are in it because Customer 360 shows opportunities, visits and quotes.
@@ -88,13 +99,37 @@ export default function Dashboard() {
     // Items fetched for Total Sales (canonical ordersTotalValue); sales users
     // are scoped to their own orders, same as the /orders headline.
     queries.push(fetchAll((from, to) => {
-      let q = sb.from('orders').select('status,order_type,order_items(total_price,unit_price_after_disc,lp_unit_price,cancelled_qty)').gte('created_at', FY_START).eq('is_test', false).order('id')
+      let q = sb.from('orders').select('status,order_type,created_at,order_items(total_price,unit_price_after_disc,lp_unit_price,cancelled_qty)').gte('created_at', FY_START).eq('is_test', false).order('id')
       if (role === 'sales') q = q.eq('created_by', session.user.id)
       return q.range(from, to)
     }))
     if (isAdmin) {
       queries.push(sb.from('purchase_orders').select('status,total_amount').eq('is_test', false).gte('created_at', FY_START))
-      queries.push(sb.from('inventory').select('quantity'))
+      // PAGED: 4,231 stock rows is past PostgREST's 1000-row cap. Unpaged, the low/out
+      // counts were computed from the first 1000 rows only — understating both.
+      queries.push(fetchAll((from, to) => sb.from('inventory')
+        .select('product_code,quantity').order('product_code').order('location').range(from, to)))
+      // SI = the stocked range (359 items). CI items are not held, so "out of stock"
+      // across all 4,231 inventory lines was never the question worth answering.
+      queries.push(sb.from('items').select('item_code').eq('type', 'SI').eq('is_active', true))
+    }
+    // ── company overview ──────────────────────────────────────────────────────
+    // Only fetched for the roles that may see it, so a sales or FC login never even
+    // requests receivables. RLS would also refuse most of it, but not asking is the
+    // clearer contract.
+    // People tiles for EVERY role. office_presence() is the same presence-only RPC the
+    // People home uses — name + in/out + on-leave, no times, no attendance detail — so a
+    // sales or FC login gets a true company figure without reading anyone's punches.
+    queries.push(sb.rpc('office_presence'))
+    // count only — never pull 4,000 customer rows to show one number
+    queries.push(sb.from('customers').select('id', { count: 'exact', head: true }))
+
+    const companyView = COMPANY_VIEW.includes(role)
+    if (companyView) {
+      // win rate needs the CLOSED stages, which the pipeline query excludes
+      queries.push(sb.from('crm_opportunities').select('stage'))
+      // receivables: the newest dues run only — older runs are superseded snapshots
+      queries.push(sb.from('customer_dues_runs').select('id').order('id', { ascending: false }).limit(1))
     }
 
     const results = await Promise.all(queries)
@@ -102,6 +137,23 @@ export default function Dashboard() {
     const ordersRes = results[1]
     const poRes = isAdmin ? results[2] : { data: [] }
     const invRes = isAdmin ? results[3] : { data: [] }
+    const siRes  = isAdmin ? results[4] : { data: [] }
+    const presIdx = isAdmin ? 5 : 2
+    const presRes = results[presIdx] || { data: [] }
+    const custRes = results[presIdx + 1] || { count: 0 }
+    const base = presIdx + 2
+    const crmAllRes = companyView ? results[base] : { data: [] }
+    const runRes    = companyView ? results[base + 1] : { data: [] }
+
+    // Ageing for the latest dues run. Paged: ~1,900 bills is past the 1000-row cap, and
+    // a truncated read would understate what is owed.
+    let ageing = []
+    const runId = runRes.data?.[0]?.id
+    if (companyView && runId) {
+      const { data: bills } = await fetchAll((from, to) => sb.from('customer_dues_bills')
+        .select('pending_inr,days_past_due').eq('run_id', runId).order('id').range(from, to))
+      ageing = bills || []
+    }
 
     const crmOpen = crmRes.data || []
     const orders = ordersRes.data || []
@@ -119,10 +171,68 @@ export default function Dashboard() {
       procOpenPOs: pos.filter(p => !['material_received','closed','cancelled'].includes(p.status)).length,
       procOpenPOValue: pos.filter(p => !['material_received','closed','cancelled'].includes(p.status)).reduce((s, p) => s + (p.total_amount || 0), 0),
       procPendingAppr: pos.filter(p => p.status === 'pending_approval').length,
+      procTotalValue: pos.reduce((s2, p) => s2 + (p.total_amount || 0), 0),
       billingAction: orders.filter(o => BILLING_ACTION_STATUSES.includes(o.status)).length,
       billingOverrides: 0,
       invLow: inv.filter(i => i.quantity > 0 && i.quantity <= 5).length,
       invZero: inv.filter(i => i.quantity === 0).length,
+
+      // ── company overview ──────────────────────────────────────────────────
+      companyView,
+      // Win rate over CLOSED opportunities only. Counting open ones would drag it
+      // down for no reason — an opportunity still in play has not been lost.
+      crmWon: (crmAllRes.data || []).filter(o => o.stage === 'WON').length,
+      crmLost: (crmAllRes.data || []).filter(o => o.stage === 'LOST').length,
+      crmFunnel: ['LEAD_CAPTURED','CONTACTED','BOM_RECEIVED','QUOTATION_SENT','WON']
+        .map(k => ({ key: k, n: (crmAllRes.data || []).filter(o => o.stage === k).length })),
+
+      // Receivables ageing. days_past_due <= 0 (or null) is not yet due.
+      ageing: (() => {
+        const keys = ['Not due','1–30','31–60','61–90','90+']
+        const b = Object.fromEntries(keys.map(k => [k, { amount: 0, bills: 0 }]))
+        ageing.forEach(x => {
+          const d = Number(x.days_past_due) || 0
+          const k = d <= 0 ? 'Not due' : d <= 30 ? '1–30' : d <= 60 ? '31–60' : d <= 90 ? '61–90' : '90+'
+          b[k].amount += Number(x.pending_inr) || 0
+          b[k].bills += 1
+        })
+        return keys.map(label => ({ label, amount: b[label].amount, bills: b[label].bills }))
+      })(),
+
+      // Inventory health, three buckets — the tiles above only counted two.
+      invOk: inv.filter(i => i.quantity > 5).length,
+      invTotal: inv.length,
+
+      // SI availability: of the stocked range, how much is actually on the shelf.
+      ...(() => {
+        const qty = new Map()
+        inv.forEach(i => qty.set(i.product_code, (qty.get(i.product_code) || 0) + (Number(i.quantity) || 0)))
+        const codes = (siRes.data || []).map(x => x.item_code)
+        const inStock = codes.filter(c => (qty.get(c) || 0) > 0).length
+        return { siTotal: codes.length, siInStock: inStock, siOut: codes.length - inStock }
+      })(),
+
+      // Fulfilment: how much of the FY's order book has actually shipped.
+      ordersTotal: orders.length,
+      ordersDispatched: orders.filter(o => o.status === 'dispatched_fc').length,
+      ordersCancelled: orders.filter(o => o.status === 'cancelled').length,
+      customers: custRes.count || 0,
+
+      // Bookings per month across the FY, for the chart and the month-on-month delta.
+      bookings: (() => {
+        const by = new Map()
+        orders.forEach(o => {
+          if (!o.created_at) return
+          const k = String(o.created_at).slice(0, 7)
+          by.set(k, (by.get(k) || 0) + 1)
+        })
+        return [...by.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([k, n]) => ({ key: k, n }))
+      })(),
+
+      // ── people (every role) ───────────────────────────────────────────────
+      headcount: (presRes.data || []).length,
+      peopleIn: (presRes.data || []).filter(p => p.is_in).length,
+      peopleLeave: (presRes.data || []).filter(p => p.on_leave).length,
     })
     setLoading(false)
   }
@@ -137,47 +247,6 @@ export default function Dashboard() {
     ? APPS.filter(a => !['upload','users'].includes(a.key))
     : APPS.filter(a => a.roles.includes('all') || a.roles.includes(user.role))
 
-  function role(roleArr) { return roleArr.includes('all') || roleArr.includes(user.role) }
-
-  // Build module KPI tiles based on role access
-  const moduleKpis = []
-  if (role(CRM_VIEW)) {
-    moduleKpis.push({
-      key:'crm', tone:'deep', label:'CRM · Open Pipeline', value: fmtMoneyShort(m.crmOpenValue), sub:`${m.crmOpenCount} active opportunities`,
-      path:'/crm', icon:'pipeline'
-    })
-  }
-  if (role(BIZ)) {
-    moduleKpis.push({
-      key:'orders', tone:'forest', label:'Orders · Total Sales', value: fmtMoneyShort(m.ordersValue), sub: m.ordersPending > 0 ? `${m.ordersActive} active · ${m.ordersPending} pending approval` : `${m.ordersActive} active orders`,
-      path:'/orders', icon:'cart'
-    })
-  }
-  if (role(['fc_kaveri','fc_godawari','ops','admin','management','accounts'])) {
-    moduleKpis.push({
-      key:'fc', tone:'teal', label:'FC · Action Required', value: m.fcAction, sub:`${m.fcDelivered} delivered FYTD`,
-      path:'/fc', icon:'truck'
-    })
-  }
-  if (role(['ops','admin','management'])) {
-    moduleKpis.push({
-      key:'procurement', label:'Procurement · Open POs', value: m.procOpenPOs, sub: fmtMoneyShort(m.procOpenPOValue) + ' value', accent: m.procPendingAppr > 0 ? 'amber' : null, badge: m.procPendingAppr > 0 ? `${m.procPendingAppr} need approval` : null,
-      path:'/procurement', icon:'po'
-    })
-  }
-  if (role(['accounts','ops','admin','management'])) {
-    moduleKpis.push({
-      key:'billing', label:'Billing · Action Needed', value: m.billingAction, sub:'credit · invoice · e-way', accent: m.billingAction > 0 ? 'amber' : null,
-      path:'/billing', icon:'invoice'
-    })
-  }
-  if (role(['sales','admin','management','ops'])) {
-    moduleKpis.push({
-      key:'inventory', label:'Inventory · Low Stock', value: m.invLow + m.invZero, sub:`${m.invZero} out of stock`, accent: (m.invLow + m.invZero) > 0 ? 'amber' : null,
-      path:'/inventory', icon:'box'
-    })
-  }
-
   return (
     <Layout pageTitle="Home" pageKey="home">
       <div className="hd-content">
@@ -188,15 +257,206 @@ export default function Dashboard() {
           <div className="hd-date">{dateStr} · {FY_LABEL}</div>
         </div>
 
-        {/* Module KPIs */}
-        {!loading && moduleKpis.length > 0 && (
-          <div className="hd-section-label" style={{ marginTop: 4 }}>At a glance</div>
-        )}
-        <div className="hd-module-kpis">
-          {moduleKpis.map(({ key, ...rest }) => (
-            <KpiTile key={key} {...rest} onClick={() => navigate(rest.path)}/>
-          ))}
-        </div>
+        {/* ── Company overview — admin / management / accounts / ops ──────────── */}
+        {!loading && (m.companyView || m.headcount > 0) && (() => {
+          const closed = m.crmWon + m.crmLost
+          const winRate = closed ? Math.round((m.crmWon / closed) * 100) : null
+          const totalDue = m.ageing.reduce((a, x) => a + x.amount, 0)
+          const overdue = m.ageing.filter(x => x.label !== 'Not due').reduce((a, x) => a + x.amount, 0)
+          const overduePct = totalDue ? Math.round((overdue / totalDue) * 100) : null
+          const shipped = m.ordersTotal ? Math.round((m.ordersDispatched / m.ordersTotal) * 100) : null
+          const siPct = m.siTotal ? Math.round((m.siInStock / m.siTotal) * 100) : null
+          // Month on month on bookings. The CURRENT month is part-complete, so the
+          // comparison is against the same point last month would be misleading —
+          // this compares the two most recent COMPLETE months instead.
+          const bk = m.bookings || []
+          const complete = bk.slice(0, -1)                     // drop the running month
+          const lastFull = complete[complete.length - 1]
+          const prevFull = complete[complete.length - 2]
+          const bookDelta = lastFull && prevFull && prevFull.n
+            ? { pct: Math.round(((lastFull.n - prevFull.n) / prevFull.n) * 100), up: lastFull.n >= prevFull.n,
+                title: `${lastFull.n} vs ${prevFull.n} the month before` }
+            : null
+          const MON3 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+          const bookLabel = k => { const [y, mo] = k.split('-').map(Number); return `${MON3[mo-1]} ${String(y).slice(2)}` }
+          const funnelPeak = Math.max(1, ...m.crmFunnel.map(f => f.n))
+          return (
+            <>
+              <div className="hd-section-label" style={{ marginTop: 4 }}>Company</div>
+              <div className="orders-app dash-embed">
+                <div className="ph-bento lv-bento">
+                  {/* Money and pipeline: admin / management / accounts / ops only. The
+                      People ratios below render for every role — presence is not
+                      restricted, and a sales login would otherwise see an empty page. */}
+                  {m.companyView && <>
+                  <Stat label="Sales FYTD" value={fmtMoneyShort(m.ordersValue)}
+                    delta={bookDelta}
+                    foot={<><b>{m.ordersTotal}</b> orders booked</>} onClick={() => navigate('/orders')} />
+                  <Stat label="Customers" value={m.customers}
+                    foot="on the master" onClick={() => navigate('/customers')} />
+                  <Stat label="Won" value={winRate != null ? `${winRate}%` : '—'}
+                    foot={<><b>{m.crmWon}</b> won · <b>{m.crmLost}</b> lost</>} onClick={() => navigate('/crm')} />
+                  <Stat label="Overdue" value={overduePct != null ? `${overduePct}%` : '—'}
+                    warn={overduePct > 25}
+                    foot={<>{fmtMoneyShort(overdue)} of {fmtMoneyShort(totalDue)}</>} onClick={() => navigate('/billing')} />
+                  <Stat label="Dispatched" value={shipped != null ? `${shipped}%` : '—'}
+                    foot={<><b>{m.ordersDispatched}</b> of {m.ordersTotal} orders</>} onClick={() => navigate('/fc')} />
+                  <Stat label="SI in stock" value={siPct != null ? `${siPct}%` : '—'}
+                    warn={siPct != null && siPct < 85}
+                    foot={<><b>{m.siInStock}</b> of {m.siTotal} stocked items</>} onClick={() => navigate('/inventory')} />
+                  {/* Carried over from the old "At a glance" row so the procurement and
+                      billing signals are not lost with it. */}
+                  {/* One tile, not two: the value IS the headline and the count is its
+                      caption — "Open POs" and "Open PO value" said the same thing twice. */}
+                  <Stat label="Open POs" value={fmtMoneyShort(m.procOpenPOValue)}
+                    warn={m.procPendingAppr > 0}
+                    foot={m.procPendingAppr > 0
+                      ? <><b>{m.procPendingAppr}</b> need approval · {m.procOpenPOs} open</>
+                      : <><b>{m.procOpenPOs}</b> POs still open</>}
+                    onClick={() => navigate('/procurement')} />
+                  <Stat label="Billing actions" value={m.billingAction}
+                    warn={m.billingAction > 0}
+                    foot="credit · invoice · e-way" onClick={() => navigate('/billing')} />
+                  </>}
+                  {/* People sits in the SAME row, as ratios rather than raw counts.
+                      Presence comes from office_presence(), which every role may read. */}
+                  <Stat label="Attendance" value={m.headcount ? `${Math.round((m.peopleIn / m.headcount) * 100)}%` : '—'}
+                    foot={<><b>{m.peopleIn}</b> of {m.headcount} in today</>}
+                    onClick={() => navigate('/people/attendance/muster')} />
+                  <Stat label="On leave" value={m.headcount ? `${Math.round((m.peopleLeave / m.headcount) * 100)}%` : '—'}
+                    foot={<><b>{m.peopleLeave}</b> approved today</>}
+                    onClick={() => navigate('/people/attendance/leave')} />
+                </div>
+
+                {m.companyView && (<>
+                {/* Sales vs purchase — the two sides of the FY on one scale. Sales comes
+                    from ordersTotalValue (the one order-value formula); purchases are the
+                    PO totals. Not a margin: PO value is committed spend, not cost of the
+                    goods sold in those orders. */}
+                {(() => {
+                  const sales = m.ordersValue || 0
+                  const purch = m.procTotalValue || 0
+                  const peak = Math.max(sales, purch, 1)
+                  const ratio = purch > 0 ? Math.round((sales / purch) * 100) : null
+                  return (
+                    <div className="card" style={{ marginBottom: 14 }}>
+                      <div className="card-head">
+                        <div>
+                          <div className="card-eyebrow">FY to date · committed, not cost of sales</div>
+                          <div className="card-title">Sales vs purchase</div>
+                        </div>
+                        <span className="trend-pill mono">{ratio != null ? `${ratio}% sales : purchase` : '—'}</span>
+                      </div>
+                      <div className="dash-vs">
+                        <div className="dash-vs-row">
+                          <span className="dash-vs-l">Sales</span>
+                          <span className="dash-vs-track"><span style={{ width: `${(sales/peak)*100}%`, background: '#10B981' }} /></span>
+                          <span className="dash-vs-v">{fmtMoneyShort(sales)}</span>
+                        </div>
+                        <div className="dash-vs-row">
+                          <span className="dash-vs-l">Purchase</span>
+                          <span className="dash-vs-track"><span style={{ width: `${(purch/peak)*100}%`, background: '#1a73e8' }} /></span>
+                          <span className="dash-vs-v">{fmtMoneyShort(purch)}</span>
+                        </div>
+                        <div className="dash-vs-row">
+                          <span className="dash-vs-l">Open POs</span>
+                          <span className="dash-vs-track"><span style={{ width: `${(m.procOpenPOValue/peak)*100}%`, background: '#F59E0B' }} /></span>
+                          <span className="dash-vs-v">{fmtMoneyShort(m.procOpenPOValue)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                <div className="dash-charts">
+                  {/* Order bookings per month — volume, where sales-vs-purchase is value. */}
+                  <div className="card">
+                    <div className="card-head">
+                      <div><div className="card-eyebrow">FY to date</div><div className="card-title">Order bookings</div></div>
+                      <span className="trend-pill mono">{m.ordersTotal} orders</span>
+                    </div>
+                    <TrendChart
+                      points={(m.bookings || []).map(b => ({ key: b.key, label: bookLabel(b.key), value: b.n,
+                        note: b.key === (m.bookings[m.bookings.length-1] || {}).key ? 'month in progress' : null }))}
+                      fmt={v => `${v} orders`} height={168} />
+                  </div>
+
+                  {/* People as a chart, not two numbers: who is in, on leave, or not in
+                      yet. Presence only — office_presence() is readable by every role. */}
+                  <div className="card">
+                    <div className="card-head">
+                      <div><div className="card-eyebrow">{m.headcount} people</div><div className="card-title">On the floor today</div></div>
+                      <span className="trend-pill mono">{m.headcount ? `${Math.round((m.peopleIn / m.headcount) * 100)}%` : '—'}</span>
+                    </div>
+                    <StatusDonut
+                      pct={m.headcount ? Math.round((m.peopleIn / m.headcount) * 100) : 0}
+                      centerLabel="IN OFFICE"
+                      rows={[
+                        { label:'In office', value:m.peopleIn,    color:'#10B981' },
+                        { label:'On leave',  value:m.peopleLeave, color:'#8B5CF6' },
+                      ]}
+                      summary={{ label:'Not in yet', value:Math.max(0, m.headcount - m.peopleIn - m.peopleLeave) }}
+                    />
+                  </div>
+
+                  {/* Receivables ageing — the chart with the sharpest signal: what is
+                      owed, and how much of it is long overdue. */}
+                  <div className="card">
+                    <div className="card-head">
+                      <div><div className="card-eyebrow">Latest statement</div><div className="card-title">Receivables ageing</div></div>
+                      <span className="trend-pill mono">{fmtMoneyShort(totalDue)}</span>
+                    </div>
+                    {/* Ageing curve: the shared line chart across the buckets. Points
+                        past "Not due" are marked red so the overdue tail reads at a
+                        glance. */}
+                    <TrendChart
+                      points={m.ageing.map(x => ({ key: x.label, label: x.label, value: x.amount,
+                        bad: x.label !== 'Not due',
+                        note: `${x.bills} bill${x.bills === 1 ? '' : 's'}` }))}
+                      fmt={v => fmtMoneyShort(v)} height={168} />
+                  </div>
+
+                  {/* CRM funnel */}
+                  <div className="card">
+                    <div className="card-head">
+                      <div><div className="card-eyebrow">Opportunities</div><div className="card-title">Pipeline funnel</div></div>
+                      <span className="trend-pill mono">{winRate != null ? `${winRate}% win` : '—'}</span>
+                    </div>
+                    <div className="funnel">
+                      {m.crmFunnel.map(f => (
+                        <div key={f.key} className="funnel-row">
+                          <div className="funnel-label"><span className="funnel-dot" style={{ background: f.key === 'WON' ? '#10B981' : '#1a73e8' }}/>
+                            <span className="funnel-name">{f.key.replace(/_/g,' ').toLowerCase()}</span></div>
+                          <div className="funnel-bar-wrap"><div className="funnel-bar" style={{ width: `${(f.n/funnelPeak)*100}%`, background: f.key === 'WON' ? '#10B981' : '#1a73e8' }}/></div>
+                          <div className="funnel-val">{f.n}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Inventory health */}
+                  <div className="card">
+                    <div className="card-head">
+                      <div><div className="card-eyebrow">{m.siTotal} stocked (SI) items</div><div className="card-title">Stock availability</div></div>
+                      <span className="trend-pill mono">{siPct != null ? `${siPct}%` : '—'}</span>
+                    </div>
+                    <StatusDonut
+                      pct={siPct || 0}
+                      centerLabel="IN STOCK"
+                      rows={[
+                        { label:'In stock',     value:m.siInStock, color:'#10B981' },
+                        { label:'Out of stock', value:m.siOut,     color:'#EF4444' },
+                      ]}
+                      summary={{ label:'Low across all lines', value:m.invLow }}
+                    />
+                  </div>
+                </div>
+                </>)}
+              </div>
+            </>
+          )
+        })()}
+
 
         {/* Apps */}
         <div className="hd-apps-section">
@@ -229,23 +489,6 @@ export default function Dashboard() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, badge, tone, onClick }) {
-  const isHero = !!tone
-  return (
-    <div className={`hd-kpi-tile ${isHero ? `hd-kpi-hero hd-tone-${tone}` : ''} ${accent ? `hd-accent-${accent}` : ''}`} onClick={onClick}>
-      {isHero && <KpiChartBg tone={tone}/>}
-      <div className="hd-kpi-top">
-        <div className="hd-kpi-label">{label}</div>
-        <span className="hd-kpi-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>
-      </div>
-      <div className="hd-kpi-value">{value}</div>
-      <div className="hd-kpi-foot">
-        {sub && <div className="hd-kpi-sub mono">{sub}</div>}
-        {badge && <span className="hd-kpi-badge mono">{badge}</span>}
-      </div>
-    </div>
-  )
-}
 
 function KpiChartBg({ tone }) {
   if (tone === 'forest' || tone === 'teal') {

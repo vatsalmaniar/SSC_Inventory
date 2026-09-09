@@ -72,23 +72,22 @@ export default function Login() {
       return
     }
 
-    // /people is the home page for everyone. It is the one screen every role can open
-    // (see NAV_ITEMS 'people' in Layout) and the only one that greets a person with
-    // their own attendance, leave and claims rather than a module index.
+    // Landing (decision 2026-09-09): the fulfilment roles and warehouse/back-office
+    // 'staff' open on People — People 360 is the whole of their day. Everyone else
+    // opens on the dashboard, which carries the company overview.
     //
-    // 'demo' is the single exception: it appears in NO nav item's roles, so Layout's
-    // accessDenied would hard-block /people. It keeps /dashboard, the only page it can
-    // open. Any new role must be added to the People nav list before it can land here.
-    if (role === 'demo') {
-      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading dashboard...' })
+    // 'demo' stays on /dashboard regardless: it appears in NO nav item's roles, so
+    // Layout's accessDenied would hard-block it on /people.
+    if (['fc_kaveri', 'fc_godawari', 'staff'].includes(role)) {
+      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading People...' })
       setView('overlay')
-      setTimeout(() => navigate('/dashboard'), 1600)
+      setTimeout(() => navigate('/people'), 1600)
       return
     }
 
-    setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading People...' })
+    setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading dashboard...' })
     setView('overlay')
-    setTimeout(() => navigate('/people'), 1600)
+    setTimeout(() => navigate('/dashboard'), 1600)
   }
 
   async function doLogin() {

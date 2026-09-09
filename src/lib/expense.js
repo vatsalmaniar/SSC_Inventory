@@ -28,14 +28,19 @@ export const LOCATIONS = ['Ahmedabad', 'Baroda']
 export const locLabel = l => l || '—'
 
 // ── Status metadata (the claim state machine) ────────────────────
+// `color`/`bg`/`border` are the darkened text + tint the older chips use. `dot` is the
+// BASE colour, added so these statuses can drive the shared Orders pill
+// (.ol-status-pill derives tint AND text from one base via color-mix — handing it the
+// already-darkened `color` renders muddy). Same field name and role as STATUS_META.dot
+// in lib/attendance.js and REQ_ST.dot.
 export const STATUS_META = {
-  pending:       { label: 'Pending',       queue: 'Awaiting Mgmt',  color: '#b45309', bg: '#fffbeb', border: '#fcd34d' },
-  mgmt_approved: { label: 'Mgmt Approved', queue: 'Awaiting Admin', color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd' },
-  approved:      { label: 'Approved',      queue: 'Payable',        color: '#047857', bg: '#f0fdf4', border: '#86efac' },
-  rejected:      { label: 'Rejected',      queue: 'Rejected',       color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
-  reimbursed:    { label: 'Reimbursed',    queue: 'Paid',           color: '#6d28d9', bg: '#f5f3ff', border: '#c4b5fd' },
+  pending:       { label: 'Pending',       queue: 'Awaiting Mgmt',  color: '#b45309', bg: '#fffbeb', border: '#fcd34d', dot: '#F59E0B' },
+  mgmt_approved: { label: 'Mgmt Approved', queue: 'Awaiting Admin', color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd', dot: '#1a73e8' },
+  approved:      { label: 'Approved',      queue: 'Payable',        color: '#047857', bg: '#f0fdf4', border: '#86efac', dot: '#10B981' },
+  rejected:      { label: 'Rejected',      queue: 'Rejected',       color: '#dc2626', bg: '#fef2f2', border: '#fca5a5', dot: '#EF4444' },
+  reimbursed:    { label: 'Reimbursed',    queue: 'Paid',           color: '#6d28d9', bg: '#f5f3ff', border: '#c4b5fd', dot: '#8B5CF6' },
 }
-export function statusMeta(s) { return STATUS_META[s] || { label: s, color: '#64748b', bg: '#f1f5f9', border: '#cbd5e1' } }
+export function statusMeta(s) { return STATUS_META[s] || { label: s, color: '#64748b', bg: '#f1f5f9', border: '#cbd5e1', dot: '#94A3B8' } }
 
 // ARGB fills for the Excel export — mirrors xlsStatusStyle() in xlsExport.js
 // so the Expenses sheet reads like the Orders sheets.

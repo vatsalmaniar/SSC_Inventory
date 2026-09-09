@@ -522,3 +522,15 @@
   .people-app .org-canvas{padding:20px 12px 26px;}
   .people-org-inspect{left:0;right:0;top:auto;bottom:0;width:auto;max-height:72vh;overflow-y:auto;border-radius:16px 16px 0 0;border-bottom:0;}
 }
+
+/* Drawers render through a portal on document.body, outside .people-app — so the
+   spinner needs the drawer scope too, the same pattern attendance-ui.css uses for
+   .reg-seg. Without it the QR drawer showed an invisible spinner. */
+.people-drawer .p-spin,
+.orders-app .p-spin {
+  width: 34px; height: 34px;
+  border: 3px solid var(--line, #E8EBF0);
+  border-top-color: var(--accent, #1a73e8);
+  border-radius: 50%;
+  animation: p-spin .7s linear infinite;
+}

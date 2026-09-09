@@ -5,12 +5,15 @@ import { fetchAll } from '../lib/fetchAll'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
 import AttendanceTabs from '../components/AttendanceTabs'
+import PeoplePager from '../components/PeoplePager'
+import { siteFromNote, isBareEssl } from '../lib/deviceLabel'
 import PeopleAvatar from '../components/PeopleAvatar'
-import { Spinner } from '../components/PeopleLoaders'
 import { visibleEmployees } from '../lib/peopleScope'
 import { istYmd, istMinutes, toMin, DEFAULT_CFG, PUNCH_DEBOUNCE_MS } from '../lib/attendance'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
+import '../styles/orders-redesign.css'
+import '../styles/people-home.css'
 
 const PER = 50
 const TIMELINES = [
@@ -128,11 +131,6 @@ export default function PeopleSwipes() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER))
   const safePage = Math.min(page, totalPages)
   const view = filtered.slice((safePage - 1) * PER, safePage * PER)
-  const pageWindow = useMemo(() => {
-    const w = []; const lo = Math.max(1, safePage - 2), hi = Math.min(totalPages, lo + 4)
-    for (let p = Math.max(1, hi - 4); p <= hi; p++) w.push(p)
-    return w
-  }, [safePage, totalPages])
 
   const timelineLabel = timeline === 'custom'
     ? (customFrom || customTo ? `${customFrom || '…'} – ${customTo || '…'}` : 'Custom range')
@@ -164,118 +162,115 @@ export default function PeopleSwipes() {
     await xlsDownload(wb, `Swipes_${timelineLabel.replace(/[^a-z0-9]+/gi, '_')}.xlsx`)
   }
 
-  if (loading) return <Layout pageKey="people" pageTitle="Swipes"><div className="people-app"><Spinner label="Loading swipes…" /></div></Layout>
-  if (denied) return <Layout pageKey="people" pageTitle="Swipes"><div className="people-app"><div className="e-empty">No swipe access.</div></div></Layout>
+  if (loading) return <Layout pageKey="people" pageTitle="Swipes"><div className="orders-app"><div className="o-loading">Loading swipes…</div></div></Layout>
+  if (denied) return <Layout pageKey="people" pageTitle="Swipes"><div className="orders-app"><div className="o-empty">No swipe access.</div></div></Layout>
 
   return (
     <Layout pageKey="people" pageTitle="Swipes">
-      <div className="people-app">
-        <div className="ph">
+      <div className="orders-app">
+        <div className="page-head">
           <div>
-            <button onClick={() => navigate('/people')} style={{ background: 'none', border: 0, cursor: 'pointer', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, padding: 0, marginBottom: 4 }}>
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width: 14, height: 14 }}><path d="M19 12H5M12 5l-7 7 7 7" /></svg>People
+            <button className="ph-back" onClick={() => navigate('/people')}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7" /></svg>People
             </button>
-            <h1 className="ph-title">Swipes</h1>
-            <div className="ph-sub">{filtered.length} swipes · {timelineLabel}</div>
+            <h1 className="page-title">Swipes</h1>
+            <div className="page-sub">{filtered.length} swipes · {timelineLabel}</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button className="btn btn-neutral btn-sm" onClick={downloadSwipes} title="Download swipes (Excel)">
+          <div className="page-meta">
+            <button className="btn-ghost" onClick={downloadSwipes} title="Download swipes (Excel)">
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{width:14,height:14}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Download
+              Export
             </button>
           </div>
         </div>
 
         <AttendanceTabs role={role} isManager={true} />
 
-        {/* timeline (Order-List style) */}
-        <div className="swf-tl" style={{ marginBottom: 12 }}>
-          {TIMELINES.map(({ key, label }) => (
-            <button key={key} className={timeline === key ? 'on' : ''} onClick={() => setTimeline(key)}>{label}</button>
-          ))}
+        {/* timeline + filters, in the shared control language */}
+        <div className="ph-filters">
+          <div className="ph-seg" role="group" aria-label="Timeline">
+            {TIMELINES.map(({ key, label }) => (
+              <button key={key} className={timeline === key ? 'on' : ''} onClick={() => setTimeline(key)}>{label}</button>
+            ))}
+          </div>
           {timeline === 'custom' && (
-            <div className="swf-custom">
-              <span>From</span>
-              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
-              <span>To</span>
-              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
-              {(customFrom || customTo) && <button className="btn btn-sm" style={{ padding: '4px 8px', fontSize: 11, color: 'var(--neg)' }} onClick={() => { setCustomFrom(''); setCustomTo('') }}>Clear</button>}
-            </div>
+            <span className="ph-monthwrap">
+              <input className="ph-month" type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
+              <span className="ph-dash">to</span>
+              <input className="ph-month" type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
+              {(customFrom || customTo) && <button className="ph-month-x" onClick={() => { setCustomFrom(''); setCustomTo('') }}>Clear</button>}
+            </span>
           )}
-        </div>
-
-        {/* person / branch / dept / method / derived-direction / late filters */}
-        <div className="filters" style={{flexWrap:'wrap'}}>
           {emps.length > 1 && (
-            <div className="f-sel"><select value={fEmp} onChange={e => setFEmp(e.target.value)}>
+            <select className="ph-picker" value={fEmp} onChange={e => setFEmp(e.target.value)}>
               <option value="all">All people</option>
               {emps.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
-            </select></div>
+            </select>
           )}
           {branches.length > 1 && (
-            <div className="f-sel"><select value={fBranch} onChange={e => setFBranch(e.target.value)}>
+            <select className="ph-picker" value={fBranch} onChange={e => setFBranch(e.target.value)}>
               <option value="all">All branches</option>
               {branches.map(b => <option key={b} value={b}>{b}</option>)}
-            </select></div>
+            </select>
           )}
           {depts.length > 1 && (
-            <div className="f-sel"><select value={fDept} onChange={e => setFDept(e.target.value)}>
+            <select className="ph-picker" value={fDept} onChange={e => setFDept(e.target.value)}>
               <option value="all">All departments</option>
               {depts.map(d => <option key={d} value={d}>{d}</option>)}
-            </select></div>
+            </select>
           )}
-          <div className="f-sel"><select value={fMethod} onChange={e => setFMethod(e.target.value)}>
+          <select className="ph-picker" value={fMethod} onChange={e => setFMethod(e.target.value)}>
             <option value="all">All methods</option>
             {methods.map(m => <option key={m} value={m}>{METHOD_LABEL[m] || m}</option>)}
-          </select></div>
-          <div className="f-sel"><select value={fDir} onChange={e => setFDir(e.target.value)}>
+          </select>
+          <select className="ph-picker" value={fDir} onChange={e => setFDir(e.target.value)}>
             <option value="all">In &amp; Out</option><option value="in">In only</option><option value="out">Out only</option><option value="dup">Duplicates</option>
-          </select></div>
+          </select>
           <button onClick={() => setFLate(v => !v)} title="First punch of the day after 10:15"
-            className="btn btn-sm" style={fLate
-              ? {background:'rgba(245,158,11,0.14)', color:'#BA7D14', border:'1px solid #F59E0B', fontWeight:600}
-              : {background:'var(--surface)', color:'var(--muted)', border:'1px solid var(--line)'}}>
-            Late in {fLate ? '· on' : ''}
-          </button>
+            className={'ph-chip' + (fLate ? ' on' : '')}>Late in{fLate ? ' · on' : ''}</button>
         </div>
 
-        <div className="acard" style={{ overflow: 'hidden' }}>
-          <div className="tbl-wrap">
-            <table className="dtbl" style={{ minWidth: 820 }}>
+        <div className="card">
+          <div className="ph-tbl-wrap">
+            <table className="ph-tbl" style={{ minWidth: 820 }}>
               <thead><tr><th>Employee</th><th>Date &amp; time</th><th>In / Out</th><th>Method</th><th>Location</th><th className="r">GPS</th></tr></thead>
               <tbody>
-                {view.length === 0 ? <tr><td colSpan={6}><div className="list-empty">No swipes match these filters.</div></td></tr> : view.map(r => (
+                {view.length === 0 ? <tr><td colSpan={6}><div className="o-empty">No swipes match these filters.</div></td></tr> : view.map(r => (
                   <tr key={r.id}>
-                    <td><div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
-                      <PeopleAvatar name={nameOf[r.employee_id] || ''} className="avatar" style={{ width: 24, height: 24, fontSize: 10, fontWeight: 600, flexShrink: 0 }} />
-                      <span style={{ fontSize:12.5, color:'var(--ink)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{nameOf[r.employee_id] || '—'}</span></div></td>
-                    <td style={{ color: 'var(--muted)', fontSize: 13 }}>{fmtDT(r.punch_at)}{isLateIn(r) && <span style={{marginLeft:7,fontSize:10,fontWeight:600,color:'#BA7D14',background:'rgba(245,158,11,0.12)',borderRadius:5,padding:'1px 6px'}}>late</span>}</td>
+                    <td>
+                      <div className="lv-emp">
+                        <PeopleAvatar name={nameOf[r.employee_id] || ''} className="avatar" style={{ width: 24, height: 24, fontSize: 10, fontWeight: 600, flexShrink: 0 }} />
+                        <span className="lv-emp-n">{nameOf[r.employee_id] || '—'}</span>
+                      </div>
+                    </td>
+                    <td className="m">
+                      {fmtDT(r.punch_at)}
+                      {isLateIn(r) && <span className="ph-reg is-pending" style={{width:'auto',padding:'0 5px',borderRadius:5}}>late</span>}
+                    </td>
                     <td>{(() => { const d = derived[r.id]?.dir
                       return d === 'dup'
-                        ? <span className="io-pill" style={{ '--sc': '#94A3B8' }} title="Repeat scan within 2 minutes — ignored by attendance"><span className="io-dot" />Dup</span>
-                        : <span className="io-pill" style={{ '--sc': d === 'in' ? '#10B981' : '#F59E0B' }} title="Derived from punch order (device flag is unreliable)"><span className="io-dot" />{d === 'in' ? 'In' : 'Out'}</span> })()}</td>
-                    <td>{r.method === 'mobile' ? <span className="method-tag gps">Mobile GPS</span> : r.method === 'biometric' ? <span className="method-tag biometric">Biometric</span> : <span className="method-tag web">{METHOD_LABEL[r.method] || r.method}</span>}</td>
-                    <td style={{ color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.note || ''}>{r.note || '—'}</td>
+                        ? <span className="ol-status-pill" style={{ '--stage-color': '#94A3B8' }} title="Repeat scan within 2 minutes — ignored by attendance"><span className="ol-status-dot" />Dup</span>
+                        : <span className="ol-status-pill" style={{ '--stage-color': d === 'in' ? '#10B981' : '#F59E0B' }} title="Derived from punch order (device flag is unreliable)"><span className="ol-status-dot" />{d === 'in' ? 'In' : 'Out'}</span> })()}</td>
+                    <td><span className={'ph-tag ' + (r.method === 'mobile' ? 'is-gps' : r.method === 'biometric' ? 'is-bio' : 'is-web')}>{r.method === 'mobile' ? 'Mobile GPS' : r.method === 'biometric' ? 'Biometric' : (METHOD_LABEL[r.method] || r.method)}</span></td>
+                    {/* Biometric notes become the site name (HO / Kaveri / Godawari);
+                        a bare "eSSL" means the device was not in ETT_DEVICE_MAP, so the
+                        site is unknown and we say so rather than guessing. Mobile punches
+                        keep their reverse-geocoded address. */}
+                    <td className="lv-reason" title={r.note || ''}>{(() => {
+                      if (isBareEssl(r.note)) return <span className="ph-noswipe">device not mapped</span>
+                      const site = siteFromNote(r.note)
+                      return site ? <span className="ph-tag is-bio">{site}</span> : (r.note || '—')
+                    })()}</td>
                     <td className="r">{r.lat != null && r.lng != null
-                      ? <a className="loc-icon" href={`https://maps.google.com/?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer" title="Open location in Maps"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg></a>
-                      : <span style={{ color: 'var(--muted-2)' }}>—</span>}</td>
+                      ? <a className="ph-loc" href={`https://maps.google.com/?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer" title="Open location in Maps"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg></a>
+                      : <span style={{ color: 'var(--o-muted-2)' }}>—</span>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--line-2)', flexWrap: 'wrap', gap: 10 }}>
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{filtered.length} swipes · page {safePage} of {totalPages}</span>
-              <div className="swf-pages">
-                <button className="swf-pg" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>‹</button>
-                {pageWindow[0] > 1 && <><button className="swf-pg" onClick={() => setPage(1)}>1</button>{pageWindow[0] > 2 && <span style={{ color: 'var(--muted-2)', padding: '0 2px' }}>…</span>}</>}
-                {pageWindow.map(p => <button key={p} className={'swf-pg' + (p === safePage ? ' on' : '')} onClick={() => setPage(p)}>{p}</button>)}
-                {pageWindow[pageWindow.length - 1] < totalPages && <>{pageWindow[pageWindow.length - 1] < totalPages - 1 && <span style={{ color: 'var(--muted-2)', padding: '0 2px' }}>…</span>}<button className="swf-pg" onClick={() => setPage(totalPages)}>{totalPages}</button></>}
-                <button className="swf-pg" disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)}>›</button>
-              </div>
-            </div>
-          )}
+          {/* House pager — replaces this page's bespoke swf-pg buttons. */}
+          <PeoplePager page={safePage} setPage={setPage} total={filtered.length} pageSize={PER} />
         </div>
       </div>
     </Layout>

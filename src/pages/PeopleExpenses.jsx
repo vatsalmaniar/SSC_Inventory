@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
+import Stat from '../components/StatTile'
+import TrendChart from '../components/TrendChart'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { fetchAll } from '../lib/fetchAll'
@@ -12,8 +14,34 @@ import * as EX from '../lib/expense'
 import '../styles/kpi-dashboard.css'
 import '../styles/orderdetail.css'   // .od-btn family — app-wide buttons
 import '../styles/expenses.css'      // drawers (.od-drawer*) are global via main.jsx
+import '../styles/orders-redesign.css'
+import '../styles/people-home.css'
 
 const PAGE_SIZE = 50
+
+/* Payment-method glyphs.
+ *
+ * Deliberately OUR OWN neutral marks, not Visa / Mastercard / Google Pay artwork:
+ *  - we store only `card`, `gpay` and `cash` — the CARD NETWORK IS NOT RECORDED, so a
+ *    Visa or Mastercard badge would be inventing information about the transaction;
+ *  - those are third-party trademarks with their own brand rules, which is not
+ *    something to paste into an internal tool without a reason.
+ * A card outline, a phone-with-rupee and a banknote read instantly and stay honest.
+ */
+const PAY_ICON = {
+  card: <><rect x="2" y="5" width="20" height="14" rx="2.5" /><path d="M2 10h20" /><path d="M6 15h4" /></>,
+  gpay: <><rect x="6" y="2" width="12" height="20" rx="2.5" /><path d="M10 6h4M9.5 10.5h5M9.5 13h5M12 10.5V16" /></>,
+  cash: <><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.6" /><path d="M5.5 9.5h.01M18.5 14.5h.01" /></>,
+}
+function PayMethod({ method }) {
+  const g = PAY_ICON[method]
+  return (
+    <span className="exp-pay">
+      {g && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{g}</svg>}
+      {EX.PAYMENT_LABEL[method] || method}
+    </span>
+  )
+}
 
 /* ── tiny inline glyphs (no emoji) ─────────────────────────────── */
 const I = {
@@ -31,8 +59,8 @@ const I = {
 function StatusChip({ status, txn }) {
   const m = EX.statusMeta(status)
   return (
-    <span className="exp-status" style={{ color: m.color, background: m.bg, border: `1px solid ${m.border}` }}>
-      <span className="exp-status-dot" style={{ background: m.color }} />
+    <span className="ol-status-pill" style={{ '--stage-color': m.dot }}>
+      <span className="ol-status-dot" />
       {m.label}{txn && status === 'reimbursed' && <span className="exp-status-txn">· {txn}</span>}
     </span>
   )
@@ -467,6 +495,7 @@ export default function PeopleExpenses() {
   const [profiles, setProfiles] = useState({})
   const [rows, setRows] = useState([])
   const [summary, setSummary] = useState([])
+  const [trend, setTrend] = useState([])   // last 12 months, for the chart only
   const [fPerson, setFPerson] = useState('')
   const [fStatus, setFStatus] = useState('')
   const [fCat, setFCat] = useState('')
@@ -498,11 +527,21 @@ export default function PeopleExpenses() {
     setLoading(true); setPage(0)
     setSummary([]); setRows([]) // avoid flashing the previous month's numbers under the new month label while the header/card stay visible
     try {
-      const [cats, profs, sum] = await Promise.all([
+      // 12-month series for the trend chart. Deliberately a separate, minimal query:
+      // the page's main fetch is one month with bills and categories joined, and widening
+      // that to a year would pull far more than the chart needs. RLS scopes it the same
+      // way, so the chart can never show claims the viewer cannot already see.
+      const firstMonth = EX.monthOptions(12)[EX.monthOptions(12).length - 1]?.value || month
+      const [cats, profs, sum, tr] = await Promise.all([
         sb.from('expense_categories').select('*').eq('is_active', true).order('sort_order'),
         sb.from('profiles').select('id,name,role,location'),
         sb.rpc('expense_summary', { p_month: month, p_is_test: testMode }),
+        fetchAll((from, to) => sb.from('expenses')
+          .select('month_start,amount,status,profile_id')
+          .gte('month_start', firstMonth).eq('is_test', testMode)
+          .order('month_start').order('id').range(from, to)),
       ])
+      setTrend(tr?.data || [])
       setCategories(cats.data || [])
       const pmap = {}; (profs.data || []).forEach(p => { pmap[p.id] = p }); setProfiles(pmap)
       setSummary(sum.data || [])
@@ -569,6 +608,25 @@ export default function PeopleExpenses() {
     : (me?.name || '')
   const cardLoc = isPriv ? (fPerson ? profiles[fPerson]?.location : null) : (me?.location || null)
   const cardCount = filtered.length
+
+  // Monthly totals for the chart. Follows the SAME person filter as the tiles, so the
+  // line always describes whatever the page is currently showing.
+  const trendPoints = useMemo(() => {
+    const opts = EX.monthOptions(12).slice().reverse()     // oldest -> newest
+    const scoped = (isPriv && fPerson) ? trend.filter(r => r.profile_id === fPerson)
+      : isPriv ? trend
+      : trend.filter(r => r.profile_id === me?.id)
+    const by = new Map()
+    scoped.forEach(r => {
+      if (r.status === 'rejected') return                  // rejected never cost anything
+      by.set(r.month_start, (by.get(r.month_start) || 0) + Number(r.amount || 0))
+    })
+    return opts.map(o => ({
+      key: o.value,
+      label: o.label.slice(0, 3),                          // "September 2026" -> "Sep"
+      value: by.get(o.value) || 0,
+    }))
+  }, [trend, isPriv, fPerson, me])
 
   async function viewBill(path) {
     const { data, error } = await sb.storage.from('expense-bills').createSignedUrl(path, 3600)
@@ -665,45 +723,25 @@ export default function PeopleExpenses() {
   // Only the initial profile fetch blanks the whole page — a subsequent data
   // reload (switching month/test mode) keeps the header/card visible and only
   // swaps the table body below, matching the Orders/GRN loading pattern.
-  if (!me) return <Layout pageKey="people"><div className="o-loading">Loading…</div></Layout>
+  if (!me) return <Layout pageKey="people"><div className="orders-app"><div className="o-loading">Loading…</div></div></Layout>
 
   return (
     <Layout pageKey="people">
-      <div className="kpi-app density-comfortable accent-ssc">
+      <div className="orders-app">
         <div className="page-head">
           <div>
-            <button className="od-btn" style={{ marginBottom: 8 }} onClick={() => navigate('/people')}>← Back</button>
+            <button className="ph-back" onClick={() => navigate('/people')}>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>People
+            </button>
             <h1 className="page-title">Expenses</h1>
             <div className="page-sub">Submit claims with bills · Management approves · Admin signs off · Accounts pays.</div>
           </div>
           <div className="page-meta">
-            <select className="exp-select" value={month} onChange={e => setMonth(e.target.value)}>
+            <select className="ph-picker" value={month} onChange={e => setMonth(e.target.value)}>
               {EX.monthOptions(12).map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
-            {me?.role === 'admin' && (
-              <label className={`o-test-toggle ${testMode ? 'on' : ''}`}>
-                <input type="checkbox" checked={testMode} onChange={e => setTestMode(e.target.checked)} style={{ accentColor: '#B45309', width: 13, height: 13 }} />
-                Test Mode
-              </label>
-            )}
-            {canConfig && <button className="od-btn" onClick={() => navigate('/people/expenses/config')}>Configure</button>}
-            <button className="od-btn od-btn-primary" onClick={() => setShowAdd(true)}>+ Add Expense</button>
-          </div>
-        </div>
-
-        {/* ── The card: total expense + spent vs budget for the selection ── */}
-        <div className="exp-card" style={{ marginBottom: 16 }}>
-          <div className="exp-card-top">
-            <div>
-              <div className="exp-card-label">Total expense · {EX.monthOptions(12).find(m => m.value === month)?.label}</div>
-              <div className="exp-card-amount">{fmtMoney(card_total)}</div>
-              <div className="exp-card-sub">
-                {cardCount} {cardCount === 1 ? 'claim' : 'claims'}{cardLoc ? ` · ${cardLoc}` : ''}
-              </div>
-            </div>
-
-            {isPriv ? (
-              <select className="exp-card-select" value={fPerson}
+            {isPriv && (
+              <select className="ph-picker" value={fPerson}
                 onChange={e => { setFPerson(e.target.value); setPage(0) }}>
                 <option value="">All people</option>
                 {/* This is a PEOPLE filter, not the budget list — the two are different
@@ -727,61 +765,66 @@ export default function PeopleExpenses() {
                     .map(o => <option key={o.id} value={o.id}>{o.name}</option>)
                 })()}
               </select>
-            ) : (
-              cardLoc && <div className="exp-card-pill">{cardLoc}</div>
             )}
-          </div>
-
-          {/* Expense vs Budget — the two numbers that drive the decision */}
-          <div className="exp-card-split">
-            <div className="exp-card-stat">
-              <div className="exp-card-ico"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg></div>
-              <div>
-                <div className="exp-card-stat-label">Expense</div>
-                <div className="exp-card-stat-val">{fmtMoney(card.expense)}</div>
-              </div>
-            </div>
-            <div className="exp-card-stat">
-              <div className="exp-card-ico"><svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7" /></svg></div>
-              <div>
-                <div className="exp-card-stat-label">Budget</div>
-                <div className="exp-card-stat-val">{card.budget > 0 ? fmtMoney(card.budget) : '—'}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Mileage budget consumption */}
-          {card.budget > 0 && (
-            <div className="exp-card-budget">
-              <div className="exp-card-btrack">
-                <div className="exp-card-bfill" style={{
-                  width: Math.min(100, EX.pctUsed(card.budgetedSpent, card.budget)) + '%',
-                  background: EX.isOver(card.budgetedSpent, card.budget) ? '#FCA5A5' : '#3DD9D6',
-                }} />
-              </div>
-              <div className="exp-card-bfoot">
-                <span>Mileage {fmtMoney(card.budgetedSpent)} / {fmtMoney(card.budget)}</span>
-                <span>{EX.isOver(card.budgetedSpent, card.budget)
-                  ? `${fmtMoney(-EX.remaining(card.budget, card.budgetedSpent))} over`
-                  : `${fmtMoney(EX.remaining(card.budget, card.budgetedSpent))} left`}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Payment decision */}
-          <div className="exp-card-foot">
-            <div className="exp-card-foot-l">
-              <span className="exp-card-foot-label">Ready to pay</span>
-              <span className="exp-card-foot-val">{fmtMoney(card.payable)}</span>
-              {card.pending > 0 && <span className="exp-card-foot-mut">· {fmtMoney(card.pending)} awaiting approval</span>}
-              {card.reimbursed > 0 && <span className="exp-card-foot-mut">· {fmtMoney(card.reimbursed)} paid</span>}
-            </div>
-            {card.payable > 0 && canPay && (
-              <button className="exp-card-cta" onClick={() => { setFStatus('approved'); setPage(0) }}>
-                Pay {fmtMoney(card.payable)}
-              </button>
+            {me?.role === 'admin' && (
+              <label className={`o-test-toggle ${testMode ? 'on' : ''}`}>
+                <input type="checkbox" checked={testMode} onChange={e => setTestMode(e.target.checked)} style={{ accentColor: '#B45309', width: 13, height: 13 }} />
+                Test Mode
+              </label>
             )}
+            {canConfig && <button className="btn-ghost" onClick={() => navigate('/people/expenses/config')}>Configure</button>}
+            <button className="btn-primary" onClick={() => setShowAdd(true)}>
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
+              Add Expense
+            </button>
           </div>
+        </div>
+
+        {/* The expense surface below is purpose-built (bill thumbnails, bulk select, budget
+            cards) with ~67 classes of its own, all scoped to .kpi-app. It keeps its own
+            shell nested here so every class still resolves and nothing about the claim
+            flow changes — only the page chrome above moved to the shared language. */}
+        <div className="kpi-app density-comfortable accent-ssc">
+
+        {/* Bento summary — the same figures the old card showed (total, approved,
+            awaiting, payable, mileage budget), in the shared tile language. Every value
+            is read from `card`, unchanged. */}
+        <div className="ph-bento lv-bento">
+          <Stat label={`Total · ${EX.monthOptions(12).find(m => m.value === month)?.label || ''}`}
+            value={fmtMoney(card_total)}
+            foot={<>{cardCount} {cardCount === 1 ? 'claim' : 'claims'}{cardLoc ? ` · ${cardLoc}` : ''}</>} />
+          <Stat label="Approved" value={fmtMoney(card.expense)} foot="actually spent" />
+          <Stat label="Awaiting" value={fmtMoney(card.pending)} warn={card.pending > 0}
+            foot={card.pending > 0 ? 'not yet approved' : 'nothing pending'} />
+          <Stat label="Ready to pay" value={fmtMoney(card.payable)}
+            foot={card.reimbursed > 0 ? <><b>{fmtMoney(card.reimbursed)}</b> already paid</> : 'approved, unpaid'}
+            onClick={card.payable > 0 && canPay ? () => { setFStatus('approved'); setPage(0) } : undefined} />
+          <Stat label="Mileage budget"
+            value={card.budget > 0 ? fmtMoney(card.budgetedSpent) : '—'}
+            unit={card.budget > 0 ? `/ ${fmtMoney(card.budget)}` : ''}
+            foot={card.budget > 0
+              ? <span className="lv-mini">
+                  <span className="lv-mini-bar"><span style={{
+                    width: Math.min(100, EX.pctUsed(card.budgetedSpent, card.budget)) + '%',
+                    background: EX.isOver(card.budgetedSpent, card.budget) ? '#EF4444' : '#10B981' }} /></span>
+                  {EX.isOver(card.budgetedSpent, card.budget)
+                    ? `${fmtMoney(-EX.remaining(card.budget, card.budgetedSpent))} over`
+                    : `${fmtMoney(EX.remaining(card.budget, card.budgetedSpent))} left`}
+                </span>
+              : 'no budget set'} />
+        </div>
+
+        {/* Monthly trend — same shared chart as the People dashboard, following the
+            person filter. Rejected claims are excluded: they never cost anything. */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-head">
+            <div>
+              <div className="card-eyebrow">Last 12 months{isPriv && fPerson ? ` · ${profiles[fPerson]?.name || ''}` : ''}</div>
+              <div className="card-title">Expense Trend</div>
+            </div>
+            <span className="trend-pill mono">{fmtMoney(trendPoints.reduce((a, p) => a + p.value, 0))} total</span>
+          </div>
+          <TrendChart points={trendPoints} fmt={v => fmtMoney(v)} height={110} />
         </div>
 
         {/* ── Filters ── */}
@@ -854,7 +897,7 @@ export default function PeopleExpenses() {
                           )}
                         </th>
                       )}
-                      <th />
+                      <th className="ico" />
                       <th>Date</th>
                       <th className="num">Amount</th>
                       <th>Category</th>
@@ -862,7 +905,7 @@ export default function PeopleExpenses() {
                       <th>Paid via</th>
                       <th>Bills</th>
                       <th>Status</th>
-                      <th />
+                      <th className="act" />
                     </tr>
                   </thead>
                   <tbody>
@@ -890,7 +933,7 @@ export default function PeopleExpenses() {
                             <div className="exp-note" title={r.review_note}>{r.review_note}</div>}
                         </td>
                         {isPriv && !fPerson && <td className="mut">{profiles[r.profile_id]?.name || '—'}</td>}
-                        <td className="mut">{EX.PAYMENT_LABEL[r.payment_method] || r.payment_method}</td>
+                        <td className="mut"><PayMethod method={r.payment_method} /></td>
                         <td>
                           {(r.expense_bills || []).length > 0
                             ? <span className="exp-billcount">{I.clip}{(r.expense_bills || []).length}</span>
@@ -955,6 +998,7 @@ export default function PeopleExpenses() {
               )}
             </>
           )}
+        </div>
         </div>
       </div>
 

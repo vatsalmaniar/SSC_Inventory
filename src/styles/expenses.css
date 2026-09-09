@@ -450,3 +450,32 @@
 @media (max-width: 820px) {
   .exp-drop-cam { display: flex !important; }
 }
+
+/* Neutral tile — the category colour paints the glyph (see ExpenseIcon.jsx), so the
+   surface is a constant. Applies in both scopes because the component is shared by
+   the Expenses page and its Config page. */
+.kpi-app .exp-tile,
+.orders-app .exp-tile {
+  background: var(--kbg-2, #FBFBFD);
+  border: 1px solid var(--kline, #E8EBF0);
+}
+
+/* Column widths must be declared on the HEADER too. td.ico was 44px and td.act had its
+   own width, but their <th> were anonymous and width-less, so the browser sized those
+   two columns from the header instead and every label drifted off its data. */
+.kpi-app .exp-table th.ico { width: 44px; padding-right: 0; }
+.kpi-app .exp-table th.act { width: 92px; text-align: right; }
+.kpi-app .exp-table td.act { width: 92px; text-align: right; white-space: nowrap; }
+.kpi-app .exp-table th.chk,
+.kpi-app .exp-table td.chk { width: 34px; }
+/* Right-align the amount header over its right-aligned figures. */
+.kpi-app .exp-table th.num,
+.kpi-app .exp-table td.num { text-align: right; }
+
+/* payment method: small neutral glyph + label */
+.kpi-app .exp-pay { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.kpi-app .exp-pay svg { width: 15px; height: 15px; flex-shrink: 0; opacity: .8; }
+
+/* The header had `padding: 0 12px 9px` — no top padding — so the labels sat flush
+   against the card's divider above them. */
+.kpi-app .exp-table th { padding-top: 12px; }
