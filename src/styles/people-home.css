@@ -831,6 +831,15 @@
 
 /* chart hover tooltip + cursor line */
 .orders-app .ph-chart-cursor { stroke: var(--o-muted-2); stroke-width: 1; stroke-dasharray: 3 3; }
+/* Edge handling: .is-start / .is-end anchor the tooltip to the near edge instead of
+   centring it (otherwise half of it sits outside the chart), and .is-below drops it
+   under the point when the point is high in a short chart. Both are set by TrendChart
+   from the hovered point's pixel position. */
+.orders-app .ph-chart-tip.is-start { transform: translate(-8px, calc(-100% - 12px)); }
+.orders-app .ph-chart-tip.is-end   { transform: translate(calc(-100% + 8px), calc(-100% - 12px)); }
+.orders-app .ph-chart-tip.is-below { transform: translate(-50%, 14px); }
+.orders-app .ph-chart-tip.is-below.is-start { transform: translate(-8px, 14px); }
+.orders-app .ph-chart-tip.is-below.is-end   { transform: translate(calc(-100% + 8px), 14px); }
 .orders-app .ph-chart-tip {
   position: absolute; transform: translate(-50%, calc(-100% - 12px));
   background: var(--o-ink); color: #fff;
@@ -874,4 +883,15 @@
 @keyframes ph-skel { from { background-position: 180% 0 } to { background-position: -20% 0 } }
 @media (prefers-reduced-motion: reduce) {
   .orders-app .ph-stat.is-skel { animation: none; background: var(--o-bg-2); }
+}
+
+/* ── TrendChart: optional second series ──────────────────────────────────────
+   Added for Orders' "Placed vs Delivered". The primary series keeps currentColor
+   and its gradient area; the compare line is a plain muted stroke so the two read
+   as subject and reference rather than as two competing lines. */
+.orders-app .ph-chart-cmp { stroke: var(--o-muted-2); opacity: 0.75; }
+.orders-app .ph-chart-tip-v.is-cmp { color: var(--o-muted); font-weight: var(--fw-medium); }
+.orders-app .ph-chart-tip-k {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--o-muted-2); margin-right: 6px;
 }

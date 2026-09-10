@@ -6,8 +6,12 @@ import { fmt, FY_START } from '../lib/fmt'
 import { TERMINAL_STATUSES } from '../lib/orderStatus'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 const DEAD_STATUSES = TERMINAL_STATUSES  // canonical — src/lib/orderStatus.js
 const FLAG_ROLES = ['ops', 'admin', 'management']
@@ -457,6 +461,23 @@ export default function Waitlist() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* KPI tiles. counts / overdue / groups are already computed above for the
+            summary line and the tables; these tiles only display them. The reason
+            buckets are the ones the Waitlist REASONS list uses, so a tile and the
+            table below it can never disagree. */}
+        <div className="ph-bento o-bento-flat">
+          <Stat label="Past Due Date" value={overdue.length}
+            foot={<>order{overdue.length === 1 ? '' : 's'} overdue</>} />
+          <Stat label="Without a Reason" value={counts.none} warn={counts.none > 0}
+            foot={counts.none > 0 ? 'nobody has said why' : 'all accounted for'} />
+          <Stat label="Out of Stock" value={counts.oos}
+            foot="flagged or auto-detected" />
+          <Stat label="Credit Hold" value={counts.credit}
+            foot="waiting on accounts" />
+          <Stat label="Short on Stock" value={groups.length}
+            foot={<><b>{groups.reduce((s, g) => s + g.totalWaiting, 0)}</b> units waiting</>} />
         </div>
 
         {/* Tabs */}

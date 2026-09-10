@@ -13,7 +13,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 //   refLabel label for that line
 //   fmt      (value) => string, for tooltips and the axis range
 //   invert   true when LOWER is better (arrival times): flips the fill direction
-export default function TrendChart({ points = [], refValue = null, refLabel = '', fmt = v => String(v), invert = false, height = 96 }) {
+//   compare  optional SECOND series, same length/order as points: [{ value }]. Drawn as a
+//            plain muted line with no area, so the primary series stays the subject. Both
+//            series share one y-scale, which is the point — two scales would let a smaller
+//            line sit above a bigger one. Omit it and this component behaves exactly as it
+//            did before the parameter existed.
+//   labels   optional { primary, compare } names for the legend and tooltip.
+export default function TrendChart({ points = [], refValue = null, refLabel = '', fmt = v => String(v), invert = false, height = 96, compare = null, labels = null }) {
   const wrapRef = useRef(null)
   const [w, setW] = useState(0)
   const [hover, setHover] = useState(null)   // index of the point under the cursor
@@ -33,12 +39,20 @@ export default function TrendChart({ points = [], refValue = null, refLabel = ''
   // Hooks run before any early return (react-hooks/rules-of-hooks).
   const geo = useMemo(() => {
     if (n < 2 || w < 40) return null
-    const vals = points.map(p => p.value)
+    // The compare series shares the scale, so its values must be in the min/max too —
+    // otherwise a delivered line above the range would be clipped out of the box.
+    const cmp = compare && compare.length === n ? compare : null
+    const vals = points.map(p => p.value).concat(cmp ? cmp.map(c => c.value) : [])
     const lo0 = Math.min(...vals, ...(refValue != null ? [refValue] : []))
     const hi0 = Math.max(...vals, ...(refValue != null ? [refValue] : []))
     // Pad the range so a nearly-flat series is not pinned to one edge.
     const pad = Math.max(1, (hi0 - lo0) * 0.18)
-    const lo = lo0 - pad, hi = hi0 + pad
+    // …but never pad a non-negative series below zero. Orders' monthly counts run
+    // 490-660, and an 18% pad put the floor at -26.42, so the axis read
+    // "-26.42 orders - 747.42 orders". There is no such thing as minus 26 orders.
+    // Series that genuinely go negative (none today) keep the padded floor.
+    const lo = lo0 >= 0 ? Math.max(0, lo0 - pad) : lo0 - pad
+    const hi = hi0 + pad
     const span = Math.max(1, hi - lo)
     const x = i => PAD_X + (i / (n - 1)) * (w - PAD_X * 2)
     const y = v => PAD_T + (1 - (v - lo) / span) * (H - PAD_T - PAD_B)
@@ -52,8 +66,19 @@ export default function TrendChart({ points = [], refValue = null, refLabel = ''
     // For "lower is better" the fill reads better hanging from the top.
     const base = invert ? PAD_T : H - PAD_B
     const area = `${line} L ${pts[n-1][0].toFixed(1)} ${base} L ${pts[0][0].toFixed(1)} ${base} Z`
-    return { pts, line, area, lo, hi, refY: refValue != null ? y(refValue) : null }
-  }, [points, n, w, refValue, invert, H])
+    // Second series: same x positions, same y scale, plain line.
+    let cmpPts = null, cmpLine = ''
+    if (cmp) {
+      cmpPts = cmp.map((c, i) => [x(i), y(c.value)])
+      cmpLine = `M ${cmpPts[0][0].toFixed(1)} ${cmpPts[0][1].toFixed(1)}`
+      for (let i = 0; i < cmpPts.length - 1; i++) {
+        const [x0, y0] = cmpPts[i], [x1, y1] = cmpPts[i + 1]
+        const cx = (x0 + x1) / 2
+        cmpLine += ` C ${cx.toFixed(1)} ${y0.toFixed(1)}, ${cx.toFixed(1)} ${y1.toFixed(1)}, ${x1.toFixed(1)} ${y1.toFixed(1)}`
+      }
+    }
+    return { pts, line, area, lo, hi, cmpPts, cmpLine, refY: refValue != null ? y(refValue) : null }
+  }, [points, n, w, refValue, invert, H, compare])
 
   if (!n) return <div className="ph-chart-empty">Nothing to plot yet</div>
   if (n === 1) return <div className="ph-chart-empty">{fmt(points[0].value)} on {points[0].label}</div>
@@ -75,6 +100,10 @@ export default function TrendChart({ points = [], refValue = null, refLabel = ''
             </>
           )}
           <path d={geo.area} fill="url(#ph-trend-fill)" />
+          {geo.cmpLine && (
+            <path d={geo.cmpLine} fill="none" className="ph-chart-cmp" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" />
+          )}
           <path d={geo.line} fill="none" stroke="currentColor" strokeWidth="2"
             strokeLinecap="round" strokeLinejoin="round" />
           {hover != null && geo.pts[hover] && (
@@ -95,14 +124,33 @@ export default function TrendChart({ points = [], refValue = null, refLabel = ''
           ))}
         </svg>
       )}
-      {hover != null && geo && (
-        <div className="ph-chart-tip"
-          style={{ left: `${(geo.pts[hover][0] / w) * 100}%`, top: `${geo.pts[hover][1]}px` }}>
+      {hover != null && geo && (() => {
+        // The tooltip is centred on the point and sits above it. At the first and last
+        // points that pushed half of it outside the chart — on Orders it landed on the
+        // headline above. Anchor it to the near edge instead when close to one, and drop
+        // it BELOW the point when the point is high in a short chart, which is the other
+        // way it escaped the card.
+        const [px, py] = geo.pts[hover]
+        const side = px < 92 ? ' is-start' : px > w - 92 ? ' is-end' : ''
+        const below = py < H * 0.45 ? ' is-below' : ''
+        return (
+        <div className={`ph-chart-tip${side}${below}`}
+          style={{ left: `${px}px`, top: `${py}px` }}>
           <div className="ph-chart-tip-l">{points[hover].label}</div>
-          <div className="ph-chart-tip-v">{fmt(points[hover].value)}</div>
+          <div className="ph-chart-tip-v">
+            {labels?.primary && <span className="ph-chart-tip-k">{labels.primary}</span>}
+            {fmt(points[hover].value)}
+          </div>
+          {geo.cmpPts && compare[hover] && (
+            <div className="ph-chart-tip-v is-cmp">
+              {labels?.compare && <span className="ph-chart-tip-k">{labels.compare}</span>}
+              {fmt(compare[hover].value)}
+            </div>
+          )}
           {points[hover].note && <div className="ph-chart-tip-n">{points[hover].note}</div>}
         </div>
-      )}
+        )
+      })()}
       <div className="ph-chart-axis">
         <span>{points[0].label}</span>
         <span>{geo ? `${fmt(geo.lo)} – ${fmt(geo.hi)}` : ''}</span>

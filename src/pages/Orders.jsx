@@ -1,11 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { MO, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import { ordersTotalValue, ordersDispatchedValue, orderNetValue, lineNetValue } from '../lib/orderValue'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
+import TrendChart from '../components/TrendChart'
 import '../styles/orders-redesign.css'
+// people-home.css owns .ph-bento / .ph-stat — the shared tile the People pages and the
+// main dashboard use. Orders now draws from the same well instead of its own KpiTile.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 const STATUS_LABELS = {
   pending:'Pending', dispatch:'Ready to Ship', partial_dispatch:'Partly Shipped',
@@ -116,7 +122,9 @@ export default function Orders() {
     const [ordersData, repsRes] = await Promise.all([
       fetchAll((from, to) => {
         let q = sb.from('orders')
-          .select('id,order_number,customer_name,status,order_type,created_at,created_by,order_items(qty,dispatched_qty,posted_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
+          // sample_returnable added for the Sample Orders "to return" figure. One extra
+          // column on the same query — no new request, no filter change.
+          .select('id,order_number,customer_name,status,order_type,sample_returnable,created_at,created_by,order_items(qty,dispatched_qty,posted_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
           .gte('created_at', FY_START).eq('is_test', role === 'demo')
           .order('created_at', { ascending: false })
           .order('id', { ascending: false })
@@ -164,6 +172,17 @@ export default function Orders() {
     return s + td.reduce((bs, b) => bs + (b.dispatched_items || []).reduce((is, i) => is + (i.total_price || 0), 0), 0)
   }, 0)
   const sampleOrders = orders.filter(o => o.order_type === 'SAMPLE')
+  // Samples still out with a customer and expected back.
+  //
+  // ⚠️ READ THIS BEFORE TRUSTING THE NUMBER. sample_returnable records that a sample
+  // is SUPPOSED to come back. Nothing in the database records that one HAS come back —
+  // there is no returned flag, no return date and no table, in orders or anywhere else.
+  // So this counts every returnable sample that reached the customer, whether or not it
+  // is already sitting back on the shelf. It is an upper bound, and the tile says
+  // "expected back" rather than "pending" for exactly that reason. Making it truthful
+  // needs a place to record the return first.
+  const samplesToReturn = sampleOrders.filter(o =>
+    o.sample_returnable !== false && ['dispatched_fc', 'closed'].includes(o.status))
 
   // Status pipeline counts + values
   const statusGroups = ['pending','approved','partial','fc','billing','delivered','cancelled'].map(g => {
@@ -245,15 +264,114 @@ export default function Orders() {
           <div className="o-loading">Loading…</div>
         ) : (
           <>
-            <div className="kpi-row">
-              <KpiTile variant="hero" tone="deep" label="Total Order Value" value={fmtCr(totalValue)} sub={`${orders.length} orders FYTD`} chart="line" onClick={() => navigate('/orders/list')}/>
-              <KpiTile variant="hero" tone="forest" label="Dispatched · Lifetime" value={fmtCr(dispatchedValue)} sub={`${fillRate}% fill rate`} chart="bars" onClick={() => navigate('/orders/list', { state: { filter: 'dispatched' } })}/>
-              <KpiTile variant="hero" tone="teal" label="Today's Delivered" value={fmtCr(todayDeliveredValue)} sub={`${todayDelivered.length} order${todayDelivered.length === 1 ? '' : 's'}`} chart="bars" onClick={() => navigate('/orders/list', { state: { filter: 'dispatched', timeline: 'today', dateMode: 'delivered_at' } })}/>
-              <KpiTile label="Pending Approval" value={pendingApproval} sub="orders need review" accent={pendingApproval > 0 ? 'amber' : null} badge={pendingApproval > 0 ? 'Action needed' : null} onClick={() => navigate('/ops')}/>
-              <KpiTile label="Today's Dispatch" value={fmtCr(todayDispatchValue)} sub={`${todayDispatched.length} order${todayDispatched.length === 1 ? '' : 's'}`} onClick={() => navigate('/dispatch/today')}/>
+            {/* ── Bento KPI row ─────────────────────────────────────────────────
+                Same five figures the hero tiles carried, plus Fill Rate and Active
+                Orders which were previously only subtext, promoted to tiles of their
+                own. Every value and every navigation target is unchanged — this is
+                the shared <Stat/> from components/StatTile.jsx, the tile the People
+                pages and the main dashboard already use, so Orders stops being the
+                one module with its own tile. */}
+            {/* ── Bento ──────────────────────────────────────────────────────────
+                The same composition /people uses: five tiles across the top, a tall
+                card holding the full column beside them, and a wide anchor underneath.
+                The previous pass put seven equal tiles in a flex row and then stacked
+                three more card rows below — which is why it read as stacked boxes
+                rather than a dashboard. Fill Rate and Active Orders are no longer
+                tiles; they belong to the anchor, which is what an anchor is for. */}
+            <div className="ph-bento">
+              <Stat label="Total Order Value" value={fmtCr(totalValue)}
+                foot={<><b>{orders.length}</b> orders FYTD</>}
+                onClick={() => navigate('/orders/list')} />
+              <Stat label="Dispatched · Lifetime" value={fmtCr(dispatchedValue)}
+                foot={<><b>{fillRate}%</b> fill rate</>}
+                onClick={() => navigate('/orders/list', { state: { filter: 'dispatched' } })} />
+              <Stat label="Delivered Today" value={fmtCr(todayDeliveredValue)}
+                foot={<><b>{todayDelivered.length}</b> order{todayDelivered.length === 1 ? '' : 's'}</>}
+                onClick={() => navigate('/orders/list', { state: { filter: 'dispatched', timeline: 'today', dateMode: 'delivered_at' } })} />
+              <Stat label="Dispatch Today" value={fmtCr(todayDispatchValue)}
+                foot={<><b>{todayDispatched.length}</b> order{todayDispatched.length === 1 ? '' : 's'}</>}
+                onClick={() => navigate('/dispatch/today')} />
+              <Stat label="Pending Approval" value={pendingApproval} warn={pendingApproval > 0}
+                foot={pendingApproval > 0 ? 'orders need review' : 'nothing waiting'}
+                onClick={() => navigate('/ops')} />
+
+              {/* Anchor — fill rate, the one number this page is really about, with the
+                  counts that produce it. Absorbs the old Dispatch Efficiency card. */}
+              <div className="ph-wide ph-anchor">
+                <div className="ph-anchor-head">
+                  <div>
+                    <div className="ph-anchor-eyebrow">Dispatch efficiency · This FY</div>
+                    <div className="ph-anchor-v">{fillRate}%</div>
+                    <div className="ph-anchor-sub">{fyDelivered} of {fyOrdered} placed orders delivered</div>
+                  </div>
+                  <div className="ph-anchor-stats">
+                    <div><div className="ph-as-l">Placed</div><div className="ph-as-v">{fyOrdered}</div></div>
+                    <div><div className="ph-as-l">Delivered</div><div className="ph-as-v">{fyDelivered}</div></div>
+                    {/* "Pending" used to sit here as placed − delivered − cancelled. That is
+                        the SAME number as Active (3229 − 2585 − 78 = 566 = totalActiveCount),
+                        so the card showed one figure under two labels. Active is the one the
+                        pipeline below is counting, so it is the one that stays. */}
+                    <div title="Placed, minus delivered, minus cancelled — cancelled orders will never deliver">
+                      <div className="ph-as-l">Active</div><div className="ph-as-v">{totalActiveCount}</div></div>
+                    <div><div className="ph-as-l">Cancelled</div><div className="ph-as-v">{fyCancelled}</div></div>
+                  </div>
+                </div>
+
+                {/* The anchor is built to carry a chart under its headline — that is what
+                    fills it on /people. Without one it was a card with a dead lower half.
+                    Placed vs Delivered lives here now instead of in a card of its own. */}
+                {(() => {
+                  // Future months excluded, exactly as the old chart did — an empty March
+                  // would otherwise drag the line to zero.
+                  const active = monthlyData.filter(d => !d.isFuture)
+                  return (
+                    <TrendChart
+                      points={active.map(d => ({ key: d.label + d.year, label: d.label, value: d.ordered,
+                        note: d.isCurrent ? 'month in progress' : null }))}
+                      compare={active.map(d => ({ value: d.delivered }))}
+                      labels={{ primary: 'Placed', compare: 'Delivered' }}
+                      fmt={v => `${v} order${v === 1 ? '' : 's'}`}
+                      height={150} />
+                  )
+                })()}
+              </div>
+
+              {/* Pipeline — Order Pipeline and Order Mix were two cards over the SAME
+                  seven statuses, one counting orders and one totalling their value.
+                  Merged into one column: the bar is the count, the rupee figure beside
+                  it is the value. Nothing is dropped, one card fewer to read. */}
+              {/* Top Customers in the tall column. The six-column table it used to be
+                  cannot live in a 300px slot, so it reads as a ranked list here: name,
+                  value, and a bar against the biggest customer. Orders and Delivered
+                  per customer move to the tooltip rather than being dropped. */}
+              <div className="card ph-tall o-pipe">
+                <div className="card-head">
+                  <div><div className="card-eyebrow">FYTD · By order value</div><div className="card-title">Top Customers</div></div>
+                  <span className="trend-pill mono">{customerAgg.length}</span>
+                </div>
+                <div className="o-pipe-list">
+                  {customerAgg.length === 0 ? <div className="o-empty">No data yet</div> : customerAgg.map((c, i) => (
+                    <div key={c.name} className="o-pipe-row" onClick={() => navigate('/orders/list')}
+                      title={`${c.count} order${c.count === 1 ? '' : 's'} · ${c.delivered} delivered`}>
+                      <div className="o-pipe-top">
+                        <span className="o-cust-rank mono">{i+1}</span>
+                        <span className="o-pipe-name">{c.name}</span>
+                        <span className="o-pipe-n mono">{fmtCr(c.value)}</span>
+                      </div>
+                      <div className="o-pipe-bar"><span style={{ width: `${(c.value/custMax)*100}%`, background: 'var(--ssc-blue)' }} /></div>
+                      <div className="o-pipe-v mono">{c.count} order{c.count === 1 ? '' : 's'} · {c.delivered} delivered</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div className="o-mid">
+            {/* Reps keep their panel; Order Pipeline takes the wide half beside it.
+                o-mid-orders is what scopes the height rules below to THIS page: .o-mid and
+                .rep-panel are also rendered by /people, and a stylesheet stays in the
+                document after an SPA navigation, so an unqualified rule would follow the
+                user there. */}
+            <div className="o-mid o-mid-orders">
               <div className="rep-panel">
                 <div className="rp-head">
                   <div className="rp-title">Sales Reps</div>
@@ -267,7 +385,7 @@ export default function Orders() {
                       <div className="rp-rank">{i+1}</div>
                       <div className="rp-avatar" style={{ background: r.color }}>{initials(r.name)}</div>
                       <div className="rp-info">
-                        <div className="rp-name">{r.name}{r.id === user.id && <span style={{ fontSize: 9, color: 'var(--ssc-blue)', marginLeft: 4, fontWeight: 700 }}>YOU</span>}</div>
+                        <div className="rp-name">{r.name}{r.id === user.id && <span className="rp-you">YOU</span>}</div>
                         <div className="rp-bar"><div className="rp-fill" style={{ width: `${(r.value/repMax)*100}%`, background: r.color }}/></div>
                       </div>
                       <div className="rp-val">{fmtCr(r.value)}</div>
@@ -286,91 +404,46 @@ export default function Orders() {
                 </div>
               </div>
 
-              <div className="o-anal">
-                <div className="card anal-card">
-                  <div className="card-head">
-                    <div>
-                      <div className="card-eyebrow">Performance · This FY</div>
-                      <div className="card-title">Dispatch Efficiency</div>
-                    </div>
-                    <span className="trend-pill mono">{fyOrdered} placed</span>
-                  </div>
-                  <DispatchGauge ordered={fyOrdered} delivered={fyDelivered} cancelled={fyCancelled}/>
-                </div>
+              {/* Order Pipeline takes the wide half, where the rows have room to show
+                  the count and the value side by side rather than stacked.
 
-                <div className="card anal-card">
-                  <div className="card-head">
-                    <div>
-                      <div className="card-eyebrow">Pipeline · By Status</div>
-                      <div className="card-title">Order Pipeline</div>
-                    </div>
-                    <span className="trend-pill mono">{totalActiveCount} active</span>
+                  DELIVERED IS EXCLUDED FROM THIS CHART, deliberately. It is the terminal
+                  status and holds more orders than every live stage put together, so on a
+                  shared scale it flattened all of them into slivers. This card is about
+                  work still moving; the delivered total is on the anchor above and is the
+                  second line on Placed vs Delivered. Cancelled stays — it is small, and
+                  hiding it would understate what was lost. */}
+              <div className="card o-pipe-wide">
+                <div className="card-head">
+                  <div>
+                    <div className="card-eyebrow">Pipeline · By status · excludes delivered</div>
+                    <div className="card-title">Order Pipeline</div>
                   </div>
-                  <div className="funnel">
-                    {statusGroups.length === 0 ? <div className="o-empty">No orders yet</div> : statusGroups.map(s => {
-                      const max = Math.max(...statusGroups.map(x => x.count))
-                      return (
-                        <div key={s.id} className="funnel-row">
-                          <div className="funnel-label">
-                            <span className="funnel-dot" style={{ background: s.color }}/>
-                            <span className="funnel-name">{s.label}</span>
-                          </div>
-                          <div className="funnel-bar-wrap">
-                            <div className="funnel-bar" style={{ width: `${(s.count/max)*100}%`, background: s.color }}/>
-                          </div>
-                          <div className="funnel-val">{s.count}</div>
+                  <span className="trend-pill mono">{totalActiveCount} active</span>
+                </div>
+                {(() => {
+                  const live = statusGroups.filter(s => s.id !== 'delivered')
+                  if (!live.length) return <div className="o-empty">No orders yet</div>
+                  const max = Math.max(...live.map(x => x.count), 1)
+                  return (
+                    <div className="dash-vs">
+                      {live.map(s => (
+                        <div key={s.id} className="dash-vs-row o-pipe-w-row" onClick={() => navigate('/orders/list')}>
+                          {/* The label needs its own element to truncate in: a bare text
+                              node inside a flex container cannot take text-overflow. */}
+                          <span className="dash-vs-l" title={s.label}>
+                            <span className="o-pipe-dot" style={{ background: s.color }} />
+                            <span className="o-pipe-w-l">{s.label}</span>
+                          </span>
+                          <span className="dash-vs-track">
+                            <span style={{ width: `${(s.count / max) * 100}%`, background: s.color }} />
+                          </span>
+                          <span className="dash-vs-v">{s.count}<em className="o-pipe-w-v">{fmtCr(s.value)}</em></span>
                         </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="card anal-card full">
-                  <div className="card-head">
-                    <div>
-                      <div className="card-eyebrow">Distribution · By Value</div>
-                      <div className="card-title">Order Mix</div>
+                      ))}
                     </div>
-                    <span className="trend-pill mono">{fmtCr(totalValue)}</span>
-                  </div>
-                  <StatusDonut groups={statusGroups} total={statusGroups.reduce((s,g) => s + g.value, 0)}/>
-                </div>
-              </div>
-            </div>
-
-            <div className="card o-chart-card">
-              <OrderVsDispatchChart data={monthlyData}/>
-            </div>
-
-            <div className="card" style={{ marginTop: 16, padding: 0, overflow: 'hidden' }}>
-              <div className="card-head" style={{ padding: '18px 20px 0', marginBottom: 12 }}>
-                <div>
-                  <div className="card-eyebrow">FYTD · By order value</div>
-                  <div className="card-title">Top Customers</div>
-                </div>
-                <span className="trend-pill mono">{customerAgg.length} customers</span>
-              </div>
-              <div className="cust-table" style={{ border: 0, borderRadius: 0 }}>
-                <div className="cust-row cust-head">
-                  <div></div>
-                  <div>Customer</div>
-                  <div className="num">Orders</div>
-                  <div className="num">Delivered</div>
-                  <div>Share</div>
-                  <div className="num">Value</div>
-                </div>
-                {customerAgg.length === 0 ? (
-                  <div className="o-empty">No data yet</div>
-                ) : customerAgg.map((c, i) => (
-                  <div key={c.name} className="cust-row cust-data" onClick={() => navigate('/orders/list')}>
-                    <div className="cust-rank">#{i+1}</div>
-                    <div className="cust-name">{c.name}</div>
-                    <div className="cust-num">{c.count}</div>
-                    <div className="cust-num" style={{ color: 'var(--o-good)' }}>{c.delivered}</div>
-                    <div className="cust-bar-wrap"><div className="cust-bar" style={{ width: `${(c.value/custMax)*100}%` }}/></div>
-                    <div className="cust-num bold">{fmtCr(c.value)}</div>
-                  </div>
-                ))}
+                  )
+                })()}
               </div>
             </div>
 
@@ -381,7 +454,7 @@ export default function Orders() {
                     <div className="card-eyebrow">Today · Active</div>
                     <div className="card-title">Today's Dispatch</div>
                   </div>
-                  <button className="btn-ghost" onClick={() => navigate('/dispatch/today')} style={{ padding: '5px 10px', fontSize: 12 }}>View plan</button>
+                  <button className="btn-ghost o-head-btn" onClick={() => navigate('/dispatch/today')}>View plan</button>
                 </div>
                 <div className="o-list">
                   {todayDispatched.length === 0 ? (
@@ -405,7 +478,7 @@ export default function Orders() {
                 </div>
               </div>
 
-              <div className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('/orders/list', { state: { filter: 'sample' } })}>
+              <div className="card o-sample-card" onClick={() => navigate('/orders/list', { state: { filter: 'sample' } })}>
                 <div className="card-head">
                   <div>
                     <div className="card-eyebrow">FYTD · Sample issues</div>
@@ -413,14 +486,21 @@ export default function Orders() {
                   </div>
                   <span className="trend-pill mono">{sampleOrders.length} total</span>
                 </div>
-                <div style={{ display: 'flex', gap: 0, padding: '0 0 12px', borderBottom: '1px solid var(--o-line-2)', marginBottom: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--o-ink)', lineHeight: 1, fontFamily: 'Geist Mono, monospace' }}>{sampleOrders.length}</div>
-                    <div style={{ fontSize: 11, color: 'var(--o-muted)', marginTop: 4, fontFamily: 'Geist Mono, monospace' }}>SAMPLES</div>
+                {/* Was a block of inline font-size/weight/colour declarations, which
+                    the UI conventions forbid — these now read from the tokens. */}
+                <div className="o-mini-stats">
+                  <div className="o-mini">
+                    <div className="o-mini-v">{sampleOrders.length}</div>
+                    <div className="o-mini-l">SAMPLES</div>
                   </div>
-                  <div style={{ flex: 1, borderLeft: '1px solid var(--o-line-2)', paddingLeft: 16 }}>
-                    <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--o-ink)', lineHeight: 1, fontFamily: 'Geist Mono, monospace' }}>{fmtCr(sampleOrders.reduce((s, o) => s + orderNetValue(o), 0))}</div>
-                    <div style={{ fontSize: 11, color: 'var(--o-muted)', marginTop: 4, fontFamily: 'Geist Mono, monospace' }}>VALUE</div>
+                  <div className="o-mini">
+                    {/* Must match the per-row values below it, which are orderNetValue. */}
+                    <div className="o-mini-v">{fmtCr(sampleOrders.reduce((s, o) => s + orderNetValue(o), 0))}</div>
+                    <div className="o-mini-l">VALUE</div>
+                  </div>
+                  <div className="o-mini" title="Returnable samples that reached the customer. Returns are not recorded anywhere yet, so this is an upper bound, not a confirmed outstanding count.">
+                    <div className={`o-mini-v${samplesToReturn.length > 0 ? ' is-warn' : ''}`}>{samplesToReturn.length}</div>
+                    <div className="o-mini-l">EXPECTED BACK</div>
                   </div>
                 </div>
                 <div className="o-list">
@@ -432,7 +512,7 @@ export default function Orders() {
                     return (
                       <div key={o.id} className="o-list-row" onClick={e => { e.stopPropagation(); navigate('/orders/' + o.id) }}>
                         <div style={{ minWidth: 0 }}>
-                          <div className="o-list-num" style={{ color: '#7C3AED' }}>{o.order_number}</div>
+                          <div className="o-list-num is-sample">{o.order_number}</div>
                           <div className="o-list-cust">{o.customer_name}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -452,287 +532,19 @@ export default function Orders() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, badge, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">
-        {sub && <div className="kt-sub mono">{sub}</div>}
-        {badge && <span className="kt-badge mono">{badge}</span>}
-      </div>
-    </div>
-  )
-}
+// KpiTile / KpiChart lived here and are gone: the bento row above uses the shared
+// <Stat/> instead. The class names they rendered (.kpi-tile, .kpi-hero, .kt-*) stay
+// defined in orders-redesign.css because twelve other pages each keep their own
+// local copy of this component and still render them.
 
-function KpiChart({ kind }) {
-  if (kind === 'bars') {
-    return (
-      <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-        {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-          <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-        ))}
-      </svg>
-    )
-  }
-  if (kind === 'line') {
-    return (
-      <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-        <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-      </svg>
-    )
-  }
-  return null
-}
+// DispatchGauge and a local pie StatusDonut lived here.
+// The gauge is now the shared components/StatusDonut (one ring definition in the
+// app), and the pie is gone — the dashboard has no pie anywhere, which is what made
+// this page still read as a different design. Order Mix is .dash-vs bars now.
+// .donut-wrap / .dlg-* / .gauge-wrap / .gs-* stay in orders-redesign.css: other
+// pages still render them.
 
-function DispatchGauge({ ordered, delivered, cancelled = 0 }) {
-  const pct = ordered > 0 ? Math.round((delivered / ordered) * 100) : 0
-  const size = 140, r = size/2 - 12, c = 2 * Math.PI * r, dash = (pct/100) * c
-  return (
-    <div className="gauge-wrap">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <defs>
-          <linearGradient id="oGaugeGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#1a73e8"/>
-            <stop offset="100%" stopColor="#10B981"/>
-          </linearGradient>
-        </defs>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#E5E7EB" strokeWidth="8"/>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="url(#oGaugeGrad)" strokeWidth="8" strokeLinecap="round" strokeDasharray={`${dash} ${c}`} transform={`rotate(-90 ${size/2} ${size/2})`}/>
-        <text x={size/2} y={size/2 - 2} textAnchor="middle" fontSize="32" fontWeight="600" fill="#0B1B30" style={{letterSpacing: '-0.02em'}}>{pct}<tspan fontSize="16" fill="#6B7280">%</tspan></text>
-        <text x={size/2} y={size/2 + 18} textAnchor="middle" fontSize="9" fill="#6B7280" letterSpacing="0.06em" fontFamily="Geist Mono, monospace">FILL RATE</text>
-      </svg>
-      <div className="gauge-stats">
-        <div className="gs-row">
-          <span className="gs-dot" style={{background: '#1a73e8'}}/>
-          <span className="gs-label">Placed</span>
-          <span className="gs-val">{ordered}</span>
-        </div>
-        <div className="gs-row">
-          <span className="gs-dot" style={{background: '#10B981'}}/>
-          <span className="gs-label">Delivered</span>
-          <span className="gs-val">{delivered}</span>
-        </div>
-        <div className="gs-row gs-total">
-          <span className="gs-label">Pending</span>
-          {/* cancelled orders are not pending — they will never deliver */}
-          <span className="gs-val">{Math.max(0, ordered - delivered - cancelled)}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function StatusDonut({ groups, total }) {
-  if (!groups.length || !total) return <div className="donut-wrap"><div style={{ color:'var(--o-muted-2)', fontSize:12 }}>No order value</div></div>
-  const size = 130, r = size/2 - 8, inner = r - 18, cx = size/2, cy = size/2
-  let angle = -Math.PI/2
-  const arcs = groups.filter(s => s.value > 0).map(s => {
-    const portion = s.value / total
-    const next = angle + portion * 2 * Math.PI
-    const large = portion > 0.5 ? 1 : 0
-    const x0 = cx + r * Math.cos(angle), y0 = cy + r * Math.sin(angle)
-    const x1 = cx + r * Math.cos(next),  y1 = cy + r * Math.sin(next)
-    const ix0 = cx + inner * Math.cos(angle), iy0 = cy + inner * Math.sin(angle)
-    const ix1 = cx + inner * Math.cos(next),  iy1 = cy + inner * Math.sin(next)
-    const path = `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix0} ${iy0} Z`
-    angle = next
-    return { path, color: s.color, label: s.label, value: s.value, count: s.count, pct: Math.round(portion*100) }
-  })
-  return (
-    <div className="donut-wrap">
-      <svg width={size} height={size}>
-        {arcs.map((a, i) => <path key={i} d={a.path} fill={a.color} opacity="0.92"/>)}
-        <text x={cx} y={cy - 2} textAnchor="middle" fontSize="14" fontWeight="600" fill="#0B1B30" fontFamily="Geist Mono, monospace">{fmtCr(total)}</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="8" fill="#6B7280" letterSpacing="0.06em" fontFamily="Geist Mono, monospace">FYTD</text>
-      </svg>
-      <div className="donut-legend">
-        {arcs.slice(0, 6).map((a, i) => (
-          <div key={i} className="dlg-row">
-            <span className="dlg-dot" style={{background: a.color}}/>
-            <span className="dlg-name">{a.label}</span>
-            <span className="dlg-pct mono">{a.pct}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// Forecast-styled smooth chart for Order vs Dispatch
-function OrderVsDispatchChart({ data }) {
-  const [hover, setHover] = useState(null)
-  const [hoverIdx, setHoverIdx] = useState(null)
-  const [showLines, setShowLines] = useState({ ordered: true, delivered: true })
-  const svgRef = useRef(null)
-
-  const W = 1000, H = 320, P = { l: 32, r: 56, t: 24, b: 50 }
-  const innerW = W - P.l - P.r, innerH = H - P.t - P.b
-  const active = data.filter(d => !d.isFuture)
-
-  if (active.length === 0) {
-    return <div style={{ padding: 60, textAlign: 'center', color: 'var(--o-muted-2)' }}>No order data this FY</div>
-  }
-
-  const maxY = Math.max(...active.flatMap(d => [d.ordered, d.delivered]), 1) * 1.15
-  const x = i => P.l + (data.length === 1 ? innerW / 2 : (i / (data.length - 1)) * innerW)
-  const y = v => P.t + innerH - (v / maxY) * innerH
-
-  const smoothPath = (pts) => {
-    if (pts.length < 2) return ''
-    let d = `M ${pts[0].x} ${pts[0].y}`
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1] || pts[i]
-      const p1 = pts[i]
-      const p2 = pts[i + 1]
-      const p3 = pts[i + 2] || p2
-      d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6}, ${p2.x - (p3.x - p1.x) / 6} ${p2.y - (p3.y - p1.y) / 6}, ${p2.x} ${p2.y}`
-    }
-    return d
-  }
-
-  const orderedPts = active.map(d => ({ x: x(data.indexOf(d)), y: y(d.ordered) }))
-  const deliveredPts = active.map(d => ({ x: x(data.indexOf(d)), y: y(d.delivered) }))
-  const orderedPath = smoothPath(orderedPts)
-  const deliveredPath = smoothPath(deliveredPts)
-  const orderedArea = orderedPts.length ? `${orderedPath} L ${orderedPts[orderedPts.length-1].x} ${y(0)} L ${orderedPts[0].x} ${y(0)} Z` : ''
-
-  const axisVals = [0, 0.25, 0.5, 0.75, 1].map(p => Math.round(maxY * p))
-
-  const handleMove = (e) => {
-    const rect = svgRef.current.getBoundingClientRect()
-    const px = ((e.clientX - rect.left) / rect.width) * W - P.l
-    const idx = Math.round((px / innerW) * (data.length - 1))
-    if (idx >= 0 && idx < data.length && !data[idx].isFuture) {
-      setHover(data[idx])
-      setHoverIdx(idx)
-    }
-  }
-
-  const totalOrdered = active.reduce((s, m) => s + m.ordered, 0)
-  const totalDelivered = active.reduce((s, m) => s + m.delivered, 0)
-  const fillPct = totalOrdered > 0 ? Math.round((totalDelivered / totalOrdered) * 100) : 0
-
-  return (
-    <div>
-      <div className="sc-headline">
-        <div>
-          <div className="sc-eyebrow mono">ORDER FLOW · FY</div>
-          <div className="sc-title">Orders Placed vs Delivered</div>
-          <div className="sc-headline-sub">
-            <span className="sc-coverage">{fillPct}% fill rate</span>
-            <span className="sc-dot">·</span>
-            <span>{totalOrdered} placed · {totalDelivered} delivered</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="sc-legend">
-        <button className={`scl-item ${showLines.ordered ? '' : 'off'}`} onClick={() => setShowLines({...showLines, ordered: !showLines.ordered})}>
-          <span className="scl-swatch scl-ordered"/> Placed
-        </button>
-        <button className={`scl-item ${showLines.delivered ? '' : 'off'}`} onClick={() => setShowLines({...showLines, delivered: !showLines.delivered})}>
-          <span className="scl-swatch scl-delivered"/> Delivered
-        </button>
-      </div>
-
-      <svg
-        className="stock-chart"
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        onMouseMove={handleMove}
-        onMouseLeave={() => { setHover(null); setHoverIdx(null) }}
-      >
-        <defs>
-          <linearGradient id="oOrderedFill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#1a73e8" stopOpacity="0.22"/>
-            <stop offset="100%" stopColor="#1a73e8" stopOpacity="0"/>
-          </linearGradient>
-        </defs>
-
-        {axisVals.map((v, i) => (
-          <g key={i}>
-            <line x1={P.l} x2={W - P.r} y1={y(v)} y2={y(v)} stroke="#EEF1F5" strokeDasharray={i === 0 ? '0' : '2 4'}/>
-            <text x={W - P.r + 10} y={y(v) + 4} fontSize="11" fill="#94A3B8" fontFamily="Geist Mono, monospace">{v}</text>
-          </g>
-        ))}
-
-        {showLines.delivered && <path d={deliveredPath} stroke="#10B981" strokeWidth="2" fill="none" strokeDasharray="6 4" opacity="0.9"/>}
-
-        {showLines.ordered && (
-          <>
-            <path d={orderedArea} fill="url(#oOrderedFill)"/>
-            <path d={orderedPath} stroke="#1a73e8" strokeWidth="2.5" fill="none" strokeLinejoin="round"/>
-          </>
-        )}
-
-        {hoverIdx !== null && hover && !hover.isFuture && (
-          <g>
-            <line x1={x(hoverIdx)} x2={x(hoverIdx)} y1={P.t} y2={P.t + innerH} stroke="#94A3B8" strokeDasharray="2 3" strokeWidth="1"/>
-            {showLines.ordered && <circle cx={x(hoverIdx)} cy={y(hover.ordered)} r="5" fill="#fff" stroke="#1a73e8" strokeWidth="2.5"/>}
-            {showLines.delivered && <circle cx={x(hoverIdx)} cy={y(hover.delivered)} r="4" fill="#fff" stroke="#10B981" strokeWidth="2"/>}
-          </g>
-        )}
-
-        {data.map((d, i) => (
-          <text key={i} x={x(i)} y={H - 20} fontSize="11" fill={d.isFuture ? '#CBD5E1' : d.isCurrent ? '#1a73e8' : '#94A3B8'}
-            fontWeight={d.isCurrent ? 700 : 400}
-            textAnchor="middle"
-            fontFamily="Geist Mono, monospace">{d.label}</text>
-        ))}
-
-        {hover && hoverIdx !== null && (() => {
-          const cx = x(hoverIdx)
-          const tipX = cx > W * 0.6 ? cx - 200 : cx + 16
-          const gapPct = hover.ordered > 0 ? Math.round(((hover.ordered - hover.delivered) / hover.ordered) * 100) : 0
-          return (
-            <g transform={`translate(${tipX}, ${P.t + 8})`}>
-              <rect width="188" height="138" rx="10" fill="#1a73e8"/>
-              <text x="14" y="22" fontSize="10" fill="#3DD9D6" fontFamily="Geist Mono, monospace" letterSpacing="0.06em">{hover.label} {hover.year}</text>
-              <line x1="14" x2="174" y1="32" y2="32" stroke="rgba(255,255,255,0.1)"/>
-              <text x="14" y="50" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">PLACED</text>
-              <text x="174" y="50" fontSize="13" fill="#fff" fontWeight="600" textAnchor="end" fontFamily="Geist Mono, monospace">{hover.ordered}</text>
-              <text x="14" y="68" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">DELIVERED</text>
-              <text x="174" y="68" fontSize="13" fill="#6EE7B7" fontWeight="600" textAnchor="end" fontFamily="Geist Mono, monospace">{hover.delivered}</text>
-              <text x="14" y="86" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">PENDING</text>
-              <text x="174" y="86" fontSize="13" fill="#FCA5A5" fontWeight="600" textAnchor="end" fontFamily="Geist Mono, monospace">{Math.max(0, hover.ordered - hover.delivered)}</text>
-              <line x1="14" x2="174" y1="100" y2="100" stroke="rgba(255,255,255,0.1)"/>
-              <text x="14" y="118" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="Geist Mono, monospace">PLACED VALUE</text>
-              <text x="174" y="118" fontSize="11" fill="#fff" fontWeight="600" textAnchor="end" fontFamily="Geist Mono, monospace">{fmtCr(hover.orderedValue)}</text>
-            </g>
-          )
-        })()}
-      </svg>
-
-      <div className="sc-stats">
-        <div className="sc-stat">
-          <span>FY PLACED</span>
-          <b>{totalOrdered}</b>
-          <span className="sc-stat-sub">orders this FY</span>
-        </div>
-        <div className="sc-stat">
-          <span>FY DELIVERED</span>
-          <b className="up">{totalDelivered}</b>
-          <span className="sc-stat-sub">closed orders</span>
-        </div>
-        <div className="sc-stat">
-          <span>FILL RATE</span>
-          <b className={fillPct >= 70 ? 'up' : 'down'}>{fillPct}%</b>
-          <span className="sc-stat-sub">delivered ÷ placed</span>
-        </div>
-        <div className="sc-stat">
-          <span>IN PIPELINE</span>
-          <b>{Math.max(0, totalOrdered - totalDelivered)}</b>
-          <span className="sc-stat-sub">awaiting delivery</span>
-        </div>
-      </div>
-    </div>
-  )
-}
+// OrderVsDispatchChart lived here — a bespoke 150-line smooth chart with its own
+// axis, hover and legend. Placed vs Delivered is now the shared TrendChart with a
+// second series, so the app has one line-chart implementation instead of three.
+// .stock-chart / .sc-* stay in orders-redesign.css: ProcurementForecast still uses them.

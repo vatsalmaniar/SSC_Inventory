@@ -1,0 +1,293 @@
+/* Orders dashboard — bento layout.
+ *
+ * Everything here is scoped to `.orders-app`, which is Orders' own page shell, so the
+ * tokens (--o-ink, --o-line, --o-muted…) resolve. No selector in this file touches
+ * `.kpi-row` or `KpiTile`: those are still used verbatim by twelve other pages
+ * (OrdersList, BillingDashboard, BillingList, FCModule, FCDashboard, CRMDashboard,
+ * CRMTargets, GRNList, PurchaseOrderList, PurchaseInvoiceList, ProcurementDashboard,
+ * StockTransferList), each with its OWN local copy of the component. Restyling the
+ * shared class would have silently redesigned all of them.
+ *
+ * The bento grid itself (.ph-bento / .ph-wide / .ph-tall / .ph-anchor / .ph-stat) is
+ * NOT redefined here — Orders uses the same rules /people does, straight out of
+ * people-home.css. That is the whole point: one composition, one set of rules.
+ *
+ * Rollback is deleting this file and its two imports from Orders.jsx.
+ */
+
+/* ── The tall column (col 6, spanning both bento rows) ──────────────────────
+   Row shape shared by whatever occupies it — Top Customers today. Kept generic
+   so the two ranked lists on this page cannot drift apart. */
+.orders-app .o-pipe { display: flex; flex-direction: column; min-height: 0; }
+.orders-app .o-pipe-list {
+  display: flex; flex-direction: column; gap: 11px;
+  overflow-y: auto; min-height: 0; flex: 1;
+  padding-right: 2px;
+}
+.orders-app .o-pipe-row { cursor: pointer; }
+.orders-app .o-pipe-row:hover .o-pipe-name { color: var(--ssc-blue); }
+.orders-app .o-pipe-top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.orders-app .o-pipe-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.orders-app .o-pipe-name {
+  font-size: 12.5px; color: var(--o-ink); flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.orders-app .o-pipe-n { font-size: 12.5px; font-weight: var(--fw-semibold); color: var(--o-ink); }
+.orders-app .o-pipe-bar {
+  height: 6px; border-radius: 4px; background: var(--o-bg-2); overflow: hidden;
+}
+.orders-app .o-pipe-bar > span { display: block; height: 100%; border-radius: 4px; transition: width .3s ease; }
+.orders-app .o-pipe-v { font-size: 11px; color: var(--o-muted); margin-top: 4px; }
+
+/* ── Top Customers — the ranked list in the tall column ─────────────────────
+   It reuses .o-pipe-list, so the two columns of this page share one row shape.
+   The rank sits where the status dot sits in the pipeline. */
+.orders-app .o-cust-rank {
+  font-size: 10px; font-weight: var(--fw-semibold); color: var(--o-muted-2);
+  min-width: 13px; flex-shrink: 0;
+}
+
+/* ── Order Pipeline — the wide card in .o-mid ────────────────────────────────
+   Built on .dash-vs (the dashboard's comparison bars) so it matches Sales vs
+   purchase. The count is the headline of each row and the value follows it. */
+/* The shared .dash-vs-row gives the label a 76px column and `white-space: nowrap`.
+   Sales-vs-purchase gets away with that on "Sales" / "Purchase"; these labels are
+   "Partially Dispatched" and "Billing / Accounts", which overflowed their column and
+   ran UNDER the bar track. Wider column, and the text truncates rather than escaping. */
+.orders-app .o-pipe-wide .dash-vs { margin-top: 2px; gap: 13px; }
+.orders-app .o-pipe-wide .dash-vs-row { grid-template-columns: 158px minmax(0, 1fr) auto; }
+.orders-app .o-pipe-w-row { cursor: pointer; }
+.orders-app .o-pipe-w-row:hover .dash-vs-l { color: var(--o-ink); }
+.orders-app .o-pipe-wide .dash-vs-l {
+  display: flex; align-items: center; gap: 7px;
+  min-width: 0; overflow: hidden;
+}
+.orders-app .o-pipe-w-l {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.orders-app .o-pipe-wide .dash-vs-v { text-align: right; min-width: 104px; }
+
+/* ONE height for every card row below the bento. Nudge this single value to make the
+   rows taller or shorter — everything below follows it. */
+.orders-app { --o-row-h: 396px; }
+
+/* Sales Reps and Order Pipeline are the SAME height, by construction.
+   CSS cannot size one grid item to another's natural height — the row is sized by its
+   tallest item, and the rep panel's natural height (16 reps) is far taller than the
+   pipeline's six bars, so "match the pipeline" has to be an explicit shared height.
+   Both take --o-row-h and both scroll internally if their content overruns. */
+.orders-app .o-mid-orders > .rep-panel,
+.orders-app .o-mid-orders > .o-pipe-wide {
+  height: var(--o-row-h);
+  max-height: var(--o-row-h);
+}
+.orders-app .o-mid-orders > .o-pipe-wide { display: flex; flex-direction: column; }
+/* Six bars are shorter than the shared height, so the slack goes into even spacing
+   between them rather than collecting as a gap under the last one. */
+.orders-app .o-mid-orders .dash-vs {
+  flex: 1; min-height: 0; overflow-y: auto; justify-content: space-between;
+}
+
+/* The bottom row takes the same height. */
+.orders-app .o-bottom > .card { max-height: var(--o-row-h); display: flex; flex-direction: column; }
+.orders-app .o-bottom > .card .o-list { flex: 1; min-height: 0; overflow-y: auto; }
+.orders-app .o-pipe-w-v {
+  font-style: normal; font-weight: var(--fw-regular);
+  font-size: 11px; color: var(--o-muted); margin-left: 8px;
+}
+
+/* ── sample orders mini-stats ───────────────────────────────────────────────
+   Replaces a block of inline font-size / weight / colour declarations. The UI
+   conventions require these to come from tokens, and inline styles cannot be
+   overridden by a stylesheet later. */
+.orders-app .o-mini-stats {
+  display: flex;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--o-line-2);
+  margin-bottom: 12px;
+}
+.orders-app .o-mini { flex: 1; min-width: 0; }
+.orders-app .o-mini + .o-mini { border-left: 1px solid var(--o-line-2); padding-left: 14px; }
+.orders-app .o-mini-v {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--o-ink);
+}
+.orders-app .o-mini-v.is-warn { color: var(--o-warn); }
+.orders-app .o-mini-l {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--o-muted);
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+/* Small bits that were inline in the markup. */
+.orders-app .o-sample-card { cursor: pointer; }
+.orders-app .o-list-num.is-sample { color: #7C3AED; }
+.orders-app .o-head-btn { padding: 5px 10px; font-size: 12px; }
+.orders-app .rp-you {
+  font-size: 9px;
+  font-weight: var(--fw-bold);
+  color: var(--ssc-blue);
+  margin-left: 4px;
+}
+
+/* ── responsive (820 / 560, the app-wide breakpoints) ─────────────────────── */
+@media (max-width: 820px) {
+  .orders-app .o-mini-stats { flex-wrap: wrap; gap: 12px 0; }
+}
+@media (max-width: 560px) {
+  .orders-app .o-mini-v { font-size: 19px; }
+  .orders-app .o-mini + .o-mini { padding-left: 12px; }
+}
+
+/* ── Flat tile row (list pages) ──────────────────────────────────────────────
+   /orders/list, /orders/waitlist and /orders/atp have tiles but no tall or wide
+   companion, so they use a plain wrapping row rather than the 6-column bento
+   composition. Flex-wrap means five tiles fill the width evenly and the last line
+   never sits ragged beside empty grid cells. */
+.orders-app .ph-bento.o-bento-flat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+  margin-bottom: 14px;
+}
+.orders-app .ph-bento.o-bento-flat > .ph-stat { flex: 1 1 178px; }
+@media (max-width: 560px) {
+  .orders-app .ph-bento.o-bento-flat > .ph-stat { flex: 1 1 100%; }
+}
+
+/* ── ATP list — same table language as /orders/list ─────────────────────────
+   The page already used .ol-wrap / .ol-row / .ol-status-pill, but overrode the
+   column grid INLINE on every row. Two problems with that: the template was
+   repeated three times, and the expanded line rows carried a DIFFERENT one
+   (7 columns against the parent's 8), so a line never sat under the column it
+   belonged to. One template here, shared by header, order row and line row. */
+.orders-app .ol-row.atp-row {
+  grid-template-columns: 130px 86px minmax(0, 1.3fr) minmax(0, 1fr) 60px 110px 100px 120px;
+}
+
+/* Expanded lines: same columns, tinted and not clickable. */
+.orders-app .ol-row.atp-line {
+  background: rgba(26, 115, 232, 0.03);
+  cursor: default;
+}
+.orders-app .atp-line-n { color: var(--o-muted-2); font-size: 11px; }
+.orders-app .atp-line-code { font-family: var(--mono); font-size: 12px; }
+.orders-app .atp-line-src { font-size: 12px; }
+.orders-app .atp-nearmiss { color: #B45309; margin-left: 6px; font-size: 11px; }
+.orders-app .atp-nodate { color: #B45309; }
+
+/* Row tags — were inline background/colour pairs. */
+.orders-app .ol-num.is-link { color: var(--ssc-blue); cursor: pointer; }
+.orders-app .ol-sample-tag.is-appr { background: rgba(180, 83, 9, 0.12); color: #92400e; }
+.orders-app .ol-sample-tag.is-hold { background: rgba(185, 28, 28, 0.10); color: #B91C1C; }
+
+/* ── Procurement dashboard ──────────────────────────────────────────────────
+   The SLA card's inner padding and the "past SLA" pill were inline styles. */
+.orders-app .proc-sla { padding: 4px 0 2px; }
+.orders-app .trend-pill.is-bad { color: #B91C1C; }
+.orders-app .dash-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+@media (max-width: 900px) { .orders-app .dash-row-3 { grid-template-columns: 1fr; } }
+
+/* ── Procurement action lists ───────────────────────────────────────────────
+   Four cards each rendering up to 8 rows made the lower half of the page very
+   tall for what it says. Capped to the shared row height with the list scrolling
+   inside, so the cards stay small and nothing is hidden — same treatment the
+   orders bottom row gets. */
+.orders-app .proc-list-card {
+  max-height: var(--o-row-h);
+  display: flex;
+  flex-direction: column;
+}
+.orders-app .proc-list-card .o-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.orders-app .proc-recent { margin-top: 16px; }
+
+/* ── Procurement .o-mid: SLA + PCO/PO stacked on the left, pipeline right ────
+   NOT .o-mid-orders — that pins both columns to --o-row-h, which is right for
+   /orders (a 16-row rep list beside 6 bars) and wrong here: the left column now
+   holds two cards and the right one sizes to its own content. */
+/* NO fixed height on these columns. A hard cap (--proc-row-h: 380px) was tried and
+   clipped both cards: the SLA card is ~250px on its own, so PCO vs PO got ~100px and
+   cut off mid-bar. Height comes from content; the row stays short because the CONTENT
+   is compact, and Recently Received absorbs any slack by scrolling. */
+.orders-app .o-mid-proc { align-items: start; }
+.orders-app .proc-left,
+.orders-app .proc-right {
+  display: flex; flex-direction: column; gap: 12px; min-width: 0;
+}
+
+/* PCO vs PO takes whatever height is left after the SLA card, so the two columns
+   finish level instead of one trailing off. Its two rows spread into that space
+   rather than sitting at the top with a gap under them. */
+.orders-app .proc-split-card { padding-bottom: 14px; }
+
+
+/* Recently Received sits under the pipeline and absorbs the rest of the right
+   column; its list scrolls so the card cannot push the row taller. */
+/* The pipeline sizes to its bars. Recently Received takes whatever is left of the
+   column and scrolls inside, which is what keeps the two columns level without
+   either being clipped. */
+/* HARD CAP. Recently Received must not grow: flex:1 made it stretch to match the
+   left column, which is what kept making it enormous. Fixed ceiling, list scrolls. */
+.orders-app .proc-right > .o-pipe-wide { flex: 0 0 auto; }
+.orders-app .proc-right > .proc-recent {
+  flex: 0 0 auto;
+  height: 232px;
+  max-height: 232px;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.orders-app .proc-right > .proc-recent .o-list { flex: 1; min-height: 0; overflow-y: auto; }
+/* The SLA card is fixed-content; the split card absorbs what is left. */
+
+/* No bottom rule inside a card of its own. */
+.orders-app .proc-split-card .proc-split { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
+
+/* ── PCO vs PO — two 100% stacked bars ──────────────────────────────────────
+   The first attempt drew a bar per row scaled to the larger of the two, with the
+   label, bars and figures each on their own line. In a 320px column that read as a
+   rendering fault, and it hid the actual finding. One shared 100% scale per measure
+   shows it instead: 81/19 by count against 53/47 by value. */
+.orders-app .proc-split { cursor: pointer; }
+.orders-app .proc-cap {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--o-muted); margin-bottom: 6px;
+}
+.orders-app .proc-blk + .proc-cap { margin-top: 14px; }
+.orders-app .proc-bar {
+  display: flex; height: 12px; border-radius: 7px; overflow: hidden;
+  background: var(--o-bg-2);
+}
+.orders-app .proc-bar > span { display: block; height: 100%; transition: width .3s ease; }
+.orders-app .proc-bar-a { background: #1a73e8; }
+.orders-app .proc-bar-b { background: #0F766E; }
+.orders-app .proc-leg {
+  display: flex; justify-content: space-between; gap: 10px; margin-top: 6px;
+  font-size: 11.5px; color: var(--o-muted);
+}
+.orders-app .proc-leg span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.orders-app .proc-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.orders-app .proc-dot.is-a { background: #1a73e8; }
+.orders-app .proc-dot.is-b { background: #0F766E; }
+.orders-app .proc-note {
+  margin-top: 14px; padding-top: 11px; border-top: 1px solid var(--o-line-2);
+  font-size: 11.5px; color: var(--o-muted-2); line-height: 1.45;
+}
+.orders-app .proc-note b { color: var(--o-ink); font-family: var(--mono); }

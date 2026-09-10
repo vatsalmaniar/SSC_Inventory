@@ -17,9 +17,13 @@ import { buildStockMap, allocateFifo, deriveOrderBucket, computeCounts, ORDER_BU
 import { toast } from '../lib/toast'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import Loading from '../components/Loading'
 import PeopleAvatar from '../components/PeopleAvatar'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 function OwnerChip({ name }) {
   if (!name) return <span style={{color:'var(--o-muted-2)'}}>—</span>
@@ -473,6 +477,31 @@ export default function AvailableToPromise() {
             <b>Stock sheet has not been uploaded today.</b> Quantities below are from the last upload — treat with care.
           </div>
         )}
+        {/* KPI tiles. Every figure is already on this page — counts comes straight
+            from dispatchability.js and chipCounts is the per-bucket tally the chips
+            below use. Nothing is recomputed and no allocation logic is touched; the
+            tiles just select the chip the user would have clicked. */}
+        {counts && (
+          <div className="ph-bento o-bento-flat">
+            <Stat label="Dispatchable SOs" value={counts.so}
+              foot={<>of <b>{counts.soTotal}</b> sales orders</>}
+              onClick={() => { setChip('dispatchable'); setPage(1) }} />
+            <Stat label="Dispatchable COs" value={counts.co}
+              foot={<>of <b>{counts.coTotal}</b> customer orders</>}
+              onClick={() => { setChip('dispatchable'); setPage(1) }} />
+            <Stat label="Full Stock" value={chipCounts[ORDER_BUCKET.FULL] || 0}
+              foot="every line coverable"
+              onClick={() => { setChip(ORDER_BUCKET.FULL); setPage(1) }} />
+            <Stat label="Partial" value={chipCounts[ORDER_BUCKET.PARTIAL] || 0}
+              foot="some lines coverable"
+              onClick={() => { setChip(ORDER_BUCKET.PARTIAL); setPage(1) }} />
+            <Stat label="No Stock" value={chipCounts[ORDER_BUCKET.NO_STOCK] || 0}
+              warn={(chipCounts[ORDER_BUCKET.NO_STOCK] || 0) > 0}
+              foot="nothing to allocate"
+              onClick={() => { setChip(ORDER_BUCKET.NO_STOCK); setPage(1) }} />
+          </div>
+        )}
+
         {tornLocs.length > 0 && (
           <div style={{ border:'1px solid rgba(180,83,9,0.35)', background:'rgba(180,83,9,0.07)', color:'#92400e', borderRadius:'var(--o-radius)', padding:'10px 14px', marginBottom:12, fontSize:13 }}>
             <b>Upload may be incomplete for {tornLocs.join(', ')}</b> — the sheet's rows carry mixed upload times. Re-upload that godown's file, then Sync.
@@ -546,7 +575,7 @@ export default function AvailableToPromise() {
           </div>
         ) : (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '130px 86px minmax(0,1.3fr) minmax(0,1fr) 60px 110px 100px 120px' }}>
+            <div className="ol-row ol-head atp-row">
               <div>Order #</div>
               <div>Order Date</div>
               <div>Customer</div>
@@ -570,14 +599,14 @@ export default function AvailableToPromise() {
                   const open = expanded.has(r.order_id)
                   return (
                     <div key={r.order_id}>
-                      <div className="ol-row ol-data" style={{ gridTemplateColumns: '130px 86px minmax(0,1.3fr) minmax(0,1fr) 60px 110px 100px 120px' }} onClick={() => toggleExpand(r.order_id)}>
+                      <div className="ol-row ol-data atp-row" onClick={() => toggleExpand(r.order_id)}>
                         <div className="ol-cell">
-                          <div className="ol-num" style={{ color:'var(--ssc-blue)', cursor:'pointer' }} title="Open order"
+                          <div className="ol-num is-link" title="Open order"
                             onClick={e => { e.stopPropagation(); navigate('/orders/' + r.order_id) }}>{r.order_number}</div>
-                          {r.order_status === 'pending' && <span className="ol-sample-tag" style={{ background:'rgba(180,83,9,0.12)', color:'#92400e' }}>Awaiting Approval</span>}
-                          {r.hold_party && <span className="ol-sample-tag" style={{ background:'rgba(185,28,28,0.10)', color:'#B91C1C' }} title={r.hold_reason || ''}>On Hold</span>}
+                          {r.order_status === 'pending' && <span className="ol-sample-tag is-appr">Awaiting Approval</span>}
+                          {r.hold_party && <span className="ol-sample-tag is-hold" title={r.hold_reason || ''}>On Hold</span>}
                         </div>
-                        <div className="ol-cell ol-date">{r.order_date ? fmt(r.order_date) : <span style={{color:'#B45309'}}>no date</span>}</div>
+                        <div className="ol-cell ol-date">{r.order_date ? fmt(r.order_date) : <span className="atp-nodate">no date</span>}</div>
                         <div className="ol-cell ol-cust" title={r.customer_name}>{r.customer_name}</div>
                         <div className="ol-cell"><OwnerChip name={r.owner}/></div>
                         <div className="ol-cell num">{r.covered_lines}/{r.line_count}</div>
@@ -592,16 +621,16 @@ export default function AvailableToPromise() {
                       {open && r.lines.map(l => {
                         const lc = LINE_COVERAGE[l.bucket]
                         return (
-                          <div key={l.order_id + l.item_code + l.sr_no} className="ol-row ol-data" style={{ gridTemplateColumns: '130px 86px minmax(0,2.3fr) 60px 110px 100px 120px', background:'var(--o-row-alt, rgba(26,115,232,0.03))', cursor:'default' }}>
-                            <div className="ol-cell" style={{ color:'var(--o-muted-2)', fontSize:11 }}>line {l.sr_no || '—'}</div>
+                          <div key={l.order_id + l.item_code + l.sr_no} className="ol-row ol-data atp-row atp-line">
+                            <div className="ol-cell atp-line-n">line {l.sr_no || '—'}</div>
                             <div className="ol-cell"/>
-                            <div className="ol-cell" style={{ fontFamily:'var(--mono)', fontSize:12 }} title={l.item_code}>
+                            <div className="ol-cell atp-line-code" title={l.item_code}>
                               {l.item_code}
-                              {l.near_miss && <span style={{ color:'#B45309', marginLeft:6, fontSize:11 }}>≈ near-miss code</span>}
+                              {l.near_miss && <span className="atp-nearmiss">≈ near-miss code</span>}
                             </div>
                             <div className="ol-cell"/>
                             <div className="ol-cell num">{l.alloc.toLocaleString('en-IN')} / {l.pend.toLocaleString('en-IN')}</div>
-                            <div className="ol-cell" style={{ fontSize:12 }}>
+                            <div className="ol-cell atp-line-src">
                               {l.from_kaveri > 0 && `K ${l.from_kaveri.toLocaleString('en-IN')}`}
                               {l.from_kaveri > 0 && l.from_godawari > 0 && ' · '}
                               {l.from_godawari > 0 && `G ${l.from_godawari.toLocaleString('en-IN')}`}
