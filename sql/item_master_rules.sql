@@ -545,3 +545,63 @@ drop trigger if exists trg_items_never_deleted on items;
 create trigger trg_items_never_deleted
   before delete on items
   for each row execute function items_are_never_deleted();
+
+
+-- ── One way in ──────────────────────────────────────────────────────────────
+-- Every write to items already goes through a SECURITY DEFINER RPC —
+-- create_item_v3, update_item, set_item_status. Nothing in the app writes to
+-- the table directly; all five call sites are SELECTs.
+--
+-- But the admin_write policy is FOR ALL, so an admin could still INSERT, UPDATE
+-- or DELETE straight over the API, skipping every role check and every clean
+-- error message those functions provide. The triggers would still fire — they
+-- are the real safety net — but the rules a person should meet (only admin or
+-- management may edit; MOQ at least 1; type SI or CI) live in the functions.
+--
+-- Dropping the write policy leaves reads untouched and makes the RPCs the only
+-- door. Definer functions run as the owner, so they are unaffected.
+drop policy if exists admin_write on items;
+
+-- Reads for the pickers, so the form offers exactly what the database will
+-- accept. Reading itemTaxonomy.js instead is what let the two drift apart.
+create or replace function get_item_taxonomy()
+returns table (brand text, category text, subcategory text, series text)
+language sql stable security definer set search_path to public, pg_temp
+as $$ select brand, category, subcategory, series from item_taxonomy order by 1,2,3,4 $$;
+
+create or replace function get_item_brands()
+returns table (brand text, is_active boolean, curated boolean)
+language sql stable security definer set search_path to public, pg_temp
+as $$
+  select b.brand, b.is_active, exists (select 1 from item_taxonomy t where t.brand = b.brand)
+    from item_brands b order by b.brand
+$$;
+
+-- Adding a brand is deliberate, and recorded. Free text in a form field is how
+-- a 95th brand appears that nobody meant to create.
+create or replace function add_item_brand(p_brand text)
+returns item_brands
+language plpgsql security definer set search_path to public, pg_temp
+as $$
+declare v_role text; v_row item_brands; v_name text := btrim(coalesce(p_brand,''));
+begin
+  select role into v_role from profiles where id = auth.uid();
+  if v_role is null or v_role not in ('admin','management') then
+    raise exception 'Only admin or management can add a brand.' using errcode = 'insufficient_privilege';
+  end if;
+  if v_name = '' then raise exception 'Brand name is required.'; end if;
+  if exists (select 1 from item_brands b
+              where lower(regexp_replace(b.brand,'[^a-zA-Z0-9]','','g'))
+                  = lower(regexp_replace(v_name,'[^a-zA-Z0-9]','','g'))) then
+    raise exception 'Brand "%" already exists (possibly spelled differently). Use the existing one.', v_name;
+  end if;
+  insert into item_brands (brand, created_by) values (v_name, auth.uid()) returning * into v_row;
+  return v_row;
+end $$;
+
+revoke execute on function get_item_taxonomy()      from public, anon;
+revoke execute on function get_item_brands()        from public, anon;
+revoke execute on function add_item_brand(text)     from public, anon;
+grant  execute on function get_item_taxonomy()      to authenticated;
+grant  execute on function get_item_brands()        to authenticated;
+grant  execute on function add_item_brand(text)     to authenticated;
