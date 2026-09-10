@@ -10,12 +10,15 @@ import AttendanceTabs from '../components/AttendanceTabs'
 import SyncAlert from '../components/SyncAlert'
 import { Spinner } from '../components/PeopleLoaders'
 import PeopleAvatar from '../components/PeopleAvatar'
+import Stat from '../components/StatTile'
+import TrendChart from '../components/TrendChart'
 import { visibleEmployees } from '../lib/peopleScope'
 import { fetchAll } from '../lib/fetchAll'
 import '../styles/people.css'
 import '../styles/attendance-ui.css'
 import '../styles/orders-redesign.css'
 import '../styles/people-home.css'
+import '../styles/muster-bento.css'
 
 const ymd = istYmd   // IST work date — never the viewer's timezone
 const monthKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
@@ -266,6 +269,59 @@ export default function PeopleMuster() {
     finally { markGuard.current = false }
   }
   const gridRows = useMemo(() => musterData.filter(m => dept==='all' || m.emp.department===dept), [musterData, dept])
+
+  // ── Month roll-up for the bento header ───────────────────────────────────────
+  // PRESENTATION ONLY. Every figure here is a SUM of numbers the grid is already
+  // drawing: gridRows[].c is computeDay()'s own output, counted once in musterData.
+  // Nothing is recomputed, no extra query is fired, and no rule is restated — if the
+  // grid is right, these are right, by construction.
+  //
+  // OT is the exception in KIND, not in trust: otMap comes from att_month_ot() in the
+  // database (sql/attendance_ot_fc_staff.sql), the only place OT is ever calculated.
+  // Summing it here is arithmetic on a DB answer, not a second formula.
+  //
+  // DELIBERATELY ABSENT: a "vs last month" delta. That needs the previous month's
+  // punches — a second month-wide paged fetch on a payroll screen — so the tiles stay
+  // same-month rather than double the load for a nicety.
+  //
+  // These sit ABOVE the `loading` / `denied` early returns on purpose: a useMemo below
+  // them would be a conditional hook.
+  const rollup = useMemo(() => {
+    const t = { present:0, half:0, absent:0, leave:0, late:0, reg:0 }
+    gridRows.forEach(({ c }) => { for (const k in t) t[k] += c[k] || 0 })
+    // "Scheduled" is exactly what each row's own bar divides by: the days a person was
+    // expected to work. Holidays and week-offs are not scheduled days, so they are out.
+    const scheduled = t.present + t.half + t.absent + t.leave
+    const attended = t.present + t.half
+    const otMins = gridRows.reduce((s, { emp }) => s + (otMap[emp.id] || 0), 0)
+    const otPeople = gridRows.filter(({ emp }) => (otMap[emp.id] || 0) > 0).length
+    return { ...t, scheduled, attended, otMins, otPeople,
+      pct: scheduled ? Math.round(attended / scheduled * 100) : null,
+      leavePct: scheduled ? (t.leave / scheduled * 100) : 0 }
+  }, [gridRows, otMap])
+
+  // Company attendance per DAY, for the trend chart. Same source: each person-day's
+  // already-computed status, tallied by date. A day nobody was scheduled for (Sunday,
+  // a public holiday, a declared holiday) is skipped entirely rather than plotted as
+  // 0% — which would read as "nobody came in".
+  const daySeries = useMemo(() => {
+    const by = new Map()
+    gridRows.forEach(({ days }) => days.forEach(d => {
+      if (d.status === 'future' || d.status === 'holiday' || d.status === 'weekoff') return
+      const a = by.get(d.day) || { sched:0, here:0, late:0 }
+      a.sched++
+      if (d.status === 'present' || d.status === 'half') a.here++
+      if (d.late) a.late++
+      by.set(d.day, a)
+    }))
+    return [...by.entries()].sort((a,b) => a[0]-b[0]).map(([day, a]) => ({
+      key: String(day), label: String(day),
+      value: Math.round(a.here / a.sched * 100),
+      bad: a.here / a.sched < 0.8,
+      note: `${a.here} of ${a.sched} in${a.late ? ` · ${a.late} late` : ''}`,
+    }))
+  }, [gridRows])
+
   // Calendar person list, narrowed by the same department filter.
   const calPeople = useMemo(() => emps
     .filter(e => dept==='all' || e.department===dept)
@@ -311,17 +367,7 @@ export default function PeopleMuster() {
   if (denied) return <Layout pageKey="people" pageTitle="Muster"><div className="orders-app"><div className="o-empty">Muster is for managers and admin/management.</div></div></Layout>
 
   const seg = (v, scheduled, color) => v>0 ? <i style={{width:(v/scheduled*100)+'%',background:color}} /> : null
-  const legend = (
-    <div className="att-legend">
-      <span className="lg"><span className="lg-sq" style={{background:'var(--st-present)'}} />Present</span>
-      <span className="lg"><span className="lg-sq" style={{background:'linear-gradient(180deg,#EDF0F3 0 50%,var(--st-present) 50% 100%)'}} />Half day</span>
-      <span className="lg"><span className="lg-sq" style={{background:'var(--st-absent)'}} />Absent</span>
-      <span className="lg"><span className="lg-sq" style={{background:'var(--st-leave)'}} />Leave</span>
-      <span className="lg"><span className="lg-wo" />Week-off</span>
-      <span className="lg"><span className="lg-late" />Late in</span>
-      <span className="lg"><span className="lg-fold" />Regularized</span>
-    </div>
-  )
+  // The legend now lives in the bento's wide slot (.mus-key) — see the render.
   const totReg = gridRows.reduce((s,m)=>s+m.c.reg,0)
 
   const person = emps.find(e=>e.id===personId) || emps[0]
@@ -364,6 +410,64 @@ export default function PeopleMuster() {
         </div>
 
         <AttendanceTabs role={role} isManager={true} />
+
+        {/* ── Bento header ────────────────────────────────────────────────────
+            Five tiles across, the daily trend standing tall beside them, and the
+            legend + exception counts filling the wide slot underneath. Every
+            number is `rollup` / `daySeries`, which only add up what the grid below
+            is already drawing — see the comment on those memos. Nothing here can
+            disagree with the grid, because nothing here computes anything. */}
+        <div className="ph-bento mus-bento">
+          <Stat label="Attendance" value={rollup.pct != null ? `${rollup.pct}%` : '—'}
+            foot={<><b>{rollup.attended}</b> of {rollup.scheduled} scheduled days</>} />
+          <Stat label="Present" value={rollup.attended}
+            foot={<><b>{rollup.present}</b> full · <b>{rollup.half}</b> half</>} />
+          <Stat label="Absent / LOP" value={rollup.absent} warn={rollup.absent > 0}
+            foot={rollup.scheduled
+              ? <><b>{(rollup.absent / rollup.scheduled * 100).toFixed(1)}%</b> of scheduled</>
+              : 'nothing scheduled'} />
+          <Stat label="On Leave" value={rollup.leave}
+            foot={<><b>{rollup.leavePct.toFixed(1)}%</b> of scheduled days</>} />
+          {/* OT is read from att_month_ot(), never computed on this page. */}
+          <Stat label="Overtime" value={(rollup.otMins / 60).toFixed(1)} unit="hrs"
+            foot={rollup.otPeople > 0
+              ? <><b>{rollup.otPeople}</b> {rollup.otPeople === 1 ? 'person' : 'people'} · from payroll</>
+              : 'none this month'} />
+
+          {/* Daily company attendance — the share-market look the rest of People uses.
+              Week-offs and holidays are absent from the series, not zeroed. */}
+          <div className="ph-tall mus-trend">
+            <div className="mus-trend-h">
+              <div>
+                <div className="mus-trend-eyebrow">{monthLabel} · % of scheduled people in</div>
+                <div className="mus-trend-v">{rollup.pct != null ? `${rollup.pct}%` : '—'}</div>
+              </div>
+              <span className="trend-pill mono">{daySeries.length} working {daySeries.length === 1 ? 'day' : 'days'}</span>
+            </div>
+            <TrendChart points={daySeries} fmt={v => `${v}%`} height={150} />
+          </div>
+
+          {/* Legend + the month's exceptions. These classes are defined fresh under
+              .orders-app in muster-bento.css: the original .att-legend is scoped to
+              .people-app and would render unstyled out here. */}
+          <div className="ph-wide mus-key">
+            <div className="mus-key-legend">
+              <span className="mus-lg"><i className="mus-sw is-present" />Present</span>
+              <span className="mus-lg"><i className="mus-sw is-half" />Half day</span>
+              <span className="mus-lg"><i className="mus-sw is-absent" />Absent</span>
+              <span className="mus-lg"><i className="mus-sw is-leave" />Leave</span>
+              <span className="mus-lg"><i className="mus-sw is-weekoff" />Week-off</span>
+              <span className="mus-lg"><i className="mus-sw is-late" />Late in</span>
+              <span className="mus-lg"><i className="mus-sw is-reg" />Regularized</span>
+            </div>
+            <div className="mus-key-nums">
+              <span className="mus-kn"><b>{rollup.late}</b> late arrivals</span>
+              <span className="mus-kn"><b>{totReg}</b> regularizations</span>
+              {decls.length > 0 && <span className="mus-kn"><b>{decls.length}</b> declared {decls.length === 1 ? 'day' : 'days'}</span>}
+              <span className="mus-kn is-hint">hover any day for detail</span>
+            </div>
+          </div>
+        </div>
 
         {/* The muster grid is a bespoke visualisation with ~70 classes of its own, all
             scoped to .people-app. Rather than restyle a payroll-critical screen, it keeps
@@ -408,7 +512,15 @@ export default function PeopleMuster() {
 
         {view==='grid' ? (
           <div className="acard">
-            <div className="card-h bd">{legend}<span className="card-sub"><b style={{color:'var(--accent)'}}>{totReg}</b> regularizations · hover any day</span></div>
+            {/* The legend moved up into the bento's wide slot, so this head is now the
+                grid's own title rather than a strip of swatches. */}
+            <div className="card-h bd mus-grid-h">
+              <div>
+                <div className="mus-grid-eyebrow">{monthLabel} · click a day to mark it</div>
+                <div className="mus-grid-title">Daily muster</div>
+              </div>
+              <span className="card-sub"><b>{gridRows.length}</b> {gridRows.length === 1 ? 'person' : 'people'}{dept !== 'all' ? ` · ${dept}` : ''}</span>
+            </div>
             <div className="mgx">
               <div className="mgx-row mgx-axis">
                 <div className="mgx-emp mgx-emp-h">{gridRows.length} people</div>
@@ -440,7 +552,10 @@ export default function PeopleMuster() {
                           onClick={canMark&&interactive?()=>openMark(e,d):undefined} /> })}
                     </div>
                     <div className="mgx-sum">
-                      <span className="msum-n"><b>{present}</b> / {scheduled} days</span>
+                      {/* Same two numbers as before, with their ratio spelled out.
+                          `scheduled` already falls back to 1 above, so no divide-by-zero. */}
+                      <span className="msum-n"><b>{present}</b> / {scheduled} days
+                        <em className="msum-pct">{Math.round(present / scheduled * 100)}%</em></span>
                       <span className="msum-bar">{seg(c.present,scheduled,'var(--st-present)')}{seg(c.half,scheduled,'var(--st-half)')}{seg(c.leave,scheduled,'var(--st-leave)')}{seg(c.absent,scheduled,'var(--st-absent)')}</span>
                       {c.reg>0 && <span className="msum-reg">{PENCIL}{c.reg} reg.</span>}
                     </div>
