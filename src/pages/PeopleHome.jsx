@@ -35,6 +35,7 @@ export default function PeopleHome() {
   const [celebs, setCelebs] = useState([])   // next 30 days: birthdays + work anniversaries
   const [upHol, setUpHol] = useState([])     // next holidays (date + name)
   const [wf, setWf] = useState(null)         // workforce roll-up — admin/management only
+  const [presence, setPresence] = useState([])   // per-person in/out + on-leave, today
   const [kpi, setKpi] = useState(null)       // { people[], defs[], thByTeam, dataByAssign }
   const [kpiWho, setKpiWho] = useState('')   // selected assignment id (admin/management picker)
   const [exp, setExp] = useState(null)       // { rows, month, uid } — this month only
@@ -61,7 +62,7 @@ export default function PeopleHome() {
     const fyStart = fyRange(currentFyLabel()).start   // Apr 1 — the monthly trend's window
     const safe = p => p.then(r => r.data || []).catch(() => [])
     await loadWeekOffOverrides(sb)   // swapped week-offs (22/29 Aug) before isWeekOff runs
-    const [emps, punches, leaves, pl, pr, exp, dev, hol, cel] = await Promise.all([
+    const [emps, punches, leaves, pl, pr, exp, dev, hol, cel, pres] = await Promise.all([
       safe(sb.from('employees').select('id,full_name,department,designation,join_date,profile_id').eq('is_active', true)),
       safe(sb.from('attendance_punches').select('employee_id').gte('punch_at', startISO)),
       safe(sb.from('leave_requests').select('employee_id').eq('status','approved').lte('from_date', today).gte('to_date', today)),
@@ -78,6 +79,10 @@ export default function PeopleHome() {
       // employee_private, which RLS keeps to admin/management. It returns the name and the
       // DAY only — never the birth year and never an age. See sql/celebrations_upcoming.sql.
       safe(sb.rpc('celebrations_upcoming', { p_days: 30 })),
+      // Per-person presence for the "on leave" and "not in office" lists.
+      // office_presence() is presence-only (name + in/out + on-leave, no times) and
+      // readable by EVERY role, so this works for a sales login too.
+      safe(sb.rpc('office_presence')),
     ])
     const thisMonthExp = exp.filter(e => e.month_start === monthStart)
     const pendingExp = thisMonthExp.filter(e => e.status && !['paid','rejected','cancelled','reimbursed'].includes(e.status))
@@ -91,7 +96,7 @@ export default function PeopleHome() {
       pendExp: pendingExp.length,
       devices: dev.length,
     })
-    setUpHol(hol); setCelebs(cel)
+    setUpHol(hol); setCelebs(cel); setPresence(pres)
     setExp({ rows: exp, month: monthStart, fyStart, uid: session.user.id })
     setLoading(false)
 
@@ -303,6 +308,22 @@ export default function PeopleHome() {
   }
 
   const isMgmt = ['admin','management'].includes(user.role)
+
+  // Today's two exception lists, straight off office_presence().
+  //   on leave      — an APPROVED leave request covers today (the RPC's own `on_leave`)
+  //   not in office — neither in nor on leave: no punch today, or last punch was OUT.
+  //                   Exempt (non-punching) staff are already counted IN by the RPC, so
+  //                   the four directors never fall into this list — see
+  //                   sql/office_presence_exempt.sql.
+  // Names only, so this stays inside the same admin/management gate as Always On Time.
+  const presLists = useMemo(() => {
+    const by = (a, b) => String(a.full_name || '').localeCompare(String(b.full_name || ''))
+    return {
+      leave: presence.filter(p => p.on_leave).sort(by),
+      out:   presence.filter(p => !p.is_in && !p.on_leave).sort(by),
+      total: presence.length,
+    }
+  }, [presence])
 
   // This month's expenses for the selected person.
   //
@@ -613,23 +634,63 @@ export default function PeopleHome() {
               </div>
             )}
 
-            {/* Recognition sits above the problem cards, deliberately. */}
-            {wf && (
-              <div className="card" style={{marginTop:16}}>
-                <div className="card-head">
-                  <div><div className="card-eyebrow">{fmtRange(wf.from, wf.to)} · never late, never absent</div><div className="card-title">Always On Time</div></div>
-                  <span className="trend-pill mono">{wf.onTimePeople.length} of {wf.eligible}</span>
+            {/* Recognition sits above the problem cards, deliberately — and today's two
+                exception lists sit beside it, so the month's record and the day's gaps
+                read as one row. */}
+            {isMgmt && (
+              <div className="ph-presence-row">
+                {wf && (
+                  <div className="card ph-presence-main">
+                    <div className="card-head">
+                      <div><div className="card-eyebrow">{fmtRange(wf.from, wf.to)} · never late, never absent</div><div className="card-title">Always On Time</div></div>
+                      <span className="trend-pill mono">{wf.onTimePeople.length} of {wf.eligible}</span>
+                    </div>
+                    {wf.onTimePeople.length === 0
+                      ? <div className="o-empty">Nobody with a clean month yet</div>
+                      : <div className="ph-chips">
+                          {wf.onTimePeople.map(x => (
+                            <span key={x.id} className="ph-chip" onClick={()=>navigate('/people/team/'+x.id)}
+                              title={`${x.present} day${x.present === 1 ? '' : 's'} present`}>
+                              <span className="ph-chip-dot" />{x.name}
+                            </span>
+                          ))}
+                        </div>}
+                  </div>
+                )}
+
+                <div className="card">
+                  <div className="card-head">
+                    <div><div className="card-eyebrow">Today · approved leave</div><div className="card-title">On Leave</div></div>
+                    <span className="trend-pill mono">{presLists.leave.length}</span>
+                  </div>
+                  {presLists.leave.length === 0
+                    ? <div className="o-empty">Nobody on leave today</div>
+                    : <div className="ph-chips">
+                        {presLists.leave.map(p => (
+                          <span key={p.employee_id} className="ph-chip is-leave" onClick={()=>navigate('/people/team/'+p.employee_id)}
+                            title={p.designation || p.department || ''}>
+                            <span className="ph-chip-dot" />{p.full_name}
+                          </span>
+                        ))}
+                      </div>}
                 </div>
-                {wf.onTimePeople.length === 0
-                  ? <div className="o-empty">Nobody with a clean month yet</div>
-                  : <div className="ph-chips">
-                      {wf.onTimePeople.map(x => (
-                        <span key={x.id} className="ph-chip" onClick={()=>navigate('/people/team/'+x.id)}
-                          title={`${x.present} day${x.present === 1 ? '' : 's'} present`}>
-                          <span className="ph-chip-dot" />{x.name}
-                        </span>
-                      ))}
-                    </div>}
+
+                <div className="card">
+                  <div className="card-head">
+                    <div><div className="card-eyebrow">Today · no punch in</div><div className="card-title">Not In Office</div></div>
+                    <span className="trend-pill mono">{presLists.out.length}</span>
+                  </div>
+                  {presLists.out.length === 0
+                    ? <div className="o-empty">Everybody is in</div>
+                    : <div className="ph-chips">
+                        {presLists.out.map(p => (
+                          <span key={p.employee_id} className="ph-chip is-out" onClick={()=>navigate('/people/team/'+p.employee_id)}
+                            title={p.designation || p.department || ''}>
+                            <span className="ph-chip-dot" />{p.full_name}
+                          </span>
+                        ))}
+                      </div>}
+                </div>
               </div>
             )}
 

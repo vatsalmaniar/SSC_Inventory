@@ -9,6 +9,7 @@ import '../styles/dashboard.css'
 import '../styles/orders-redesign.css'
 import '../styles/people-home.css'
 import Stat from '../components/StatTile'
+import Loading from '../components/Loading'
 import TrendChart from '../components/TrendChart'
 import StatusDonut from '../components/StatusDonut'
 
@@ -128,8 +129,12 @@ export default function Dashboard() {
     if (companyView) {
       // win rate needs the CLOSED stages, which the pipeline query excludes
       queries.push(sb.from('crm_opportunities').select('stage'))
-      // receivables: the newest dues run only — older runs are superseded snapshots
-      queries.push(sb.from('customer_dues_runs').select('id').order('id', { ascending: false }).limit(1))
+      // The CURRENT dues run. Was `.order('id', desc)` — but id is a uuid, so that
+      // ordering is arbitrary, not chronological; with more than one run it would have
+      // picked a random snapshot. is_current is the flag the import maintains.
+      queries.push(sb.from('customer_dues_runs')
+        .select('id,as_on,total_outstanding_inr,total_pdc_inr,total_overdue_inr')
+        .eq('is_current', true).order('as_on', { ascending: false }).limit(1))
     }
 
     const results = await Promise.all(queries)
@@ -151,7 +156,7 @@ export default function Dashboard() {
     const runId = runRes.data?.[0]?.id
     if (companyView && runId) {
       const { data: bills } = await fetchAll((from, to) => sb.from('customer_dues_bills')
-        .select('pending_inr,days_past_due').eq('run_id', runId).order('id').range(from, to))
+        .select('pending_inr,pdc_inr,days_past_due,party_name_raw').eq('run_id', runId).order('id').range(from, to))
       ageing = bills || []
     }
 
@@ -187,17 +192,28 @@ export default function Dashboard() {
         .map(k => ({ key: k, n: (crmAllRes.data || []).filter(o => o.stage === k).length })),
 
       // Receivables ageing. days_past_due <= 0 (or null) is not yet due.
+      // GROSS outstanding: pending + PDC. pending_inr is stored NET of post-dated
+      // cheques, which made our total ₹13.09Cr against the ₹13.37Cr the Tally statement
+      // shows. Each cheque is aged with its OWN bill, so the buckets stay honest about
+      // how old the money is.
       ageing: (() => {
         const keys = ['Not due','1–30','31–60','61–90','90+']
         const b = Object.fromEntries(keys.map(k => [k, { amount: 0, bills: 0 }]))
         ageing.forEach(x => {
           const d = Number(x.days_past_due) || 0
           const k = d <= 0 ? 'Not due' : d <= 30 ? '1–30' : d <= 60 ? '31–60' : d <= 90 ? '61–90' : '90+'
-          b[k].amount += Number(x.pending_inr) || 0
+          b[k].amount += (Number(x.pending_inr) || 0) + (Number(x.pdc_inr) || 0)
           b[k].bills += 1
         })
         return keys.map(label => ({ label, amount: b[label].amount, bills: b[label].bills }))
       })(),
+
+      // Post-dated cheques are held SEPARATELY from pending_inr — a cheque in hand is
+      // money promised, not received, so it is not counted as collected. Surfaced on its
+      // own tile because the Tally statement adds it in: our ₹13.09Cr + ₹28.1L PDC is
+      // the ₹13.37Cr gross that report shows.
+      pdcTotal: ageing.reduce((a, x) => a + (Number(x.pdc_inr) || 0), 0),
+      pdcParties: new Set(ageing.filter(x => Number(x.pdc_inr)).map(x => x.party_name_raw)).size,
 
       // Inventory health, three buckets — the tiles above only counted two.
       invOk: inv.filter(i => i.quantity > 5).length,
@@ -258,6 +274,21 @@ export default function Dashboard() {
         </div>
 
         {/* ── Company overview — admin / management / accounts / ops ──────────── */}
+        {/* Until this resolves the page was just a greeting over blank space, with no
+            sign anything was coming. Skeleton tiles keep the layout in place and the
+            shared <Loading/> says the numbers are on their way. */}
+        {loading && (
+          <>
+            <div className="hd-section-label" style={{ marginTop: 4 }}>Company</div>
+            <div className="orders-app dash-embed">
+              <div className="ph-bento">
+                {Array.from({ length: 6 }).map((_, i) => <div key={i} className="ph-stat is-skel" />)}
+              </div>
+              <Loading label="Loading company data…" />
+            </div>
+          </>
+        )}
+
         {!loading && (m.companyView || m.headcount > 0) && (() => {
           const closed = m.crmWon + m.crmLost
           const winRate = closed ? Math.round((m.crmWon / closed) * 100) : null
@@ -299,6 +330,11 @@ export default function Dashboard() {
                   <Stat label="Overdue" value={overduePct != null ? `${overduePct}%` : '—'}
                     warn={overduePct > 25}
                     foot={<>{fmtMoneyShort(overdue)} of {fmtMoneyShort(totalDue)}</>} onClick={() => navigate('/billing')} />
+                  {m.pdcTotal > 0 && (
+                    <Stat label="PDC in hand" value={fmtMoneyShort(m.pdcTotal)}
+                      foot={<><b>{m.pdcParties}</b> parties · included above</>}
+                      onClick={() => navigate('/billing')} />
+                  )}
                   <Stat label="Dispatched" value={shipped != null ? `${shipped}%` : '—'}
                     foot={<><b>{m.ordersDispatched}</b> of {m.ordersTotal} orders</>} onClick={() => navigate('/fc')} />
                   <Stat label="SI in stock" value={siPct != null ? `${siPct}%` : '—'}
@@ -403,7 +439,10 @@ export default function Dashboard() {
                       owed, and how much of it is long overdue. */}
                   <div className="card">
                     <div className="card-head">
-                      <div><div className="card-eyebrow">Latest statement</div><div className="card-title">Receivables ageing</div></div>
+                      <div>
+                        <div className="card-eyebrow">Latest statement · gross, incl. PDC</div>
+                        <div className="card-title">Receivables ageing</div>
+                      </div>
                       <span className="trend-pill mono">{fmtMoneyShort(totalDue)}</span>
                     </div>
                     {/* Ageing curve: the shared line chart across the buckets. Points
@@ -414,6 +453,13 @@ export default function Dashboard() {
                         bad: x.label !== 'Not due',
                         note: `${x.bills} bill${x.bills === 1 ? '' : 's'}` }))}
                       fmt={v => fmtMoneyShort(v)} height={168} />
+                    {m.pdcTotal > 0 && (
+                      <div className="dash-note">
+                        Total outstanding <b>{fmtMoneyShort(totalDue)}</b> — gross, including {fmtMoneyShort(m.pdcTotal)} of
+                        post-dated cheques. Each cheque is aged with its own bill, so a cheque against a
+                        bill that is not yet due sits in “Not due”, not in 90+.
+                      </div>
+                    )}
                   </div>
 
                   {/* CRM funnel */}

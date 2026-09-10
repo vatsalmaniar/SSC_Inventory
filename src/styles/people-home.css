@@ -140,6 +140,29 @@
 }
 .orders-app .ph-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--o-good); flex-shrink: 0; }
 
+/* On Leave / Not In Office reuse the chip, only the colour changes: purple = planned
+   absence (same hue the dashboard donut uses for leave), amber = unexplained. */
+.orders-app .ph-chip.is-leave { background: rgba(139,92,246,0.10); color: #6D28D9; }
+.orders-app .ph-chip.is-leave .ph-chip-dot { background: #8B5CF6; }
+.orders-app .ph-chip.is-out { background: rgba(245,158,11,0.12); color: #B45309; }
+.orders-app .ph-chip.is-out .ph-chip-dot { background: var(--o-warn); }
+
+/* Recognition on the left, today's two exception lists on the right. The two lists are
+   narrower on purpose — they are short name lists, not the headline. */
+.orders-app .ph-presence-row {
+  display: grid; grid-template-columns: 1.6fr 1fr 1fr;
+  gap: 14px; margin-top: 16px; align-items: start;
+}
+.orders-app .ph-presence-row > .card { min-width: 0; }
+@media (max-width: 1040px) {
+  .orders-app .ph-presence-row { grid-template-columns: 1fr 1fr; }
+  .orders-app .ph-presence-row > .ph-presence-main { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .orders-app .ph-presence-row { grid-template-columns: 1fr; }
+  .orders-app .ph-presence-row > .ph-presence-main { grid-column: auto; }
+}
+
 /* ── responsive ──────────────────────────────────────────────────────────────
    1280: agenda drops below, stats stay 5-across.
    1040: stats go 3-across so they do not squeeze.
@@ -830,3 +853,25 @@
 }
 .orders-app .ph-delta.up   { color: #0F926D; }
 .orders-app .ph-delta.down { color: #C2255C; }
+
+/* reconciliation note under a chart */
+.orders-app .dash-note {
+  font-size: 11.5px; color: var(--o-muted); margin-top: 10px;
+  padding-top: 10px; border-top: 1px solid var(--o-line-2); line-height: 1.5;
+}
+.orders-app .dash-note b { color: var(--o-ink); font-weight: var(--fw-semibold); }
+
+/* Skeleton tile: holds the bento's shape while the numbers load, so the page does
+   not read as empty. Pure shimmer — no text, no spinner of its own (the shared
+   <Loading/> carries that). */
+.orders-app .ph-stat.is-skel {
+  cursor: default;
+  border-color: var(--o-line-2);
+  background: linear-gradient(100deg, var(--o-bg-2) 30%, #fff 50%, var(--o-bg-2) 70%);
+  background-size: 220% 100%;
+  animation: ph-skel 1.3s ease-in-out infinite;
+}
+@keyframes ph-skel { from { background-position: 180% 0 } to { background-position: -20% 0 } }
+@media (prefers-reduced-motion: reduce) {
+  .orders-app .ph-stat.is-skel { animation: none; background: var(--o-bg-2); }
+}
