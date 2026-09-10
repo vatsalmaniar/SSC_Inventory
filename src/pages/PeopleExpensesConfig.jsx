@@ -61,7 +61,7 @@ export default function PeopleExpensesConfig({ embed = false }) {
       if (val == null) { if (ex) await sb.from('expense_budgets').delete().eq('id', ex.id) }
       else if (ex) { const { error } = await sb.from('expense_budgets').update({ budget_amount: val }).eq('id', ex.id); if (error) throw error }
       else { const { error } = await sb.from('expense_budgets').insert({ profile_id: profileId, category_id: categoryId, month_start: null, budget_amount: val }); if (error) throw error }
-      toast('Saved.', 'success'); loadAll()
+      toast('Budget saved', 'success'); loadAll()
     } catch (e) { toast(e?.message || friendlyError(e), 'error'); loadAll() }
   }
 

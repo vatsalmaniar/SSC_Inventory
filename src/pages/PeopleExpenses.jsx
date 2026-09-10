@@ -640,7 +640,7 @@ export default function PeopleExpenses() {
       if (paths.length) await sb.storage.from('expense-bills').remove(paths).catch(() => {})
       const { error } = await sb.from('expenses').delete().eq('id', row.id)
       if (error) throw error
-      toast('Deleted.', 'warning'); load()
+      toast('Expense claim deleted', 'warning', 'Its attached bills were removed too.'); load()
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
   }
   // Styled .xlsx — same chrome as the Orders sheets (xlsFinish/xlsDownload).

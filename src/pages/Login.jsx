@@ -86,12 +86,12 @@ export default function Login() {
       // Toast, not a full-screen interstitial. toast() appends to document.body,
       // outside the React tree, so it survives the navigate and lands with the user
       // on People rather than holding them on a "Welcome" screen for 1.6 seconds.
-      toast('Welcome, ' + name, 'success')
+      toast('Welcome back, ' + name, 'success', 'Opening People 360.')
       navigate('/people')
       return
     }
 
-    toast('Welcome, ' + name, 'success')
+    toast('Welcome back, ' + name, 'success', 'Opening your dashboard.')
     navigate('/dashboard')
   }
 

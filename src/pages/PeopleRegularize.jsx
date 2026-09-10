@@ -250,7 +250,7 @@ export default function PeopleRegularize() {
       const { data, error } = await sb.from('regularizations').update({ status:'cancelled' }).eq('id', req.id).select('id')
       if (error) throw error
       if (!data?.length) throw new Error('Could not cancel — the request may already be decided, or you may not have permission.')
-      toast('Cancelled.','warning'); await load(meId)
+      toast('Regularization request cancelled', 'warning'); await load(meId)
     }
     catch (e) { toast(e?.message||friendlyError(e),'error') }
     finally { guard.current = false }

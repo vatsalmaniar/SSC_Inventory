@@ -302,14 +302,14 @@ export default function EmployeeDetail() {
         }, { onConflict: 'employee_id' })
         if (error) throw error
       }
-      toast('Saved.', 'success'); setShowEdit(false); await load(role)
+      toast('Employee details saved', 'success'); setShowEdit(false); await load(role)
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { guard.current = false }
   }
 
   async function togglePermanent() {
     const on = !(priv?.is_permanent)
-    try { await sb.from('employee_private').update({ is_permanent: on }).eq('employee_id', emp.id); toast('Updated.','success'); await load(role) }
+    try { await sb.from('employee_private').update({ is_permanent: on }).eq('employee_id', emp.id); toast(on ? 'Marked as permanent' : 'Marked as not permanent', 'success'); await load(role) }
     catch (e) { toast(e?.message||friendlyError(e),'error') }
   }
 

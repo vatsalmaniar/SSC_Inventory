@@ -251,7 +251,7 @@ export default function PeopleLeave() {
       const { data, error } = await sb.from('leave_requests').update({ status:'cancelled' }).eq('id', req.id).select('id')
       if (error) throw error
       if (!data?.length) throw new Error('Could not cancel — the request may already be approved, or you may not have permission.')
-      toast('Cancelled.','warning'); await load(meId, role)
+      toast('Leave request cancelled', 'warning'); await load(meId, role)
     }
     catch (e) { toast(e?.message||friendlyError(e),'error') }
     finally { guard.current = false }
