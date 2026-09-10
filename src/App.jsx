@@ -70,6 +70,11 @@ const PeopleRegularize = lazy(() => import('./pages/PeopleRegularize'))
 const PeopleMuster = lazy(() => import('./pages/PeopleMuster'))
 const PeopleSwipes = lazy(() => import('./pages/PeopleSwipes'))
 const PeopleSyncStatus = lazy(() => import('./pages/PeopleSyncStatus'))
+const TalentHome = lazy(() => import('./pages/TalentHome'))
+const TalentOpenings = lazy(() => import('./pages/TalentOpenings'))
+const TalentPipeline = lazy(() => import('./pages/TalentPipeline'))
+const TalentCandidateDetail = lazy(() => import('./pages/TalentCandidateDetail'))
+const TalentOffers = lazy(() => import('./pages/TalentOffers'))
 const PurchaseInvoiceList = lazy(() => import('./pages/PurchaseInvoiceList'))
 const PurchaseInvoiceDetail = lazy(() => import('./pages/PurchaseInvoiceDetail'))
 const FCDashboard = lazy(() => import('./pages/FCDashboard'))
@@ -167,6 +172,14 @@ export default function App() {
           <Route path="/people/kpi/config" element={<PeopleKpiConfig />} />
           <Route path="/people/expenses" element={<PeopleExpenses />} />
           <Route path="/people/expenses/config" element={<PeopleExpensesConfig />} />
+
+          {/* Talent 360 — admin/management only. Each page checks the role
+              itself too; Layout's NAV_ITEMS gate is not the only guard. */}
+          <Route path="/talent" element={<TalentHome />} />
+          <Route path="/talent/openings" element={<TalentOpenings />} />
+          <Route path="/talent/pipeline" element={<TalentPipeline />} />
+          <Route path="/talent/candidates/:id" element={<TalentCandidateDetail />} />
+          <Route path="/talent/offers" element={<TalentOffers />} />
           <Route path="/fc/:id" element={<FCOrderDetail />} />
           <Route path="/billing" element={<BillingDashboard />} />
           <Route path="/billing/list" element={<BillingList />} />

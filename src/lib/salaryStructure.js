@@ -1,6 +1,8 @@
 // Reverse salary structure — Annual CTC → monthly breakup → net payable, per SSC structure.
 // Pure. Reuses the tax engine for TDS. No React/Supabase.
-import { calculateTax } from './tax'
+// Explicit .js so plain `node` can resolve it too — scripts/test-offer-annexure.mjs
+// runs this formula outside Vite. Vite resolves it identically.
+import { calculateTax } from './tax.js'
 
 export const RATIOS = {
   '50 / 20 / 10 / 20': [0.50, 0.20, 0.10, 0.20],

@@ -4,6 +4,7 @@
       "Read(//Users/vatsalmaniar/.nvm/versions/**)",
       "Bash(brew list:*)",
       "Bash(curl -s \"https://www.ssccontrol.com/partners.html\")",
+      "Bash(curl *api.supabase.com*)",
       "Bash(python3)",
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",

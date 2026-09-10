@@ -5,32 +5,16 @@ import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { signPhotos } from '../lib/photos'
-import { computeStructure, RATIOS } from '../lib/salaryStructure'
-import { FY_LABEL } from '../lib/fmt'
+import { RATIOS } from '../lib/salaryStructure'
+// The onboarding sequence itself lives in lib/createEmployee.js — Talent 360 runs
+// the identical five steps when a candidate joins, and two copies would drift.
+import { createEmployee, validateEmployeeForm, structureFor, today, autoUsername, genPassword, EMPTY_EMPLOYEE_FORM as EMPTY_FORM } from '../lib/createEmployee'
 import Layout from '../components/Layout'
 import { TeamSkeleton } from '../components/PeopleLoaders'
 import '../styles/people.css'
 
-const FY = FY_LABEL.replace(/^FY\s*/, '')   // 'FY 26-27' → '26-27'
 const LOGIN_ROLES = [['sales','Sales'],['accounts','Accounts'],['management','Management'],['ops','Operations'],['fc_kaveri','FC Kaveri'],['fc_godawari','FC Godawari']]
 const inr = n => '₹' + Math.round(n || 0).toLocaleString('en-IN')
-const autoUsername = (name='') => {
-  const p = name.trim().toLowerCase().replace(/[^a-z\s]/g,'').split(/\s+/).filter(Boolean)
-  return p.length === 0 ? '' : p.length === 1 ? p[0] : `${p[0]}.${p[p.length-1]}`
-}
-const genPassword = () => 'Ssc@' + Math.floor(1000 + Math.random() * 9000)
-// Local date, NOT toISOString().slice(0,10) — that yields UTC, so between 00:00 and
-// 05:30 IST it returns yesterday and back-dates the salary effective_from by a day.
-const today = () => new Date().toLocaleDateString('en-CA')
-// Money must reach the DB at paise precision; computeStructure works in JS floats.
-const round2 = n => Math.round((Number(n) || 0) * 100) / 100
-// Statutory IDs: blank and placeholder text ("NA", "-", "N/A") must land as NULL, never as
-// a literal value — a stored 'NA' collides across employees and breaks PF/ESI filing.
-const statutory = (v, upper = false) => {
-  const s = String(v ?? '').trim()
-  if (!s || /^(na|n\/a|nil|none|-+)$/i.test(s)) return null
-  return upper ? s.toUpperCase() : s
-}
 
 function Drawer({ title, sub, onClose, children, footer }) {
   return createPortal(
@@ -54,20 +38,6 @@ function Section({ title, sub, open, onToggle, children }) {
       {open && <div style={{ padding:'12px 14px' }}>{children}</div>}
     </div>
   )
-}
-
-const EMPTY_FORM = {
-  // basic (employees)
-  full_name:'', employee_code:'', department:'', designation:'', branch:'', join_date:'',
-  reporting_manager_id:'', lifecycle_status:'probation', tax_regime:'new',
-  // statutory & personal (employee_private)
-  gender:'', marital_status:'', date_of_birth:'', personal_phone:'', personal_email:'',
-  emergency_contact:'', pan:'', aadhaar:'', uan_no:'', esic_no:'',
-  spouse_name:'', spouse_phone:'', spouse_dob:'', is_permanent:true,
-  // salary (employee_compensation)
-  annual_ctc:'', salary_ratio:'50 / 20 / 10 / 20', pf_applicable:false, professional_tax:'200', accidental_insurance:'128',
-  // login
-  create_login:false, username:'', login_role:'sales', password:'', team_id:'',
 }
 
 const DEPT_HEX = { 'Management':'#6D28D9', 'Sales':'#1E54B7', 'Operation & Support':'#0E7C6B', 'Opeartion & Support':'#0E7C6B', 'Account':'#C2255C', 'Back Office':'#8C99A8', 'People & Culture':'#C2255C' }
@@ -137,17 +107,10 @@ export default function PeopleTeam() {
     else set({ create_login:false })
   }
 
-  // live salary breakup preview (mgmt only) — recomputed as CTC/ratio/regime change
-  const salPreview = useMemo(() => {
-    const ctc = parseFloat(addForm.annual_ctc) || 0
-    if (!ctc) return null
-    return computeStructure({
-      annualCtc: ctc, ratio: addForm.salary_ratio, regime: addForm.tax_regime,
-      pfApplicable: addForm.pf_applicable,
-      professionalTax: parseFloat(addForm.professional_tax) || 0,
-      accidentalInsurance: parseFloat(addForm.accidental_insurance) || 0,
-    })
-  }, [addForm.annual_ctc, addForm.salary_ratio, addForm.tax_regime, addForm.pf_applicable, addForm.professional_tax, addForm.accidental_insurance])
+  // live salary breakup preview (mgmt only) — recomputed as CTC/ratio/regime change.
+  // Same call the write path uses, so the preview cannot differ from what is stored.
+  const salPreview = useMemo(() => structureFor(addForm),
+    [addForm.annual_ctc, addForm.salary_ratio, addForm.tax_regime, addForm.pf_applicable, addForm.professional_tax, addForm.accidental_insurance])
 
   const resetAdd = () => { setAddForm({ ...EMPTY_FORM }); setCreatedCreds(null); setOpenSec({ basic:true, statutory:false, salary:false, login:false }) }
   const closeAdd = () => { setShowAdd(false); resetAdd() }
@@ -155,82 +118,12 @@ export default function PeopleTeam() {
   async function addMember() {
     if (guard.current) return
     const f = addForm
-    if (!f.full_name.trim()) { toast('Full name is required.', 'error'); return }
-    if (f.create_login) {
-      if (!f.username.trim()) { toast('Username is required for the login.', 'error'); return }
-      if ((f.password || '').length < 6) { toast('Temp password must be at least 6 characters.', 'error'); return }
-      if (f.login_role === 'sales' && !f.team_id) { toast('Pick a team for the sales login (target auto-assigns).', 'error'); return }
-    }
+    const bad = validateEmployeeForm(f)
+    if (bad) { toast(bad, 'error'); return }
     guard.current = true
     try {
-      // 1) base employee record
-      const { data: emp, error } = await sb.from('employees').insert({
-        full_name: f.full_name.trim(),
-        employee_code: f.employee_code.trim() || null,
-        department: f.department.trim() || null,
-        designation: f.designation.trim() || null,
-        branch: f.branch.trim() || null,
-        join_date: f.join_date || null,
-        reporting_manager_id: f.reporting_manager_id || null,
-        lifecycle_status: f.lifecycle_status,
-        is_active: f.lifecycle_status !== 'exited',
-        tax_regime: f.tax_regime,
-        is_test: testMode,
-      }).select('id').single()
-      if (error) throw error
-      const empId = emp.id
-
-      // 2) statutory & personal (mgmt) — only if something was entered
-      if (isMgmt) {
-        const hasPriv = [f.gender,f.marital_status,f.date_of_birth,f.personal_phone,f.personal_email,f.emergency_contact,f.pan,f.aadhaar,f.uan_no,f.esic_no,f.spouse_name,f.spouse_phone,f.spouse_dob].some(v => (v||'').trim && v.trim())
-        if (hasPriv || f.is_permanent === false) {
-          const { error: e2 } = await sb.from('employee_private').upsert({
-            employee_id: empId, gender: f.gender || null, marital_status: f.marital_status || null,
-            date_of_birth: f.date_of_birth || null, personal_phone: f.personal_phone || null, personal_email: f.personal_email || null,
-            emergency_contact: f.emergency_contact || null, pan: statutory(f.pan, true), aadhaar: statutory(f.aadhaar),
-            uan_no: statutory(f.uan_no), esic_no: statutory(f.esic_no),
-            spouse_name: f.spouse_name || null, spouse_phone: f.spouse_phone || null, spouse_dob: f.spouse_dob || null,
-            is_permanent: f.is_permanent,
-          }, { onConflict: 'employee_id' })
-          if (e2) throw e2
-        }
-      }
-
-      // 3) salary breakup (mgmt) — only if a CTC was entered
-      const ctc = parseFloat(f.annual_ctc) || 0
-      if (isMgmt && ctc > 0) {
-        const s = computeStructure({ annualCtc: ctc, ratio: f.salary_ratio, regime: f.tax_regime, pfApplicable: f.pf_applicable, professionalTax: parseFloat(f.professional_tax) || 0, accidentalInsurance: parseFloat(f.accidental_insurance) || 0 })
-        // Every money value is rounded to paise here: computeStructure works in JS floats and
-        // its output has never been reconciled against the payroll sheet, so these rows are
-        // tagged 'computed_unverified' — payroll must treat them as needing sign-off, unlike
-        // the 'sheet_june_2026' rows which came from the real sheet.
-        const { error: e3 } = await sb.from('employee_compensation').insert({
-          employee_id: empId, fy_label: FY, annual_ctc_inr: round2(ctc), effective_from: f.join_date || today(),
-          source: 'onboarding', revision_reason: 'Onboarding', is_current: true,
-          monthly_ctc: round2(s.monthlyCtc), monthly_gross: round2(s.gross), basic: round2(s.basic), hra: round2(s.hra),
-          travel_allowance: round2(s.travelAllowance), special_allowance: round2(s.specialAllowance), salary_ratio: f.salary_ratio,
-          pf_employer: round2(s.employerPf), esic_employer: round2(s.employerEsic), pf_employee: round2(s.pfEmployee), esic_employee: round2(s.esicEmployee),
-          professional_tax: round2(s.professionalTax), accidental_insurance: round2(s.accidentalInsurance),
-          gratuity: round2(s.gratuity), bonus: round2(s.bonus), tds: round2(s.tds), total_deductions: round2(s.totalDeductions),
-          net_payable: round2(s.netPayable), breakup_source: 'computed_unverified', updated_at: new Date().toISOString(),
-        })
-        if (e3) throw e3
-      }
-
-      // 4) app login (optional) — links employees.profile_id server-side
-      if (f.create_login) {
-        const uname = f.username.trim().toLowerCase()
-        const { data: newUid, error: e4 } = await sb.rpc('admin_create_login', {
-          p_employee_id: empId, p_username: uname, p_password: f.password, p_role: f.login_role, p_name: f.full_name.trim(),
-        })
-        if (e4) throw e4
-        // 5) sales → KPI team + auto target (multiplier resolved server-side)
-        if (f.login_role === 'sales' && f.team_id) {
-          const { error: e5 } = await sb.rpc('assign_kpi_target', { p_profile_id: newUid, p_team_id: f.team_id, p_fy_label: FY, p_annual_ctc: ctc })
-          if (e5) throw e5
-        }
-        setCreatedCreds({ username: uname, password: f.password })
-      }
+      const { credentials } = await createEmployee({ form: f, isMgmt, testMode })
+      if (credentials) setCreatedCreds(credentials)
 
       toast(f.create_login ? 'Onboarded — share the login below.' : 'Team member onboarded.', 'success')
       await load()
