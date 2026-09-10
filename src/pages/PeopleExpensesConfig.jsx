@@ -89,7 +89,7 @@ export default function PeopleExpensesConfig({ embed = false }) {
     try {
       const { error } = await sb.rpc('expense_set_budget_flag', { p_id: profileId, p_on: on })
       if (error) throw error
-      toast(on ? 'Added to budget.' : 'Removed from budget.', 'success'); loadAll()
+      toast(on ? 'Added to budget.' : 'Removed from budget.', on ? 'success' : 'warning'); loadAll()
     } catch (e) { toast(e?.message || friendlyError(e), 'error'); loadAll() }
   }
 

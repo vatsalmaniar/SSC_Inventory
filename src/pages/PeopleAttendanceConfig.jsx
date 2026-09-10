@@ -80,7 +80,7 @@ export default function PeopleAttendanceConfig({ embed = false }) {
   }
   async function removeHoliday(h) {
     if (!window.confirm(`Remove ${h.name}?`)) return
-    try { await sb.from('holidays').update({ is_active:false }).eq('id', h.id); await load(); toast('Removed.', 'success') }
+    try { await sb.from('holidays').update({ is_active:false }).eq('id', h.id); await load(); toast('Removed.', 'warning') }
     catch (e) { toast(e?.message||friendlyError(e),'error') }
   }
 

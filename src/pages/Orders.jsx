@@ -91,6 +91,9 @@ export default function Orders() {
   const [user, setUser] = useState({ name: '', role: '', id: '' })
   const [orders, setOrders] = useState([])
   const [reps, setReps] = useState([])
+  // Order ids that already have a sample_return GRN against them — the ONLY record
+  // that a sample has physically come back. See sql/sample_return_tracking.sql.
+  const [sampleReturned, setSampleReturned] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
   const [successMsg, setSuccessMsg] = useState('')
 
@@ -119,7 +122,7 @@ export default function Orders() {
     setLoading(true)
     // Page past PostgREST's 1000-row cap — otherwise this dashboard's
     // Total Order Value under-reported (showed ~6.8 Cr of the true 9.2 Cr).
-    const [ordersData, repsRes] = await Promise.all([
+    const [ordersData, repsRes, retRes] = await Promise.all([
       fetchAll((from, to) => {
         let q = sb.from('orders')
           // sample_returnable added for the Sample Orders "to return" figure. One extra
@@ -132,11 +135,16 @@ export default function Orders() {
         return q.range(from, to)
       }),
       sb.from('profiles').select('id,name,role').in('role',['sales','admin','management']),
+      // Paged: 18 rows today, but the cap is a silent truncation, not an error.
+      fetchAll((from, to) => sb.from('grn').select('order_id')
+        .eq('grn_type', 'sample_return').eq('is_test', false).order('id').range(from, to)),
     ])
     if (ordersData.error) console.error('Orders load error:', ordersData.error)
     if (ordersData.truncated) console.warn('Orders: hit fetch ceiling — consider server-side pagination.')
+    if (retRes.error) console.error('sample returns load error:', retRes.error)
     setOrders(ordersData.data || [])
     setReps(repsRes.data || [])
+    setSampleReturned(new Set((retRes.data || []).map(g => g.order_id).filter(Boolean)))
     setLoading(false)
   }
 
@@ -181,8 +189,27 @@ export default function Orders() {
   // is already sitting back on the shelf. It is an upper bound, and the tile says
   // "expected back" rather than "pending" for exactly that reason. Making it truthful
   // needs a place to record the return first.
+  // Samples still physically out with a customer.
+  //
+  // ⚠️ THIS PREVIOUSLY OVERSTATED. It asked only "was this returnable, and did it reach
+  // the customer" and never "did it come back", so a sample stayed counted forever. It
+  // read 32 while 16 of those were already back on the shelf with a numbered return GRN
+  // against them (SSC/SR0040 → SSC/GRN0477/GOD, SSC/SR0023 → SSC/GRN0642/KAV, and 14
+  // more). The real figure is 20.
+  //
+  // The close signal is a sample_return GRN. There is NO "returned" flag on orders —
+  // searching for one and not finding it is exactly how the wrong version got written.
+  // "Out" is decided by an actual DELIVERY, not by order status. Testing
+  // status in ('dispatched_fc','closed') misses samples sitting on
+  // 'partial_dispatch' where part of the shipment was delivered and IS with the
+  // customer — three of them today, including SSC/SR0004 (delivered 10 Apr, the
+  // oldest outstanding sample in the company). Status is also what made this and
+  // /fc disagree, 17 against 20. Same test on both pages now, and it is the same
+  // basis the 30-day return clock uses in sql/sample_return_tracking.sql.
   const samplesToReturn = sampleOrders.filter(o =>
-    o.sample_returnable !== false && ['dispatched_fc', 'closed'].includes(o.status))
+    o.sample_returnable !== false
+    && (o.order_dispatches || []).some(d => d.delivered_at)
+    && !sampleReturned.has(o.id))
 
   // Status pipeline counts + values
   const statusGroups = ['pending','approved','partial','fc','billing','delivered','cancelled'].map(g => {
@@ -498,9 +525,9 @@ export default function Orders() {
                     <div className="o-mini-v">{fmtCr(sampleOrders.reduce((s, o) => s + orderNetValue(o), 0))}</div>
                     <div className="o-mini-l">VALUE</div>
                   </div>
-                  <div className="o-mini" title="Returnable samples that reached the customer. Returns are not recorded anywhere yet, so this is an upper bound, not a confirmed outstanding count.">
+                  <div className="o-mini" title="Returnable samples delivered to a customer with no sample_return GRN against them — physically still out. Policy: back within 30 days, 60-day hard cap.">
                     <div className={`o-mini-v${samplesToReturn.length > 0 ? ' is-warn' : ''}`}>{samplesToReturn.length}</div>
-                    <div className="o-mini-l">EXPECTED BACK</div>
+                    <div className="o-mini-l">STILL OUT</div>
                   </div>
                 </div>
                 <div className="o-list">

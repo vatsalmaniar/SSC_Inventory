@@ -268,7 +268,7 @@ export default function GRNDetail() {
     const { error } = await sb.rpc('void_grn', { p_grn_id: id, p_reason: reason })
     setSaving(false)
     if (error) { toast(friendlyError(error, 'Could not void this GRN.'), 'error'); return }
-    toast('GRN voided', 'success')
+    toast('GRN voided', 'warning')
     setShowVoid(false); setVoidReason('')
     await loadGRN()
   }

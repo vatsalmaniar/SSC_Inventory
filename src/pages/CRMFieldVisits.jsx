@@ -315,7 +315,7 @@ export default function CRMFieldVisits() {
     if (error) { toast('Delete failed: ' + error.message); return }
     setVisits(prev => prev.filter(x => x.id !== v.id))
     setViewVisit(null)
-    toast('Visit deleted', 'success')
+    toast('Visit deleted', 'warning')
   }
 
   function openModal() {

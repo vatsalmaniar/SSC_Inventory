@@ -277,7 +277,7 @@ function HeroProductsTab({ onSaved }) {
   async function remove(id) {
     const { error } = await sb.from('kpi_hero_products').delete().eq('id', id)
     if (error) { toast(friendlyError(error)); return }
-    toast('Removed', 'success'); reload()
+    toast('Removed', 'warning'); reload()
   }
   async function reload() {
     const { data } = await sb.from('kpi_hero_products').select('*').order('month_start', { ascending: false })
@@ -417,7 +417,7 @@ function EmployeesTab({ teams, onSaved }) {
     if (!confirm('Remove this assignment? Their monthly KPI data will also be removed.')) return
     const { error } = await sb.from('kpi_assignments').delete().eq('id', id)
     if (error) { toast(friendlyError(error)); return }
-    toast('Removed', 'success'); reload(); onSaved?.()
+    toast('Removed', 'warning'); reload(); onSaved?.()
   }
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8' }}>Loading…</div>
@@ -564,7 +564,7 @@ function DefinitionsTab({ teams, defsByTeam, krasByTeam, onSaved }) {
     if (!confirm('Delete this KPI definition? Existing monthly data and thresholds for this kpi_key will stop being scored.')) return
     const { error } = await sb.from('kpi_definitions').delete().eq('id', id)
     if (error) { toast(friendlyError(error)); return }
-    toast('Deleted', 'success'); onSaved?.()
+    toast('Deleted', 'warning'); onSaved?.()
   }
 
   return (
@@ -717,7 +717,7 @@ function KrasTab({ teams, krasByTeam, onSaved }) {
     if (!confirm('Delete this KRA? KPIs assigned to it will keep the code but lose the colour.')) return
     const { error } = await sb.from('kpi_kra_categories').delete().eq('id', id)
     if (error) { toast(friendlyError(error)); return }
-    toast('Deleted', 'success'); onSaved?.()
+    toast('Deleted', 'warning'); onSaved?.()
   }
   function start(k) { setEditingId(k.id); setDraft({ code: k.code, name: k.name, color: k.color, sort_order: k.sort_order }) }
 

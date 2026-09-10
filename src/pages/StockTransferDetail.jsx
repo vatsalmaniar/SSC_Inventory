@@ -325,7 +325,7 @@ export default function StockTransferDetail() {
     }).eq('id', id)
     if (error) { toast(friendlyError(error)); guard.current = false; setSaving(false); return }
     await logActivity('cancelled', cancelReason.trim())
-    toast('Transfer cancelled', 'success')
+    toast('Transfer cancelled', 'warning')
     setShowCancel(false); setCancelReason('')
     guard.current = false; setSaving(false)
     await loadAll()

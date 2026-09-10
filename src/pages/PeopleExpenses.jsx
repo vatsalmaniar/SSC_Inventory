@@ -380,7 +380,7 @@ function ExpenseDrawer({ row, me, canApprove, canPay, onClose, onDone, onDelete 
         p_note: note.trim() || null,
       })
       if (error) throw error
-      toast(decision === 'reject' ? 'Expense rejected.' : isL2 ? 'Expense approved.' : 'Sent to Admin for sign-off.', 'success')
+      toast(decision === 'reject' ? 'Expense rejected.' : isL2 ? 'Expense approved.' : 'Sent to Admin for sign-off.', decision === 'reject' ? 'warning' : 'success')
       onDone()
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { guard.current = false; setSaving(false) }
@@ -640,7 +640,7 @@ export default function PeopleExpenses() {
       if (paths.length) await sb.storage.from('expense-bills').remove(paths).catch(() => {})
       const { error } = await sb.from('expenses').delete().eq('id', row.id)
       if (error) throw error
-      toast('Deleted.', 'success'); load()
+      toast('Deleted.', 'warning'); load()
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
   }
   // Styled .xlsx — same chrome as the Orders sheets (xlsFinish/xlsDownload).

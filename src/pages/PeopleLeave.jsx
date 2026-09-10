@@ -235,7 +235,7 @@ export default function PeopleLeave() {
     try {
       const { error } = await sb.rpc('leave_decide', { p_id: req.id, p_step: step, p_approve: approve, p_note: note })
       if (error) throw error
-      toast(approve ? (step==='hr'?'Approved.':'Sent to HR.') : 'Rejected.', 'success')
+      toast(approve ? (step==='hr'?'Approved.':'Sent to HR.') : 'Rejected.', approve ? 'success' : 'warning')
       await load(meId, role)
     } catch (e) { toast(e?.message||friendlyError(e),'error') }
     finally { guard.current = false }
@@ -251,7 +251,7 @@ export default function PeopleLeave() {
       const { data, error } = await sb.from('leave_requests').update({ status:'cancelled' }).eq('id', req.id).select('id')
       if (error) throw error
       if (!data?.length) throw new Error('Could not cancel — the request may already be approved, or you may not have permission.')
-      toast('Cancelled.','success'); await load(meId, role)
+      toast('Cancelled.','warning'); await load(meId, role)
     }
     catch (e) { toast(e?.message||friendlyError(e),'error') }
     finally { guard.current = false }

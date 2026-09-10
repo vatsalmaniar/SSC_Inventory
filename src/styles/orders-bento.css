@@ -400,3 +400,20 @@
   /* The tall bento column keeps a cap — it is a ranked list, not a page section. */
   .orders-app .ph-tall.o-pipe { max-height: 300px; }
 }
+
+/* ── /inventory (Sales.jsx) search results ─────────────────────────────────
+   The results were a grid of cards; they are the shared .ol-* table now, so the
+   only page-specific rules are the column template and the quantity cell. */
+.orders-app .ol-row.inv-row {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) 120px 120px 130px 160px;
+}
+.orders-app .inv-res-head { padding: 15px 20px 13px; }
+.orders-app .inv-qty-n { font-family: var(--mono); font-size: 15px; font-weight: var(--fw-semibold); }
+.orders-app .inv-qty-u { font-size: 10.5px; color: var(--o-muted-2); margin-left: 5px; }
+.orders-app .inv-loc-cell { font-size: 12.5px; color: var(--o-ink); }
+.orders-app .inv-empty { padding: 60px; text-align: center; }
+.orders-app .inv-empty-t { font-size: 15px; font-weight: var(--fw-semibold); color: var(--o-ink); margin-bottom: 6px; }
+.orders-app .inv-empty-s { font-size: 13px; color: var(--o-muted); }
+
+/* Narrow screens: the shared table rule already gives .ol-wrap horizontal scroll
+   below 820px, so the columns stay reachable rather than being clipped. */

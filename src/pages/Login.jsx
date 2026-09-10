@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
 import { sb, stampLoginNow } from '../lib/supabase'
+import { toast } from '../lib/toast'
 import '../styles/login.css'
 
 const HCAPTCHA_SITE_KEY = '3eb698c2-27c4-46b8-bc52-6aa0e778a0cc'
@@ -13,8 +14,11 @@ export default function Login() {
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState('')
   const [showPwd, setShowPwd]       = useState(false)
-  const [view, setView]             = useState('login') // 'login' | 'totp' | 'enroll' | 'overlay'
-  const [overlayMsg, setOverlayMsg] = useState({ text: '', sub: '' })
+  // Caps Lock indicator. Reads ONLY the modifier state of a keydown the browser already
+  // delivered — no keystroke is captured, stored or transmitted, it never touches the
+  // password value, and it changes nothing about the auth call.
+  const [capsOn, setCapsOn]         = useState(false)
+  const [view, setView]             = useState('login') // 'login' | 'totp' | 'enroll' | 'selector'
 
   // MFA state
   const [mfaFactorId, setMfaFactorId]   = useState(null)
@@ -79,15 +83,16 @@ export default function Login() {
     // 'demo' stays on /dashboard regardless: it appears in NO nav item's roles, so
     // Layout's accessDenied would hard-block it on /people.
     if (['fc_kaveri', 'fc_godawari', 'staff'].includes(role)) {
-      setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading People...' })
-      setView('overlay')
-      setTimeout(() => navigate('/people'), 1600)
+      // Toast, not a full-screen interstitial. toast() appends to document.body,
+      // outside the React tree, so it survives the navigate and lands with the user
+      // on People rather than holding them on a "Welcome" screen for 1.6 seconds.
+      toast('Welcome, ' + name, 'success')
+      navigate('/people')
       return
     }
 
-    setOverlayMsg({ text: 'Welcome, ' + name + '!', sub: 'Loading dashboard...' })
-    setView('overlay')
-    setTimeout(() => navigate('/dashboard'), 1600)
+    toast('Welcome, ' + name, 'success')
+    navigate('/dashboard')
   }
 
   async function doLogin() {
@@ -212,8 +217,7 @@ export default function Login() {
   }
 
   function goTo(path) {
-    setView('overlay')
-    setTimeout(() => navigate(path), 800)
+    navigate(path)
   }
 
   function onKeyDown(e) {
@@ -224,38 +228,34 @@ export default function Login() {
 
   return (
     <div className="split-wrap">
-
-      {/* ── Left Panel ── */}
-      <div className="split-left">
-        <div className="left-orb-top" />
-        <div className="left-orb-bottom" />
-        <div className="left-content">
-          <div><img src="/ssc-logo.svg" alt="SSC Control Pvt. Ltd." style={{height:50,objectFit:'contain',filter:'brightness(0) invert(1)'}}/></div>
-          <div className="left-divider" />
-          <div className="left-headline">Internal Operations<br/>Management System</div>
-          <div className="left-sub">Orders · Procurement · CRM<br/>Fulfilment · Accounts</div>
-          <div className="left-badge">
-            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-            Authorised access only
-          </div>
-          <div className="left-tagline">your link to excellence</div>
-        </div>
+      {/* Centred single-card layout. The old split had a 38-44% brand panel that carried
+          a headline, a sub, a badge and a tagline — four pieces of copy nobody reads on
+          the way to typing a password. The brand now appears once, as the mark above the
+          card, and the ambient wash behind it carries the colour.
+          Nothing about authentication changed with the layout. */}
+      <div className="lg-ambient" aria-hidden="true">
+        <span className="lg-blob lg-blob-a" />
+        <span className="lg-blob lg-blob-b" />
       </div>
 
-      {/* ── Right Panel ── */}
       <div className="split-right">
 
         {/* Login form */}
         {view === 'login' && (
           <div className="right-inner">
-            <div className="right-eyebrow">Internal access</div>
+            <div className="lg-mark"><img src="/ssc-logo.svg" alt="SSC Control Pvt. Ltd." /></div>
             <div className="right-title">Welcome back</div>
-            <div className="right-sub">Sign in with your username and password</div>
+            <div className="right-sub">Sign in to your SSC Control account</div>
 
             {hasError && (
               <div className="error-msg show">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+                  {/* The dot was `M12 16h.01` — a ZERO-LENGTH line, which renders as
+                      nothing unless stroke-linecap is round, and this svg sets none.
+                      So the "!" had a stem and no dot. A real circle instead. */}
+                  <circle cx="12" cy="12" r="9"/>
+                  <path d="M12 7.5v5" strokeLinecap="round"/>
+                  <circle cx="12" cy="16.2" r="0.9" fill="currentColor" stroke="none"/>
                 </svg>
                 <span>{error}</span>
               </div>
@@ -278,7 +278,15 @@ export default function Login() {
             </div>
 
             <div className="field">
-              <label className="field-label">Password</label>
+              <div className="field-labelrow">
+                <label className="field-label">Password</label>
+                {capsOn && (
+                  <span className="caps-hint">
+                    <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 4l8 8h-5v5H9v-5H4z"/></svg>
+                    Caps Lock is on
+                  </span>
+                )}
+              </div>
               <div className="input-wrap">
                 <span className="input-icon">
                   <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -287,7 +295,10 @@ export default function Login() {
                 </span>
                 <input type={showPwd ? 'text' : 'password'} value={password}
                   onChange={e => { setPassword(e.target.value); setError('') }}
-                  onKeyDown={onKeyDown} placeholder="Enter your password"
+                  onKeyDown={e => { setCapsOn(e.getModifierState && e.getModifierState('CapsLock')); onKeyDown(e) }}
+                  onBlur={() => setCapsOn(false)}
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
                   className={hasError ? 'error' : ''} />
                 <button className="eye-btn" type="button" onClick={() => setShowPwd(v => !v)}>
                   {showPwd ? (
@@ -308,7 +319,7 @@ export default function Login() {
                 so skipping the widget locally doesn't skip the check — it just sends
                 no token and gets "captcha protection: request disallowed", which read
                 to the user as a wrong password. Local testing was impossible. */}
-            <div style={{ display:'flex', justifyContent:'center', margin:'8px 0 16px', minHeight:78 }}>
+            <div className="captcha-wrap">
                 <HCaptcha
                   ref={captchaRef}
                   sitekey={HCAPTCHA_SITE_KEY}
@@ -321,7 +332,7 @@ export default function Login() {
             </div>
 
             {captchaFailed && (
-              <div style={{ fontSize:12, color:'#92400e', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:6, padding:'8px 12px', marginBottom:12 }}>
+              <div className="captcha-warn">
                 CAPTCHA service unavailable — you can still sign in. If problems persist, contact admin.
               </div>
             )}
@@ -334,7 +345,7 @@ export default function Login() {
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
               </svg>
-              <span><strong style={{color:'var(--gray-600)'}}>SSC Control Pvt. Ltd.</strong> · Access limited to authorised team members only.</span>
+              <span><strong>SSC Control Pvt. Ltd.</strong> · Access limited to authorised team members only.</span>
             </div>
           </div>
         )}
@@ -348,7 +359,12 @@ export default function Login() {
             {mfaError && (
               <div className="error-msg show">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+                  {/* The dot was `M12 16h.01` — a ZERO-LENGTH line, which renders as
+                      nothing unless stroke-linecap is round, and this svg sets none.
+                      So the "!" had a stem and no dot. A real circle instead. */}
+                  <circle cx="12" cy="12" r="9"/>
+                  <path d="M12 7.5v5" strokeLinecap="round"/>
+                  <circle cx="12" cy="16.2" r="0.9" fill="currentColor" stroke="none"/>
                 </svg>
                 <span>{mfaError}</span>
               </div>
@@ -364,13 +380,13 @@ export default function Login() {
                 <input ref={totpRef} type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
                   value={totpCode} onChange={e => { setTotpCode(e.target.value.replace(/\D/g, '')); setMfaError('') }}
                   onKeyDown={e => e.key === 'Enter' && submitTOTP()} placeholder="000000"
-                  style={{letterSpacing:'0.3em',fontSize:20,fontFamily:'var(--mono)',textAlign:'center'}} />
+                  className="totp-input" />
               </div>
             </div>
             <button className="submit-btn" onClick={submitTOTP} disabled={mfaLoading}>
               {mfaLoading ? <><div className="spinner"/><span>Verifying...</span></> : <span>Verify</span>}
             </button>
-            <button style={{marginTop:12,width:'100%',background:'none',border:'none',color:'var(--gray-400)',fontSize:13,cursor:'pointer'}}
+            <button className="link-btn"
               onClick={() => { setView('login'); setTotpCode(''); setMfaError('') }}>← Back to login</button>
           </div>
         )}
@@ -384,16 +400,23 @@ export default function Login() {
             {mfaError && (
               <div className="error-msg show">
                 <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+                  {/* The dot was `M12 16h.01` — a ZERO-LENGTH line, which renders as
+                      nothing unless stroke-linecap is round, and this svg sets none.
+                      So the "!" had a stem and no dot. A real circle instead. */}
+                  <circle cx="12" cy="12" r="9"/>
+                  <path d="M12 7.5v5" strokeLinecap="round"/>
+                  <circle cx="12" cy="16.2" r="0.9" fill="currentColor" stroke="none"/>
                 </svg>
                 <span>{mfaError}</span>
               </div>
             )}
-            <div style={{textAlign:'center',margin:'0 0 20px'}}>
-              <div dangerouslySetInnerHTML={{ __html: enrollData.qr_code }} style={{display:'inline-block',background:'white',padding:12,borderRadius:8,border:'1px solid var(--gray-200)'}} />
-              <div style={{marginTop:10,fontSize:11,color:'var(--gray-400)'}}>
+            <div className="enroll-qr">
+              {/* dangerouslySetInnerHTML is UNCHANGED — it renders the QR svg Supabase
+                  returns from mfa.enroll(). Only the wrapper styling moved to a class. */}
+              <div className="enroll-qr-box" dangerouslySetInnerHTML={{ __html: enrollData.qr_code }} />
+              <div className="enroll-manual">
                 Can't scan? Enter manually:<br/>
-                <span style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--gray-600)',letterSpacing:'0.1em',wordBreak:'break-all'}}>{enrollData.secret}</span>
+                <span className="enroll-secret">{enrollData.secret}</span>
               </div>
             </div>
             <div className="field">
@@ -407,13 +430,13 @@ export default function Login() {
                 <input ref={totpRef} type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
                   value={totpCode} onChange={e => { setTotpCode(e.target.value.replace(/\D/g, '')); setMfaError('') }}
                   onKeyDown={e => e.key === 'Enter' && submitEnroll()} placeholder="000000"
-                  style={{letterSpacing:'0.3em',fontSize:20,fontFamily:'var(--mono)',textAlign:'center'}} />
+                  className="totp-input" />
               </div>
             </div>
             <button className="submit-btn" onClick={submitEnroll} disabled={mfaLoading}>
               {mfaLoading ? <><div className="spinner"/><span>Activating...</span></> : <span>Activate 2FA</span>}
             </button>
-            <button style={{marginTop:12,width:'100%',background:'none',border:'none',color:'var(--gray-400)',fontSize:13,cursor:'pointer'}}
+            <button className="link-btn"
               onClick={() => { setView('login'); setTotpCode(''); setMfaError('') }}>← Back to login</button>
           </div>
         )}
@@ -455,17 +478,6 @@ export default function Login() {
       </div>{/* end split-right */}
 
       {/* Success Overlay */}
-      {view === 'overlay' && (
-        <div className="success-overlay">
-          <div className="success-circle">
-            <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-          </div>
-          <div className="success-text">{overlayMsg.text}</div>
-          <div className="success-sub">{overlayMsg.sub}</div>
-        </div>
-      )}
     </div>
   )
 }

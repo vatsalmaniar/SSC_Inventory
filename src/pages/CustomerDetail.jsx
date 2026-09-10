@@ -275,7 +275,7 @@ export default function CustomerDetail() {
         return
       }
       if (!out.ok) { toast(out.error || 'Could not send the reminder.'); return }
-      toast('Payment reminder sent on WhatsApp')
+      toast('Payment reminder sent on WhatsApp', 'success')
       const { data: fresh } = await sb.from('whatsapp_messages')
         .select('sent_at,status,to_number,overdue_inr,error_message')
         .eq('customer_id', id).order('sent_at', { ascending: false }).limit(5)
@@ -334,7 +334,7 @@ export default function CustomerDetail() {
     if (!window.confirm('Reject and delete this customer submission?')) return
     setApproving(true)
     await sb.from('customers').delete().eq('id', id)
-    toast('Customer rejected', 'success')
+    toast('Customer rejected', 'warning')
     navigate('/customers')
   }
 

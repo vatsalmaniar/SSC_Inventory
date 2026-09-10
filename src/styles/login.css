@@ -1,149 +1,250 @@
-/* ── Split layout ── */
+/* ══ Login ═══════════════════════════════════════════════════════════════════
+ *
+ * Centred card on an ambient ground. Replaces a 38% brand panel that carried a
+ * headline, a sub, a badge and a tagline — four pieces of copy nobody reads on
+ * the way to typing a password. The brand appears once, as the mark on the card.
+ *
+ * NOTHING HERE TOUCHES AUTHENTICATION. No class decides whether a request is made,
+ * what it contains, or what an error says. The Supabase calls, the MFA challenge,
+ * the hCaptcha gate and the generic "Invalid username or password" message are
+ * exactly as they were.
+ *
+ * Login renders before the app shell mounts, outside .orders-app, so the --o-*
+ * and --ssc-* tokens are NOT in scope. Literals below are deliberate repeats of
+ * those tokens, not independent choices.
+ */
+
+:root {
+  --lg-ink:    #101828;
+  --lg-body:   #667085;
+  --lg-faint:  #98A2B3;
+  --lg-line:   #E4E7EC;
+  /* --ssc-deep from orders-redesign.css — the app's primary button colour. */
+  --lg-accent: #1a73e8;
+  --lg-accent-hover: #174ea6;
+}
+
+/* global.css already sets font-family: var(--font) on html/body and is imported in
+   main.jsx, so login inherits Geist. Everything below uses the app's TYPE SCALE
+   tokens (--fs-*, --fw-*) rather than hardcoded px — CLAUDE.md's UI conventions
+   name that scale as the only place sizes and weights are defined. The earlier pass
+   hardcoded 24px/15px/11px, which is why the page read as a different typeface
+   even though the family matched. */
 html, body { background: #fff; }
 
-.split-wrap { min-height: 100vh; display: flex; }
-
-/* ── Left panel ── */
-.split-left {
-  width: 42%;
-  background: linear-gradient(145deg, #0d2461 0%, #1a3a8b 55%, #2550c0 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 40px;
+/* Full-height, centred, and safe on a notched phone. 100dvh (not vh) so the iOS
+   URL bar collapsing does not leave a gap or force a scroll. */
+.split-wrap {
   position: relative;
-  overflow: hidden;
-  flex-shrink: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px 20px calc(32px + env(safe-area-inset-bottom));
+  padding-left: calc(20px + env(safe-area-inset-left));
+  padding-right: calc(20px + env(safe-area-inset-right));
+  overflow-x: hidden;
 }
-.split-left::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(circle, rgba(255,255,255,0.055) 1px, transparent 1px);
-  background-size: 28px 28px;
-  pointer-events: none;
-}
-.left-orb-top {
-  position: absolute; top: -100px; left: -100px;
-  width: 320px; height: 320px; border-radius: 50%;
-  background: rgba(13,36,97,0.5); filter: blur(60px); pointer-events: none;
-}
-.left-orb-bottom {
-  position: absolute; bottom: -100px; right: -80px;
-  width: 300px; height: 300px; border-radius: 50%;
-  background: rgba(37,80,192,0.4); filter: blur(60px); pointer-events: none;
-}
-.left-content {
-  position: relative; z-index: 2;
-  display: flex; flex-direction: column; align-items: center;
-  text-align: center; gap: 28px;
-}
-.left-logo img { height: 48px; object-fit: contain; filter: brightness(0) invert(1); }
-.left-divider { width: 44px; height: 2px; background: rgba(255,255,255,0.2); border-radius: 2px; }
-.left-headline { color: white; font-size: 24px; font-weight: 600; letter-spacing: -0.4px; line-height: 1.3; }
-.left-sub { color: rgba(255,255,255,0.5); font-size: 13px; line-height: 1.65; max-width: 240px; }
-.left-badge {
-  display: inline-flex; align-items: center; gap: 7px;
-  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.16);
-  border-radius: 100px; padding: 7px 16px;
-  color: rgba(255,255,255,0.75); font-size: 12px; font-weight: 500;
-  letter-spacing: 0.2px;
-}
-.left-badge svg { width: 13px; height: 13px; opacity: 0.65; }
-.left-tagline { color: rgba(255,255,255,0.3); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
 
-/* ── Right panel ── */
+/* ── Ambient ground ────────────────────────────────────────────────────────
+   Two soft washes, pinned behind everything and clipped to the viewport so they
+   can never create a horizontal scrollbar. Decorative only — aria-hidden. */
+.lg-ambient { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.lg-blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.5; }
+.lg-blob-a { width: 46vw; height: 46vw; min-width: 320px; min-height: 320px; top: -12%; right: -8%; background: #CFE0FB; }
+.lg-blob-b { width: 40vw; height: 40vw; min-width: 280px; min-height: 280px; bottom: -14%; left: -10%; background: #E3DDFA; }
+/* Slow drift. Deliberately long (28s/34s) and small in travel — it should read as
+   the light shifting, not as something moving. Fully disabled for anyone who has
+   asked the OS to reduce motion, and blur+transform stay on the compositor so it
+   costs no layout work. */
+@media (prefers-reduced-motion: no-preference) {
+  .lg-blob-a { animation: lgDriftA 28s ease-in-out infinite alternate; }
+  .lg-blob-b { animation: lgDriftB 34s ease-in-out infinite alternate; }
+}
+@keyframes lgDriftA {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-6%, 8%, 0) scale(1.12); }
+}
+@keyframes lgDriftB {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(7%, -6%, 0) scale(1.1); }
+}
+
+/* ── The card ──────────────────────────────────────────────────────────────── */
 .split-right {
-  flex: 1;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: 48px 48px;
-  background: #fff; position: relative;
-  overflow-y: auto;
+  position: relative; z-index: 1;
+  width: 100%; display: flex; justify-content: center;
 }
-.right-inner { width: 100%; max-width: 400px; }
+.right-inner {
+  width: 100%; max-width: 400px;
+  background: #fff;
+  border: 1px solid var(--lg-line);
+  border-radius: 16px;
+  padding: 36px 32px 30px;
+  box-shadow: 0 1px 3px rgba(16,24,40,0.04), 0 12px 28px -14px rgba(16,24,40,0.14);
+}
 
-/* ── Login form header ── */
-.right-eyebrow { font-family: 'Geist Mono', monospace; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: #5B6878; margin-bottom: 8px; }
-.right-title   { font-size: 24px; font-weight: 600; color: #0B1B30; letter-spacing: -0.02em; margin-bottom: 6px; }
-.right-sub     { font-size: 13.5px; color: #5B6878; margin-bottom: 24px; }
+.lg-mark { display: flex; justify-content: center; margin-bottom: 22px; }
+.lg-mark img { height: 34px; object-fit: contain; }
 
-/* ── Form elements ── */
-.field       { margin-bottom: 18px; }
-.field-label { margin-bottom: 7px; font-size: 12px; font-weight: 600; color: var(--gray-700); display: block; }
-.input-wrap  { position: relative; }
-.input-icon  { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--gray-400); display: flex; align-items: center; pointer-events: none; }
-.input-icon svg { width: 16px; height: 16px; }
-.input-wrap input { width: 100%; padding: 12px 12px 12px 40px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); font-family: var(--mono); font-size: 14px; color: var(--gray-900); background: var(--gray-50); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
-.input-wrap input:focus { border-color: var(--blue-600); background: white; box-shadow: 0 0 0 3px rgba(37,80,192,0.1); }
-.input-wrap input.error { border-color: var(--red-500); background: var(--red-50); }
-.input-wrap input::placeholder { font-family: var(--font); color: var(--gray-400); }
-.eye-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--gray-400); display: flex; align-items: center; }
-.eye-btn svg { width: 17px; height: 17px; }
+.right-title, .mfa-title, .selector-title {
+  font-size: var(--fs-xl); font-weight: var(--fw-semibold); color: var(--lg-ink);
+  letter-spacing: var(--tracking-title); line-height: 1.25;
+  margin-bottom: 6px; text-align: center;
+}
+.right-sub, .mfa-sub {
+  font-size: var(--fs-sm); color: var(--lg-body); line-height: var(--lh-base);
+  margin-bottom: 28px; text-align: center;
+}
+/* The eyebrow is redundant next to a centred title + sub. Login's was removed from
+   the markup; the MFA and selector views still render theirs, so they are hidden. */
+.mfa-eyebrow, .selector-eyebrow { display: none; }
+.selector-title { margin-bottom: 22px; }
 
-.error-msg { display: none; align-items: flex-start; gap: 9px; background: var(--red-50); border: 1px solid var(--red-200); border-radius: var(--radius-sm); padding: 11px 14px; margin-bottom: 16px; font-size: 13px; color: #b91c1c; }
+/* ── Fields ────────────────────────────────────────────────────────────────
+   Small uppercase label, bordered input. No icon inside the field — the label
+   already names it. */
+.field { margin-bottom: 18px; }
+.field-labelrow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.field-label {
+  display: block; margin-bottom: 7px;
+  font-size: var(--fs-eyebrow); font-weight: var(--fw-medium); color: var(--lg-body);
+  letter-spacing: 0.06em; text-transform: uppercase; font-family: var(--mono);
+}
+.caps-hint { font-size: var(--fs-label); font-weight: var(--fw-medium); color: #B54708; text-transform: none; letter-spacing: 0; }
+.caps-hint svg { display: none; }
+
+.input-wrap { position: relative; }
+.input-icon { display: none; }
+.input-wrap input {
+  width: 100%; padding: 11px 14px;
+  border: 1px solid var(--lg-line); border-radius: 8px;
+  background: #fff; outline: none;
+  font-family: var(--font); font-size: var(--fs-body); color: var(--lg-ink);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input-wrap input::placeholder { color: #C4CAD4; }
+.input-wrap input:hover:not(:focus) { border-color: #D0D5DD; }
+.input-wrap input:focus { border-color: var(--lg-accent); box-shadow: 0 0 0 3px rgba(26,115,232,0.12); }
+.input-wrap input.error { border-color: #D92D20; }
+.input-wrap input.error:focus { box-shadow: 0 0 0 3px rgba(217,45,32,0.12); }
+/* Leave room for the reveal button. */
+.input-wrap input[type='password'], .input-wrap input[type='text'] { padding-right: 42px; }
+
+.eye-btn {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; padding: 7px; border-radius: 6px;
+  cursor: pointer; color: var(--lg-faint);
+  display: flex; align-items: center; transition: color 0.15s, background 0.15s;
+}
+.eye-btn svg { width: 16px; height: 16px; }
+.eye-btn:hover { color: var(--lg-body); background: #F2F4F7; }
+.eye-btn:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: 1px; }
+
+.totp-input { letter-spacing: 0.45em; font-size: var(--fs-lg); font-family: var(--mono); text-align: center; padding-right: 14px !important; }
+
+/* ── Messages — copy untouched, container quiet ───────────────────────────── */
+.error-msg {
+  display: none; align-items: flex-start; gap: 8px;
+  background: #FEF3F2; border: 1px solid #FECDCA; border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 18px;
+  font-size: var(--fs-sm); color: #B42318; line-height: var(--lh-base);
+}
 .error-msg.show { display: flex; }
 .error-msg svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+.captcha-warn {
+  font-size: var(--fs-label); color: #B54708; background: #FFFAEB;
+  border: 1px solid #FEDF89; border-radius: 8px;
+  padding: 9px 12px; margin-bottom: 14px; line-height: 1.45;
+}
+/* hCaptcha renders a fixed 302px widget — it must be allowed to shrink on a
+   narrow phone rather than push the card wider than the screen. */
+.captcha-wrap { display: flex; justify-content: center; margin: 4px 0 18px; min-height: 78px; }
+.captcha-wrap > div { max-width: 100%; }
 
-.submit-btn { width: 100%; padding: 13px; background: var(--blue-700); color: white; border: none; border-radius: var(--radius-sm); font-family: var(--font); font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background 0.15s, transform 0.1s; margin-top: 4px; }
-.submit-btn:hover:not(:disabled) { background: var(--blue-800); }
-.submit-btn:active:not(:disabled) { transform: scale(0.99); }
-.submit-btn:disabled { opacity: 0.65; cursor: not-allowed; }
-.spinner { width: 17px; height: 17px; border: 2.5px solid rgba(255,255,255,0.35); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+/* ── Button ────────────────────────────────────────────────────────────────── */
+.submit-btn {
+  width: 100%; padding: 12px;
+  background: var(--lg-accent); color: #fff;
+  border: 0; border-radius: 8px;
+  font-family: var(--font); font-size: var(--fs-body); font-weight: var(--fw-medium);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px;
+  transition: background 0.15s;
+}
+.submit-btn:hover:not(:disabled) { background: var(--lg-accent-hover); }
+.submit-btn:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
+.submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg) } }
 
-.right-footer { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--gray-100); display: flex; align-items: center; gap: 9px; color: var(--gray-400); font-size: 12px; line-height: 1.5; }
-.right-footer svg { width: 14px; height: 14px; flex-shrink: 0; }
+.link-btn {
+  margin-top: 14px; width: 100%; background: none; border: 0;
+  color: var(--lg-body); font-size: var(--fs-sm); cursor: pointer;
+  font-family: var(--font); padding: 8px; border-radius: 6px;
+}
+.link-btn:hover { color: var(--lg-ink); background: #F9FAFB; }
 
-/* ── MFA heading ── */
-.mfa-eyebrow { font-family: 'Geist Mono', monospace; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: #5B6878; margin-bottom: 8px; }
-.mfa-title   { font-size: 22px; font-weight: 600; color: #0B1B30; letter-spacing: -0.02em; margin-bottom: 6px; }
-.mfa-sub     { font-size: 13px; color: var(--gray-500); margin-bottom: 24px; }
+.right-footer {
+  margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--lg-line);
+  display: flex; align-items: flex-start; gap: 7px;
+  color: var(--lg-faint); font-size: var(--fs-label); line-height: 1.55; text-align: left;
+}
+.right-footer svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 2px; }
+.right-footer strong { color: var(--lg-body); font-weight: var(--fw-semibold); }
 
-/* ── Admin selector ── */
-.selector-eyebrow { font-family: 'Geist Mono', monospace; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: #5B6878; margin-bottom: 6px; }
-.selector-title   { font-size: 22px; font-weight: 600; color: #0B1B30; letter-spacing: -0.02em; margin-bottom: 18px; }
+/* ── Admin selector ───────────────────────────────────────────────────────── */
+.view-btn {
+  display: flex; align-items: center; gap: 13px;
+  width: 100%; padding: 13px 14px; margin-bottom: 10px;
+  background: #fff; border: 1px solid var(--lg-line); border-radius: 10px;
+  cursor: pointer; text-align: left; font-family: var(--font);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.view-btn:hover { border-color: var(--lg-accent); box-shadow: 0 0 0 3px rgba(26,115,232,0.10); }
+.view-btn:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
+.view-btn-icon {
+  width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #F2F4F7; color: var(--lg-body);
+}
+.view-btn-icon svg { width: 17px; height: 17px; }
+.view-btn-icon.sales, .view-btn-icon.accounts { background: #F2F4F7; color: var(--lg-body); }
+.view-btn-title { font-size: var(--fs-body); font-weight: var(--fw-medium); color: var(--lg-ink); margin-bottom: 1px; }
+.view-btn-sub { font-size: var(--fs-label); color: var(--lg-faint); }
+.view-btn-arrow { margin-left: auto; color: #D0D5DD; flex-shrink: 0; }
+.view-btn-arrow svg { width: 16px; height: 16px; }
 
-.view-btn { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: 10px; border: 1.5px solid var(--gray-200); background: var(--gray-50); cursor: pointer; transition: all 0.15s; text-align: left; width: 100%; font-family: var(--font); margin-bottom: 12px; }
-.view-btn:hover { border-color: var(--blue-600); background: var(--blue-50); box-shadow: 0 0 0 3px rgba(37,80,192,0.07); }
-.view-btn-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.view-btn-icon svg { width: 20px; height: 20px; }
-.view-btn-icon.sales    { background: var(--green-bg); color: var(--green-text); }
-.view-btn-icon.accounts { background: var(--blue-50); color: var(--blue-800); }
-.view-btn-title { font-size: 14px; font-weight: 600; color: var(--gray-900); margin-bottom: 2px; }
-.view-btn-sub   { font-size: 12px; color: var(--gray-500); }
-.view-btn-arrow { margin-left: auto; color: var(--gray-300); flex-shrink: 0; }
-.view-btn-arrow svg { width: 18px; height: 18px; }
-.view-btn:hover .view-btn-arrow { color: var(--blue-600); }
+/* ── MFA enrol ─────────────────────────────────────────────────────────────── */
+.enroll-qr { margin: 0 0 22px; text-align: center; }
+.enroll-qr-box { display: inline-block; background: #fff; padding: 10px; border: 1px solid var(--lg-line); border-radius: 10px; }
+.enroll-qr-box svg { display: block; max-width: 100%; height: auto; }
+.enroll-manual { margin-top: 12px; font-size: var(--fs-label); color: var(--lg-faint); line-height: 1.6; }
+.enroll-secret { font-family: var(--mono); font-size: var(--fs-label); color: var(--lg-ink); letter-spacing: 0.08em; word-break: break-all; }
 
-/* ── Success overlay ── */
-.success-overlay { position: fixed; inset: 0; z-index: 50; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; animation: fadeIn 0.3s ease; }
-.success-circle { width: 64px; height: 64px; border-radius: 50%; background: var(--green-bg); display: flex; align-items: center; justify-content: center; animation: popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275) 0.1s both; }
-.success-circle svg { width: 28px; height: 28px; color: var(--green-text); }
-.success-text { color: var(--gray-900); font-size: 19px; font-weight: 600; }
-.success-sub  { color: var(--gray-400); font-size: 14px; }
+/* The success overlay is gone — login now toasts and lands straight on the
+   destination, so .success-* had no markup left to style. */
 
-@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-@keyframes popIn  { from { transform: scale(0.7); opacity: 0 } to { transform: scale(1); opacity: 1 } }
-
-/* ── Mobile ── */
-/* ≤900 covers phones (portrait + landscape) AND iPad portrait — the 42%
-   split panel is too cramped anywhere below this. */
-@media (max-width: 900px) {
-  .split-wrap { flex-direction: column; }
-  /* compact brand strip instead of a hero — form must be visible instantly */
-  .split-left { width: 100%; min-height: 0; padding: 20px 24px 18px; }
-  .left-content { gap: 8px; }
-  .left-logo img { height: 32px; }
-  .left-divider, .left-sub, .left-tagline, .left-badge,
-  .left-orb-top, .left-orb-bottom { display: none; }
-  .left-headline { font-size: 14px; font-weight: 500; opacity: 0.85; }
-  .split-right { padding: 26px 22px 36px; }
-  .right-inner { max-width: 100%; }
-  .right-title { font-size: 22px; }
-  /* 16px inputs stop iOS from zoom-jumping on focus; roomier tap targets */
-  .input-wrap input { font-size: 16px; padding: 13px 12px 13px 40px; }
-  .submit-btn { padding: 15px; font-size: 16px; }
-  .view-btn { padding: 18px; }
+/* ── PWA / narrow screens ──────────────────────────────────────────────────
+   Verified target is 390px. The card loses its frame and fills the width; the
+   blobs shrink so blur() stays cheap on a phone GPU. */
+@media (max-width: 560px) {
+  .split-wrap { padding: 20px 16px calc(28px + env(safe-area-inset-bottom)); align-items: flex-start; }
+  .right-inner { max-width: 100%; padding: 26px 20px 24px; border-radius: 14px; }
+  /* Animation off on phones: a full-screen 60px blur repainting for 30s is the
+     kind of thing that warms a handset and drains battery for decoration. */
+  .lg-blob { filter: blur(60px); opacity: 0.42; animation: none !important; }
+  .lg-blob-a { width: 70vw; height: 70vw; }
+  .lg-blob-b { width: 62vw; height: 62vw; }
+  .right-title, .mfa-title, .selector-title { font-size: var(--fs-xl); }
+  /* 16px stops iOS zoom-jumping into the field on focus. */
+  /* 16px literal, NOT a token: below 16px iOS zooms into the field on focus.
+     This is the one place a hardcoded size is correct. */
+  .input-wrap input { font-size: 16px; padding: 12px 14px; }
+  .submit-btn { padding: 14px; font-size: 16px; }
+}
+/* Standalone PWA: no browser chrome, so the top needs its own breathing room. */
+@media (display-mode: standalone) {
+  .split-wrap { padding-top: calc(28px + env(safe-area-inset-top)); }
 }

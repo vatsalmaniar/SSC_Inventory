@@ -8,8 +8,28 @@
 //   no-undef — vite build resolves imports, not identifiers, so a typo'd
 //   function name ships happily and throws in the browser.
 //
+//   react/jsx-no-undef — no-undef DOES NOT SEE JSX ELEMENT NAMES. Deleting a local
+//   component and calling the shared one without importing it passes both `npm run
+//   lint` and `npm run build`, then renders a blank page. That happened twice in one
+//   session (Orders.jsx <StatusDonut>, PeopleHome <AttendanceTabs>).
+//
+//   react/jsx-uses-vars — the same blindness in reverse: without it, no-unused-vars
+//   reports every imported component as unused (Layout was flagged 79 times), which
+//   is why no-unused-vars could never be switched on. With it, the 569 reports drop
+//   to the ~130 that are real.
+//
+//   no-unused-vars — WARNING, not error, so it never blocks a push while the existing
+//   ~130 are cleared.
+//
+//   no-restricted-syntax / unpaged select — PostgREST silently caps a select at 1000
+//   rows. Three dashboards were quietly reading two thirds of their data this way:
+//   /procurement (1,498 POs), /dashboard's POs, /dashboard's inventory (4,231 rows).
+//   No error, no warning, just numbers a third too small.
+//
 // Not a style config. Run it before every push: npm run lint
 import hooks from 'eslint-plugin-react-hooks'
+import react from 'eslint-plugin-react'
+import noUnpagedSelect from './eslint-rules/no-unpaged-select.js'
 
 const BROWSER = ['window','document','localStorage','sessionStorage','navigator','console',
   'setTimeout','clearTimeout','setInterval','clearInterval','fetch','alert','confirm','prompt',
@@ -24,7 +44,7 @@ export default [
   { ignores: ['dist/**', 'node_modules/**', 'public/**', 'supabase/**', 'scripts/**'] },
   {
     files: ['src/**/*.{js,jsx}'],
-    plugins: { 'react-hooks': hooks },
+    plugins: { 'react-hooks': hooks, react, local: { rules: { 'no-unpaged-select': noUnpagedSelect } } },
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -34,6 +54,18 @@ export default [
     rules: {
       'react-hooks/rules-of-hooks': 'error',
       'no-undef': 'error',
+      // JSX element names — the gap no-undef leaves open.
+      'react/jsx-no-undef': 'error',
+      'react/jsx-uses-vars': 'error',
+      'react/jsx-uses-react': 'error',
+      // Warning: the repo has ~130 pre-existing dead identifiers to clear.
+      'no-unused-vars': ['warn', { args: 'none', varsIgnorePattern: '^_' }],
+      // WARNING, not error, for the same reason as no-unused-vars: it currently
+      // surfaces 10 pre-existing unpaged reads that each need checking against real
+      // row counts (Sales.jsx reads `inventory` — 4,231 rows — and has been showing
+      // 1,000 of them). Blocking every push on day one would just get the rule
+      // disabled. Promote to 'error' once those 10 are cleared.
+      'local/no-unpaged-select': 'warn',
       'no-restricted-syntax': ['error',
         {
           selector: "CallExpression[callee.property.name='rpc'][arguments.0.value=/^search_(items|inventory)/]",

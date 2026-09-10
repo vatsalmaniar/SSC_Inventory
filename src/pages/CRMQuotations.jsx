@@ -422,7 +422,7 @@ export default function CRMQuotations() {
     if (error) { toast('Delete failed: ' + error.message); return }
     setViewQuote(null)
     await loadQuotes()
-    toast('Quote deleted', 'success')
+    toast('Quote deleted', 'warning')
   }
 
   const q = search.trim().toLowerCase()

@@ -332,7 +332,7 @@ export default function VendorDetail() {
     if (!window.confirm('Remove this contact?')) return
     await sb.from('vendor_contacts').delete().eq('id', cid)
     setContacts(p => p.filter(c => c.id !== cid))
-    toast('Contact removed', 'success')
+    toast('Contact removed', 'warning')
   }
 
   async function downloadVendorPDF(include) {

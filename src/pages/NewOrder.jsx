@@ -249,7 +249,9 @@ export default function NewOrder() {
       if (effectiveOrderType === 'SO' && hasCI) {
         effectiveOrderType = 'CO'
         setOrderType('CO')
-        toast('Order type changed to CO — this order contains CI (Customised) items.')
+        // Informative, not a failure — nothing went wrong, the app just reclassified
+        // the order. Untyped meant it inherited the 'error' default and showed red.
+        toast('Order type changed to CO', 'info', 'This order contains CI (Customised) items.')
       }
 
       // CO with all-SI items → ask for confirmation before proceeding

@@ -938,7 +938,7 @@ if (match) {
     if (error) { toast(friendlyError(error, 'Cancellation failed')); cancelGuardRef.current = false; setSaving(false); return }
     await notifyUsers([], `${order.order_number} — Order cancelled. Reason: ${cancelReason.trim()}`, 'order_cancelled')
     await notifyOpsForLinkedPOs()
-    toast('Order cancelled', 'success')
+    toast('Order cancelled', 'warning')
     closeCancelDrawer()
     await loadOrder()
     setSaving(false)
@@ -988,7 +988,7 @@ if (match) {
       return
     }
     await notifyOpsForLinkedPOs(resolvesEverything ? 'full' : 'partial', cancelDetail)
-    toast('Lines cancelled', 'success')
+    toast('Lines cancelled', 'warning')
     closeCancelDrawer()
     await loadOrder()
     setSaving(false)

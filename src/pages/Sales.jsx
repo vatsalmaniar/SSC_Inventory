@@ -4,7 +4,12 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmtDateTime } from '../lib/fmt'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
+import { fetchAll } from '../lib/fetchAll'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 function stockLevel(qty) {
   if (qty === 0) return { key: 'zero', label: 'Out of stock', color: '#EF4444' }
@@ -34,9 +39,17 @@ export default function Sales() {
   }
 
   async function loadStats() {
-    const { data } = await sb.from('inventory')
+    // PAGED. This was a plain select against PostgREST's 1000-row cap while the table
+    // holds 4,232 rows — and because it is ordered by updated_at DESC it kept only the
+    // 1,000 most recently touched. So "products tracked" read 1,000 instead of 4,232,
+    // and the low/out-of-stock counts were computed from that arbitrary slice: 817 rows
+    // are actually out of stock and 1,200 are low. Silent truncation, no error.
+    const { data, error, truncated } = await fetchAll((from, to) => sb.from('inventory')
       .select('quantity, updated_at, product_code, location, category_brand')
-      .order('updated_at', { ascending: false })
+      .order('updated_at', { ascending: false }).order('product_code')
+      .range(from, to))
+    if (error) console.error('inventory stats load error:', error)
+    if (truncated) console.warn('Inventory: hit fetch ceiling — counts may be short.')
     if (data) setStatsCache(data)
   }
 
@@ -63,6 +76,7 @@ export default function Sales() {
   const zero = statsCache?.filter(i => i.quantity === 0).length || 0
   const inStock = total - low - zero
   const lastDate = statsCache?.[0] ? new Date(statsCache[0].updated_at) : null
+  const locations = statsCache ? [...new Set(statsCache.map(i => i.location).filter(Boolean))] : []
 
   return (
     <Layout pageTitle="Inventory" pageKey="inventory">
@@ -102,13 +116,28 @@ export default function Sales() {
           <div className="o-loading">{view === 'loading' ? 'Loading…' : 'Searching…'}</div>
         ) : view === 'home' ? (
           !statsCache?.length ? (
-            <div className="card" style={{ marginTop: 16, padding: 60, textAlign: 'center' }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--o-ink)', marginBottom: 6 }}>No inventory yet</div>
-              <div style={{ fontSize: 13, color: 'var(--o-muted)' }}>Accounts team needs to upload the XLS file.</div>
+            <div className="card inv-empty">
+              <div className="inv-empty-t">No inventory yet</div>
+              <div className="inv-empty-s">Accounts team needs to upload the XLS file.</div>
             </div>
           ) : (
             <>
-              <div className="card" style={{ marginTop: 16 }}>
+              {/* KPI tiles — the shared <Stat/>, same as every other module. These
+                  figures existed already but only as a one-line text summary. */}
+              <div className="ph-bento o-bento-flat">
+                <Stat label="Products Tracked" value={total.toLocaleString('en-IN')}
+                  foot={locations.length > 1 ? <><b>{locations.length}</b> warehouses</> : (locations[0] || 'all stock rows')} />
+                <Stat label="In Stock" value={inStock.toLocaleString('en-IN')}
+                  foot={total ? <><b>{Math.round(inStock / total * 100)}%</b> of catalogue</> : '—'} />
+                <Stat label="Low Stock" value={low.toLocaleString('en-IN')} warn={low > 0}
+                  foot="5 units or fewer" />
+                <Stat label="Out of Stock" value={zero.toLocaleString('en-IN')} warn={zero > 0}
+                  foot={total ? <><b>{Math.round(zero / total * 100)}%</b> of catalogue</> : '—'} />
+                <Stat label="Last Synced" value={lastDate ? fmtDateTime(lastDate).split(',')[0] : '—'}
+                  foot={lastDate ? fmtDateTime(lastDate) : 'never'} />
+              </div>
+
+              <div className="card">
                 <div className="card-head">
                   <div>
                     <div className="card-eyebrow">Recently Updated</div>
@@ -140,49 +169,55 @@ export default function Sales() {
             </>
           )
         ) : view === 'results' ? (
-          <>
-            <div style={{ marginTop: 16, fontSize: 13, color: 'var(--o-muted)' }}>
-              <b style={{ color: 'var(--o-ink)' }}>{results.length}</b> result{results.length > 1 ? 's' : ''} for "<b style={{ color: 'var(--o-ink)' }}>{searchTerm}</b>"
+          <div className="ol-wrap">
+            {/* Was a grid of cards. The rest of the app reads stock in the .ol-* table,
+                and a table is the better shape here: one product code usually exists in
+                BOTH warehouses, and as adjacent rows the two quantities can be compared
+                at a glance instead of sitting in separate cards. */}
+            <div className="card-head inv-res-head">
+              <div>
+                <div className="card-eyebrow">Live stock · {searchTerm}</div>
+                <div className="card-title">{results.length} result{results.length === 1 ? '' : 's'}</div>
+              </div>
+              <span className="trend-pill mono">
+                {results.reduce((a, r) => a + (Number(r.quantity) || 0), 0).toLocaleString('en-IN')} units total
+              </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginTop: 12 }}>
+            <div className="ol-row ol-head inv-row">
+              <div>Product Code</div>
+              <div>Brand / Category</div>
+              <div>Location</div>
+              <div className="num">Quantity</div>
+              <div className="num">Status</div>
+              <div>Updated</div>
+            </div>
+            <div className="ol-table">
               {results.map((item, i) => {
                 const lvl = stockLevel(item.quantity)
                 return (
-                  <div key={item.id || i} className="card" style={{ padding: 18, animationDelay: i * 0.05 + 's' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div className="o-list-num" style={{ fontSize: 14, marginBottom: 2 }}>{item.product_code}</div>
-                        <div className="o-list-cust">{item.category_brand || '—'} · {item.location || '—'}</div>
-                      </div>
+                  <div key={item.id || i} className="ol-row ol-data inv-row">
+                    <div className="ol-cell"><div className="ol-num">{item.product_code}</div></div>
+                    <div className="ol-cell ol-cust" title={item.category_brand || ''}>{item.category_brand || '—'}</div>
+                    <div className="ol-cell inv-loc-cell">{item.location || '—'}</div>
+                    <div className="ol-cell num">
+                      <span className="inv-qty-n" style={{ color: lvl.color }}>{item.quantity}</span>
+                      <span className="inv-qty-u">units</span>
+                    </div>
+                    <div className="ol-cell ol-status-cell">
                       <span className="ol-status-pill" style={{ '--stage-color': lvl.color }}>
-                        <span className="ol-status-dot"/>
-                        {lvl.label}
+                        <span className="ol-status-dot"/>{lvl.label}
                       </span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: '12px 0', borderTop: '1px solid var(--o-line-2)', borderBottom: '1px solid var(--o-line-2)' }}>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--o-muted)', fontFamily: 'Geist Mono, monospace', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Quantity</div>
-                        <div style={{ fontSize: 28, fontWeight: 600, color: lvl.color, fontFamily: 'Geist Mono, monospace', letterSpacing: '-0.02em', marginTop: 2 }}>{item.quantity}</div>
-                        <div style={{ fontSize: 11, color: 'var(--o-muted-2)' }}>units available</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--o-muted)', fontFamily: 'Geist Mono, monospace', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Location</div>
-                        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--o-ink)', marginTop: 6 }}>{item.location || '—'}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 11, color: 'var(--o-muted)' }}>
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ width: 12, height: 12 }}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                      <span>Updated <b style={{ color: 'var(--o-ink)' }}>{fmtDateTime(new Date(item.updated_at))}</b></span>
-                    </div>
+                    <div className="ol-cell ol-date">{fmtDateTime(new Date(item.updated_at))}</div>
                   </div>
                 )
               })}
             </div>
-          </>
+          </div>
         ) : view === 'empty' ? (
-          <div className="card" style={{ marginTop: 16, padding: 60, textAlign: 'center' }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--o-ink)', marginBottom: 6 }}>No product found</div>
-            <div style={{ fontSize: 13, color: 'var(--o-muted)' }}>No match for "{searchTerm}". Try a partial code like "CTS" or "STB".</div>
+          <div className="card inv-empty">
+            <div className="inv-empty-t">No product found</div>
+            <div className="inv-empty-s">No match for "{searchTerm}". Try a partial code like "CTS" or "STB".</div>
           </div>
         ) : view === 'error' ? (
           <div className="card" style={{ marginTop: 16, padding: 60, textAlign: 'center' }}>
@@ -195,26 +230,6 @@ export default function Sales() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  return null
-}
+// A local KpiTile lived here and was never rendered — dead since before this
+// change. The tiles above are the shared <Stat/>.
+

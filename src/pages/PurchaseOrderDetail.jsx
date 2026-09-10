@@ -397,7 +397,7 @@ export default function PurchaseOrderDetail() {
     const newTotal = items.filter(it => it.id !== pi.id).reduce((s, it) => s + (Number(it.total_price) || 0), 0)
     await sb.from('purchase_orders').update({ total_amount: newTotal, updated_at: new Date().toISOString() }).eq('id', id)
     await logActivity(`Removed line ${pi.item_code} × ${pi.qty} — its CO ${coNumber} was cancelled. PO total updated to ${fmtINR(newTotal)}`)
-    toast(`Line removed — ${pi.item_code}`, 'success')
+    toast(`Line removed — ${pi.item_code}`, 'warning')
     await loadPO(true)
   }
 
