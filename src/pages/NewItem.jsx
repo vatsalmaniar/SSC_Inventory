@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
-import { isCuratedBrand, canonicalBrand, taxonomyCategories, taxonomySubcategories, taxonomySeries } from '../lib/itemTaxonomy'
+import { canonicalBrand } from '../lib/itemTaxonomy'
 import Layout from '../components/Layout'
 import '../styles/orderdetail.css'
 
@@ -29,7 +29,15 @@ export default function NewItem() {
   const submitGuard             = useRef(false)
 
   const [form, setForm] = useState({ item_code:'', brand:'', category:'', subcategory:'', type:'', series:'', description:'', moq:'1', list_price:'', discount_group_code:'' })
-  const [brands, setBrands]           = useState([])
+  const [brands, setBrands]           = useState([])          // [{brand, is_active, curated}]
+  // The taxonomy is read from the DATABASE, not from itemTaxonomy.js. The file
+  // decided what the form offered while a trigger decided what the database
+  // accepted, and the two drifted: a slim relay could only be filed under
+  // terminal-block categories because that is all the file listed. Same source
+  // now, so the form can only offer what will actually be accepted.
+  const [taxonomy, setTaxonomy]       = useState([])          // [{brand, category, subcategory, series}]
+  const [addingBrand, setAddingBrand] = useState(false)
+  const [newBrand, setNewBrand]       = useState('')
   // Discount groups for the chosen brand. Only brands with a loaded price list
   // have any (Mitsubishi today) — that is what makes pricing compulsory or not.
   const [discountGroups, setDiscountGroups] = useState([])
@@ -49,17 +57,33 @@ export default function NewItem() {
     const role = profile?.role || 'sales'
     if (!['admin','management'].includes(role)) { navigate('/items'); return }   // hard gate
     setUserRole(role)
-    const [b, c, s] = await Promise.all([
-      sb.rpc('get_all_brands'),
+    const [b, c, s, t] = await Promise.all([
+      sb.rpc('get_item_brands'),
       sb.rpc('get_all_categories'),
       sb.rpc('get_all_subcategories'),
+      sb.rpc('get_item_taxonomy'),
     ])
-    setBrands((b.data || []).map(r => r.brand).filter(Boolean))
+    setBrands(b.data || [])
+    setTaxonomy(t.data || [])
     setCategories((c.data || []).map(r => r.category).filter(Boolean))
     setSubcats((s.data || []).map(r => r.subcategory).filter(Boolean))
   }
 
   const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setErrors(e => ({ ...e, [k]: undefined })) }
+
+  // add_item_brand() checks the role and refuses a name that already exists
+  // under different punctuation, so 'Connect well' cannot become a 95th brand.
+  async function saveNewBrand() {
+    const name = newBrand.trim()
+    if (!name) return
+    const { data, error } = await sb.rpc('add_item_brand', { p_brand: name })
+    if (error) { toast(error.message || friendlyError(error, 'Could not add the brand.')); return }
+    const { data: fresh } = await sb.rpc('get_item_brands')
+    setBrands(fresh || [])
+    setAddingBrand(false); setNewBrand('')
+    setBrand(data?.brand || name)
+    toast(`Brand "${data?.brand || name}" added`, 'success')
+  }
 
   // Pricing is compulsory only where we hold a price list. Demanding it for every
   // brand would make the ~70 brands with no price book impossible to add to.
@@ -79,6 +103,13 @@ export default function NewItem() {
   // For a standardised brand these three fields become cascading dropdowns, so the
   // retired values (Controller / VFD / HMI / Servo Motor) can't be picked or typed.
   // Every other brand keeps the free-text + datalist behaviour unchanged.
+  // Same four questions the old file answered, asked of the database rows.
+  const uniq = a => [...new Set(a)].sort((x, y) => x.localeCompare(y))
+  const isCuratedBrand   = b => taxonomy.some(r => r.brand === b)
+  const taxonomyCategories    = b       => uniq(taxonomy.filter(r => r.brand === b).map(r => r.category))
+  const taxonomySubcategories = (b, c)  => uniq(taxonomy.filter(r => r.brand === b && r.category === c).map(r => r.subcategory))
+  const taxonomySeries        = (b,c,su)=> uniq(taxonomy.filter(r => r.brand === b && r.category === c && r.subcategory === su && r.series).map(r => r.series))
+
   const curated    = isCuratedBrand(form.brand)
   const hasPricing = discountGroups.length > 0
   const catOpts    = taxonomyCategories(form.brand)
@@ -235,9 +266,33 @@ export default function NewItem() {
                   </div>
 
                   <Field label="Brand" required>
-                    <input style={inputStyle('brand')} value={form.brand} list="item-brands"
-                      onChange={e => setBrand(e.target.value)} placeholder="Pick or type a brand" autoComplete="off" />
-                    <datalist id="item-brands">{brands.map(b => <option key={b} value={b} />)}</datalist>
+                    {/* A dropdown, not free text. Typing the brand is how a 95th
+                        brand appears that nobody meant to create — and the
+                        database now refuses one that is not on the list, so a
+                        text box could only produce an error at save time.
+                        Adding a brand is still possible, just deliberate. */}
+                    {!addingBrand ? (
+                      <select style={inputStyle('brand')} value={form.brand}
+                        onChange={e => {
+                          if (e.target.value === '__new__') { setAddingBrand(true); setNewBrand(''); return }
+                          setBrand(e.target.value)
+                        }}>
+                        <option value="">— Select a brand —</option>
+                        {brands.filter(b => b.is_active).map(b => (
+                          <option key={b.brand} value={b.brand}>{b.brand}{b.curated ? ' ·' : ''}</option>
+                        ))}
+                        {['admin','management'].includes(userRole) && <option value="__new__">+ Add a new brand…</option>}
+                      </select>
+                    ) : (
+                      <div style={{ display:'flex', gap:6 }}>
+                        <input style={{ ...inputStyle('brand'), flex:1 }} value={newBrand} autoFocus
+                          onChange={e => setNewBrand(e.target.value)} placeholder="New brand name" autoComplete="off" />
+                        <button type="button" onClick={saveNewBrand} disabled={!newBrand.trim()}
+                          style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #16a34a', background:'#16a34a', color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer' }}>Add</button>
+                        <button type="button" onClick={() => { setAddingBrand(false); setNewBrand('') }}
+                          style={{ padding:'8px 12px', borderRadius:8, border:'1px solid var(--gray-300)', background:'white', fontSize:12, cursor:'pointer' }}>Cancel</button>
+                      </div>
+                    )}
                     {errors.brand && <div style={{ fontSize:11, color:'#e11d48', marginTop:3 }}>{errors.brand}</div>}
                     {curated && <div style={{ fontSize:10.5, color:'var(--gray-400)', marginTop:4 }}>Standardised brand — category, subcategory and series are picked from the approved list.</div>}
                   </Field>

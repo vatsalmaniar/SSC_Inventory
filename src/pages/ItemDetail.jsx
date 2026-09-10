@@ -154,6 +154,11 @@ export default function ItemDetail() {
     valid_from: '', valid_to: '', project_ref: '', notes: '' }
   const [sp, setSp]                   = useState(blankSpecial)
   const [savingStatus, setSavingStatus] = useState(false)
+  const [editing, setEditing]     = useState(false)
+  const [editForm, setEditForm]   = useState(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [taxonomy, setTaxonomy]   = useState([])   // from the DB, same rows the trigger enforces
+  const [brandList, setBrandList] = useState([])
 
   useEffect(() => { init() }, [id])
 
@@ -291,6 +296,49 @@ export default function ItemDetail() {
   // putting that code on a new order or PO. set_item_status() checks the role
   // and refuses a chain (a replacement that is itself retired), so this is a
   // prompt, not the rule.
+  // ── Edit ──
+  // The app has never had an item edit, which is why every wrong category and
+  // MOQ this week had to be fixed against the database by hand. update_item()
+  // checks the role, validates against the same taxonomy the trigger enforces,
+  // and does not accept item_code at all — that is immutable, because orders,
+  // POs, GRNs and stock all reference it as plain text.
+  async function openEdit() {
+    const [{ data: tax }, { data: br }] = await Promise.all([
+      sb.rpc('get_item_taxonomy'), sb.rpc('get_item_brands'),
+    ])
+    setTaxonomy(tax || []); setBrandList(br || [])
+    setEditForm({
+      brand: item.brand || '', category: item.category || '', subcategory: item.subcategory || '',
+      series: item.series || '', description: item.description || '',
+      moq: String(item.moq ?? 1), type: item.type || 'CI', notes: item.notes || '',
+    })
+    setEditing(true)
+  }
+
+  async function saveEdit() {
+    if (savingEdit) return
+    setSavingEdit(true)
+    const { error } = await sb.rpc('update_item', {
+      p_item_no: item.item_no,
+      p_brand: editForm.brand, p_category: editForm.category || null,
+      p_subcategory: editForm.subcategory || null, p_series: editForm.series || null,
+      p_description: editForm.description || null,
+      p_moq: Number(editForm.moq) || 1, p_type: editForm.type, p_notes: editForm.notes || null,
+    })
+    setSavingEdit(false)
+    if (error) { toast(error.message || friendlyError(error, 'Could not save the item.')); return }
+    toast('Item updated', 'success')
+    setEditing(false)
+    init()
+  }
+
+  // Same four questions the New Item form asks, of the same database rows.
+  const uniqTax = a => [...new Set(a)].sort((x, y) => x.localeCompare(y))
+  const editCurated = editForm ? taxonomy.some(r => r.brand === editForm.brand) : false
+  const editCats = editForm ? uniqTax(taxonomy.filter(r => r.brand === editForm.brand).map(r => r.category)) : []
+  const editSubs = editForm ? uniqTax(taxonomy.filter(r => r.brand === editForm.brand && r.category === editForm.category).map(r => r.subcategory)) : []
+  const editSers = editForm ? uniqTax(taxonomy.filter(r => r.brand === editForm.brand && r.category === editForm.category && r.subcategory === editForm.subcategory && r.series).map(r => r.series)) : []
+
   async function openStatus() {
     const cur = item.item_status || 'Active'
     const next = window.prompt(
@@ -535,6 +583,14 @@ export default function ItemDetail() {
                       {item.item_status.toUpperCase()}
                       {item.superseded_by && ` — use ${item.superseded_by}`}
                     </span>
+                  )}
+                  {canEditPrices && (
+                    <button onClick={openEdit}
+                      style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 6,
+                               border: '1px solid var(--gray-300)', background: 'white',
+                               color: 'var(--gray-600)', cursor: 'pointer' }}>
+                      Edit item
+                    </button>
                   )}
                   {canEditPrices && (
                     <button onClick={openStatus} disabled={savingStatus}
@@ -1148,6 +1204,114 @@ export default function ItemDetail() {
             <button className="od-btn od-btn-approve" onClick={saveSpecial} disabled={spSaving}>
               {spSaving ? 'Saving…' : 'Save special price'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit item ──
+          item_code and item_no are shown but not editable: orders, POs, GRNs and
+          stock all reference the code as plain text, so renaming it would orphan
+          that history. trg_item_code_immutable refuses it independently of this
+          screen — this just explains why rather than letting someone try. */}
+      {editing && editForm && (
+        <div className="od-drawer-scrim" onClick={() => !savingEdit && setEditing(false)}>
+          <div className="od-drawer" onClick={e => e.stopPropagation()}>
+            <div className="od-drawer-head">
+              <div style={{ minWidth: 0 }}>
+                <div className="od-drawer-eyebrow">Edit item</div>
+                <div className="od-drawer-title" style={{ fontFamily: 'var(--mono)' }}>{item.item_code}</div>
+                <div className="od-drawer-sub">{item.item_no} · the part code cannot be changed</div>
+              </div>
+              <button className="od-drawer-close" onClick={() => setEditing(false)}>✕</button>
+            </div>
+            <div className="od-drawer-body">
+              <div style={{ display:'grid', gap:12 }}>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }}>Brand</label>
+                  <select style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.brand}
+                    onChange={e => setEditForm(f => ({ ...f, brand: e.target.value, category:'', subcategory:'', series:'' }))}>
+                    {brandList.filter(b => b.is_active).map(b => <option key={b.brand} value={b.brand}>{b.brand}</option>)}
+                  </select>
+                </div>
+
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }}>Category</label>
+                    {editCurated ? (
+                      <select style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.category}
+                        onChange={e => setEditForm(f => ({ ...f, category: e.target.value, subcategory:'', series:'' }))}>
+                        <option value="">— none yet —</option>
+                        {editCats.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <input style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.category}
+                        onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))} placeholder="Optional" />
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }}>Subcategory</label>
+                    {editCurated ? (
+                      <select style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.subcategory} disabled={!editForm.category}
+                        onChange={e => setEditForm(f => ({ ...f, subcategory: e.target.value, series:'' }))}>
+                        <option value="">{editForm.category ? '— none yet —' : 'Pick a category first'}</option>
+                        {editSubs.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <input style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.subcategory}
+                        onChange={e => setEditForm(f => ({ ...f, subcategory: e.target.value }))} placeholder="Optional" />
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }}>Series</label>
+                    {editCurated ? (
+                      <select style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.series}
+                        disabled={!editForm.subcategory || editSers.length === 0}
+                        onChange={e => setEditForm(f => ({ ...f, series: e.target.value }))}>
+                        <option value="">{editSers.length === 0 ? 'none for this subcategory' : '— none yet —'}</option>
+                        {editSers.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <input style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.series}
+                        onChange={e => setEditForm(f => ({ ...f, series: e.target.value }))} placeholder="Optional" />
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }}>Type</label>
+                    <select style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.type}
+                      onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}>
+                      <option value="SI">SI — Standard</option>
+                      <option value="CI">CI — Customised</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }}>MOQ</label>
+                    <input style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} type="number" min="1" value={editForm.moq}
+                      onChange={e => setEditForm(f => ({ ...f, moq: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }}>Description</label>
+                  <input style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.description}
+                    onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'block' }}>Notes</label>
+                  <input style={{ padding:'8px 10px', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:13, fontFamily:'var(--font)', background:'white', outline:'none', width:'100%', boxSizing:'border-box' }} value={editForm.notes}
+                    onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional" />
+                </div>
+              </div>
+
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:18 }}>
+                <button className="od-btn" onClick={() => setEditing(false)} disabled={savingEdit}>Cancel</button>
+                <button className="od-btn od-btn-approve" onClick={saveEdit} disabled={savingEdit}>
+                  {savingEdit ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
