@@ -4,7 +4,11 @@ import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 const STATUS_LABELS = {
   pi_requested:'PI Requested', pi_generated:'PI Issued', pi_payment_pending:'PI Payment Pending',
@@ -101,53 +105,55 @@ export default function BillingDashboard() {
           <div className="o-loading">Loading…</div>
         ) : (
           <>
-            <div className="kpi-row">
-              <KpiTile variant="hero" tone="deep" label="Action Needed" value={actionNeeded.length} sub="credit · invoice · e-way" chart="bars" onClick={() => navigate('/billing/list')}/>
-              <KpiTile variant="hero" tone="forest" label="Delivered FYTD" value={deliveredOrders.length} sub="completed orders" chart="bars" onClick={() => navigate('/billing/list')}/>
-              <KpiTile variant="hero" tone="teal" label="PI Phase" value={piOrders.length} sub={`${piOrders.filter(o=>o.status==='pi_requested').length} to issue`} chart="line" onClick={() => navigate('/billing/list')}/>
-              <KpiTile label="On Hold" value={overrideOrders.length} sub="credit — payment pending" accent={overrideOrders.length > 0 ? 'amber' : null} onClick={() => navigate('/billing/list')}/>
-              <KpiTile label="Purchase Invoices" value={purchaseInvCount} sub="awaiting match" accent={purchaseInvCount > 0 ? 'amber' : null} onClick={() => navigate('/procurement/invoices')}/>
+            {/* KPI tiles — the shared <Stat/>. Same values, same targets. */}
+            <div className="ph-bento o-bento-flat">
+              <Stat label="Action Needed" value={actionNeeded.length} foot="credit · invoice · e-way"
+                onClick={() => navigate('/billing/list')} />
+              <Stat label="Delivered FYTD" value={deliveredOrders.length} foot="completed orders"
+                onClick={() => navigate('/billing/list')} />
+              <Stat label="PI Phase" value={piOrders.length}
+                foot={<><b>{piOrders.filter(o=>o.status==='pi_requested').length}</b> to issue</>}
+                onClick={() => navigate('/billing/list')} />
+              <Stat label="On Hold" value={overrideOrders.length} warn={overrideOrders.length > 0}
+                foot="credit — payment pending" onClick={() => navigate('/billing/list')} />
+              <Stat label="Purchase Invoices" value={purchaseInvCount} warn={purchaseInvCount > 0}
+                foot="awaiting match" onClick={() => navigate('/procurement/invoices')} />
             </div>
 
-            <div className="o-anal" style={{ marginTop: 16 }}>
-              <div className="card anal-card">
-                <div className="card-head">
-                  <div>
-                    <div className="card-eyebrow">Pipeline · By Status</div>
-                    <div className="card-title">Billing Pipeline</div>
-                  </div>
-                  <span className="trend-pill mono">{activeOrders.length} active</span>
+            {/* Billing Pipeline. "Stage Mix" was a second card over the SAME funnel
+                data, drawn as a pie — the one chart type used nowhere else in the app.
+                Merged: the bar is the count, the share follows it. */}
+            <div className="card o-pipe-wide fc-grn-card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">Pipeline · By status</div>
+                  <div className="card-title">Billing Pipeline</div>
                 </div>
-                <div className="funnel">
-                  {funnel.length === 0 ? <div className="o-empty">No orders in pipeline</div> : funnel.map(s => {
-                    const max = Math.max(...funnel.map(x => x.count))
-                    return (
-                      <div key={s.id} className="funnel-row">
-                        <div className="funnel-label">
-                          <span className="funnel-dot" style={{ background: s.color }}/>
-                          <span className="funnel-name">{s.label}</span>
-                        </div>
-                        <div className="funnel-bar-wrap"><div className="funnel-bar" style={{ width: `${(s.count/max)*100}%`, background: s.color }}/></div>
-                        <div className="funnel-val">{s.count}</div>
+                <span className="trend-pill mono">{activeOrders.length} active</span>
+              </div>
+              {funnel.length === 0 ? <div className="o-empty">No orders in pipeline</div> : (() => {
+                const total = funnel.reduce((a, f) => a + f.count, 0) || 1
+                const max = Math.max(...funnel.map(f => f.count), 1)
+                return (
+                  <div className="dash-vs">
+                    {funnel.map(f => (
+                      <div key={f.id} className="dash-vs-row o-pipe-w-row" onClick={() => navigate('/billing/list')}>
+                        <span className="dash-vs-l" title={f.label}>
+                          <span className="o-pipe-dot" style={{ background: f.color }} />
+                          <span className="o-pipe-w-l">{f.label}</span>
+                        </span>
+                        <span className="dash-vs-track">
+                          <span style={{ width: `${(f.count / max) * 100}%`, background: f.color }} />
+                        </span>
+                        <span className="dash-vs-v">{f.count}<em className="o-pipe-w-v">{Math.round(f.count / total * 100)}%</em></span>
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="card anal-card">
-                <div className="card-head">
-                  <div>
-                    <div className="card-eyebrow">Distribution · By Stage</div>
-                    <div className="card-title">Stage Mix</div>
+                    ))}
                   </div>
-                  <span className="trend-pill mono">{orders.length} total</span>
-                </div>
-                <StatusDonut groups={funnel} total={funnel.reduce((s,g) => s + g.count, 0)} centerLabel="ORDERS"/>
-              </div>
+                )
+              })()}
             </div>
 
-            <div className="dash-row-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
+            <div className="dash-row-3">
               <ListCard title="Action Needed" eyebrow="Credit · Invoice · E-Way" badge={`${actionNeeded.length} orders`} badgeColor="#B45309"
                 items={actionNeeded.slice(0, 8)} emptyText="No pending billing actions"
                 onClick={(o) => navigate('/billing/' + o.id)}/>
@@ -231,69 +237,9 @@ function ListCard({ title, eyebrow, badge, badgeColor, items, emptyText, onClick
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
+// KpiTile / KpiChart lived here — the tiles above are the shared <Stat/>.
+// .kpi-tile / .kt-* stay in orders-redesign.css; other pages still render them.
 
-function StatusDonut({ groups, total, centerLabel = 'TOTAL' }) {
-  if (!groups.length || !total) return <div className="donut-wrap"><div style={{ color:'var(--o-muted-2)', fontSize:12 }}>No data</div></div>
-  const size = 130, r = size/2 - 8, inner = r - 18, cx = size/2, cy = size/2
-  let angle = -Math.PI/2
-  const arcs = groups.filter(s => s.count > 0).map(s => {
-    const portion = s.count / total
-    const next = angle + portion * 2 * Math.PI
-    const large = portion > 0.5 ? 1 : 0
-    const x0 = cx + r * Math.cos(angle), y0 = cy + r * Math.sin(angle)
-    const x1 = cx + r * Math.cos(next),  y1 = cy + r * Math.sin(next)
-    const ix0 = cx + inner * Math.cos(angle), iy0 = cy + inner * Math.sin(angle)
-    const ix1 = cx + inner * Math.cos(next),  iy1 = cy + inner * Math.sin(next)
-    const path = `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix0} ${iy0} Z`
-    angle = next
-    return { path, color: s.color, label: s.label, count: s.count, pct: Math.round(portion*100) }
-  })
-  return (
-    <div className="donut-wrap">
-      <svg width={size} height={size}>
-        {arcs.map((a, i) => <path key={i} d={a.path} fill={a.color} opacity="0.92"/>)}
-        <text x={cx} y={cy - 2} textAnchor="middle" fontSize="22" fontWeight="600" fill="#0B1B30" fontFamily="Geist Mono, monospace" style={{ letterSpacing: '-0.02em' }}>{total}</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="8" fill="#6B7280" letterSpacing="0.06em" fontFamily="Geist Mono, monospace">{centerLabel}</text>
-      </svg>
-      <div className="donut-legend">
-        {arcs.slice(0, 6).map((a, i) => (
-          <div key={i} className="dlg-row">
-            <span className="dlg-dot" style={{background: a.color}}/>
-            <span className="dlg-name">{a.label}</span>
-            <span className="dlg-pct mono">{a.pct}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+// A local pie StatusDonut lived here. Billing Pipeline carries the share now.
+// .donut-wrap / .dlg-* stay in orders-redesign.css — CRM still renders them.
+

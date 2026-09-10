@@ -4,7 +4,11 @@ import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat / .dash-vs — the shared language the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 const STATUS_LABELS = {
   delivery_created:'Delivery Created', picking:'Picking', packing:'Packing',
@@ -12,6 +16,9 @@ const STATUS_LABELS = {
   goods_issued:'Goods Issued', credit_check:'Credit Check', goods_issue_posted:'GI Posted',
   invoice_generated:'Invoice Generated', delivery_ready:'Delivery Ready',
   eway_pending:'E-Way Pending', eway_generated:'E-Way Generated', dispatched_fc:'Delivered',
+  // These two were missing, so the stuck-by-stage bars printed the raw column value
+  // ("partial_dispatch", "closed") instead of a label.
+  partial_dispatch:'Partly Shipped', closed:'Closed', cancelled:'Cancelled',
 }
 const STATUS_COLORS = {
   delivery_created:'#0F766E', picking:'#14B8A6', packing:'#0D9488',
@@ -19,11 +26,12 @@ const STATUS_COLORS = {
   goods_issued:'#D97706', credit_check:'#65A30D', goods_issue_posted:'#16A34A',
   invoice_generated:'#059669', delivery_ready:'#15803D',
   eway_pending:'#84CC16', eway_generated:'#22C55E', dispatched_fc:'#047857',
+  partial_dispatch:'#0EA5E9', closed:'#64748B', cancelled:'#EF4444',
 }
 
 const ACTION_STATUSES  = ['delivery_created','picking','packing']
 const BILLING_STATUSES = ['goods_issued','credit_check','goods_issue_posted','delivery_ready']
-import { PI_STAGES as PI_STATUSES } from '../lib/orderStatus'
+import { PI_STAGES as PI_STATUSES, TERMINAL_STATUSES } from '../lib/orderStatus'
 const FC_ALL_STATUSES  = [...ACTION_STATUSES, ...PI_STATUSES, ...BILLING_STATUSES, 'invoice_generated','eway_generated','dispatched_fc','partial_dispatch','closed']
 
 const PIPELINE_ORDER = [
@@ -42,6 +50,8 @@ export default function FCDashboard() {
   const [user, setUser] = useState({ name:'', role:'', fc:'' })
   const [orders, setOrders] = useState([])
   const [pendingGrns, setPendingGrns] = useState(0)
+  const [grnMix, setGrnMix] = useState([])       // grn_type -> count, this FY
+  const [samples, setSamples] = useState(null)   // sample-return cycle, from sample_return GRNs
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { init() }, [])
@@ -59,6 +69,54 @@ export default function FCDashboard() {
     if (fc) grnQ = grnQ.eq('fulfilment_center', fc)
     const { count: grnCount } = await grnQ
     setPendingGrns(grnCount || 0)
+    await loadGrnMix(fc)
+    await loadSampleReturns(fc)
+  }
+
+  // GRN mix by type. po_inward is routine inward; sample_return, customer_rejection
+  // and cancellation_return are the exception flows this page exists to surface.
+  async function loadGrnMix(fc) {
+    let q = sb.from('grn').select('grn_type,status').eq('is_test', false).gte('created_at', FY_START)
+    if (fc) q = q.eq('fulfilment_center', fc)
+    const { data, error } = await fetchAll((from, to) => q.order('id').range(from, to))
+    if (error) { console.error('grn mix:', error.message); return }
+    const m = {}
+    ;(data || []).forEach(g => { const k = g.grn_type || 'unknown'; m[k] = (m[k] || 0) + 1 })
+    setGrnMix(Object.entries(m).map(([type, n]) => ({ type, n })).sort((a, b) => b.n - a.n))
+  }
+
+  // Sample-return cycle. THE CLOSE SIGNAL IS A sample_return GRN — there is no
+  // "returned" flag on orders, which is why a naive count of returnable samples
+  // overstates what is actually still out. Policy (sql/sample_return_tracking.sql):
+  // back within 30 days of delivery, 60-day hard cap.
+  async function loadSampleReturns(fc) {
+    let oq = sb.from('orders')
+      .select('id,order_number,customer_name,order_dispatches(delivered_at)')
+      .eq('order_type', 'SAMPLE').eq('is_test', false).eq('sample_returnable', true)
+    if (fc) oq = oq.eq('fulfilment_center', fc)
+    const [ordRes, grnRes] = await Promise.all([
+      fetchAll((from, to) => oq.order('id').range(from, to)),
+      fetchAll((from, to) => sb.from('grn').select('order_id')
+        .eq('grn_type', 'sample_return').eq('is_test', false).order('id').range(from, to)),
+    ])
+    if (ordRes.error || grnRes.error) { console.error('sample returns:', (ordRes.error || grnRes.error).message); return }
+    const returned = new Set((grnRes.data || []).map(g => g.order_id).filter(Boolean))
+    const today = new Date()
+    const out = []
+    ;(ordRes.data || []).forEach(o => {
+      const dates = (o.order_dispatches || []).map(d => d.delivered_at).filter(Boolean).sort()
+      if (!dates.length) return                       // never delivered: not out yet
+      if (returned.has(o.id)) return                  // closed by a sample_return GRN
+      const days = Math.floor((today - new Date(dates[dates.length - 1])) / 86400000)
+      out.push({ id: o.id, order_number: o.order_number, customer_name: o.customer_name, days })
+    })
+    out.sort((a, b) => b.days - a.days)
+    setSamples({
+      out,
+      overdue: out.filter(x => x.days > 30).length,
+      hardCap: out.filter(x => x.days > 60).length,
+      returned: returned.size,
+    })
   }
 
   async function loadOrders(fc) {
@@ -66,7 +124,7 @@ export default function FCDashboard() {
     // Page past the 1000-row cap (1100+ FC-stage orders/FY).
     const { data, error, truncated } = await fetchAll((from, to) => {
       let q = sb.from('orders')
-        .select('id,order_number,customer_name,status,fulfilment_center,credit_override,order_type,created_at,order_dispatches(id,batch_no,dc_number,pi_number,pi_required,status)')
+        .select('id,order_number,customer_name,status,fulfilment_center,credit_override,order_type,created_at,updated_at,order_dispatches(id,batch_no,dc_number,pi_number,pi_required,status,delivered_at)')
         .in('status', FC_ALL_STATUSES)
         .gte('created_at', FY_START).eq('is_test', false)
         .order('updated_at', { ascending: false })
@@ -86,6 +144,24 @@ export default function FCDashboard() {
   const readyOrders = orders.filter(o => o.status === 'invoice_generated')
   const ewayOrders = orders.filter(o => o.status === 'eway_generated')
   const delivered = orders.filter(o => o.status === 'dispatched_fc')
+  // ── Stuck orders ─────────────────────────────────────────────────────────────
+  // The thing this page is really for. An order sitting in an FC stage is work in
+  // progress; one sitting there for a week is a problem nobody has noticed. Age is
+  // measured from updated_at — the last time ANYTHING moved on the order — so a
+  // stage that is being actively worked never counts as stuck.
+  const STUCK_DAYS = 7
+  const stuck = (() => {
+    const now = Date.now()
+    const rows = orders
+      .filter(o => !TERMINAL_STATUSES.includes(o.status))
+      .map(o => ({ ...o, _days: Math.floor((now - new Date(o.updated_at || o.created_at)) / 86400000) }))
+      .filter(o => o._days >= STUCK_DAYS)
+      .sort((a, b) => b._days - a._days)
+    const byStage = {}
+    rows.forEach(o => { byStage[o.status] = (byStage[o.status] || 0) + 1 })
+    return { rows, byStage, oldest: rows[0]?._days || 0 }
+  })()
+
   const inProgress = actionOrders.length + piOrders.length + billingOrders.length + readyOrders.length + ewayOrders.length
 
   // Status funnel buckets (use mapped grouping for cleaner display)
@@ -123,53 +199,169 @@ export default function FCDashboard() {
           <div className="o-loading">Loading…</div>
         ) : (
           <>
-            <div className="kpi-row">
-              <KpiTile variant="hero" tone="deep" label="Action Required" value={actionOrders.length} sub="picking · packing · dispatch" chart="bars" onClick={() => navigate('/fc/list')}/>
-              <KpiTile variant="hero" tone="forest" label="Delivered FYTD" value={delivered.length} sub="completed orders" chart="bars" onClick={() => navigate('/fc/list')}/>
-              <KpiTile variant="hero" tone="teal" label="With Billing" value={billingOrders.length + readyOrders.length} sub={`${readyOrders.length} delivery ready`} chart="line" onClick={() => navigate('/fc/list')}/>
-              <KpiTile label="PI Phase" value={piOrders.length} sub="awaiting payment" accent={piOrders.length > 0 ? 'amber' : null} onClick={() => navigate('/fc/list')}/>
-              <KpiTile label="Pending GRNs" value={pendingGrns} sub="awaiting inspection" accent={pendingGrns > 0 ? 'amber' : null} onClick={() => navigate('/fc/grn')}/>
+            {/* ── Bento ──────────────────────────────────────────────────────────
+                Same composition as /procurement and /orders: five tiles, a tall
+                column beside them, a wide anchor underneath. */}
+            <div className="ph-bento">
+              <Stat label="Stuck Orders" value={stuck.rows.length} warn={stuck.rows.length > 0}
+                foot={stuck.rows.length > 0
+                  ? <>no movement in <b>{STUCK_DAYS}</b>+ days · oldest <b>{stuck.oldest}</b>d</>
+                  : 'everything is moving'}
+                onClick={() => navigate('/fc/list')} />
+              <Stat label="Action Required" value={actionOrders.length}
+                foot="picking · packing · dispatch" onClick={() => navigate('/fc/list')} />
+              <Stat label="With Billing" value={billingOrders.length + readyOrders.length}
+                foot={<><b>{readyOrders.length}</b> delivery ready</>} onClick={() => navigate('/fc/list')} />
+              <Stat label="PI Phase" value={piOrders.length} warn={piOrders.length > 0}
+                foot="awaiting payment" onClick={() => navigate('/fc/list')} />
+              <Stat label="Pending GRNs" value={pendingGrns} warn={pendingGrns > 0}
+                foot="awaiting inspection" onClick={() => navigate('/fc/grn')} />
+
+              {/* Anchor — stuck orders by stage. A count says there is a problem;
+                  the stage split says WHERE it is. */}
+              <div className="ph-wide ph-anchor">
+                <div className="ph-anchor-head">
+                  <div>
+                    <div className="ph-anchor-eyebrow">Stuck · no movement in {STUCK_DAYS}+ days</div>
+                    <div className="ph-anchor-v">{stuck.rows.length}</div>
+                    <div className="ph-anchor-sub">
+                      of {orders.filter(o => !TERMINAL_STATUSES.includes(o.status)).length} in progress
+                      {stuck.oldest > 0 ? ` · oldest ${stuck.oldest} days` : ''}
+                    </div>
+                  </div>
+                  <div className="ph-anchor-stats">
+                    <div><div className="ph-as-l">Delivered FYTD</div><div className="ph-as-v">{delivered.length}</div></div>
+                    <div><div className="ph-as-l">In progress</div><div className="ph-as-v">{inProgress}</div></div>
+                    <div title="Samples delivered and returnable with no sample_return GRN against them">
+                      <div className="ph-as-l">Samples out</div><div className="ph-as-v">{samples ? samples.out.length : '—'}</div></div>
+                    <div title="Past the 30-day return policy — sql/sample_return_tracking.sql">
+                      <div className="ph-as-l">Past 30d</div><div className="ph-as-v">{samples ? samples.overdue : '—'}</div></div>
+                    <div title="Past the 60-day hard cap — no further extension allowed">
+                      <div className="ph-as-l">Past 60d cap</div><div className="ph-as-v">{samples ? samples.hardCap : '—'}</div></div>
+                  </div>
+                </div>
+                {stuck.rows.length > 0 && (() => {
+                  const rows = Object.entries(stuck.byStage).sort((a, b) => b[1] - a[1])
+                  const max = Math.max(...rows.map(r => r[1]), 1)
+                  return (
+                    <div className="dash-vs">
+                      {rows.map(([st, n]) => (
+                        <div key={st} className="dash-vs-row o-pipe-w-row" onClick={() => navigate('/fc/list')}>
+                          <span className="dash-vs-l" title={STATUS_LABELS[st] || st}>
+                            <span className="o-pipe-dot" style={{ background: STATUS_COLORS[st] || '#94A3B8' }} />
+                            <span className="o-pipe-w-l">{STATUS_LABELS[st] || st}</span>
+                          </span>
+                          <span className="dash-vs-track">
+                            <span style={{ width: `${(n / max) * 100}%`, background: STATUS_COLORS[st] || '#94A3B8' }} />
+                          </span>
+                          <span className="dash-vs-v">{n}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {/* Sample returns — the tall column. Each row is a sample physically out
+                  with a customer, oldest first. Amber past 30 days, red past 60. */}
+              <div className="card ph-tall o-pipe">
+                <div className="card-head">
+                  <div><div className="card-eyebrow">Out with customers</div><div className="card-title">Sample Returns</div></div>
+                  <span className="trend-pill mono">{samples ? samples.out.length : '—'}</span>
+                </div>
+                <div className="o-pipe-list">
+                  {!samples ? <div className="o-empty">Loading…</div>
+                    : samples.out.length === 0 ? <div className="o-empty">Nothing outstanding</div>
+                    : samples.out.map(x => (
+                      <div key={x.id} className="o-pipe-row" onClick={() => navigate('/orders/' + x.id)}>
+                        <div className="o-pipe-top">
+                          <span className="o-pipe-dot" style={{ background: x.days > 60 ? '#EF4444' : x.days > 30 ? '#F59E0B' : '#10B981' }} />
+                          <span className="o-pipe-name">{x.order_number}</span>
+                          <span className="o-pipe-n mono">{x.days}d</span>
+                        </div>
+                        <div className="o-pipe-v mono">{x.customer_name}</div>
+                      </div>
+                    ))}
+                </div>
+              </div>
             </div>
 
-            <div className="o-anal" style={{ marginTop: 16 }}>
-              <div className="card anal-card">
+            <div className="o-mid o-mid-proc">
+              <div className="proc-left">
+              {/* Inward & Returns moved in here: it was a full-width card floating
+                  between the bento and the analytics row. */}
+              {grnMix.length > 0 && (
+                <div className="card">
+                  <div className="card-head">
+                    <div>
+                      <div className="card-eyebrow">FYTD · By GRN type</div>
+                      <div className="card-title">Inward &amp; Returns</div>
+                    </div>
+                    <span className="trend-pill mono">{grnMix.reduce((a, g) => a + g.n, 0)}</span>
+                  </div>
+                  {(() => {
+                    const LBL = { po_inward:'PO Inward', sample_return:'Sample Return',
+                                  customer_rejection:'Customer Rejection', cancellation_return:'Cancellation Return' }
+                    const CLR = { po_inward:'#1a73e8', sample_return:'#0F766E',
+                                  customer_rejection:'#EF4444', cancellation_return:'#F59E0B' }
+                    const max = Math.max(...grnMix.map(g => g.n), 1)
+                    return (
+                      <div className="dash-vs">
+                        {grnMix.map(g => (
+                          <div key={g.type} className="dash-vs-row o-pipe-w-row" onClick={() => navigate('/fc/grn')}>
+                            <span className="dash-vs-l" title={LBL[g.type] || g.type}>
+                              <span className="o-pipe-dot" style={{ background: CLR[g.type] || '#94A3B8' }} />
+                              <span className="o-pipe-w-l">{LBL[g.type] || g.type}</span>
+                            </span>
+                            <span className="dash-vs-track">
+                              <span style={{ width: `${(g.n / max) * 100}%`, background: CLR[g.type] || '#94A3B8' }} />
+                            </span>
+                            <span className="dash-vs-v">{g.n}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+              </div>
+
+              {/* Order Pipeline. "Stage Mix" was a second card over the SAME funnel data,
+                  drawn as a pie — the one chart type that appears nowhere else in the app,
+                  and the reason this page still looked foreign. Merged: the bar is the
+                  count, the share follows it. */}
+              <div className="card o-pipe-wide">
                 <div className="card-head">
                   <div>
-                    <div className="card-eyebrow">Pipeline · By Status</div>
+                    <div className="card-eyebrow">Pipeline · By status</div>
                     <div className="card-title">Order Pipeline</div>
                   </div>
                   <span className="trend-pill mono">{inProgress} active</span>
                 </div>
-                <div className="funnel">
-                  {funnel.length === 0 ? <div className="o-empty">No active orders</div> : funnel.map(s => {
-                    const max = Math.max(...funnel.map(x => x.count))
-                    return (
-                      <div key={s.id} className="funnel-row">
-                        <div className="funnel-label">
-                          <span className="funnel-dot" style={{ background: s.color }}/>
-                          <span className="funnel-name">{s.label}</span>
+                {funnel.length === 0 ? <div className="o-empty">No active orders</div> : (() => {
+                  const total = funnel.reduce((a, f) => a + f.count, 0) || 1
+                  const max = Math.max(...funnel.map(f => f.count), 1)
+                  return (
+                    <div className="dash-vs">
+                      {funnel.map(f => (
+                        <div key={f.id} className="dash-vs-row o-pipe-w-row" onClick={() => navigate('/fc/list')}>
+                          <span className="dash-vs-l" title={f.label}>
+                            <span className="o-pipe-dot" style={{ background: f.color }} />
+                            <span className="o-pipe-w-l">{f.label}</span>
+                          </span>
+                          <span className="dash-vs-track">
+                            <span style={{ width: `${(f.count / max) * 100}%`, background: f.color }} />
+                          </span>
+                          <span className="dash-vs-v">{f.count}<em className="o-pipe-w-v">{Math.round(f.count / total * 100)}%</em></span>
                         </div>
-                        <div className="funnel-bar-wrap"><div className="funnel-bar" style={{ width: `${(s.count/max)*100}%`, background: s.color }}/></div>
-                        <div className="funnel-val">{s.count}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="card anal-card">
-                <div className="card-head">
-                  <div>
-                    <div className="card-eyebrow">Distribution · By Stage</div>
-                    <div className="card-title">Stage Mix</div>
-                  </div>
-                  <span className="trend-pill mono">{orders.length} total</span>
-                </div>
-                <StatusDonut groups={funnel} total={funnel.reduce((s,g) => s + g.count, 0)}/>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
 
-            <div className="dash-row-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
+            <div className="dash-row-3">
               <ListCard
                 title="Action Required" eyebrow="FC operations · Now"
                 badge={`${actionOrders.length} orders`} badgeColor="#0F766E"
@@ -236,7 +428,7 @@ function StatusPill({ status }) {
 
 function ListCard({ title, eyebrow, badge, badgeColor, items, emptyText, onClick }) {
   return (
-    <div className="card">
+    <div className="card proc-list-card">
       <div className="card-head">
         <div>
           <div className="card-eyebrow">{eyebrow}</div>
@@ -263,69 +455,10 @@ function ListCard({ title, eyebrow, badge, badgeColor, items, emptyText, onClick
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
+// KpiTile / KpiChart lived here — the bento above uses the shared <Stat/>.
+// .kpi-tile / .kt-* stay in orders-redesign.css; other pages still render them.
 
-function StatusDonut({ groups, total }) {
-  if (!groups.length || !total) return <div className="donut-wrap"><div style={{ color:'var(--o-muted-2)', fontSize:12 }}>No data</div></div>
-  const size = 130, r = size/2 - 8, inner = r - 18, cx = size/2, cy = size/2
-  let angle = -Math.PI/2
-  const arcs = groups.filter(s => s.count > 0).map(s => {
-    const portion = s.count / total
-    const next = angle + portion * 2 * Math.PI
-    const large = portion > 0.5 ? 1 : 0
-    const x0 = cx + r * Math.cos(angle), y0 = cy + r * Math.sin(angle)
-    const x1 = cx + r * Math.cos(next),  y1 = cy + r * Math.sin(next)
-    const ix0 = cx + inner * Math.cos(angle), iy0 = cy + inner * Math.sin(angle)
-    const ix1 = cx + inner * Math.cos(next),  iy1 = cy + inner * Math.sin(next)
-    const path = `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix0} ${iy0} Z`
-    angle = next
-    return { path, color: s.color, label: s.label, count: s.count, pct: Math.round(portion*100) }
-  })
-  return (
-    <div className="donut-wrap">
-      <svg width={size} height={size}>
-        {arcs.map((a, i) => <path key={i} d={a.path} fill={a.color} opacity="0.92"/>)}
-        <text x={cx} y={cy - 2} textAnchor="middle" fontSize="22" fontWeight="600" fill="#0B1B30" fontFamily="Geist Mono, monospace" style={{ letterSpacing: '-0.02em' }}>{total}</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="8" fill="#6B7280" letterSpacing="0.06em" fontFamily="Geist Mono, monospace">ACTIVE</text>
-      </svg>
-      <div className="donut-legend">
-        {arcs.slice(0, 6).map((a, i) => (
-          <div key={i} className="dlg-row">
-            <span className="dlg-dot" style={{background: a.color}}/>
-            <span className="dlg-name">{a.label}</span>
-            <span className="dlg-pct mono">{a.pct}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+// A local pie StatusDonut lived here. Order Pipeline carries the share now, and
+// the app has no pie anywhere else. .donut-wrap / .dlg-* stay in
+// orders-redesign.css — Billing, CRM and Procurement still render them.
+

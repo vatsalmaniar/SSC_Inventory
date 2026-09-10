@@ -5,8 +5,12 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START, FY_LABEL, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 const PAGE_SIZE = 50
 
@@ -287,12 +291,17 @@ export default function PurchaseInvoiceList() {
           </div>
         </div>
 
-        <div className="kpi-row">
-          <KpiTile variant="hero" tone="deep" label="3-Way Check" value={counts.three_way_check} sub="verify PO·GRN·invoice" chart="bars" onClick={() => setFilter('three_way_check')}/>
-          <KpiTile variant="hero" tone="forest" label="Inward Complete" value={counts.inward_complete} sub="fully processed" chart="bars" onClick={() => setFilter('inward_complete')}/>
-          <KpiTile variant="hero" tone="teal" label="Invoice Pending" value={counts.invoice_pending} sub="awaiting entry" chart="line" onClick={() => setFilter('invoice_pending')}/>
-          <KpiTile label="Total Value" value={fmtCr(totalAmount)} sub="filtered amount"/>
-          <KpiTile label="Total Invoices" value={counts.all} sub={FY_LABEL} onClick={() => setFilter('all')}/>
+        {/* KPI tiles — the shared <Stat/>. Same values, same filter targets. */}
+        <div className="ph-bento o-bento-flat">
+          <Stat label="3-Way Check" value={counts.three_way_check} foot="verify PO · GRN · invoice"
+            onClick={() => setFilter('three_way_check')} />
+          <Stat label="Inward Complete" value={counts.inward_complete} foot="fully processed"
+            onClick={() => setFilter('inward_complete')} />
+          <Stat label="Invoice Pending" value={counts.invoice_pending} warn={counts.invoice_pending > 0}
+            foot="awaiting entry" onClick={() => setFilter('invoice_pending')} />
+          <Stat label="Total Value" value={fmtCr(totalAmount)} foot="filtered amount" />
+          <Stat label="Total Invoices" value={counts.all} foot={FY_LABEL}
+            onClick={() => setFilter('all')} />
         </div>
 
         {/* Timeline — filters on vendor invoice date */}
@@ -339,7 +348,7 @@ export default function PurchaseInvoiceList() {
           <div className="o-loading">Loading invoices…</div>
         ) : isCnTab ? (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '190px 150px minmax(0, 1.3fr) 130px 110px 180px' }}>
+            <div className="ol-row ol-head pinv-row">
               <div>GRN #</div>
               <div>Type</div>
               <div>Customer</div>
@@ -355,7 +364,7 @@ export default function PurchaseInvoiceList() {
             ) : (
               <div className="ol-table">
                 {cnFiltered.map(g => (
-                  <div key={g.id} className="ol-row ol-data" style={{ gridTemplateColumns: '190px 150px minmax(0, 1.3fr) 130px 110px 180px' }} onClick={() => navigate('/fc/grn/' + g.id)}>
+                  <div key={g.id} className="ol-row ol-data pinv-row" onClick={() => navigate('/fc/grn/' + g.id)}>
                     <div className="ol-cell"><div className="ol-num" style={{ color: 'var(--ssc-blue)' }}>{g.grn_number}</div></div>
                     <div className="ol-cell">
                       <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: g.grn_type === 'customer_rejection' ? '#fef2f2' : '#fff7ed', color: g.grn_type === 'customer_rejection' ? '#b91c1c' : '#c2410c' }}>
@@ -382,7 +391,7 @@ export default function PurchaseInvoiceList() {
           </div>
         ) : (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '200px minmax(0, 1.4fr) 110px 110px 110px 110px 150px' }}>
+            <div className="ol-row ol-head pinv-row2">
               <div>GRN / Inv #</div>
               <div>Vendor / Customer</div>
               <div>Date</div>
@@ -404,7 +413,7 @@ export default function PurchaseInvoiceList() {
                     // Credit/Dr-note row (return / rejection GRN) mixed into "All"
                     const g = row.g
                     return (
-                      <div key={'cn-' + g.id} className="ol-row ol-data" style={{ gridTemplateColumns: '200px minmax(0, 1.4fr) 110px 110px 110px 110px 150px' }} onClick={() => navigate('/fc/grn/' + g.id)}>
+                      <div key={'cn-' + g.id} className="ol-row ol-data pinv-row2" onClick={() => navigate('/fc/grn/' + g.id)}>
                         <div className="ol-cell">
                           <div className="ol-num" style={{ color: 'var(--ssc-blue)' }}>
                             {g.grn_number}
@@ -432,7 +441,7 @@ export default function PurchaseInvoiceList() {
                   const stage = inv.status || 'three_way_check'
                   const grnNo = grnNumById[inv.grn_id] || ''
                   return (
-                    <div key={inv.id} className="ol-row ol-data" style={{ gridTemplateColumns: '200px minmax(0, 1.4fr) 110px 110px 110px 110px 150px' }} onClick={() => navigate('/procurement/invoices/' + inv.id)}>
+                    <div key={inv.id} className="ol-row ol-data pinv-row2" onClick={() => navigate('/procurement/invoices/' + inv.id)}>
                       <div className="ol-cell">
                         {inv.invoice_number ? (
                           <div className="ol-num" style={{ color: stage === 'inward_complete' ? '#047857' : 'var(--ssc-blue)' }}>{inv.invoice_number}</div>
@@ -489,33 +498,6 @@ export default function PurchaseInvoiceList() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
+// KpiTile / KpiChart lived here — the tiles above are the shared <Stat/>.
+// .kpi-tile / .kt-* stay in orders-redesign.css; other pages still render them.
+

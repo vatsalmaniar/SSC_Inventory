@@ -6,8 +6,12 @@ import { fmt, FY_START, FY_LABEL, TIMELINE_OPTIONS, dateInTimeline } from '../li
 import { PI_STAGES } from '../lib/orderStatus'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 const BILLING_BATCH_STATUSES = ['delivery_created','pi_requested','pi_generated','pi_payment_pending','goods_issued','credit_check','goods_issue_posted','invoice_generated','delivery_ready','eway_generated','dispatched_fc']
 // Samples are normally kept out of Billing (never invoiced), EXCEPT the E-Way
@@ -352,12 +356,18 @@ export default function BillingList() {
           </div>
         </div>
 
-        <div className="kpi-row">
-          <KpiTile variant="hero" tone="deep"   label="Action Required" value={counts.action} sub="credit · invoice · e-way" chart="bars" onClick={() => setFilter('action')}/>
-          <KpiTile variant="hero" tone="forest" label="Delivered"        value={counts.dispatched_fc} sub={FY_LABEL} chart="bars" onClick={() => setFilter('dispatched_fc')}/>
-          <KpiTile variant="hero" tone="teal"   label="Total Active"     value={counts.all} sub="in pipeline" chart="line" onClick={() => setFilter('all')}/>
-          <KpiTile label="PI Stage"  value={counts.pi}       sub="awaiting payment" accent={counts.pi > 0 ? 'amber' : null} onClick={() => setFilter('pi')}/>
-          <KpiTile label="Overrides" value={counts.override} sub="payment pending"  accent={counts.override > 0 ? 'amber' : null} onClick={() => setFilter('override')}/>
+        {/* KPI tiles — the shared <Stat/>. Same values, same filter targets. */}
+        <div className="ph-bento o-bento-flat">
+          <Stat label="Action Required" value={counts.action} foot="credit · invoice · e-way"
+            onClick={() => setFilter('action')} />
+          <Stat label="Delivered" value={counts.dispatched_fc} foot={FY_LABEL}
+            onClick={() => setFilter('dispatched_fc')} />
+          <Stat label="Total Active" value={counts.all} foot="in pipeline"
+            onClick={() => setFilter('all')} />
+          <Stat label="PI Stage" value={counts.pi} warn={counts.pi > 0} foot="awaiting payment"
+            onClick={() => setFilter('pi')} />
+          <Stat label="Overrides" value={counts.override} warn={counts.override > 0} foot="payment pending"
+            onClick={() => setFilter('override')} />
         </div>
 
         {/* Timeline — filters on batch created date */}
@@ -404,7 +414,7 @@ export default function BillingList() {
           <div className="o-loading">Loading batches…</div>
         ) : (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '170px minmax(0, 1.4fr) 110px 100px minmax(0, 1fr) auto 140px' }}>
+            <div className="ol-row ol-head bl-row">
               <div>Invoice / DC</div>
               <div>Customer</div>
               <div>Centre</div>
@@ -433,7 +443,7 @@ export default function BillingList() {
                     const itemsCount = batchItemsCount(b)
                     const stageKey = isCancelled ? 'cancelled' : s
                     return (
-                      <div key={b.id} className="ol-row ol-data" style={{ gridTemplateColumns: '170px minmax(0, 1.4fr) 110px 100px minmax(0, 1fr) auto 140px' }} onClick={() => navigate('/billing/' + b.order_id, { state: { dispatch_id: b.id } })}>
+                      <div key={b.id} className="ol-row ol-data bl-row" onClick={() => navigate('/billing/' + b.order_id, { state: { dispatch_id: b.id } })}>
                         <div className="ol-cell">
                           {hasInv ? (
                             <div className="ol-num" style={{ color: isDelivered ? '#047857' : 'var(--ssc-blue)' }}>{b.invoice_number}</div>
@@ -491,33 +501,6 @@ export default function BillingList() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
+// KpiTile / KpiChart lived here — the tiles above are the shared <Stat/>.
+// .kpi-tile / .kt-* stay in orders-redesign.css; other pages still render them.
+

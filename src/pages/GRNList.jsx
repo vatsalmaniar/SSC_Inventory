@@ -6,9 +6,13 @@ import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import { selectByCodes } from '../lib/safeCodes'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import PeopleAvatar from '../components/PeopleAvatar'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 // A .in('col', ids) filter with hundreds of UUIDs builds a URL long enough to be
 // silently rejected — chunk the id list itself, not just the row range, and merge.
@@ -376,12 +380,16 @@ export default function GRNList() {
           </div>
         </div>
 
-        <div className="kpi-row">
-          <KpiTile variant="hero" tone="deep" label={FILTERS.find(f => f.key === filter)?.label || 'GRNs'} value={filtered.length} sub="matching GRNs" chart="line"/>
-          <KpiTile variant="hero" tone="forest" label="Total Value" value={fmtCr(totalValue)} sub="across filtered" chart="bars"/>
-          <KpiTile variant="hero" tone="teal" label="Confirmed" value={confirmedCount} sub="confirmed GRNs" chart="bars" onClick={() => { setFilter('confirmed'); setPage(1) }}/>
-          <KpiTile label="Pending" value={pendingCount} sub="created + checking" accent={pendingCount > 0 ? 'amber' : null} onClick={() => { setFilter('checking'); setPage(1) }}/>
-          <KpiTile label="Posted" value={counts.inward_posted || 0} sub="inward posted" onClick={() => { setFilter('inward_posted'); setPage(1) }}/>
+        {/* KPI tiles — the shared <Stat/>. Same values, same filter targets. */}
+        <div className="ph-bento o-bento-flat">
+          <Stat label={FILTERS.find(f => f.key === filter)?.label || 'GRNs'} value={filtered.length} foot="matching GRNs" />
+          <Stat label="Total Value" value={fmtCr(totalValue)} foot="across filtered" />
+          <Stat label="Confirmed" value={confirmedCount} foot="confirmed GRNs"
+            onClick={() => { setFilter('confirmed'); setPage(1) }} />
+          <Stat label="Pending" value={pendingCount} warn={pendingCount > 0} foot="created + checking"
+            onClick={() => { setFilter('checking'); setPage(1) }} />
+          <Stat label="Posted" value={counts.inward_posted || 0} foot="inward posted"
+            onClick={() => { setFilter('inward_posted'); setPage(1) }} />
         </div>
 
         {/* Timeline — filters on received date */}
@@ -449,7 +457,7 @@ export default function GRNList() {
           <div className="o-loading">Loading GRNs…</div>
         ) : (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '160px minmax(0, 1.4fr) 130px 100px minmax(0, 1fr) 130px 100px 130px' }}>
+            <div className="ol-row ol-head grn-row">
               <div>GRN #</div>
               <div>Vendor / Source</div>
               <div>Type</div>
@@ -467,7 +475,7 @@ export default function GRNList() {
             ) : (
               <div className="ol-table">
                 {paginated.map(g => (
-                  <div key={g.id} className="ol-row ol-data" style={{ gridTemplateColumns: '160px minmax(0, 1.4fr) 130px 100px minmax(0, 1fr) 130px 100px 130px' }} onClick={() => navigate('/fc/grn/' + g.id)}>
+                  <div key={g.id} className="ol-row ol-data grn-row" onClick={() => navigate('/fc/grn/' + g.id)}>
                     <div className="ol-cell">
                       <div className="ol-num">{g.grn_number}</div>
                       {g.grn_type !== 'po_inward' && <span className="ol-sample-tag">{GRN_TYPE_LABELS[g.grn_type]}</span>}
@@ -520,33 +528,6 @@ export default function GRNList() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
+// KpiTile / KpiChart lived here — the tiles above are the shared <Stat/>.
+// .kpi-tile / .kt-* stay in orders-redesign.css; other pages still render them.
+

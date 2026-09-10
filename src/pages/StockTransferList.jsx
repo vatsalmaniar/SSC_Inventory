@@ -5,7 +5,11 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 const STATUS_LABELS = { draft:'Draft', dispatched:'In Transit', received:'Received', cancelled:'Cancelled' }
 const STATUS_COLORS = { draft:'#94A3B8', dispatched:'#1a73e8', received:'#22C55E', cancelled:'#EF4444' }
@@ -101,12 +105,17 @@ export default function StockTransferList() {
           </div>
         </div>
 
-        <div className="kpi-row">
-          <KpiTile variant="hero" tone="deep" label="Total Transfers" value={transfers.length} sub="this FY" chart="line"/>
-          <KpiTile variant="hero" tone="forest" label="Received" value={counts.received} sub="completed" chart="bars" onClick={() => setFilter('received')}/>
-          <KpiTile variant="hero" tone="teal" label="In Transit" value={counts.dispatched} sub="dispatched" chart="bars" onClick={() => setFilter('dispatched')}/>
-          <KpiTile label="Draft" value={counts.draft} sub="not yet dispatched" accent={counts.draft > 0 ? 'amber' : null} onClick={() => setFilter('draft')}/>
-          <KpiTile label="Cancelled" value={counts.cancelled} sub="cancelled" onClick={() => setFilter('cancelled')}/>
+        {/* KPI tiles — the shared <Stat/>. Same values, same filter targets. */}
+        <div className="ph-bento o-bento-flat">
+          <Stat label="Total Transfers" value={transfers.length} foot="this FY" />
+          <Stat label="Received" value={counts.received} foot="completed"
+            onClick={() => setFilter('received')} />
+          <Stat label="In Transit" value={counts.dispatched} foot="dispatched"
+            onClick={() => setFilter('dispatched')} />
+          <Stat label="Draft" value={counts.draft} warn={counts.draft > 0} foot="not yet dispatched"
+            onClick={() => setFilter('draft')} />
+          <Stat label="Cancelled" value={counts.cancelled} foot="cancelled"
+            onClick={() => setFilter('cancelled')} />
         </div>
 
         {/* Timeline — filters on transfer created date */}
@@ -150,7 +159,7 @@ export default function StockTransferList() {
           <div className="o-loading">Loading transfers…</div>
         ) : (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '180px minmax(0, 1.4fr) 100px 110px 130px' }}>
+            <div className="ol-row ol-head stx-row">
               <div>Transfer #</div>
               <div>Route</div>
               <div className="num">Items</div>
@@ -165,7 +174,7 @@ export default function StockTransferList() {
             ) : (
               <div className="ol-table">
                 {pageRows.map(t => (
-                  <div key={t.id} className="ol-row ol-data" style={{ gridTemplateColumns: '180px minmax(0, 1.4fr) 100px 110px 130px' }} onClick={() => navigate('/fc/transfers/' + t.id)}>
+                  <div key={t.id} className="ol-row ol-data stx-row" onClick={() => navigate('/fc/transfers/' + t.id)}>
                     <div className="ol-cell">
                       <div className="ol-num">{t.transfer_number || '—'}</div>
                     </div>
@@ -207,33 +216,6 @@ export default function StockTransferList() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
+// KpiTile / KpiChart lived here — the tiles above are the shared <Stat/>.
+// .kpi-tile / .kt-* stay in orders-redesign.css; other pages still render them.
+

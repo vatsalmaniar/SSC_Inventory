@@ -6,9 +6,13 @@ import { fmt, FY_START, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import { poLinePendingQty, poLinePendingValue, poPendingValue, posPendingValue } from '../lib/poValue'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import PeopleAvatar from '../components/PeopleAvatar'
 import { xlsStatusStyle, xlsFinish, xlsDownload } from '../lib/xlsExport'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 const REP_PALETTE = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
 function ownerColor(n) { let h=0; for(let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return REP_PALETTE[Math.abs(h)%REP_PALETTE.length] }
@@ -376,12 +380,16 @@ export default function PurchaseOrderList() {
           </div>
         </div>
 
-        <div className="kpi-row">
-          <KpiTile variant="hero" tone="deep" label={activeFilterLabel} value={filtered.length} sub="matching POs" chart="line"/>
-          <KpiTile variant="hero" tone="forest" label="Total Value" value={fmtCr(sumTotal)} sub="across filtered" chart="bars"/>
-          <KpiTile variant="hero" tone="teal" label="Open POs" value={counts.open || 0} sub="in progress" chart="bars" onClick={() => selectFilter('open')}/>
-          <KpiTile label="Pending Approval" value={counts.approval || 0} sub="awaiting approval" accent={(counts.approval || 0) > 0 ? 'amber' : null} onClick={() => selectFilter('approval')}/>
-          <KpiTile label="Delivery Pending" value={counts.delivery || 0} sub="awaiting delivery" onClick={() => selectFilter('delivery')}/>
+        {/* KPI tiles — the shared <Stat/>. Same values, same filter targets. */}
+        <div className="ph-bento o-bento-flat">
+          <Stat label={activeFilterLabel} value={filtered.length} foot="matching POs" />
+          <Stat label="Total Value" value={fmtCr(sumTotal)} foot="across filtered" />
+          <Stat label="Open POs" value={counts.open || 0} foot="in progress"
+            onClick={() => selectFilter('open')} />
+          <Stat label="Pending Approval" value={counts.approval || 0} warn={(counts.approval || 0) > 0}
+            foot="awaiting approval" onClick={() => selectFilter('approval')} />
+          <Stat label="Delivery Pending" value={counts.delivery || 0} foot="awaiting delivery"
+            onClick={() => selectFilter('delivery')} />
         </div>
 
         <div className="o-timeline">
@@ -532,33 +540,6 @@ export default function PurchaseOrderList() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
+// KpiTile / KpiChart lived here — the tiles above are the shared <Stat/> now.
+// .kpi-tile / .kt-* stay in orders-redesign.css; other pages still render them.
+

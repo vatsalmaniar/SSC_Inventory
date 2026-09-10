@@ -5,8 +5,12 @@ import { sb } from '../lib/supabase'
 import { fmt, FY_START, FY_LABEL, TIMELINE_OPTIONS, dateInTimeline } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import * as XLSX from 'xlsx'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 const PAGE_SIZE = 50
 const WITH_ACCOUNTS = ['goods_issued','credit_check','goods_issue_posted','delivery_ready']
@@ -300,12 +304,17 @@ export default function FCModule() {
           </div>
         </div>
 
-        <div className="kpi-row">
-          <KpiTile variant="hero" tone="deep" label="Action Required" value={counts.action} sub="needs FC action" chart="bars" onClick={() => setFilter('action')}/>
-          <KpiTile variant="hero" tone="forest" label="Total Active" value={totalActive} sub="in pipeline" chart="line" onClick={() => setFilter('all')}/>
-          <KpiTile variant="hero" tone="teal" label="Delivered" value={counts.dispatched_fc} sub={`dispatched ${FY_LABEL}`} chart="bars" onClick={() => setFilter('dispatched_fc')}/>
-          <KpiTile label="With Accounts" value={counts.waiting} sub="with billing team" accent={counts.waiting > 0 ? 'amber' : null} onClick={() => setFilter('waiting')}/>
-          <KpiTile label="This Filter" value={filtered.length} sub="matching batches"/>
+        {/* KPI tiles — the shared <Stat/>. Same values, same filter targets. */}
+        <div className="ph-bento o-bento-flat">
+          <Stat label="Action Required" value={counts.action} foot="needs FC action"
+            onClick={() => setFilter('action')} />
+          <Stat label="Total Active" value={totalActive} foot="in pipeline"
+            onClick={() => setFilter('all')} />
+          <Stat label="Delivered" value={counts.dispatched_fc} foot={`dispatched ${FY_LABEL}`}
+            onClick={() => setFilter('dispatched_fc')} />
+          <Stat label="With Accounts" value={counts.waiting} warn={counts.waiting > 0}
+            foot="with billing team" onClick={() => setFilter('waiting')} />
+          <Stat label="This Filter" value={filtered.length} foot="matching batches" />
         </div>
 
         {/* Timeline — filters on batch created date */}
@@ -352,7 +361,7 @@ export default function FCModule() {
           <div className="o-loading">Loading batches…</div>
         ) : (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '160px minmax(0, 1.4fr) 110px 100px minmax(0, 1fr) auto 130px' }}>
+            <div className="ol-row ol-head fcl-row">
               <div>DC #</div>
               <div>Customer</div>
               <div>Centre</div>
@@ -384,7 +393,7 @@ export default function FCModule() {
                   const itemsCount = (b.dispatched_items || b.orders?.order_items || []).length
                   const stageKey = isCancelled ? 'cancelled' : isWaiting ? 'waiting' : s
                   return (
-                    <div key={b.id} className="ol-row ol-data" style={{ gridTemplateColumns: '160px minmax(0, 1.4fr) 110px 100px minmax(0, 1fr) auto 130px' }} onClick={() => navigate('/fc/' + b.order_id, { state: { dispatch_id: b.id } })}>
+                    <div key={b.id} className="ol-row ol-data fcl-row" onClick={() => navigate('/fc/' + b.order_id, { state: { dispatch_id: b.id } })}>
                       <div className="ol-cell">
                         <div className="ol-num" style={{ color: isTempDC ? '#92400e' : isDelivered ? '#047857' : 'var(--ssc-blue)' }}>{b.dc_number || '—'}</div>
                         {b.batch_no > 1 && <span className="ol-sample-tag">Batch {b.batch_no}</span>}
@@ -435,33 +444,6 @@ export default function FCModule() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
+// KpiTile / KpiChart lived here — the tiles above are the shared <Stat/>.
+// .kpi-tile / .kt-* stay in orders-redesign.css; other pages still render them.
+

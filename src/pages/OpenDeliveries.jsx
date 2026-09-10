@@ -4,9 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { fmt } from '../lib/fmt'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import Loading from '../components/Loading'
 import { fetchAll } from '../lib/fetchAll'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat / .o-chip — the shared language the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OPEN DELIVERIES — the delivery monitor. SAP's VL06O.
@@ -160,18 +164,34 @@ export default function OpenDeliveries() {
           </div>
         )}
 
-        <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:14, flexWrap:'wrap' }}>
-          <input type="text" placeholder="Search order, customer or DC…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
-            style={{ flex:'1 1 240px', maxWidth:320, padding:'8px 12px', fontSize:16, border:'1px solid var(--o-line)',
-                     borderRadius:9, outline:'none', background:'var(--o-surface)', fontFamily:'inherit' }} />
-          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+        {/* KPI tiles — the ageing buckets counts already computed for the chips.
+            An open delivery is goods created but not issued, so age is the whole
+            point: the older ones are the ones nobody is chasing. */}
+        <div className="ph-bento o-bento-flat">
+          <Stat label="Open Deliveries" value={counts.all}
+            foot="created, not goods-issued" onClick={() => { setBucket('all'); setPage(1) }} />
+          <Stat label="Over 30 Days" value={counts.over30} warn={counts.over30 > 0}
+            foot={counts.over30 > 0 ? 'oldest first' : 'none this old'}
+            onClick={() => { setBucket('over30'); setPage(1) }} />
+          <Stat label="15–30 Days" value={counts.d15_30} warn={counts.d15_30 > 0}
+            foot="ageing" onClick={() => { setBucket('d15_30'); setPage(1) }} />
+          <Stat label="8–14 Days" value={counts.d8_14}
+            foot="watch" onClick={() => { setBucket('d8_14'); setPage(1) }} />
+          <Stat label="Under 7 Days" value={counts.under7}
+            foot="within normal" onClick={() => { setBucket('under7'); setPage(1) }} />
+        </div>
+
+        {/* Search + buckets. Was a block of inline button styling; these are the
+            shared .o-chip / .o-search the other list pages use. */}
+        <div className="od-filters">
+          <input type="text" className="o-search" placeholder="Search order, customer or DC…"
+            value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          <div className="o-filter-row">
             {BUCKETS.map(b => (
-              <button key={b.key} onClick={() => { setBucket(b.key); setPage(1) }}
-                style={{ padding:'6px 12px', fontSize:12, fontWeight:600, borderRadius:8, cursor:'pointer',
-                         border:'1px solid ' + (bucket === b.key ? 'var(--ssc-deep)' : 'var(--o-line)'),
-                         background: bucket === b.key ? 'var(--ssc-deep)' : 'var(--o-surface)',
-                         color: bucket === b.key ? '#fff' : (b.tone === 'danger' ? '#b91c1c' : b.tone === 'warn' ? '#92400e' : 'var(--o-ink)') }}>
-                {b.label} {counts[b.key] ? `(${counts[b.key]})` : ''}
+              <button key={b.key} className={`o-chip ${bucket === b.key ? 'on' : ''} ${b.tone === 'danger' ? 'bad' : b.tone === 'warn' ? 'warn' : ''}`}
+                onClick={() => { setBucket(b.key); setPage(1) }}>
+                {b.label}
+                {counts[b.key] > 0 && <span className="o-chip-n">{counts[b.key]}</span>}
               </button>
             ))}
           </div>

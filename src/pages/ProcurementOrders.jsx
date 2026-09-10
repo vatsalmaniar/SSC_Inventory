@@ -8,7 +8,11 @@ import { isDeliveredish } from '../lib/orderStatus'
 import { lineIsHandled, lineToProcureQty, COVERING_PO_STATUSES, UNPLACED_PO_STATUSES, unplacedPoLabel,
          poSlaState, fmtSlaAge, fetchWorkflowOwners, SLA_APPROVE_HOURS, SLA_PLACE_HOURS } from '../lib/coverage'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat — the shared tile the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 function fmtCr(val) {
   if (!val) return '₹0'
@@ -259,18 +263,25 @@ export default function ProcurementOrders() {
           </div>
         </div>
 
-        <div className="kpi-row">
-          <KpiTile variant="hero" tone="deep" label="Pending Coverage" value={pendingOrders.length} sub={`${totalUncovered} items`} chart="bars" onClick={() => setTab('pending')}/>
-          <KpiTile variant="hero" tone="forest" label="Total CO Value" value={fmtCr(totalValue)} sub="across pending COs" chart="line"/>
-          <KpiTile variant="hero" tone="teal" label="Orphan POs" value={orphanOrders.length} sub="post-approval · CO cancelled" chart="bars" onClick={() => setTab('orphan')}/>
+        {/* KPI tiles — the shared <Stat/>. Same values, same tab targets; only the
+            component changed. */}
+        <div className="ph-bento o-bento-flat">
+          <Stat label="Pending Coverage" value={pendingOrders.length}
+            foot={<><b>{totalUncovered}</b> items</>} onClick={() => setTab('pending')} />
+          <Stat label="Total CO Value" value={fmtCr(totalValue)} foot="across pending COs" />
+          <Stat label="Orphan POs" value={orphanOrders.length}
+            foot="post-approval · CO cancelled" onClick={() => setTab('orphan')} />
           {/* PO exists but the vendor does not have it — the failure that hid 13 POs
               for 74-99 days. Counted so it can be managed, not just noticed. */}
-          <KpiTile label="PO Not Placed" value={staleUnplaced.count}
-            sub={staleUnplaced.stale > 0 ? `${staleUnplaced.stale} past SLA` : 'awaiting despatch to vendor'}
-            accent={staleUnplaced.stale > 0 ? 'amber' : null}
-            onClick={() => setTab('unplaced')}/>
-          <KpiTile label="Fully Covered" value={timelineOrders.filter(o => o.status !== 'cancelled' && o._coveredItems >= o._totalItems).length} sub="all items linked"/>
-          <KpiTile label="Cancelled COs" value={timelineOrders.filter(o => o.status === 'cancelled').length} sub="this FY"/>
+          <Stat label="PO Not Placed" value={staleUnplaced.count}
+            warn={staleUnplaced.stale > 0}
+            foot={staleUnplaced.stale > 0 ? <><b>{staleUnplaced.stale}</b> past SLA</> : 'awaiting despatch to vendor'}
+            onClick={() => setTab('unplaced')} />
+          <Stat label="Fully Covered"
+            value={timelineOrders.filter(o => o.status !== 'cancelled' && o._coveredItems >= o._totalItems).length}
+            foot="all items linked" />
+          <Stat label="Cancelled COs"
+            value={timelineOrders.filter(o => o.status === 'cancelled').length} foot="this FY" />
         </div>
 
         {/* Timeline — filters on CO created date */}
@@ -343,7 +354,7 @@ export default function ProcurementOrders() {
           <div className="o-loading">Loading…</div>
         ) : (
           <div className="ol-wrap">
-            <div className="ol-row ol-head" style={{ gridTemplateColumns: '140px minmax(0, 1.4fr) 130px 120px 110px 110px 130px' }}>
+            <div className="ol-row ol-head pco-row">
               <div>Order #</div>
               <div>Customer</div>
               <div>Status</div>
@@ -366,7 +377,7 @@ export default function ProcurementOrders() {
                   const isCancelled = o.status === 'cancelled'
                   const statusColor = STATUS_COLORS[o.status] || '#94A3B8'
                   return (
-                    <div key={o.id} className="ol-row ol-data" style={{ gridTemplateColumns: '140px minmax(0, 1.4fr) 130px 120px 110px 110px 130px' }}>
+                    <div key={o.id} className="ol-row ol-data pco-row">
                       <div className="ol-cell">
                         <div className="ol-num" style={{ color: isCancelled ? '#B91C1C' : 'var(--ssc-blue)', textDecoration: isCancelled ? 'line-through' : 'none' }} onClick={() => navigate('/orders/' + o.id)}>{o.order_number}</div>
                       </div>
@@ -482,33 +493,6 @@ export default function ProcurementOrders() {
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
+// KpiTile / KpiChart lived here — the tiles above are the shared <Stat/> now.
+// .kpi-tile / .kt-* stay in orders-redesign.css; other pages still render them.
+
