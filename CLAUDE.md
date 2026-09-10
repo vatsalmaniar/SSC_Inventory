@@ -30,10 +30,63 @@ one-off spinners). To stop this:
    and `src/styles` for something that already does the job and use it. Cross-module
    chrome (e.g. the **Live** pill = `.meta-pill.live` + `.meta-dot` in global.css) is
    defined once and shared — do not re-create it per module.
-4. **New pages must visually match existing pages.** The Orders dashboard
-   (`Orders.jsx` / `orders-redesign.css`) is the reference design language: Geist,
-   `#1a73e8` accent, `#f8f9fa` page background, 14px `--o-radius`, 600-max weights.
+4. **New pages must visually match existing pages.** Geist, `#1a73e8` accent,
+   `#f8f9fa` page background, 14px `--o-radius`, 600-max weights. The bento
+   composition below is the current reference — see "The bento design language".
    Adding a new one-off style is a **last resort — flag it to the user first.**
+5. **`KpiTile` is retired.** It was copy-pasted into 13 pages. Twelve are gone; only
+   `CRMDashboard.jsx` still defines and renders one. Use the shared `<Stat/>`.
+   `.kpi-tile` / `.kt-*` remain in `orders-redesign.css` for that one page — delete
+   them when CRM is converted.
+
+### The bento design language — USE THIS FOR EVERY NEW DASHBOARD
+Established Sep 2026 across Orders, Procurement, FC, Billing, People and Inventory.
+A new module must look like these, not invent a fifth style.
+
+**The dashboard composition** (`/orders`, `/procurement`, `/fc` are the references):
+
+```
+<div className="ph-bento">                     6-col grid, from people-home.css
+  <Stat … /> x5                                cols 1-5, row 1
+  <div className="ph-wide ph-anchor">          cols 1-5, row 2 — the headline number
+    …head with big value + .ph-anchor-stats…   AND A CHART. An anchor with no chart
+    <TrendChart … />                           has a dead lower half.
+  </div>
+  <div className="card ph-tall o-pipe">        col 6, spans BOTH rows — a ranked list
+</div>
+<div className="o-mid">                        320px panel + wide card
+<div className="dash-row-3">                   three action lists
+```
+
+**List pages** (`/orders/list`, `/fc/grn`, …): a flat `.ph-bento.o-bento-flat` tile
+row, then the `.ol-wrap` / `.ol-row` table. Nothing else.
+
+**The pieces — never rebuild these:**
+| Need | Use |
+|---|---|
+| KPI tile | `<Stat/>` — `src/components/StatTile.jsx`. `warn` for bad states, `foot` for context |
+| Time series | `<TrendChart/>` — optional `compare` for a second series on ONE shared y-scale |
+| Rate / composition ring | `<StatusDonut/>` — `src/components/StatusDonut.jsx` |
+| Bars comparing quantities | `.dash-vs` / `.dash-vs-row` / `.dash-vs-track` |
+| Ranked list in the tall column | `.o-pipe-list` / `.o-pipe-row` |
+| Table | `.ol-wrap` / `.ol-row ol-head` / `.ol-row ol-data`, one grid class per table |
+
+**Rules learned the hard way — each of these was a real bug:**
+1. **NO PIE CHARTS.** Four modules had a funnel card *and* a pie over the same data.
+   Merge them: the bar is the count, the value follows it. There is no pie anywhere now.
+2. **Exclude the terminal stage from a pipeline chart.** `delivered` / `closed` dwarf
+   every live stage and flatten them to slivers. Say so in the eyebrow.
+3. **Cap `.ph-tall`.** It spans both bento rows, so its content drives the row heights of
+   the whole grid. A 20-row list made the five stat tiles 700px tall.
+4. **Never put a column template in `style={{gridTemplateColumns}}`.** It gets repeated on
+   the header and every row and they drift — ATP had an 8-column header over 7-column
+   rows. It also has specificity 1,0,0,0 and silently beats the mobile restack.
+5. **Fixed heights are for side-by-side columns only.** Release them below 1000px or a
+   phone gets a nested scroll region inside a page that should just scroll.
+6. **Don't fix dead space by growing a card** — that just moves the emptiness inside it.
+   Shrink the row.
+7. **Deleting from a shared stylesheet? `grep -rn` the import first.** `login.css` had two
+   consumers; checking only the page in front of me shipped a broken `/change-password`.
 
 ### Shared components & helpers (find these before searching blind)
 | What | Where |
