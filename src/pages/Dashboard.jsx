@@ -105,7 +105,15 @@ export default function Dashboard() {
       return q.range(from, to)
     }))
     if (isAdmin) {
-      queries.push(sb.from('purchase_orders').select('status,total_amount').eq('is_test', false).gte('created_at', FY_START))
+      // PAGED. Unpaged this hit PostgREST's 1000-row cap against 1,498 FY purchase
+      // orders, so every procurement figure on this dashboard — open PO value, the
+      // purchase side of Sales vs purchase, the approval count — was built from two
+      // thirds of the data. Same trap /procurement had.
+      queries.push(fetchAll((from, to) => sb.from('purchase_orders')
+        .select('status,total_amount')
+        .eq('is_test', false).gte('created_at', FY_START)
+        .order('created_at', { ascending: false }).order('id', { ascending: false })
+        .range(from, to)))
       // PAGED: 4,231 stock rows is past PostgREST's 1000-row cap. Unpaged, the low/out
       // counts were computed from the first 1000 rows only — understating both.
       queries.push(fetchAll((from, to) => sb.from('inventory')

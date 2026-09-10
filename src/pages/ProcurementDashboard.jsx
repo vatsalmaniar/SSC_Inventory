@@ -3,8 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { FY_START } from '../lib/fmt'
 import { fetchActivePoCoveredQty, lineIsHandled, poSlaState, SLA_APPROVE_HOURS, SLA_PLACE_HOURS } from '../lib/coverage'
+import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import Stat from '../components/StatTile'
+import TrendChart from '../components/TrendChart'
 import '../styles/orders-redesign.css'
+// .ph-bento / .ph-stat / .dash-vs — the shared language the rest of the app uses.
+import '../styles/people-home.css'
+import '../styles/orders-bento.css'
 
 function fmtCr(val) {
   if (!val) return '₹0'
@@ -23,8 +29,13 @@ const PO_STATUS_COLORS = {
   acknowledged:'#0F766E', partially_received:'#D97706', material_received:'#22C55E',
   closed:'#047857', cancelled:'#EF4444',
 }
+const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
 const PIPELINE_KEYS = ['draft','pending_approval','approved','placed','acknowledged','partially_received','material_received','closed']
 
+// KpiTile / KpiChart / a local pie StatusDonut lived at the bottom of this file. The
+// bento above uses the shared <Stat/> and the pipeline is .dash-vs bars, so all three
+// are gone. Their CSS stays in orders-redesign.css — other pages still render it.
 export default function ProcurementDashboard() {
   const navigate = useNavigate()
   const [user, setUser] = useState({ name:'', role:'' })
@@ -32,6 +43,10 @@ export default function ProcurementDashboard() {
   const [coOrders, setCoOrders] = useState([])
   const [pendingGrn, setPendingGrn] = useState(0)
   const [pendingInward, setPendingInward] = useState(0)
+  // Value actually received per month, from procurement_received_by_month().
+  // The receipt link is at LINE level (grn.po_id is NULL on 1,451 of 1,452 GRNs), so this
+  // is a three-table join done once in the database rather than in the browser.
+  const [receivedByMonth, setReceivedByMonth] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { init() }, [])
@@ -45,14 +60,27 @@ export default function ProcurementDashboard() {
     setUser({ name: profile?.name || '', role })
 
     const [posRes, grnCountRes, inwardCountRes] = await Promise.all([
-      sb.from('purchase_orders').select('id,po_number,status,total_amount,vendor_name,created_at,submitted_at,approved_at,placed_at')
-        .eq('is_test', false).gte('created_at', FY_START).order('created_at', { ascending: false }),
+      // PAGED. This was a plain select against PostgREST's 1000-row cap while the FY
+      // holds 1,498 purchase orders — so this dashboard was built from 1,000 of them and
+      // every figure on it (open POs, total value, the vendor ranking, the funnel, the
+      // SLA scores) was understated by a third, silently. Same trap as the orders
+      // dashboard's Total Order Value. The stable tiebreaker keeps paging deterministic.
+      fetchAll((from, to) => sb.from('purchase_orders')
+        .select('id,po_number,status,total_amount,vendor_name,order_id,created_at,submitted_at,approved_at,placed_at')
+        .eq('is_test', false).gte('created_at', FY_START)
+        .order('created_at', { ascending: false }).order('id', { ascending: false })
+        .range(from, to)),
       sb.from('grn').select('id', { count:'exact', head:true }).in('status', ['draft','checking']).eq('is_test', false),
       sb.from('purchase_invoices').select('id', { count:'exact', head:true }).in('status', ['three_way_check','invoice_pending']).eq('is_test', false),
     ])
+    if (posRes.error) console.error('Procurement PO load error:', posRes.error)
+    if (posRes.truncated) console.warn('Procurement: hit fetch ceiling — figures may be short.')
     setPos(posRes.data || [])
     setPendingGrn(grnCountRes.count || 0)
     setPendingInward(inwardCountRes.count || 0)
+    const { data: recv, error: recvErr } = await sb.rpc('procurement_received_by_month', { p_from: FY_START })
+    if (recvErr) console.error('received-by-month:', recvErr.message)
+    setReceivedByMonth(recv || [])
 
     const { data: coData } = await sb.from('orders')
       .select('id,order_number,customer_name,status,order_items(id,qty,total_price,cancelled_qty,dispatched_qty,stock_qty,procurement_source,line_status)')
@@ -122,7 +150,9 @@ export default function ProcurementDashboard() {
   const partialPos = pos.filter(p => p.status === 'partially_received')
   const receivedPos = pos.filter(p => p.status === 'material_received')
   const closedPos = pos.filter(p => p.status === 'closed')
-  const totalPoValue = openPos.reduce((s, p) => s + (p.total_amount || 0), 0)
+  // NOTE: the face value of open POs (sum of total_amount) is deliberately NOT shown
+  // anywhere. It counts goods already received against partially-received POs, so it
+  // always overstates what is actually outstanding. Use orderedTotal - receivedTotal.
 
   // Vendor leaderboard
   const vendorAgg = Object.values(pos.reduce((m, p) => {
@@ -137,7 +167,62 @@ export default function ProcurementDashboard() {
   const funnel = PIPELINE_KEYS.map(k => ({
     id: k, label: PO_STATUS_LABELS[k], color: PO_STATUS_COLORS[k],
     count: pos.filter(p => p.status === k).length,
+    // Value per stage. total_amount is the PO value used everywhere else on this page
+    // (the vendor leaderboard, every list row) — same field, grouped.
+    value: pos.filter(p => p.status === k).reduce((a, p) => a + (p.total_amount || 0), 0),
   })).filter(s => s.count > 0)
+
+  // ── PCO vs PO ────────────────────────────────────────────────────────────────
+  // The real type split, and it is NOT the po_type column: po_type reads 'SO' on all
+  // 1,498 rows and distinguishes nothing. What separates them is order_id, which lines
+  // up with the number prefix exactly — all 1,206 SSC/PCO… rows carry an order_id and
+  // all 292 SSC/PO… rows do not. PCO = bought against a customer order; PO = bought for
+  // stock. Stock buying is 19% of the count but 47% of the value, which nothing on this
+  // page showed before.
+  const isPco = p => !!p.order_id
+  const pcoPos = pos.filter(isPco)
+  const stockPos = pos.filter(p => !isPco(p))
+  const pcoValue = pcoPos.reduce((a, p) => a + (p.total_amount || 0), 0)
+  const stockValue = stockPos.reduce((a, p) => a + (p.total_amount || 0), 0)
+
+  // Approved but not yet sent to the vendor — "pending to place".
+  const toPlace = pos.filter(p => p.status === 'approved')
+  const toPlacePco = toPlace.filter(isPco).length
+
+  // Committed to vendors and not yet in: placed + acknowledged + partially received.
+  // Partially-received is the bulk of it and had no tile at all before.
+  const awaiting = pos.filter(p => ['placed','acknowledged','partially_received'].includes(p.status))
+
+  const cancelledPos = pos.filter(p => p.status === 'cancelled')
+  const cancelValue = cancelledPos.reduce((a, p) => a + (p.total_amount || 0), 0)
+  const cancelPct = pos.length ? (cancelledPos.length / pos.length * 100) : 0
+
+  // ── Ordered vs received, by month ────────────────────────────────────────────
+  // Ordered = PO value by the month the PO was raised. Received = the RPC's figure,
+  // which prices GRN lines through po_items with the nullif() guard (that column is zero
+  // on every row). The two are NOT the same POs in the same month — goods ordered in
+  // June arrive in July — which is the point of putting them on one axis.
+  const orderedVsReceived = (() => {
+    const m = new Map()
+    const key = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}` }
+    pos.forEach(p => {
+      if (!p.created_at || p.status === 'cancelled') return
+      const k = key(p.created_at)
+      const e = m.get(k) || { ordered: 0, received: 0 }
+      e.ordered += (p.total_amount || 0)
+      m.set(k, e)
+    })
+    ;(receivedByMonth || []).forEach(r => {
+      const k = key(r.month_start)
+      const e = m.get(k) || { ordered: 0, received: 0 }
+      e.received += Number(r.received_value) || 0
+      m.set(k, e)
+    })
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([k, v]) => ({ key: k, label: MONTH_SHORT[Number(k.slice(5, 7)) - 1], ...v }))
+  })()
+  const receivedTotal = orderedVsReceived.reduce((a, x) => a + x.received, 0)
+  const orderedTotal = orderedVsReceived.reduce((a, x) => a + x.ordered, 0)
 
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' })()
 
@@ -147,7 +232,14 @@ export default function ProcurementDashboard() {
         <div className="page-head">
           <div>
             <h1 className="page-title">{greeting}, {user.name?.split(' ')[0] || ''}</h1>
-            <div className="page-sub">Procurement · {openPos.length} open POs · {fmtCr(totalPoValue)} value</div>
+            {/* "value" alone read as a contradiction against the anchor's ₹20.32 Cr Ordered.
+                Both are right and they answer different questions, so each says which. */}
+            {/* This said "₹14.11 Cr still open", the FACE VALUE of open POs — which
+                includes ₹5.48 Cr of goods already delivered against those very POs
+                (161 of them are partially received). It contradicted the anchor's
+                ₹8.63 Cr yet-to-receive by exactly that double count. Both numbers now
+                come from the same two variables, so they cannot drift apart. */}
+            <div className="page-sub">Procurement · {openPos.length} open POs · {fmtCr(Math.max(0, orderedTotal - receivedTotal))} yet to receive</div>
           </div>
           <div className="page-meta">
             <div className="meta-pill live"><span className="meta-dot"/> Live</div>
@@ -163,113 +255,101 @@ export default function ProcurementDashboard() {
           <div className="o-loading">Loading…</div>
         ) : (
           <>
-            <div className="kpi-row">
-              <KpiTile variant="hero" tone="deep" label="Open POs" value={openPos.length} sub={`${fmtCr(totalPoValue)} value`} chart="line" onClick={() => navigate('/procurement/po')}/>
-              <KpiTile variant="hero" tone="forest" label="Received / Closed" value={receivedPos.length + closedPos.length} sub="completed FYTD" chart="bars" onClick={() => navigate('/procurement/po')}/>
-              <KpiTile variant="hero" tone="teal" label="Awaiting GRN" value={placedPos.length + partialPos.length} sub={`${partialPos.length} partial`} chart="bars" onClick={() => navigate('/fc/grn')}/>
-              <KpiTile label="Pending Approval" value={pendingAppr.length} sub="POs to approve" accent={pendingAppr.length > 0 ? 'amber' : null} onClick={() => navigate('/procurement/po')}/>
-              <KpiTile label="CO Needing PO" value={coOrders.length} sub="orders uncovered" accent={coOrders.length > 0 ? 'amber' : null} onClick={() => navigate('/procurement/orders')}/>
-            </div>
+            {/* ── Bento ──────────────────────────────────────────────────────────
+                Same composition as /orders and /people: five tiles, a tall column
+                beside them, a wide anchor underneath carrying the chart. */}
+            <div className="ph-bento">
+              <Stat label="PCO · Against Orders" value={pcoPos.length}
+                foot={<><b>{fmtCr(pcoValue)}</b> committed</>}
+                onClick={() => navigate('/procurement/po')} />
+              <Stat label="PO · Stock Purchase" value={stockPos.length}
+                foot={<><b>{fmtCr(stockValue)}</b> committed</>}
+                onClick={() => navigate('/procurement/po')} />
+              <Stat label="Pending to Place" value={toPlace.length} warn={toPlace.length > 0}
+                foot={<><b>{toPlacePco}</b> PCO · approved, not sent</>}
+                onClick={() => navigate('/procurement/po')} />
+              {/* A rupee figure here repeated the double count above, so this is the
+                  PO COUNT with vendors; the honest outstanding value is on the anchor. */}
+              <Stat label="Awaiting Receipt" value={awaiting.length}
+                foot={<><b>{partialPos.length}</b> part received</>}
+                onClick={() => navigate('/fc/grn')} />
+              <Stat label="Cancelled Rate" value={`${cancelPct.toFixed(1)}%`}
+                warn={cancelPct > 15}
+                foot={<><b>{cancelledPos.length}</b> POs · {fmtCr(cancelValue)}</>}
+                onClick={() => navigate('/procurement/po')} />
 
-            <div className="o-mid">
-              <div className="rep-panel">
-                <div className="rp-head">
-                  <div className="rp-title">Top Vendors</div>
-                  <div className="rp-sub">FYTD · By PO value</div>
+              {/* Anchor — ordered against received, the question this page exists to
+                  answer. The gap between the lines is money committed but not yet in. */}
+              <div className="ph-wide ph-anchor">
+                <div className="ph-anchor-head">
+                  <div>
+                    <div className="ph-anchor-eyebrow">Ordered vs received · FY to date</div>
+                    <div className="ph-anchor-v">{orderedTotal > 0 ? `${Math.round(receivedTotal / orderedTotal * 100)}%` : '—'}</div>
+                    <div className="ph-anchor-sub">{fmtCr(receivedTotal)} received of {fmtCr(orderedTotal)} ordered · cancelled POs excluded</div>
+                  </div>
+                  <div className="ph-anchor-stats">
+                    {/* Three different PO totals exist and all three are legitimate:
+                        every PO raised (₹21.62 Cr), non-cancelled (₹20.32 Cr, this one),
+                        and still-open (₹14.11 Cr, the header). Each label says which. */}
+                    <div title="Every PO raised this FY except cancelled ones">
+                      <div className="ph-as-l">Ordered</div><div className="ph-as-v">{fmtCr(orderedTotal)}</div></div>
+                    <div title="Goods actually received, priced from GRN lines through po_items">
+                      <div className="ph-as-l">Received</div><div className="ph-as-v">{fmtCr(receivedTotal)}</div></div>
+                    {/* WAS "In transit" (placed+acknowledged+partially received PO value)
+                        and "Part received". Both DOUBLE COUNTED: a partially-received PO
+                        contributed its WHOLE value here while the part that had already
+                        arrived was also inside Received. ₹5.40 Cr of the old ₹13.10 Cr was
+                        counted twice, which is why the figures would not add up.
+                        Yet to receive is the true complement: Ordered − Received. */}
+                    <div title="Ordered minus received — value committed and not yet in">
+                      <div className="ph-as-l">Yet to receive</div><div className="ph-as-v">{fmtCr(Math.max(0, orderedTotal - receivedTotal))}</div></div>
+                    <div title="Approved but not yet sent to the vendor">
+                      <div className="ph-as-l">To place</div><div className="ph-as-v">{toPlace.length}</div></div>
+                    <div title="GRNs in draft or checking — goods in, not yet inspected">
+                      <div className="ph-as-l">Pending GRN</div><div className="ph-as-v">{pendingGrn}</div></div>
+                    {/* pendingInward is fetched in loadData; its old card was merged in here
+                        rather than dropped, which would have left the query orphaned. */}
+                    <div title="Purchase invoices in 3-way check or pending entry">
+                      <div className="ph-as-l">Inward inv.</div><div className="ph-as-v">{pendingInward}</div></div>
+                  </div>
                 </div>
-                <div className="rp-list">
-                  {vendorAgg.length === 0 ? (
-                    <div className="o-empty">No vendor activity yet</div>
-                  ) : vendorAgg.map((v, i) => {
-                    const seed = v.name; let h = 0; for (let j = 0; j < seed.length; j++) h = (h * 31 + seed.charCodeAt(j)) & 0xffffffff
-                    const palette = ['#1a73e8','#0F766E','#15803d','#B45309','#0E7490','#5B21B6','#0369A1','#475569','#C2410C','#0d9488']
-                    const color = palette[Math.abs(h) % palette.length]
-                    return (
-                      <div key={v.name} className="rp-row" onClick={() => navigate('/procurement/po')}>
-                        <div className="rp-rank">{i+1}</div>
-                        <div className="rp-avatar" style={{ background: color }}>{(v.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-                        <div className="rp-info">
-                          <div className="rp-name">{v.name}</div>
-                          <div className="rp-bar"><div className="rp-fill" style={{ width: `${(v.value/vendorMax)*100}%`, background: color }}/></div>
-                        </div>
-                        <div className="rp-val">{fmtCr(v.value)}</div>
+                {/* Ordered is grouped by the month the PO was RAISED; received by the
+                    month the goods arrived. They are deliberately not the same POs —
+                    June's orders land in July, and that lag is what the gap shows. */}
+                <TrendChart
+                  points={orderedVsReceived.map(x => ({ key: x.key, label: x.label, value: x.ordered }))}
+                  compare={orderedVsReceived.map(x => ({ value: x.received }))}
+                  labels={{ primary: 'Ordered', compare: 'Received' }}
+                  fmt={v => fmtCr(v)} height={150} />
+              </div>
+
+              {/* Top Vendors — the tall column, same ranked-list shape as /orders. */}
+              <div className="card ph-tall o-pipe">
+                <div className="card-head">
+                  <div><div className="card-eyebrow">FYTD · By PO value</div><div className="card-title">Top Vendors</div></div>
+                  <span className="trend-pill mono">{vendorAgg.length}</span>
+                </div>
+                <div className="o-pipe-list">
+                  {vendorAgg.length === 0 ? <div className="o-empty">No vendor activity yet</div> : vendorAgg.map((v, i) => (
+                    <div key={v.name} className="o-pipe-row" onClick={() => navigate('/procurement/po')}
+                      title={`${v.count} PO${v.count === 1 ? '' : 's'}`}>
+                      <div className="o-pipe-top">
+                        <span className="o-cust-rank mono">{i+1}</span>
+                        <span className="o-pipe-name">{v.name}</span>
+                        <span className="o-pipe-n mono">{fmtCr(v.value)}</span>
                       </div>
-                    )
-                  })}
-                </div>
-                <div className="rp-foot">
-                  <div className="rp-foot-cell">
-                    <div className="rp-foot-label">VENDORS</div>
-                    <div className="rp-foot-val">{vendorAgg.length}</div>
-                  </div>
-                  <div className="rp-foot-cell">
-                    <div className="rp-foot-label">TOTAL VALUE</div>
-                    <div className="rp-foot-val">{fmtCr(vendorAgg.reduce((s,v)=>s+v.value,0))}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="o-anal">
-                <div className="card anal-card">
-                  <div className="card-head">
-                    <div>
-                      <div className="card-eyebrow">Pipeline · By Status</div>
-                      <div className="card-title">PO Pipeline</div>
+                      <div className="o-pipe-bar"><span style={{ width: `${(v.value/vendorMax)*100}%`, background: 'var(--ssc-blue)' }} /></div>
+                      <div className="o-pipe-v mono">{v.count} PO{v.count === 1 ? '' : 's'}</div>
                     </div>
-                    <span className="trend-pill mono">{openPos.length} open</span>
-                  </div>
-                  <div className="funnel">
-                    {funnel.length === 0 ? <div className="o-empty">No POs yet</div> : funnel.map(s => {
-                      const max = Math.max(...funnel.map(x => x.count))
-                      return (
-                        <div key={s.id} className="funnel-row">
-                          <div className="funnel-label">
-                            <span className="funnel-dot" style={{ background: s.color }}/>
-                            <span className="funnel-name">{s.label}</span>
-                          </div>
-                          <div className="funnel-bar-wrap"><div className="funnel-bar" style={{ width: `${(s.count/max)*100}%`, background: s.color }}/></div>
-                          <div className="funnel-val">{s.count}</div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="card anal-card">
-                  <div className="card-head">
-                    <div>
-                      <div className="card-eyebrow">Distribution · By Stage</div>
-                      <div className="card-title">PO Mix</div>
-                    </div>
-                    <span className="trend-pill mono">{pos.length} total</span>
-                  </div>
-                  <StatusDonut groups={funnel} total={funnel.reduce((s,g) => s + g.count, 0)} centerLabel="POs"/>
-                </div>
-
-                <div className="card anal-card full">
-                  <div className="card-head">
-                    <div>
-                      <div className="card-eyebrow">Inward Activity</div>
-                      <div className="card-title">GRN & Invoice Queue</div>
-                    </div>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 12, padding: 4 }}>
-                    <div className="card" style={{ padding: 14, cursor: 'pointer' }} onClick={() => navigate('/fc/grn')}>
-                      <div style={{ fontSize: 11, color: 'var(--o-muted)', fontFamily: 'Geist Mono, monospace', letterSpacing: '0.06em', textTransform:'uppercase' }}>PENDING GRNs</div>
-                      <div style={{ fontSize: 28, fontWeight: 600, fontFamily: 'Geist Mono, monospace', color: pendingGrn > 0 ? '#B45309' : 'var(--o-ink)', marginTop: 4 }}>{pendingGrn}</div>
-                      <div style={{ fontSize: 11, color: 'var(--o-muted-2)', marginTop: 2 }}>awaiting inspection</div>
-                    </div>
-                    <div className="card" style={{ padding: 14, cursor: 'pointer' }} onClick={() => navigate('/procurement/invoices')}>
-                      <div style={{ fontSize: 11, color: 'var(--o-muted)', fontFamily: 'Geist Mono, monospace', letterSpacing: '0.06em', textTransform:'uppercase' }}>INWARD INVOICES</div>
-                      <div style={{ fontSize: 28, fontWeight: 600, fontFamily: 'Geist Mono, monospace', color: pendingInward > 0 ? '#0F766E' : 'var(--o-ink)', marginTop: 4 }}>{pendingInward}</div>
-                      <div style={{ fontSize: 11, color: 'var(--o-muted-2)', marginTop: 2 }}>3-way / pending</div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
 
-            <div className="dash-row-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
+            <div className="o-mid o-mid-proc">
+              <div className="proc-left">
+              {/* SLA keeps its card, unchanged — poSlaState is the one place the clock
+                  is judged and nothing here recomputes it. */}
               <div className="card">
                 <div className="card-head">
                   <div>
@@ -277,12 +357,12 @@ export default function ProcurementDashboard() {
                     <div className="card-title">PO Turnaround SLA</div>
                   </div>
                   {(slaScore.open.approval + slaScore.open.placement) > 0 && (
-                    <span className="trend-pill mono" style={{ color: '#B91C1C' }}>
+                    <span className="trend-pill mono is-bad">
                       {slaScore.open.approval + slaScore.open.placement} past SLA
                     </span>
                   )}
                 </div>
-                <div style={{ padding: '4px 0 2px' }}>
+                <div className="proc-sla">
                   <SlaRow label={`Approved within ${SLA_APPROVE_HOURS}h`} owner="Approver"
                     pct={slaScore.now.approve} prev={slaScore.prev.approve} n={slaScore.now.apprN}
                     openBreaches={slaScore.open.approval} />
@@ -292,21 +372,98 @@ export default function ProcurementDashboard() {
                 </div>
               </div>
 
-              <ListCard title="Pending Approval" eyebrow="Action · Now" badge={`${pendingAppr.length} POs`} badgeColor="#B45309"
-                items={pendingAppr.slice(0, 8)} emptyText="No POs pending approval"
-                renderItem={(o) => ({ left: o.po_number, leftColor: '#B45309', sub: o.vendor_name || '—', right: fmtCr(o.total_amount), status: 'pending_approval' })}
-                onClick={(o) => navigate('/procurement/po/' + o.id)}/>
-              <ListCard title="CO Orders Need PO" eyebrow="Awaiting coverage" badge={`${coOrders.length} orders`} badgeColor="#1a73e8"
-                items={coOrders.slice(0, 8)} emptyText="All CO orders fully covered"
-                renderItem={(o) => ({ left: o.order_number, leftColor: '#1a73e8', sub: o.customer_name, right: `${o._coveredItems}/${o._totalItems}`, status: 'placed', label: 'covered' })}
-                onClick={(o) => navigate('/procurement/po/new?order_id=' + o.id)}/>
-              <ListCard title="Placed · Awaiting Delivery" eyebrow="Vendor · In transit" badge={`${placedPos.length} POs`} badgeColor="#0F766E"
-                items={placedPos.slice(0, 8)} emptyText="No POs awaiting delivery"
-                renderItem={(o) => ({ left: o.po_number, leftColor: '#0F766E', sub: o.vendor_name || '—', right: fmtCr(o.total_amount), status: o.status })}
-                onClick={(o) => navigate('/procurement/po/' + o.id)}/>
-            </div>
+              {/* PCO vs PO — filled the gap under the SLA card rather than sitting on top
+                  of the pipeline, which pushed the stage bars down. */}
+              <div className="card proc-split-card">
+                <div className="card-head">
+                  <div>
+                    <div className="card-eyebrow">FYTD · By purchase reason</div>
+                    <div className="card-title">PCO vs PO</div>
+                  </div>
+                  <span className="trend-pill mono">{pos.length}</span>
+                </div>
+                {/* Two 100% bars — one for count, one for value. The point is where they
+                    DISAGREE: PCO is 81% of the POs but only 53% of the money, so a stock
+                    buy is far larger individually. Two independent bars could not show
+                    that; one shared 100% scale shows it at a glance.
 
-            <div className="card" style={{ marginTop: 16 }}>
+                    The split is order_id — a PO carrying one was raised against a customer
+                    order (SSC/PCO…), one without is a stock buy (SSC/PO…). po_type does
+                    NOT say this; it reads 'SO' on all 1,498 rows. */}
+                {pos.length > 0 && (() => {
+                  const totalV = pcoValue + stockValue
+                  const nPct = Math.round(pcoPos.length / pos.length * 100)
+                  const vPct = totalV > 0 ? Math.round(pcoValue / totalV * 100) : 0
+                  const avgPco = pcoPos.length ? pcoValue / pcoPos.length : 0
+                  const avgStock = stockPos.length ? stockValue / stockPos.length : 0
+                  const bar = (pct, a, b) => (
+                    <div className="proc-blk">
+                      <div className="proc-bar">
+                        <span className="proc-bar-a" style={{ width: `${pct}%` }} />
+                        <span className="proc-bar-b" style={{ width: `${100 - pct}%` }} />
+                      </div>
+                      <div className="proc-leg">
+                        <span><i className="proc-dot is-a" />{a}</span>
+                        <span>{b}<i className="proc-dot is-b" /></span>
+                      </div>
+                    </div>
+                  )
+                  return (
+                    <div className="proc-split" onClick={() => navigate('/procurement/po')}>
+                      <div className="proc-cap">By count · {pos.length} POs</div>
+                      {bar(nPct, `PCO ${pcoPos.length} · ${nPct}%`, `${stockPos.length} · ${100 - nPct}% PO`)}
+                      <div className="proc-cap">By value · {fmtCr(totalV)}</div>
+                      {bar(vPct, `PCO ${fmtCr(pcoValue)}`, `${fmtCr(stockValue)} PO`)}
+                      {avgPco > 0 && (
+                        <div className="proc-note">
+                          A stock PO averages <b>{(avgStock / avgPco).toFixed(1)}×</b> the value of an order-backed one
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+              </div>
+              </div>
+
+              <div className="proc-right">
+              {/* PO Pipeline — the funnel and the "PO Mix" donut were two cards over the
+                  same stages, one counting and one showing share. Merged: the bar is the
+                  count, the rupee figure beside it is the value. Closed is excluded from
+                  the scale — it is the terminal stage and dwarfs every live one, exactly
+                  as delivered did on the orders pipeline. */}
+              <div className="card o-pipe-wide">
+                <div className="card-head">
+                  <div>
+                    <div className="card-eyebrow">Pipeline · By stage · excludes closed</div>
+                    <div className="card-title">PO Pipeline</div>
+                  </div>
+                  <span className="trend-pill mono">{openPos.length} open</span>
+                </div>
+                {(() => {
+                  const live = funnel.filter(f => f.id !== 'closed')
+                  if (!live.length) return <div className="o-empty">No POs yet</div>
+                  const max = Math.max(...live.map(x => x.count), 1)
+                  return (
+                    <div className="dash-vs">
+                      {live.map(f => (
+                        <div key={f.id} className="dash-vs-row o-pipe-w-row" onClick={() => navigate('/procurement/po')}>
+                          <span className="dash-vs-l" title={f.label}>
+                            <span className="o-pipe-dot" style={{ background: f.color }} />
+                            <span className="o-pipe-w-l">{f.label}</span>
+                          </span>
+                          <span className="dash-vs-track">
+                            <span style={{ width: `${(f.count / max) * 100}%`, background: f.color }} />
+                          </span>
+                          <span className="dash-vs-v">{f.count}<em className="o-pipe-w-v">{fmtCr(f.value)}</em></span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div className="card proc-list-card proc-recent">
               <div className="card-head">
                 <div>
                   <div className="card-eyebrow">FYTD · Closed</div>
@@ -333,6 +490,27 @@ export default function ProcurementDashboard() {
                 ))}
               </div>
             </div>
+              </div>
+            </div>
+
+            <div className="dash-row-3">
+              {/* The SLA card moved up into .o-mid beside the pipeline. It was left here
+                  too, so the page showed PO Turnaround SLA twice. This row is the three
+                  action lists, which is what dash-row-3 is sized for. */}
+              <ListCard title="Pending Approval" eyebrow="Action · Now" badge={`${pendingAppr.length} POs`} badgeColor="#B45309"
+                items={pendingAppr.slice(0, 8)} emptyText="No POs pending approval"
+                renderItem={(o) => ({ left: o.po_number, leftColor: '#B45309', sub: o.vendor_name || '—', right: fmtCr(o.total_amount), status: 'pending_approval' })}
+                onClick={(o) => navigate('/procurement/po/' + o.id)}/>
+              <ListCard title="CO Orders Need PO" eyebrow="Awaiting coverage" badge={`${coOrders.length} orders`} badgeColor="#1a73e8"
+                items={coOrders.slice(0, 8)} emptyText="All CO orders fully covered"
+                renderItem={(o) => ({ left: o.order_number, leftColor: '#1a73e8', sub: o.customer_name, right: `${o._coveredItems}/${o._totalItems}`, status: 'placed', label: 'covered' })}
+                onClick={(o) => navigate('/procurement/po/new?order_id=' + o.id)}/>
+              <ListCard title="Placed · Awaiting Delivery" eyebrow="Vendor · In transit" badge={`${placedPos.length} POs`} badgeColor="#0F766E"
+                items={placedPos.slice(0, 8)} emptyText="No POs awaiting delivery"
+                renderItem={(o) => ({ left: o.po_number, leftColor: '#0F766E', sub: o.vendor_name || '—', right: fmtCr(o.total_amount), status: o.status })}
+                onClick={(o) => navigate('/procurement/po/' + o.id)}/>
+            </div>
+
           </>
         )}
       </div>
@@ -374,7 +552,7 @@ function SlaRow({ label, owner, pct, prev, n, openBreaches, last }) {
 
 function ListCard({ title, eyebrow, badge, badgeColor, items, emptyText, renderItem, onClick }) {
   return (
-    <div className="card">
+    <div className="card proc-list-card">
       <div className="card-head">
         <div>
           <div className="card-eyebrow">{eyebrow}</div>
@@ -408,69 +586,3 @@ function ListCard({ title, eyebrow, badge, badgeColor, items, emptyText, renderI
   )
 }
 
-function KpiTile({ label, value, sub, accent, variant, tone, chart, onClick }) {
-  const isHero = variant === 'hero'
-  return (
-    <div className={`kpi-tile ${isHero ? `kpi-hero tone-${tone}` : ''} ${accent ? `accent-${accent}` : ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
-      {isHero && <KpiChart kind={chart}/>}
-      <div className="kt-top">
-        <div className="kt-label">{label}</div>
-        {onClick && <span className="kt-arrow"><svg viewBox="0 0 14 14" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10 L10 4 M5 4 H10 V9"/></svg></span>}
-      </div>
-      <div className="kt-value">{value}</div>
-      <div className="kt-foot">{sub && <div className="kt-sub mono">{sub}</div>}</div>
-    </div>
-  )
-}
-function KpiChart({ kind }) {
-  if (kind === 'bars') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      {[0.4, 0.6, 0.5, 0.75, 0.55, 0.85, 0.7, 0.95].map((h, i) => (
-        <rect key={i} x={i*15 + 2} y={60 - h*55} width="10" height={h*55} fill="currentColor" opacity="0.18" rx="1"/>
-      ))}
-    </svg>
-  )
-  if (kind === 'line') return (
-    <svg className="kt-chart" viewBox="0 0 120 60" preserveAspectRatio="none">
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M0 45 L20 38 L40 42 L60 28 L80 32 L100 18 L120 22 L120 60 L0 60 Z" fill="currentColor" opacity="0.12"/>
-    </svg>
-  )
-  return null
-}
-
-function StatusDonut({ groups, total, centerLabel = 'TOTAL' }) {
-  if (!groups.length || !total) return <div className="donut-wrap"><div style={{ color:'var(--o-muted-2)', fontSize:12 }}>No data</div></div>
-  const size = 130, r = size/2 - 8, inner = r - 18, cx = size/2, cy = size/2
-  let angle = -Math.PI/2
-  const arcs = groups.filter(s => s.count > 0).map(s => {
-    const portion = s.count / total
-    const next = angle + portion * 2 * Math.PI
-    const large = portion > 0.5 ? 1 : 0
-    const x0 = cx + r * Math.cos(angle), y0 = cy + r * Math.sin(angle)
-    const x1 = cx + r * Math.cos(next),  y1 = cy + r * Math.sin(next)
-    const ix0 = cx + inner * Math.cos(angle), iy0 = cy + inner * Math.sin(angle)
-    const ix1 = cx + inner * Math.cos(next),  iy1 = cy + inner * Math.sin(next)
-    const path = `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix0} ${iy0} Z`
-    angle = next
-    return { path, color: s.color, label: s.label, count: s.count, pct: Math.round(portion*100) }
-  })
-  return (
-    <div className="donut-wrap">
-      <svg width={size} height={size}>
-        {arcs.map((a, i) => <path key={i} d={a.path} fill={a.color} opacity="0.92"/>)}
-        <text x={cx} y={cy - 2} textAnchor="middle" fontSize="22" fontWeight="600" fill="#0B1B30" fontFamily="Geist Mono, monospace" style={{ letterSpacing: '-0.02em' }}>{total}</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="8" fill="#6B7280" letterSpacing="0.06em" fontFamily="Geist Mono, monospace">{centerLabel}</text>
-      </svg>
-      <div className="donut-legend">
-        {arcs.slice(0, 6).map((a, i) => (
-          <div key={i} className="dlg-row">
-            <span className="dlg-dot" style={{background: a.color}}/>
-            <span className="dlg-name">{a.label}</span>
-            <span className="dlg-pct mono">{a.pct}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
