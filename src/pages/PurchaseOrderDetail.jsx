@@ -214,7 +214,7 @@ export default function PurchaseOrderDetail() {
     setUserName(profile?.name || '')
     setUserId(session.user.id)
     setSenderEmail(profile?.email || (profile?.username ? profile.username + '@ssccontrol.com' : ''))
-    const { data: users } = await sb.from('profiles').select('id,name,username,role').neq('role','staff')
+    const { data: users } = await sb.from('active_people').select('id,name,username,role').neq('role','staff')
     setAllUsers(users || [])
     await loadPO()
   }

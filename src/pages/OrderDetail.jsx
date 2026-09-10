@@ -194,7 +194,12 @@ export default function OrderDetail() {
     }
     const [{ data: profile }, { data: profileList }] = await Promise.all([
       sb.from('profiles').select('name,role').eq('id', session.user.id).single(),
-      sb.from('profiles').select('id,name,username,role').neq('role','staff').order('name'),
+      // active_people, not profiles: a leaver keeps their role, so Bhavesh Patel and
+      // Akash Devda were still offered in @mention and the staff picker months after
+      // they left. The view drops anyone exited or suspended (sql/active_people_view.sql).
+      // Historical tags are NOT affected — an old comment renders its own stored
+      // tagged_users array, so past mentions of a leaver still show.
+      sb.from('active_people').select('id,name,username,role').neq('role','staff').order('name'),
       loadOrder(),
     ])
     setProfiles(profileList || [])
