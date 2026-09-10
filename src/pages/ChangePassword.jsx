@@ -187,26 +187,19 @@ export default function ChangePassword() {
 
   return (
     <div className="split-wrap">
-      <div className="split-left">
-        <div className="left-orb-top" />
-        <div className="left-orb-bottom" />
-        <div className="left-content">
-          <div><img src="/ssc-logo.svg" alt="SSC Control Pvt. Ltd." style={{height:50,objectFit:'contain',filter:'brightness(0) invert(1)'}}/></div>
-          <div className="left-divider" />
-          <div className="left-headline">Set a new<br/>secure password</div>
-          <div className="left-sub">Strong, unique passwords protect<br/>your account and our data</div>
-          <div className="left-badge">
-            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-            12+ chars · mixed case · digit · symbol
-          </div>
-          <div className="left-tagline">your link to excellence</div>
-        </div>
+      {/* Same shell as Login. This page imports login.css and used to render the split
+          brand panel; the login redesign removed those rules, which left .split-left,
+          .left-orb-*, .left-headline, .left-badge and .left-tagline unstyled here.
+          Two pages share one stylesheet, so they have to share its layout. */}
+      <div className="lg-ambient" aria-hidden="true">
+        <span className="lg-blob lg-blob-a" />
+        <span className="lg-blob lg-blob-b" />
       </div>
 
       <div className="split-right">
         {step === 'form' && (
           <div className="right-inner">
-            <div className="right-eyebrow">{forced ? 'Action required' : 'Account security'}</div>
+            <div className="lg-mark"><img src="/ssc-logo.svg" alt="SSC Control Pvt. Ltd." /></div>
             <div className="right-title">{forced ? 'Update your password' : 'Change password'}</div>
             <div className="right-sub">
               {forced
@@ -284,7 +277,7 @@ export default function ChangePassword() {
 
         {step === 'confirm' && (
           <div className="right-inner">
-            <div className="right-eyebrow">Confirm before saving</div>
+            <div className="lg-mark"><img src="/ssc-logo.svg" alt="SSC Control Pvt. Ltd." /></div>
             <div className="right-title">Save this password</div>
             <div className="right-sub">
               You will need this exact password to log in next time.
@@ -359,7 +352,7 @@ export default function ChangePassword() {
 
         {step === 'mfa' && (
           <div className="right-inner">
-            <div className="right-eyebrow">Verify it's you</div>
+            <div className="lg-mark"><img src="/ssc-logo.svg" alt="SSC Control Pvt. Ltd." /></div>
             <div className="right-title">Enter your 6-digit code</div>
             <div className="right-sub">Open your authenticator app and enter the current code to confirm the password change.</div>
 
