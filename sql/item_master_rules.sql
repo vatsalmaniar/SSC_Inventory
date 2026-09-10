@@ -499,3 +499,49 @@ end $$;
 
 revoke execute on function update_item(text,text,text,text,text,text,integer,text,text) from public, anon;
 grant  execute on function update_item(text,text,text,text,text,text,integer,text,text) to authenticated;
+
+
+-- ── An item is never deleted ────────────────────────────────────────────────
+-- The items table is the backbone of the app, and its part code is the join key
+-- for everything downstream — but NOT as a foreign key. order_items, po_items,
+-- grn_items and inventory all carry item_code as plain text, so the database
+-- would let an item be deleted without a word and leave 1,805 order codes,
+-- 1,618 PO codes, 1,281 GRN codes and 3,494 stock rows pointing at nothing.
+-- No error, no cascade, no way to notice until a report came out wrong.
+--
+-- Until now the only thing standing between that and the data was the
+-- admin_write policy being FOR ALL — which permits DELETE. Four people have
+-- that role.
+--
+-- There is no escape hatch here, deliberately. A retired part is marked, not
+-- removed: item_status = 'Superseded' or 'Discontinued' keeps the row, its
+-- history and its stock, and tells anyone reaching for it what to use instead.
+-- If a row genuinely must go, disabling this trigger as postgres is a visible,
+-- deliberate act — which is exactly the bar that decision should have to clear.
+create or replace function items_are_never_deleted()
+returns trigger
+language plpgsql
+set search_path to public
+as $$
+declare v_orders int; v_pos int; v_grns int; v_stock int;
+begin
+  select count(*) into v_orders from order_items where item_code = old.item_code;
+  select count(*) into v_pos    from po_items    where item_code = old.item_code;
+  select count(*) into v_grns   from grn_items   where item_code = old.item_code;
+  select count(*) into v_stock  from inventory   where product_code = old.item_code;
+
+  raise exception
+    'Item % (%) cannot be deleted. Orders, POs, GRNs and stock reference it by code, not by key, so deleting it would orphan that history silently%. Mark it Superseded or Discontinued instead — the row and its history stay, and anyone reaching for it is told what to use.',
+    old.item_code, old.item_no,
+    case when v_orders + v_pos + v_grns + v_stock > 0
+         then format(' (%s order line(s), %s PO line(s), %s GRN line(s), %s stock row(s) today)',
+                     v_orders, v_pos, v_grns, v_stock)
+         else '' end
+    using errcode = 'check_violation';
+  return null;
+end $$;
+
+drop trigger if exists trg_items_never_deleted on items;
+create trigger trg_items_never_deleted
+  before delete on items
+  for each row execute function items_are_never_deleted();
