@@ -119,6 +119,34 @@ export const TAXONOMY = {
       'Three Level': ['CP', 'CTL'],
       'Two Level': ['CDL', 'CP', 'CX'],
     },
+
+    // ── Electronics range ────────────────────────────────────────────────
+    // Connectwell is a CURATED brand, so the New Item form offers only what is
+    // listed here — no free text, and create_item_v3 refuses a blank category.
+    // Until now the only categories were the two terminal-block ones above, so
+    // anyone adding a relay, an SMPS or a fan monitor had to either mis-file it
+    // or leave the category empty. Both happened: SRL1-24D went in as
+    // 'Terminal Block Accessories / DIN Rail / ECAP' (ECAP is the end-cap
+    // series), and 14 items added since May carry no category at all.
+    //
+    // Subcategories are the section names Connectwell prints down the side of
+    // its own tables in the CW Electronics Price List 2026-27, and the series
+    // are the part-code families extracted from those same tables — neither is
+    // invented here. Book section → page: Slim Relay 10-11, Modular Relay 6-9,
+    // IMRE 6, CIMRE 12, SMPS 12, Redundancy 13, Fan Monitor 13.
+    'Relay': {
+      'Slim Relay':    ['CSER', 'CSR', 'SRL'],
+      'Modular Relay': ['CRB', 'CRLA', 'CRLD', 'CRMA', 'CRS'],
+      'IMRE':          ['CRB', 'CRLA', 'CRLD', 'CRS'],
+      'CIMRE':         ['CIMRE'],
+    },
+    'Power Supply': {
+      'SMPS':       ['CSS'],
+      'Redundancy': ['CDR'],
+    },
+    'Monitoring': {
+      'Fan Monitor': ['CFTD', 'CFTDPR'],
+    },
   },
 }
 
