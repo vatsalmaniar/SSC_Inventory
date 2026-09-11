@@ -47,6 +47,22 @@ export function ordersTotalValue(orders) {
 // still sitting in the godown), while the dashboard and the order-items table
 // summed dispatched_fc batch JSON (a later milestone that excludes goods already
 // goods-issued but not yet stamped out of the FC).
+// Value actually DELIVERED in one dispatch batch.
+//
+// Reads the batch's own dispatched_items JSON rather than the order line, because
+// posted_qty is CUMULATIVE on the line: summing it per batch double-counts every
+// multi-batch order (2,951 orders carry 3,858 batches). The JSON already excludes
+// cancelled quantity.
+//
+// This is what "sales" means for KPI — the month material actually went out, not the
+// month the order was booked. Verified against Aarth's August Tally ledger: 61 invoices,
+// ledger 19,69,525 gross ÷ 1.18 = 16,69,089, and our batch values reconciled to the rupee.
+export function batchDeliveredValue(batch) {
+  const items = batch?.dispatched_items
+  if (!Array.isArray(items)) return 0
+  return items.reduce((s, it) => s + (Number(it?.total_price) || 0), 0)
+}
+
 export function lineDispatchedValue(item) {
   // Same price fallback as lineNetValue above. order_items has no `unit_price`
   // column — the pair is unit_price_after_disc then lp_unit_price. 613 lines are

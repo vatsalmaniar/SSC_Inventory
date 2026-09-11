@@ -22,7 +22,7 @@
 // Derived KPIs do not query — they compute from the merged month values.
 
 import { sb } from './supabase'
-import { lineNetValue } from './orderValue'
+import { batchDeliveredValue } from './orderValue'
 import { selectByCodes } from './safeCodes'
 
 // ── helper: bucket a date into the matching month range key ──
@@ -35,18 +35,37 @@ function bucketKey(dt, monthRanges) {
 }
 
 export const AUTO_FETCHERS = {
-  sales_actual_by_owner: async ({ profileName, fyStart, fyEnd, monthRanges }) => {
+  // SALES = DELIVERED, not booked (user rule 2026-09-10: "in performance take
+  // delivered data only").
+  //
+  // This used to read `orders` by created_at and sum the WHOLE order — so a booking
+  // counted in full the day it was raised, even if nothing had shipped. That is why
+  // Performance disagreed with Tally: for August it gave Harshadba 1,84,95,436 against a
+  // ledger-backed 1,29,14,278, overstating by 62 lakh, while under-reporting people whose
+  // deliveries were against older orders (Bhavesh showed 0 with 9.9 lakh actually shipped).
+  //
+  // Now: one row per delivered BATCH, valued from its own dispatched_items and bucketed by
+  // the date it was delivered. Verified against Aarth's August ledger — 61 invoices,
+  // reconciled to the rupee.
+  //
+  // No date filter on the query: batches carry delivered_at OR fall back to updated_at, and
+  // PostgREST cannot express that coalesce. The volume is small (3,858 batches across the
+  // whole database, a fraction of that per person), so we bucket client-side instead —
+  // bucketKey drops anything outside the FY.
+  sales_actual_by_owner: async ({ profileName, monthRanges }) => {
     if (!profileName) return {}
-    const { data } = await sb.from('orders')
-      .select('created_at, order_items(total_price,unit_price_after_disc,cancelled_qty)')
-      .eq('account_owner', profileName).neq('status', 'cancelled').eq('is_test', false)
-      .gte('created_at', fyStart).lt('created_at', fyEnd)
+    const { data } = await sb.from('order_dispatches')
+      .select('delivered_at, updated_at, dispatched_items, orders!inner(account_owner,is_test)')
+      .in('status', ['dispatched_fc', 'closed'])
+      .eq('orders.account_owner', profileName)
+      .eq('orders.is_test', false)
     const result = {}
-    ;(data || []).forEach(o => {
-      const k = bucketKey(new Date(o.created_at), monthRanges)
+    ;(data || []).forEach(b => {
+      const when = b.delivered_at || b.updated_at
+      if (!when) return
+      const k = bucketKey(new Date(when), monthRanges)
       if (!k) return
-      const v = (o.order_items || []).reduce((a, i) => a + lineNetValue(i), 0)
-      result[k] = (result[k] || 0) + v
+      result[k] = (result[k] || 0) + batchDeliveredValue(b)
     })
     return result
   },
