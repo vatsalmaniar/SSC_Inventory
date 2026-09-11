@@ -6,6 +6,7 @@ import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { loadOpenings, loadPipeline, canSeeTalent } from '../lib/talent'
 import { LIVE_STAGES, TERMINAL_STAGES, stageLabel, stageColor } from '../lib/talentStage'
+import { TALENT_BUCKET, ACCEPT_ATTR, MAX_DOC_MB, uploadDoc, validateFile } from '../lib/hrDocs'
 import Layout from '../components/Layout'
 import TalentTabs from '../components/TalentTabs'
 import Loading from '../components/Loading'
@@ -25,13 +26,8 @@ const avColor = (n='') => { let h=0; for (let i=0;i<n.length;i++) h=n.charCodeAt
 // How long this candidate has sat where they are.
 const daysIn = a => Math.max(0, Math.round((Date.now() - new Date(a.stage_changed_at || a.created_at)) / 86400000))
 
-// Mirrors the talent-docs bucket in sql/talent_360_up.sql — see the same block
-// in TalentCandidateDetail. Checked here so an oversized CV fails instantly
-// instead of after a long upload.
-const MAX_DOC_MB = 10
-const MAX_DOC_BYTES = MAX_DOC_MB * 1024 * 1024
-const ACCEPT_ATTR = '.pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.heif'
-const safeName = s2 => String(s2 || 'file').replace(/[^\w.\-]+/g, '_').slice(-80)
+// Limits, accepted types and the uploader come from lib/hrDocs — one list for
+// Talent and People 360 both.
 
 const EMPTY = {
   full_name:'', phone:'', email:'', location:'', current_employer:'', current_designation:'',
@@ -136,24 +132,22 @@ export default function TalentPipeline() {
   // Same storage path shape as the Documents tab, so a CV attached here and one
   // attached later land in exactly the same place.
   async function uploadCv(file, candidateId, applicationId) {
-    const path = `${candidateId}/cv/${Date.now()}-${safeName(file.name)}`
-    const { error: upErr } = await sb.storage.from('talent-docs').upload(path, file, { upsert:false, contentType:file.type })
-    if (upErr) throw upErr
-    const { error } = await sb.rpc('add_talent_document', {
-      p_candidate_id: candidateId, p_doc_type: 'cv', p_file_path: path,
-      p_file_name: file.name, p_application_id: applicationId, p_offer_version_id: null,
+    await uploadDoc({
+      bucket: TALENT_BUCKET, ownerId: candidateId, docType: 'cv', file,
+      register: async (path) => {
+        const { error } = await sb.rpc('add_talent_document', {
+          p_candidate_id: candidateId, p_doc_type: 'cv', p_file_path: path,
+          p_file_name: file.name, p_application_id: applicationId, p_offer_version_id: null,
+        })
+        if (error) throw error
+      },
     })
-    // Never leave an orphan object in the bucket that no row points at.
-    if (error) { await sb.storage.from('talent-docs').remove([path]).catch(() => {}); throw error }
   }
 
   function pickCv(file) {
     if (!file) { setCv(null); return }
-    if (file.size > MAX_DOC_BYTES) {
-      toast(`That CV is ${(file.size / 1048576).toFixed(1)} MB — the limit is ${MAX_DOC_MB} MB.`, 'error')
-      if (cvRef.current) cvRef.current.value = ''
-      return
-    }
+    const bad = validateFile(file)
+    if (bad) { toast(bad, 'error'); if (cvRef.current) cvRef.current.value = ''; return }
     setCv(file)
   }
 

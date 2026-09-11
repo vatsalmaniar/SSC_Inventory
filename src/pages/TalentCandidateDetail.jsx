@@ -6,6 +6,10 @@ import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { writeDoc } from '../lib/printDoc'
 import { buildOfferLetterHtml } from '../lib/offerLetterHtml'
+import {
+  TALENT_BUCKET, EMPLOYEE_BUCKET, CANDIDATE_DOC_TYPES, CARRY_ON_JOIN,
+  ACCEPT_ATTR, MAX_DOC_MB, docLabel, uploadDoc, openDoc, copyObject, docPath, validateFile,
+} from '../lib/hrDocs'
 import { createEmployee, validateEmployeeForm, EMPTY_EMPLOYEE_FORM, autoUsername, genPassword, today } from '../lib/createEmployee'
 import SalaryStructurePanel, { computePanel, EMPTY_SALARY } from '../components/SalaryStructurePanel'
 import {
@@ -22,12 +26,9 @@ import '../styles/orders-redesign.css'
 import '../styles/people-home.css'
 
 const TABS = ['Profile', 'Documents', 'Interviews', 'References', 'Offer', 'Activity']
-const DOC_TYPES = [
-  ['cv','CV / Resume'], ['id_proof','Photo ID proof'], ['address_proof','Address proof'],
-  ['education','Education certificate'], ['experience_letter','Experience letter'],
-  ['relieving_letter','Relieving letter'], ['salary_slip','Salary slip'],
-  ['photograph','Photograph'], ['offer_letter','Offer letter'], ['other','Other'],
-]
+// Document types, limits and the uploader all come from lib/hrDocs — the same
+// list People 360 uses, so a document filed here is one the employee profile
+// can find after they join.
 const ROUND_TYPES = [['screening','Screening'],['technical','Technical'],['hr','HR'],['management','Management'],['other','Other']]
 const OUTCOMES = [['pending','Pending'],['selected','Selected'],['rejected','Rejected'],['on_hold','On hold'],['no_show','No show']]
 // Stored values are unchanged ('positive' / 'negative' / 'unreachable') — only
@@ -52,25 +53,7 @@ const fmtDateTime = d => d ? new Date(d).toLocaleString('en-IN', { day:'numeric'
 const initials = (n='') => n.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?'
 const AVATAR_COLORS = ['#5c6bc0','#0d9488','#059669','#b45309','#7c3aed','#be185d','#0369a1','#475569']
 const avColor = (n='') => { let h=0; for (let i=0;i<n.length;i++) h=n.charCodeAt(i)+((h<<5)-h); return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length] }
-// Storage keys must not carry spaces or non-ASCII — a signed URL for
-// "Aayush's CV (final).pdf" round-trips badly.
-const safeName = s => String(s || 'file').replace(/[^\w.\-]+/g, '_').slice(-80)
 
-// Mirrors the talent-docs bucket in sql/talent_360_up.sql. If the bucket's
-// file_size_limit or allowed_mime_types change, change these too — the point
-// of having them here is to fail fast, before the upload, not to disagree
-// with the server.
-const MAX_DOC_MB = 10
-const MAX_DOC_BYTES = MAX_DOC_MB * 1024 * 1024
-const ALLOWED_MIME = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
-]
-// `accept` mirrors ALLOWED_MIME rather than using image/*, which would let the
-// picker offer a GIF the bucket then rejects.
-const ACCEPT_ATTR = '.pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.heif'
 
 function Drawer({ title, sub, onClose, children, footer, wide }) {
   return createPortal(
@@ -199,50 +182,32 @@ export default function TalentCandidateDetail() {
   // ── documents ────────────────────────────────────────────────────────────
   async function upload(file) {
     if (!file || !cand) return
-
-    // Checked HERE as well as at the bucket. Storage does enforce both limits,
-    // but it only does so after the whole file has been pushed over the wire —
-    // so a 40 MB scan uploads for a minute and then fails with a raw error.
-    // These two checks must stay in step with the bucket definition in
-    // sql/talent_360_up.sql.
-    if (file.size > MAX_DOC_BYTES) {
-      toast(`That file is ${(file.size / 1048576).toFixed(1)} MB — the limit is ${MAX_DOC_MB} MB.`, 'error',
-        'Scans are usually the culprit. Re-save it at a lower DPI, or split it.')
-      if (fileRef.current) fileRef.current.value = ''
-      return
-    }
-    if (file.type && !ALLOWED_MIME.includes(file.type)) {
-      toast('That file type is not accepted.', 'error', 'PDF, Word, JPG, PNG, WebP or HEIC.')
-      if (fileRef.current) fileRef.current.value = ''
-      return
-    }
+    const bad = validateFile(file)
+    if (bad) { toast(bad, 'error'); if (fileRef.current) fileRef.current.value = ''; return }
 
     setUploading(true)
-    let path = null
     try {
-      path = `${cand.id}/${docType}/${Date.now()}-${safeName(file.name)}`
-      const { error: upErr } = await sb.storage.from('talent-docs').upload(path, file, { upsert:false, contentType:file.type })
-      if (upErr) throw upErr
-      const { error } = await sb.rpc('add_talent_document', {
-        p_candidate_id: cand.id, p_doc_type: docType, p_file_path: path,
-        p_file_name: file.name, p_application_id: app?.id || null, p_offer_version_id: null,
+      await uploadDoc({
+        bucket: TALENT_BUCKET, ownerId: cand.id, docType, file,
+        register: async (path) => {
+          const { error } = await sb.rpc('add_talent_document', {
+            p_candidate_id: cand.id, p_doc_type: docType, p_file_path: path,
+            p_file_name: file.name, p_application_id: app?.id || null, p_offer_version_id: null,
+          })
+          if (error) throw error
+        },
       })
-      if (error) throw error
-      toast('Document uploaded.', 'success')
+      toast(`${docLabel(docType)} uploaded.`, 'success')
       await load()
-    } catch (e) {
-      // Do not leave an orphan in the bucket when the row fails to write.
-      if (path) await sb.storage.from('talent-docs').remove([path]).catch(() => {})
-      toast(e?.message || friendlyError(e), 'error')
-    } finally { setUploading(false); if (fileRef.current) fileRef.current.value = '' }
+    } catch (e) { toast(e?.message || friendlyError(e), 'error') }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = '' }
   }
 
-  async function openDoc(d) {
+  async function viewDoc(d) {
     // Private bucket — always a fresh signed URL, never a public one. CVs and
     // ID proofs are personal data.
-    const { data, error } = await sb.storage.from('talent-docs').createSignedUrl(d.file_path, 3600)
-    if (error || !data?.signedUrl) { toast('Could not open that document.', 'error'); return }
-    window.open(data.signedUrl, '_blank', 'noopener')
+    try { window.open(await openDoc(TALENT_BUCKET, d.file_path), '_blank', 'noopener') }
+    catch { toast('Could not open that document.', 'error') }
   }
 
   // ── interviews ───────────────────────────────────────────────────────────
@@ -438,24 +403,34 @@ export default function TalentCandidateDetail() {
   // it against the new employee. employee_documents is unique on
   // (employee_id, doc_type), so only the newest of each type survives — which
   // is what the People 360 Documents tab shows anyway.
+  // Moves the candidate's paperwork onto the employee record.
+  //
+  // THE BUG THIS FIXES: People 360 used to look for doc_type 'Offer Letter'
+  // while this wrote 'offer_letter', so copied documents landed in the table
+  // and were never shown — no error, just an empty tab. Both sides now take
+  // their vocabulary from lib/hrDocs, so the types match by construction.
+  //
+  // employee_documents is UNIQUE on (employee_id, doc_type), so only the newest
+  // of each type survives — which is what the Documents tab shows anyway.
   async function copyDocsToEmployee(employeeId) {
-    const KEEP = ['cv','id_proof','address_proof','education','experience_letter','relieving_letter','offer_letter','photograph']
     const seen = new Set()
+    let copied = 0, failed = 0
     for (const d of docs) {
-      if (!KEEP.includes(d.doc_type) || seen.has(d.doc_type)) continue
+      if (!CARRY_ON_JOIN.includes(d.doc_type) || seen.has(d.doc_type)) continue
       seen.add(d.doc_type)
       try {
-        const { data: blob, error: dlErr } = await sb.storage.from('talent-docs').download(d.file_path)
-        if (dlErr || !blob) continue
-        const dest = `${employeeId}/${d.doc_type}/${Date.now()}-${safeName(d.file_name || d.doc_type)}`
-        const { error: upErr } = await sb.storage.from('employee-docs').upload(dest, blob, { upsert: true })
-        if (upErr) continue
-        await sb.from('employee_documents').upsert(
-          { employee_id: employeeId, doc_type: d.doc_type, file_path: dest, file_name: d.file_name },
+        const dest = docPath(EMPLOYEE_BUCKET, employeeId, d.doc_type, d.file_name || d.doc_type)
+        await copyObject({ from: TALENT_BUCKET, to: EMPLOYEE_BUCKET, fromPath: d.file_path, toPath: dest })
+        const { error } = await sb.from('employee_documents').upsert(
+          { employee_id: employeeId, doc_type: d.doc_type, file_path: dest,
+            file_name: d.file_name, uploaded_at: new Date().toISOString() },
           { onConflict: 'employee_id,doc_type' },
         )
-      } catch { /* one document is not worth failing the join over */ }
+        if (error) throw error
+        copied++
+      } catch { failed++ }   // one document is not worth failing the join over
     }
+    return { copied, failed }
   }
 
   async function doJoin() {
@@ -482,7 +457,11 @@ export default function TalentCandidateDetail() {
       // read against the employee-docs bucket, so copying only the row would
       // leave People 360 with a path it cannot sign. Best-effort — a document
       // that fails to copy must not undo an employee who already exists.
-      await copyDocsToEmployee(employeeId).catch(() => {})
+      const moved = await copyDocsToEmployee(employeeId).catch(() => ({ copied: 0, failed: 0 }))
+      if (moved.failed) {
+        toast(`${moved.failed} document${moved.failed === 1 ? '' : 's'} could not be copied to their profile.`,
+          'warning', 'Re-upload from People 360 → Documents.')
+      }
 
       setJoinForm(null)
       if (credentials) setCreds(credentials)
@@ -602,7 +581,7 @@ export default function TalentCandidateDetail() {
               <div className="card" style={{ padding:'18px 20px' }}>
                 <div className="tc-upload">
                   <select className="ph-picker" value={docType} onChange={e=>setDocType(e.target.value)}>
-                    {DOC_TYPES.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                    {CANDIDATE_DOC_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
                   </select>
                   <input ref={fileRef} type="file" onChange={e=>upload(e.target.files?.[0])} disabled={uploading}
                     accept={ACCEPT_ATTR} />
@@ -616,10 +595,10 @@ export default function TalentCandidateDetail() {
                 {docs.map(d => (
                   <div className="tc-doc" key={d.id}>
                     <div>
-                      <div className="tc-doc-t">{DOC_TYPES.find(x => x[0] === d.doc_type)?.[1] || d.doc_type}</div>
+                      <div className="tc-doc-t">{docLabel(d.doc_type)}</div>
                       <div className="tc-doc-s">{d.file_name} · {fmtDate(d.created_at)}</div>
                     </div>
-                    <button className="btn-ghost o-btn-sm" onClick={()=>openDoc(d)}>Open</button>
+                    <button className="btn-ghost o-btn-sm" onClick={()=>viewDoc(d)}>Open</button>
                   </div>
                 ))}
               </div>

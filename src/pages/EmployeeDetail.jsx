@@ -6,6 +6,10 @@ import { toast } from '../lib/toast'
 import { friendlyError } from '../lib/errorMsg'
 import { currentFyLabel } from '../lib/kpi'
 import { signPhotos } from '../lib/photos'
+import {
+  EMPLOYEE_BUCKET, EMPLOYEE_DOC_TYPES, EXPECTED_EMPLOYEE_DOCS, ACCEPT_ATTR, MAX_DOC_MB,
+  docLabel, uploadDoc, openDoc, validateFile,
+} from '../lib/hrDocs'
 import { isWeekOff, loadWeekOffOverrides } from '../lib/attendance'
 import { fetchLedgerInputs, computeLedger } from '../components/LeaveLedger'
 import { calculateTax } from '../lib/tax'
@@ -102,6 +106,9 @@ export default function EmployeeDetail() {
   const [showEdit, setShowEdit] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [docType, setDocType] = useState('pan_card')   // Documents tab picker
+  const [docBusy, setDocBusy] = useState(false)
+  const docFileRef = useRef(null)
   const [photoSigned, setPhotoSigned] = useState('')
   const [cropSrc, setCropSrc] = useState('')
   const [editingEmail, setEditingEmail] = useState(false)
@@ -269,6 +276,61 @@ export default function EmployeeDetail() {
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { setUploading(false) }
   }
+  // ── Documents ────────────────────────────────────────────────────────────
+  // employee_documents is UNIQUE on (employee_id, doc_type), so re-uploading a
+  // type replaces it. That is the behaviour we want — a file has one current
+  // version — but it means the previous OBJECT is orphaned in the bucket, so it
+  // is removed explicitly after the row is repointed.
+  async function onDocUpload(ev) {
+    const file = ev.target.files?.[0]
+    ev.target.value = ''
+    if (!file || !emp) return
+
+    const bad = validateFile(file)
+    if (bad) { toast(bad, 'error'); return }
+
+    const previous = docs.find(d => d.doc_type === docType)
+    setDocBusy(true)
+    try {
+      await uploadDoc({
+        bucket: EMPLOYEE_BUCKET, ownerId: emp.id, docType, file,
+        register: async (path) => {
+          const { error } = await sb.from('employee_documents').upsert({
+            employee_id: emp.id, doc_type: docType, file_path: path,
+            file_name: file.name, uploaded_at: new Date().toISOString(),
+          }, { onConflict: 'employee_id,doc_type' })
+          if (error) throw error
+        },
+      })
+      // Best-effort: the row already points at the new file, so a failure here
+      // costs storage, not correctness.
+      if (previous?.file_path) {
+        await sb.storage.from(EMPLOYEE_BUCKET).remove([previous.file_path]).catch(() => {})
+      }
+      toast(`${docLabel(docType)} ${previous ? 'replaced' : 'uploaded'}.`, 'success')
+      await load(role)
+    } catch (e) { toast(e?.message || friendlyError(e), 'error') }
+    finally { setDocBusy(false) }
+  }
+
+  async function onDocOpen(d) {
+    try { window.open(await openDoc(EMPLOYEE_BUCKET, d.file_path), '_blank', 'noopener') }
+    catch (e) { toast(e?.message || 'Could not open that document.', 'error') }
+  }
+
+  async function onDocDelete(d) {
+    if (!window.confirm(`Delete the ${docLabel(d.doc_type)} for ${emp.full_name}? This cannot be undone.`)) return
+    setDocBusy(true)
+    try {
+      const { error } = await sb.from('employee_documents').delete().eq('id', d.id)
+      if (error) throw error
+      if (d.file_path) await sb.storage.from(EMPLOYEE_BUCKET).remove([d.file_path]).catch(() => {})
+      toast(`${docLabel(d.doc_type)} deleted.`, 'success')
+      await load(role)
+    } catch (e) { toast(e?.message || friendlyError(e), 'error') }
+    finally { setDocBusy(false) }
+  }
+
   function openEdit() {
     setEditForm({
       full_name: emp.full_name, employee_code: emp.employee_code || '', designation: emp.designation || '',
@@ -573,14 +635,62 @@ export default function EmployeeDetail() {
 
             {tab==='documents' && isMgmt && (
               <PCard icon={<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 2h5l3 3v9H4z"/><path d="M9 2v3h3"/></svg>} title={`Documents · ${docs.length}`}>
-                {['PAN Card','Aadhaar Card','Offer Letter','Appointment Letter'].map(dt=>{
-                  const d = docs.find(x=>x.doc_type===dt)
-                  return <div key={dt} className="dchip" style={{margin:'0 0 10px'}}>
-                    <div className={'doc-ico '+(d?'up':'miss')}>{d?<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 8l3 3 7-7"/></svg>:<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 3v10M3 8h10"/></svg>}</div>
-                    <div className="doc-info"><div className="doc-name">{dt}</div><div className="doc-sub">{d?('Uploaded '+fmtD(d.uploaded_at||d.created_at)):'Not uploaded'}</div></div>
-                  </div>
+                <div className="edoc-upload">
+                  <select value={docType} onChange={e=>setDocType(e.target.value)} disabled={docBusy}>
+                    {EMPLOYEE_DOC_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                  </select>
+                  <input ref={docFileRef} type="file" accept={ACCEPT_ATTR} onChange={onDocUpload} disabled={docBusy} />
+                  {docBusy && <span className="edoc-busy">Working…</span>}
+                </div>
+                <div className="edoc-hint">
+                  PDF, Word or image · up to {MAX_DOC_MB} MB. Uploading a type that already exists replaces it.
+                  Stored privately — links are signed on demand and expire.
+                </div>
+
+                {/* The four every file should contain, shown whether present or
+                    not, so a gap is visible rather than merely absent. */}
+                {EXPECTED_EMPLOYEE_DOCS.map(key => {
+                  const d = docs.find(x => x.doc_type === key)
+                  return (
+                    <div key={key} className="dchip" style={{margin:'0 0 10px'}}>
+                      <div className={'doc-ico ' + (d ? 'up' : 'miss')}>
+                        {d ? <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 8l3 3 7-7"/></svg>
+                           : <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 3v10M3 8h10"/></svg>}
+                      </div>
+                      <div className="doc-info">
+                        <div className="doc-name">{docLabel(key)}</div>
+                        <div className="doc-sub">{d ? `${d.file_name || 'File'} · ${fmtD(d.uploaded_at || d.created_at)}` : 'Not uploaded'}</div>
+                      </div>
+                      {d && (
+                        <div className="doc-acts">
+                          <button className="btn btn-neutral btn-sm" onClick={()=>onDocOpen(d)}>Open</button>
+                          {isAdmin && <button className="btn btn-neutral btn-sm" onClick={()=>onDocDelete(d)} disabled={docBusy}>Delete</button>}
+                        </div>
+                      )}
+                    </div>
+                  )
                 })}
-                <div style={{fontSize:11.5,color:'var(--muted-2)'}}>Document upload storage is admin/management-only. Upload wiring can be enabled next.</div>
+
+                {/* Anything else on file — a CV carried over from Talent when
+                    they joined, an experience letter, a photograph. */}
+                {docs.filter(d => !EXPECTED_EMPLOYEE_DOCS.includes(d.doc_type)).length > 0 && (
+                  <>
+                    <div className="edoc-sec">Also on file</div>
+                    {docs.filter(d => !EXPECTED_EMPLOYEE_DOCS.includes(d.doc_type)).map(d => (
+                      <div key={d.id} className="dchip" style={{margin:'0 0 10px'}}>
+                        <div className="doc-ico up"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 8l3 3 7-7"/></svg></div>
+                        <div className="doc-info">
+                          <div className="doc-name">{docLabel(d.doc_type)}</div>
+                          <div className="doc-sub">{d.file_name || 'File'} · {fmtD(d.uploaded_at || d.created_at)}</div>
+                        </div>
+                        <div className="doc-acts">
+                          <button className="btn btn-neutral btn-sm" onClick={()=>onDocOpen(d)}>Open</button>
+                          {isAdmin && <button className="btn btn-neutral btn-sm" onClick={()=>onDocDelete(d)} disabled={docBusy}>Delete</button>}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
               </PCard>
             )}
 
