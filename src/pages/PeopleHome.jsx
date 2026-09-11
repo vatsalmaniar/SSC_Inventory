@@ -13,6 +13,11 @@ import Stat from '../components/StatTile'
 import LeavePolicyDrawer from '../components/LeavePolicyDrawer'
 import '../styles/orders-redesign.css'
 import '../styles/people-home.css'
+// LeavePolicyDrawer portals to document.body and uses .people-drawer / .pd-* which are
+// defined in people.css. Without this import the drawer mounted with NO position, width
+// or z-index — it rendered as an invisible unstyled block, so "Leave & LOP" did nothing.
+// PeopleLeave and PeopleMyAttendance already import it, which is why it worked there.
+import '../styles/people.css'
 
 const DEPT_COLORS = ['#1a73e8','#0E7C6B','#7C3AED','#C2255C','#C25A00','#0369a1','#475569','#0f766e','#B45309','#4f7942']
 const initials = (n='') => n.split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?'
@@ -35,6 +40,10 @@ export default function PeopleHome() {
   const [celebs, setCelebs] = useState([])   // next 30 days: birthdays + work anniversaries
   const [upHol, setUpHol] = useState([])     // next holidays (date + name)
   const [wf, setWf] = useState(null)         // workforce roll-up — admin/management only
+  // Set only if loadWorkforce() FAILS, so the skeleton cannot hang forever. The
+  // "are we still waiting" question is answered from the ROLE, not a flag — see the
+  // anchor render for why a flag could not work here.
+  const [wfFailed, setWfFailed] = useState(false)
   const [presence, setPresence] = useState([])   // per-person in/out + on-leave, today
   const [kpi, setKpi] = useState(null)       // { people[], defs[], thByTeam, dataByAssign }
   const [kpiWho, setKpiWho] = useState('')   // selected assignment id (admin/management picker)
@@ -109,7 +118,10 @@ export default function PeopleHome() {
     // own attendance rows, so the same panel would be a one-person "company average" —
     // worse than showing nothing at all.
     if (['admin','management'].includes(roleStr)) {
-      loadWorkforce(now).catch(e => console.error('workforce:', e?.message || e))
+      loadWorkforce(now).catch(e => {
+        console.error('workforce:', e?.message || e)
+        setWfFailed(true)          // release the skeleton; fall back to today's floor
+      })
     }
     loadKpi(roleStr, session.user.id, profile?.name || 'You', pickedPeople).catch(e => console.error('kpi:', e?.message || e))
   }
@@ -530,7 +542,22 @@ export default function PeopleHome() {
               {/* Anchor. Admin/management get the month's attendance; everyone else gets
                   today's floor, so the slot is never an empty box. */}
               <div className="ph-wide ph-anchor">
-                {wf ? (
+                {/* ⚠️ DERIVED FROM THE ROLE, NOT A LOADING FLAG.
+                    loadWorkforce() runs AFTER setLoading(false), and there is an
+                    `await loadPickable()` — a whole network round-trip — in between. A
+                    flag set at that call site turns on far too late: for the entire
+                    window the anchor rendered the "On the floor · today" fallback at 85%
+                    and then swapped to "Attendance · Sep", which read as the page showing
+                    random data. isMgmt comes from the profile and is known BEFORE the page
+                    reveals itself, so "is this role going to get wf?" has no race at all.
+                    wfFailed releases it if the fetch errors. */}
+                {isMgmt && !wf && !wfFailed ? (
+                  <div className="ph-anchor-skel" aria-hidden="true">
+                    <span className="ph-skel-line is-eyebrow" />
+                    <span className="ph-skel-line is-value" />
+                    <span className="ph-skel-line is-sub" />
+                  </div>
+                ) : wf ? (
                   <>
                     <div className="ph-anchor-head">
                       <div>
@@ -564,6 +591,18 @@ export default function PeopleHome() {
                         <div><div className="ph-as-l">Not in</div><div className="ph-as-v">{weekoff ? '—' : absent}</div></div>
                       </div>
                     </div>
+                    {/* The wf branch above fills its lower half with AttendanceChart. This
+                        branch had nothing there, so for admin/management it rendered as a
+                        tall empty box for as long as loadWorkforce() took — the state in
+                        the screenshot. A single presence bar occupies it and is useful in
+                        its own right for the roles that never get wf at all. */}
+                    {!weekoff && headcount > 0 && (
+                      <div className="ph-floor-bar" title={`${data.present} in · ${data.onLeave} on leave · ${absent} not in`}>
+                        <span className="ph-floor-seg is-in"    style={{ width: `${(data.present / headcount) * 100}%` }} />
+                        <span className="ph-floor-seg is-leave" style={{ width: `${(data.onLeave / headcount) * 100}%` }} />
+                        <span className="ph-floor-seg is-out"   style={{ width: `${(Math.max(0, absent) / headcount) * 100}%` }} />
+                      </div>
+                    )}
                   </>
                 )}
               </div>

@@ -18,14 +18,9 @@
 /* ── The tall column (col 6, spanning both bento rows) ──────────────────────
    Row shape shared by whatever occupies it — Top Customers today. Kept generic
    so the two ranked lists on this page cannot drift apart. */
-/* ⚠️ THE TALL COLUMN MUST BE CAPPED.
-   .ph-tall spans BOTH bento rows, so its content height drives the row heights of
-   the whole grid. /fc's Sample Returns list has 20 rows; uncapped it made the card
-   ~900px, which stretched row 1 and turned the five stat tiles into 700px columns
-   with their footers clipped. /people gets away with no cap only because its agenda
-   is short — and even there the cap exists solely inside the 1280px media query.
-   Cap here, and let the list scroll. */
-.orders-app .ph-tall.o-pipe { max-height: 340px; }
+/* The cap that used to live here moved onto the base .ph-tall in people-home.css,
+   so every variant gets it — capping one variant at a time is exactly how
+   PeopleHome's .ph-agenda was missed. */
 .orders-app .o-pipe { display: flex; flex-direction: column; min-height: 0; }
 .orders-app .o-pipe-list {
   display: flex; flex-direction: column; gap: 11px;
@@ -328,12 +323,18 @@
 
 /* /fc/open filters — replaces a block of inline button and input styling. */
 .orders-app .od-filters { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
-.orders-app .o-search {
+/* ⚠️ NOT .o-search — that name was already taken. .o-search in orders-redesign.css
+   is a flex WRAPPER div (icon + input + clear button) used by 13 pages, and this file
+   loads after it, so redefining the name restyled every one of them: wrong padding,
+   wrong background, a narrower max-width. /fc/open is the only page that puts the
+   class on a bare <input>, so it gets its own name. */
+.orders-app .od-search {
   flex: 1 1 240px; max-width: 320px; padding: 8px 12px;
   font-size: 16px; font-family: inherit; color: var(--o-ink);
   border: 1px solid var(--o-line); border-radius: 9px;
   background: var(--o-surface); outline: none;
 }
+.orders-app .od-search:focus { border-color: var(--ssc-blue); outline: none; }
 .orders-app .o-chip.bad.on  { background: #B91C1C; border-color: #B91C1C; color: #fff; }
 .orders-app .o-chip.bad     { color: #B91C1C; }
 
@@ -373,7 +374,7 @@
   .orders-app .o-mid-proc { grid-template-columns: 1fr; }
   .orders-app .proc-split-row { grid-template-columns: minmax(0, 1fr) 76px; }
   .orders-app .od-filters { flex-direction: column; align-items: stretch; }
-  .orders-app .o-search { max-width: none; }
+  .orders-app .od-search { max-width: none; }
   .orders-app .dash-row-3 { grid-template-columns: 1fr; }
 }
 

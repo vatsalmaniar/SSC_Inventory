@@ -184,7 +184,7 @@ export default function OpenDeliveries() {
         {/* Search + buckets. Was a block of inline button styling; these are the
             shared .o-chip / .o-search the other list pages use. */}
         <div className="od-filters">
-          <input type="text" className="o-search" placeholder="Search order, customer or DC…"
+          <input type="text" className="od-search" placeholder="Search order, customer or DC…"
             value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
           <div className="o-filter-row">
             {BUCKETS.map(b => (

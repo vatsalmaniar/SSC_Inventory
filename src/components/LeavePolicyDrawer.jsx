@@ -27,6 +27,11 @@ const T = {
       { title:'Loss of Pay — unpaid', desc:'Unpaid days deducted from salary — from uninformed absence, unapproved leave, or being on probation/notice. LOP does not touch your paid leave balance — it is a separate salary deduction.' },
       { title:'Regularise', desc:'An absence you justify and get approved becomes Present — no LOP.' },
     ],
+    sandT:'Sandwich rule — leave on both sides of an off day',
+    sandD:'If you are on leave the working day BEFORE an off block and the working day AFTER it, the off days in between are charged as leave too. Off days on their own are never charged — only when leave sits on both sides.',
+    sandEg:'Example — Friday and Monday on leave, Saturday and Sunday off:',
+    sandRow:'Fri leave · Sat off · Sun off · Mon leave  =  4 days deducted, not 2.',
+    sandNote:'A half day counts only if it faces the off block — second half on the day before, first half on the day after. Leave only one side (Friday but not Monday) and nothing extra is deducted.',
     probT:'Probation & notice period',
     probD:'During your first 3 months (probation) and while on notice, every leave or absence is LOP — no paid leave applies.',
   },
@@ -41,6 +46,11 @@ const T = {
       { title:'Loss of Pay — बिना वेतन', desc:'बिना वेतन वाले दिन वेतन से काटे जाते हैं — बिना सूचना अनुपस्थिति, बिना मंज़ूरी छुट्टी, या प्रोबेशन/नोटिस पर होने के कारण। LOP आपके पेड लीव बैलेंस को नहीं छूता — यह एक अलग वेतन कटौती है।' },
       { title:'रेगुलराइज़', desc:'जिस अनुपस्थिति को आप उचित ठहराते हैं और मंज़ूरी पा लेते हैं वह उपस्थित बन जाती है — कोई LOP नहीं।' },
     ],
+    sandT:'सैंडविच नियम — छुट्टी के दिन के दोनों ओर',
+    sandD:'अगर आप अवकाश (साप्ताहिक अवकाश या त्योहार) से ठीक पहले वाले कार्यदिवस और ठीक बाद वाले कार्यदिवस — दोनों पर छुट्टी लेते हैं, तो बीच के अवकाश भी छुट्टी में गिने जाते हैं। अकेले अवकाश कभी नहीं कटते — केवल तब जब दोनों तरफ छुट्टी हो।',
+    sandEg:'उदाहरण — शुक्रवार और सोमवार की छुट्टी, शनि-रवि अवकाश:',
+    sandRow:'शुक्र छुट्टी · शनि अवकाश · रवि अवकाश · सोम छुट्टी  =  2 नहीं, 4 दिन कटेंगे।',
+    sandNote:'आधा दिन तभी गिना जाता है जब वह अवकाश की ओर हो — पहले वाले दिन का दूसरा हिस्सा, बाद वाले दिन का पहला हिस्सा। केवल एक तरफ छुट्टी लें (शुक्रवार, सोमवार नहीं) तो कुछ अतिरिक्त नहीं कटेगा।',
     probT:'प्रोबेशन और नोटिस पीरियड',
     probD:'आपके पहले 3 महीने (प्रोबेशन) के दौरान और नोटिस पर होने पर, हर छुट्टी या अनुपस्थिति LOP है — कोई पेड लीव लागू नहीं होती।',
   },
@@ -55,6 +65,11 @@ const T = {
       { title:'Loss of Pay — પગાર વગર', desc:'પગાર વગરના દિવસો પગારમાંથી કાપવામાં આવે છે — જાણ વગરની ગેરહાજરી, મંજૂર ન કરાયેલી રજા, અથવા પ્રોબેશન/નોટિસ પર હોવાને કારણે. LOP તમારા પેઇડ રજા બેલેન્સને સ્પર્શતું નથી — તે એક અલગ પગાર કપાત છે.' },
       { title:'રેગ્યુલરાઇઝ', desc:'તમે જે ગેરહાજરીને યોગ્ય ઠેરવો છો અને મંજૂરી મેળવો છો તે હાજર બની જાય છે - કોઈ LOP નહીં.' },
     ],
+    sandT:'સેન્ડવિચ નિયમ — રજાના દિવસની બંને બાજુ',
+    sandD:'જો તમે રજા (સાપ્તાહિક રજા કે તહેવાર) ની બરાબર પહેલાંના કામકાજના દિવસે અને બરાબર પછીના કામકાજના દિવસે — બંને પર રજા લો, તો વચ્ચેની રજાઓ પણ રજામાં ગણાય છે. એકલી રજાઓ ક્યારેય કપાતી નથી — ફક્ત ત્યારે જ્યારે બંને બાજુ રજા હોય.',
+    sandEg:'ઉદાહરણ — શુક્રવાર અને સોમવારે રજા, શનિ-રવિ રજા:',
+    sandRow:'શુક્ર રજા · શનિ રજા · રવિ રજા · સોમ રજા  =  2 નહીં, 4 દિવસ કપાશે.',
+    sandNote:'અડધો દિવસ ત્યારે જ ગણાય જ્યારે તે રજા તરફ હોય — પહેલાંના દિવસનો બીજો ભાગ, પછીના દિવસનો પહેલો ભાગ. ફક્ત એક બાજુ રજા લો (શુક્રવાર, સોમવાર નહીં) તો કંઈ વધારાનું કપાશે નહીં.',
     probT:'પ્રોબેશન અને નોટિસ પીરિયડ',
     probD:'તમારા પહેલા 3 મહિના (પ્રોબેશન) દરમિયાન અને નોટિસ પર હોય ત્યારે, દરેક રજા અથવા ગેરહાજરી LOP છે - કોઈ પેઇડ રજા લાગુ પડતી નથી.',
   },
@@ -107,9 +122,30 @@ export default function LeavePolicyDrawer({ open, onClose }) {
             <Row key={s.code} code={s.code} color={s.color} bg={s.bg} title={t.rows[i].title}>{t.rows[i].desc}</Row>
           ))}
 
-          <div style={{ marginTop:14, padding:'12px 14px', borderRadius:10, background:'var(--bg)', fontSize:12.5, lineHeight:1.55, color:'var(--muted)' }}>
-            <b style={{ color:'var(--ink)' }}>{t.probT}</b><br/>
-            {t.probD}
+          {/* Sandwich rule. The single most misunderstood line on a payslip: people
+              take Friday and Monday expecting 2 days and lose 4. The worked example is
+              the point — the prose alone has never made it land.
+              Matches sandwichDays() in src/lib/leaveLedger.js exactly: an off block is
+              charged only when the working day BEFORE and the working day AFTER are
+              both on leave, and a half day qualifies only if it faces the block. */}
+          <div className="pd-note pd-note-sand">
+            <b>{t.sandT}</b>
+            <div>{t.sandD}</div>
+            <div className="pd-eg-lbl">{t.sandEg}</div>
+            <div className="pd-eg">
+              <span className="pd-eg-d is-leave">Fri<i>leave</i></span>
+              <span className="pd-eg-d is-off">Sat<i>off</i></span>
+              <span className="pd-eg-d is-off">Sun<i>off</i></span>
+              <span className="pd-eg-d is-leave">Mon<i>leave</i></span>
+              <span className="pd-eg-eq">= 4</span>
+            </div>
+            <div className="pd-eg-cap">{t.sandRow}</div>
+            <div className="pd-note-sub">{t.sandNote}</div>
+          </div>
+
+          <div className="pd-note">
+            <b>{t.probT}</b>
+            <div>{t.probD}</div>
           </div>
         </div>
       </div>
