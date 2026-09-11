@@ -19,6 +19,8 @@ const STATUS_LABEL = { open:'Open', on_hold:'On hold', filled:'Filled', closed:'
 
 const EMPLOYMENT = [['full_time','Full time'],['contract','Contract'],['intern','Internship'],['part_time','Part time']]
 const EMP_LABEL = Object.fromEntries(EMPLOYMENT)
+const inr = n => n == null || n === '' ? '—' : '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+const fmtDate = d => d ? new Date(d).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }) : '—'
 
 const EMPTY = {
   title:'', department:'', branch:'', description:'', must_have:'',
@@ -49,6 +51,7 @@ export default function TalentOpenings() {
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ ...EMPTY })
+  const [viewing, setViewing] = useState(null)   // opening shown in the detail drawer
   const guard = useRef(false)
 
   useEffect(() => { init() }, [])
@@ -104,6 +107,32 @@ export default function TalentOpenings() {
       await load()
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { guard.current = false }
+  }
+
+  // Duplicate — same role, fresh opening. Everything the person typed is
+  // carried over; the live counters (status, filled_count) are not, because
+  // they belong to the opening being copied, not to the new one.
+  function duplicate(o) {
+    setViewing(null)
+    setForm({
+      ...EMPTY,
+      title: o.title || '',
+      department: o.department || '',
+      branch: o.branch || '',
+      description: o.description || '',
+      must_have: o.must_have || '',
+      exp_min_years: o.exp_min_years != null ? String(o.exp_min_years) : '',
+      exp_max_years: o.exp_max_years != null ? String(o.exp_max_years) : '',
+      headcount: String(o.headcount || 1),
+      employment_type: o.employment_type || 'full_time',
+      budget_ctc_min: o.budget_ctc_min != null ? String(o.budget_ctc_min) : '',
+      budget_ctc_max: o.budget_ctc_max != null ? String(o.budget_ctc_max) : '',
+      justification: o.justification || '',
+      // A target date copied from an older opening is almost always in the
+      // past, so it is left blank rather than shipped already overdue.
+      target_date: '',
+    })
+    setShowAdd(true)
   }
 
   async function setStatus(o, status) {
@@ -193,7 +222,10 @@ export default function TalentOpenings() {
             const total = f.reduce((s, x) => s + x.n, 0)
             const left = Math.max(0, (o.headcount || 0) - (o.filled_count || 0))
             return (
-              <div className="card to-card" key={o.id}>
+              <div className="card to-card is-clickable" key={o.id}
+                role="button" tabIndex={0}
+                onClick={()=>setViewing(o)}
+                onKeyDown={e=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setViewing(o) } }}>
                 <div className="card-head">
                   <div>
                     <div className="card-eyebrow">{o.department || 'No department'}{o.branch ? ` · ${o.branch}` : ''}</div>
@@ -232,8 +264,12 @@ export default function TalentOpenings() {
                   ))}
                 </div>
 
-                <div className="to-acts">
+                {/* stopPropagation everywhere — the card itself is now a
+                    button, and without it every action would also open the
+                    detail drawer behind the thing you just clicked. */}
+                <div className="to-acts" onClick={e=>e.stopPropagation()}>
                   <button className="btn-ghost o-btn-sm" onClick={()=>navigate(`/talent/pipeline?opening=${o.id}`)}>View pipeline</button>
+                  <button className="btn-ghost o-btn-sm" onClick={()=>duplicate(o)}>Duplicate</button>
                   {o.status === 'open' && <button className="btn-ghost o-btn-sm" onClick={()=>setStatus(o, 'on_hold')}>Hold</button>}
                   {o.status === 'on_hold' && <button className="btn-ghost o-btn-sm" onClick={()=>setStatus(o, 'open')}>Resume</button>}
                   {o.status !== 'closed' && o.status !== 'filled' && <button className="btn-ghost o-btn-sm" onClick={()=>setStatus(o, 'closed')}>Close</button>}
@@ -243,6 +279,57 @@ export default function TalentOpenings() {
           })}
         </div>
       </div>
+
+      {viewing && (
+        <Drawer title={viewing.title}
+          sub={`${EMP_LABEL[viewing.employment_type] || 'Full time'} · ${viewing.department || 'No department'}${viewing.branch ? ` · ${viewing.branch}` : ''}`}
+          onClose={()=>setViewing(null)}
+          footer={<>
+            <button className="btn btn-neutral" onClick={()=>duplicate(viewing)}>Duplicate</button>
+            <button className="btn btn-primary" onClick={()=>navigate(`/talent/pipeline?opening=${viewing.id}`)}>View pipeline</button>
+          </>}>
+          <div className="to-view">
+            <div className="to-view-row"><span>Status</span><b style={{ color: STATUS_COLOR[viewing.status] }}>{STATUS_LABEL[viewing.status] || viewing.status}</b></div>
+            <div className="to-view-row"><span>Headcount</span><b>{viewing.filled_count || 0} filled of {viewing.headcount}</b></div>
+            <div className="to-view-row"><span>Engagement</span><b>{EMP_LABEL[viewing.employment_type] || 'Full time'}</b></div>
+            <div className="to-view-row"><span>Department</span><b>{viewing.department || '—'}</b></div>
+            <div className="to-view-row"><span>Branch</span><b>{viewing.branch || '—'}</b></div>
+            <div className="to-view-row"><span>Experience</span><b>
+              {viewing.exp_min_years != null || viewing.exp_max_years != null
+                ? `${viewing.exp_min_years ?? 0}–${viewing.exp_max_years ?? '+'} yrs` : '—'}</b></div>
+            <div className="to-view-row"><span>Budget CTC</span><b>
+              {viewing.budget_ctc_min || viewing.budget_ctc_max
+                ? `${inr(viewing.budget_ctc_min)} – ${inr(viewing.budget_ctc_max)}` : '—'}</b></div>
+            <div className="to-view-row"><span>Target date</span><b>{fmtDate(viewing.target_date)}</b></div>
+            <div className="to-view-row"><span>Opened on</span><b>{fmtDate(viewing.created_at)}</b></div>
+          </div>
+
+          {viewing.justification && (
+            <div className="to-view-block"><label>Why this role exists</label><p>{viewing.justification}</p></div>
+          )}
+          {viewing.must_have && (
+            <div className="to-view-block"><label>Must-have skills</label><p>{viewing.must_have}</p></div>
+          )}
+          {viewing.description && (
+            <div className="to-view-block"><label>Description</label><p>{viewing.description}</p></div>
+          )}
+
+          <div className="to-view-block">
+            <label>Pipeline · live stages only</label>
+            {(() => {
+              const f = funnelFor(viewing.id)
+              const total = f.reduce((s2, x) => s2 + x.n, 0)
+              return total === 0
+                ? <p>No candidates yet.</p>
+                : f.map(x => (
+                    <div className="to-view-row" key={x.stage}>
+                      <span>{stageLabel(x.stage)}</span><b>{x.n}</b>
+                    </div>
+                  ))
+            })()}
+          </div>
+        </Drawer>
+      )}
 
       {showAdd && (
         <Drawer title="New opening" sub="The role, where it sits, and what we are willing to pay for it."
@@ -300,6 +387,23 @@ export default function TalentOpenings() {
         .to-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:14px; }
         .to-card { padding:16px 18px; display:flex; flex-direction:column; gap:14px; }
         .to-nums { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+        /* .pmc-l / .pmc-v are scoped to .people-app; this card is inside
+           .orders-app, so they arrived unstyled. Declared locally instead. */
+        .orders-app .to-card .pmc-l { font-size:10px; font-weight:600; letter-spacing:.05em;
+          text-transform:uppercase; color:var(--o-muted); }
+        .orders-app .to-card .pmc-v { font-size:16px; font-weight:600; margin-top:4px;
+          letter-spacing:-.01em; color:var(--o-ink); }
+        .orders-app .to-card.is-clickable { cursor:pointer; transition:border-color .12s, box-shadow .12s; }
+        .orders-app .to-card.is-clickable:hover { border-color:var(--o-accent,#1a73e8); }
+        .orders-app .to-card.is-clickable:focus-visible { outline:2px solid var(--o-accent,#1a73e8); outline-offset:2px; }
+        .to-view { margin-bottom:6px; }
+        .to-view-row { display:flex; justify-content:space-between; gap:12px; padding:7px 0;
+          border-bottom:1px solid var(--line-2); font-size:12.5px; color:var(--muted); }
+        .to-view-row b { color:var(--ink); font-weight:600; text-align:right; }
+        .to-view-block { margin-top:16px; }
+        .to-view-block label { display:block; font-size:10.5px; font-weight:600; letter-spacing:.03em;
+          text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
+        .to-view-block p { font-size:12.5px; color:var(--ink); line-height:1.6; white-space:pre-wrap; margin:0; }
         /* The shared .dash-vs-row gives the label a 76px column, which clips
            "Reference check" straight into the bar. These stage names need more. */
         .orders-app .to-card .dash-vs-row { grid-template-columns:112px minmax(0,1fr) auto; }

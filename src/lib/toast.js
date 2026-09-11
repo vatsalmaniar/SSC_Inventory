@@ -16,20 +16,34 @@
 let container = null
 
 function getContainer() {
-  if (container) return container
+  // `container.isConnected` matters: the reference is cached for the life of
+  // the module, so if the node is ever detached from the DOM — a stray
+  // innerHTML wipe, a portal cleanup, an extension rewriting <body> — every
+  // later toast would be appended to an orphan node and silently never appear.
+  // Nothing throws and nothing logs; the app just goes quiet. Re-create it.
+  if (container && container.isConnected) return container
   container = document.createElement('div')
   container.id = 'toast-container'
   Object.assign(container.style, {
     position: 'fixed',
     // Sits clear of a notch and of the app's fixed topbar.
-    top: 'calc(16px + env(safe-area-inset-top))',
-    right: 'calc(16px + env(safe-area-inset-right))',
+    // Plain fallbacks FIRST, then the env() versions. If a browser rejects the
+    // calc(... env(...)) value the plain one survives, so the container still
+    // pins to the top-right. Without the fallback an unsupported env() leaves
+    // `top` unset entirely and the container lands at its static position —
+    // the bottom of <body>, usually well below the fold and invisible.
+    top: '16px',
+    right: '16px',
     left: 'auto',
     zIndex: '9999',
     display: 'flex', flexDirection: 'column', gap: '10px',
     pointerEvents: 'none',
     maxWidth: 'min(400px, calc(100vw - 32px))',
   })
+  // Applied after the fallbacks so a supporting browser upgrades to the
+  // notch-aware values, and a non-supporting one silently keeps 16px.
+  container.style.top = 'calc(16px + env(safe-area-inset-top))'
+  container.style.right = 'calc(16px + env(safe-area-inset-right))'
   document.body.appendChild(container)
   return container
 }

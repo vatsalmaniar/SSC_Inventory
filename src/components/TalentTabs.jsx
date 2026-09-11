@@ -12,6 +12,7 @@ const TABS = [
   { k: '/talent/openings',     l: 'Openings' },
   { k: '/talent/pipeline',     l: 'Pipeline' },
   { k: '/talent/offers',       l: 'Offers' },
+  { k: '/talent/salary-calculator', l: 'Salary Calculator' },
 ]
 
 export default function TalentTabs() {

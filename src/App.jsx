@@ -159,7 +159,9 @@ export default function App() {
           <Route path="/people/org" element={<PeopleOrg />} />
           <Route path="/people/assets" element={<PeopleAssets />} />
           <Route path="/people/config" element={<PeopleConfig />} />
-          <Route path="/people/salary-calculator" element={<SalaryCalculator />} />
+          {/* Moved to Talent 360 — the calculator is a hiring tool. The old
+              path redirects so existing links and bookmarks still work. */}
+          <Route path="/people/salary-calculator" element={<Navigate to="/talent/salary-calculator" replace />} />
           <Route path="/people/handbook" element={<Handbook />} />
           <Route path="/people/attendance" element={<Navigate to="/people/attendance/me" replace />} />
           <Route path="/people/attendance/me" element={<PeopleMyAttendance />} />
@@ -180,6 +182,7 @@ export default function App() {
           <Route path="/talent/pipeline" element={<TalentPipeline />} />
           <Route path="/talent/candidates/:id" element={<TalentCandidateDetail />} />
           <Route path="/talent/offers" element={<TalentOffers />} />
+          <Route path="/talent/salary-calculator" element={<SalaryCalculator />} />
           <Route path="/fc/:id" element={<FCOrderDetail />} />
           <Route path="/billing" element={<BillingDashboard />} />
           <Route path="/billing/list" element={<BillingList />} />

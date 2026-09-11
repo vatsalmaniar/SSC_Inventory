@@ -30,7 +30,16 @@ const DOC_TYPES = [
 ]
 const ROUND_TYPES = [['screening','Screening'],['technical','Technical'],['hr','HR'],['management','Management'],['other','Other']]
 const OUTCOMES = [['pending','Pending'],['selected','Selected'],['rejected','Rejected'],['on_hold','On hold'],['no_show','No show']]
-const VERDICTS = [['pending','Pending'],['positive','Positive'],['mixed','Mixed'],['negative','Negative'],['unreachable','Could not reach']]
+// Stored values are unchanged ('positive' / 'negative' / 'unreachable') — only
+// the wording differs, so no CHECK constraint is altered and no row migrates.
+// 'mixed' is dropped from the picker but still renders if an old row has it.
+const VERDICTS = [
+  ['pending','Not called yet'],
+  ['positive','Recommended'],
+  ['negative','Not recommended'],
+  ['unreachable','Could not reach'],
+]
+const VERDICT_LABEL = { pending:'Not called yet', positive:'Recommended', mixed:'Mixed', negative:'Not recommended', unreachable:'Could not reach' }
 const OUTCOME_COLOR = { pending:'#b45309', selected:'#15803d', rejected:'#dc2626', on_hold:'#7c3aed', no_show:'#94a3b8' }
 const VERDICT_COLOR = { pending:'#b45309', positive:'#15803d', mixed:'#b45309', negative:'#dc2626', unreachable:'#94a3b8' }
 const OFFER_COLOR = { draft:'#475569', sent:'#1a73e8', accepted:'#15803d', declined:'#dc2626', lapsed:'#b45309', revoked:'#94a3b8' }
@@ -46,6 +55,22 @@ const avColor = (n='') => { let h=0; for (let i=0;i<n.length;i++) h=n.charCodeAt
 // Storage keys must not carry spaces or non-ASCII — a signed URL for
 // "Aayush's CV (final).pdf" round-trips badly.
 const safeName = s => String(s || 'file').replace(/[^\w.\-]+/g, '_').slice(-80)
+
+// Mirrors the talent-docs bucket in sql/talent_360_up.sql. If the bucket's
+// file_size_limit or allowed_mime_types change, change these too — the point
+// of having them here is to fail fast, before the upload, not to disagree
+// with the server.
+const MAX_DOC_MB = 10
+const MAX_DOC_BYTES = MAX_DOC_MB * 1024 * 1024
+const ALLOWED_MIME = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+]
+// `accept` mirrors ALLOWED_MIME rather than using image/*, which would let the
+// picker offer a GIF the bucket then rejects.
+const ACCEPT_ATTR = '.pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.heif'
 
 function Drawer({ title, sub, onClose, children, footer, wide }) {
   return createPortal(
@@ -174,6 +199,24 @@ export default function TalentCandidateDetail() {
   // ── documents ────────────────────────────────────────────────────────────
   async function upload(file) {
     if (!file || !cand) return
+
+    // Checked HERE as well as at the bucket. Storage does enforce both limits,
+    // but it only does so after the whole file has been pushed over the wire —
+    // so a 40 MB scan uploads for a minute and then fails with a raw error.
+    // These two checks must stay in step with the bucket definition in
+    // sql/talent_360_up.sql.
+    if (file.size > MAX_DOC_BYTES) {
+      toast(`That file is ${(file.size / 1048576).toFixed(1)} MB — the limit is ${MAX_DOC_MB} MB.`, 'error',
+        'Scans are usually the culprit. Re-save it at a lower DPI, or split it.')
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    }
+    if (file.type && !ALLOWED_MIME.includes(file.type)) {
+      toast('That file type is not accepted.', 'error', 'PDF, Word, JPG, PNG, WebP or HEIC.')
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    }
+
     setUploading(true)
     let path = null
     try {
@@ -562,10 +605,13 @@ export default function TalentCandidateDetail() {
                     {DOC_TYPES.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                   <input ref={fileRef} type="file" onChange={e=>upload(e.target.files?.[0])} disabled={uploading}
-                    accept=".pdf,.doc,.docx,image/*" />
-                  {uploading && <span className="pmc-l">Uploading…</span>}
+                    accept={ACCEPT_ATTR} />
+                  {uploading && <span className="tc-uploading">Uploading…</span>}
                 </div>
-                <div className="tc-hint">Stored privately. Links are signed on demand and expire — CVs and ID proofs are personal data.</div>
+                <div className="tc-hint">
+                  PDF, Word or image · up to {MAX_DOC_MB} MB.
+                  Stored privately — links are signed on demand and expire, because CVs and ID proofs are personal data.
+                </div>
                 {docs.length === 0 && <div className="o-empty">No documents yet.</div>}
                 {docs.map(d => (
                   <div className="tc-doc" key={d.id}>
@@ -627,7 +673,7 @@ export default function TalentCandidateDetail() {
                     <div className="tc-iv-h">
                       <span className="tc-iv-t">{r.referee_name}</span>
                       <span className="meta-pill" style={{ color: VERDICT_COLOR[r.verdict], background:`color-mix(in srgb, ${VERDICT_COLOR[r.verdict]} 12%, transparent)` }}>
-                        {VERDICTS.find(x => x[0] === r.verdict)?.[1] || r.verdict}
+                        {VERDICT_LABEL[r.verdict] || r.verdict}
                       </span>
                       <button className="btn-ghost o-btn-sm" style={{ marginLeft:'auto' }}
                         onClick={()=>setRefForm({ id:r.id, referee_name:r.referee_name||'', referee_company:r.referee_company||'',
@@ -1008,8 +1054,22 @@ export default function TalentCandidateDetail() {
                     background:var(--bg); border-radius:10px; }
         .tc-notes.warn { background:color-mix(in srgb,#b45309 8%,transparent); }
         .tc-hint { font-size:11.5px; color:var(--muted-2); margin:8px 0 12px; line-height:1.6; }
+        .tc-uploading { font-size:11.5px; font-weight:600; color:var(--o-accent,#1a73e8); }
         .tc-sec-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
         .tc-upload { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+        /* A bare <input type=file> renders the OS "Choose File" chrome, which
+           looks nothing like the rest of the app. ::file-selector-button is the
+           only way to restyle it without replacing the control entirely. */
+        .orders-app .tc-upload input[type=file] { font:inherit; font-size:12.5px; color:var(--o-muted); max-width:100%; }
+        .orders-app .tc-upload input[type=file]::file-selector-button {
+          font:inherit; font-size:12px; font-weight:500; padding:6px 12px; margin-right:10px;
+          border:1px solid var(--o-line); border-radius:8px; background:var(--o-surface);
+          color:var(--o-ink); cursor:pointer; transition:background .12s, border-color .12s;
+        }
+        .orders-app .tc-upload input[type=file]::file-selector-button:hover {
+          background:var(--o-bg-2); border-color:var(--o-accent,#1a73e8);
+        }
+        .orders-app .tc-upload input[type=file]:disabled::file-selector-button { opacity:.55; cursor:default; }
         .tc-doc { display:flex; justify-content:space-between; align-items:center; gap:12px;
                   padding:10px 0; border-bottom:1px solid var(--line-2); }
         .tc-doc-t { font-size:12.5px; font-weight:600; color:var(--ink); }
@@ -1028,7 +1088,6 @@ export default function TalentCandidateDetail() {
         .tc-ver.on { font-weight:600; }
         @media (max-width:820px){
           .tc-ver { grid-template-columns:1fr 1fr; row-gap:4px; }
-          .salcalc-grid { grid-template-columns:1fr !important; }
         }
       `}</style>
     </Layout>

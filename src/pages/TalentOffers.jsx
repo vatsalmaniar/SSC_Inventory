@@ -166,12 +166,26 @@ export default function TalentOffers() {
       </div>
 
       <style>{`
-        .tof-grid { grid-template-columns: 1.2fr 1.1fr 1.2fr .8fr .8fr .9fr .9fr; }
+        /* MUST out-specify .orders-app .ol-row (0,2,0), which carries the
+           Orders column template. A bare .tof-grid (0,1,0) loses to it and the
+           table silently renders in Orders' widths — 110px for the offer
+           number, which wrapped it onto two lines and collided with the name. */
+        .orders-app .ol-row.tof-grid {
+          grid-template-columns: 200px minmax(0,1.1fr) minmax(0,1.2fr) 104px 100px 112px 118px;
+        }
+        /* overflow:hidden is the guard that matters: a cell whose content is
+           wider than its track must clip, never spill into its neighbour.
+           "SSC/HR/OFR/0001/26-27" is ~160px of Geist Mono, so the track is
+           sized for it — but a longer number must still not collide. */
+        .orders-app .ol-row.tof-grid > * { min-width: 0; overflow: hidden; }
+        .orders-app .ol-row.tof-grid .tof-num { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
         .tof-rev { font-family:var(--font); font-size:10px; font-weight:600; color:#7c3aed;
                    background:color-mix(in srgb, #7c3aed 12%, transparent); padding:1px 6px; border-radius:6px; margin-left:6px; }
         .tof-note { margin-top:12px; font-size:11.5px; color:var(--muted-2); line-height:1.6; }
         @media (max-width: 820px) {
-          .tof-grid { grid-template-columns: 1fr 1fr; row-gap: 4px; }
+          /* same specificity fight as above — the mobile restack has to beat
+             .orders-app .ol-row too, or the table stays 7 columns on a phone */
+          .orders-app .ol-row.tof-grid { grid-template-columns: 1fr 1fr; row-gap: 4px; }
           .tof-grid > div.r { text-align: left; }
           .ol-row.ol-head.tof-grid { display: none; }
         }

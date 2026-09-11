@@ -25,6 +25,14 @@ const avColor = (n='') => { let h=0; for (let i=0;i<n.length;i++) h=n.charCodeAt
 // How long this candidate has sat where they are.
 const daysIn = a => Math.max(0, Math.round((Date.now() - new Date(a.stage_changed_at || a.created_at)) / 86400000))
 
+// Mirrors the talent-docs bucket in sql/talent_360_up.sql — see the same block
+// in TalentCandidateDetail. Checked here so an oversized CV fails instantly
+// instead of after a long upload.
+const MAX_DOC_MB = 10
+const MAX_DOC_BYTES = MAX_DOC_MB * 1024 * 1024
+const ACCEPT_ATTR = '.pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.heif'
+const safeName = s2 => String(s2 || 'file').replace(/[^\w.\-]+/g, '_').slice(-80)
+
 const EMPTY = {
   full_name:'', phone:'', email:'', location:'', current_employer:'', current_designation:'',
   total_experience_years:'', current_ctc:'', expected_ctc:'', notice_period_days:'',
@@ -53,6 +61,8 @@ export default function TalentPipeline() {
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ ...EMPTY })
+  const [cv, setCv] = useState(null)      // attached in the drawer, uploaded after the candidate exists
+  const cvRef = useRef(null)
   const guard = useRef(false)
 
   const fOpening = params.get('opening') || 'all'
@@ -88,7 +98,7 @@ export default function TalentPipeline() {
       // same walk-in a minute apart must not create two of them), creates the
       // application, and writes the timeline entry, all in one transaction.
       // Matching server-side rather than here is what makes that race safe.
-      const { error } = await sb.rpc('add_candidate_application', {
+      const { data: row, error } = await sb.rpc('add_candidate_application', {
         p_opening_id: form.opening_id,
         p_full_name: form.full_name.trim(),
         p_phone: form.phone.trim() || null,
@@ -106,11 +116,45 @@ export default function TalentPipeline() {
         p_is_test: false,
       })
       if (error) throw error
+
+      // The CV can only be filed once the candidate row exists, so it is
+      // uploaded here rather than in the drawer. Best-effort: a failed CV must
+      // not discard a candidate who is already in the pipeline — the person is
+      // told, and can attach it from the Documents tab.
+      if (cv && row?.candidate_id) {
+        try { await uploadCv(cv, row.candidate_id, row.id) }
+        catch (e2) { toast('Candidate added, but the CV did not upload.', 'warning', e2?.message || 'Attach it from their Documents tab.') }
+      }
+
       toast(`${form.full_name.trim()} added to the pipeline.`, 'success')
-      setShowAdd(false); setForm({ ...EMPTY })
+      setShowAdd(false); setForm({ ...EMPTY }); setCv(null)
       await load()
     } catch (e) { toast(e?.message || friendlyError(e), 'error') }
     finally { guard.current = false }
+  }
+
+  // Same storage path shape as the Documents tab, so a CV attached here and one
+  // attached later land in exactly the same place.
+  async function uploadCv(file, candidateId, applicationId) {
+    const path = `${candidateId}/cv/${Date.now()}-${safeName(file.name)}`
+    const { error: upErr } = await sb.storage.from('talent-docs').upload(path, file, { upsert:false, contentType:file.type })
+    if (upErr) throw upErr
+    const { error } = await sb.rpc('add_talent_document', {
+      p_candidate_id: candidateId, p_doc_type: 'cv', p_file_path: path,
+      p_file_name: file.name, p_application_id: applicationId, p_offer_version_id: null,
+    })
+    // Never leave an orphan object in the bucket that no row points at.
+    if (error) { await sb.storage.from('talent-docs').remove([path]).catch(() => {}); throw error }
+  }
+
+  function pickCv(file) {
+    if (!file) { setCv(null); return }
+    if (file.size > MAX_DOC_BYTES) {
+      toast(`That CV is ${(file.size / 1048576).toFixed(1)} MB — the limit is ${MAX_DOC_MB} MB.`, 'error')
+      if (cvRef.current) cvRef.current.value = ''
+      return
+    }
+    setCv(file)
   }
 
   const visible = useMemo(() => {
@@ -156,7 +200,7 @@ export default function TalentPipeline() {
             <div className="page-sub">Every candidate, and exactly where they are</div>
           </div>
           <div className="page-meta">
-            <button className="btn-primary" onClick={()=>{ setForm({ ...EMPTY, opening_id: fOpening !== 'all' ? fOpening : '' }); setShowAdd(true) }}>
+            <button className="btn-primary" onClick={()=>{ setForm({ ...EMPTY, opening_id: fOpening !== 'all' ? fOpening : '' }); setCv(null); setShowAdd(true) }}>
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
               Add candidate
             </button>
@@ -248,7 +292,7 @@ export default function TalentPipeline() {
         <Drawer title="Add candidate" sub="A candidate is a person — if we already have their number, we reuse the record."
           onClose={()=>setShowAdd(false)}
           footer={<>
-            <button className="btn btn-neutral" onClick={()=>setShowAdd(false)}>Cancel</button>
+            <button className="btn btn-neutral" onClick={()=>{ setShowAdd(false); setCv(null) }}>Cancel</button>
             <button className="btn btn-primary" onClick={addCandidate}>Add to pipeline</button>
           </>}>
           <div className="pd-f"><label>Applying for *</label>
@@ -286,11 +330,24 @@ export default function TalentPipeline() {
               <input value={form.source_detail} onChange={e=>set({ source_detail:e.target.value })}
                 placeholder={form.source === 'referral' ? 'Employee name' : 'Consultant / portal ref'} /></div>
           </div>
+          <div className="pd-f"><label>CV / Resume</label>
+            <input ref={cvRef} type="file" accept={ACCEPT_ATTR} onChange={e=>pickCv(e.target.files?.[0])} />
+            <div className="pd-hint">
+              {cv ? `${cv.name} · ${(cv.size / 1048576).toFixed(1)} MB` : `PDF, Word or image · up to ${MAX_DOC_MB} MB. Optional — you can attach it later.`}
+            </div>
+          </div>
           <div className="pd-f"><label>Notes</label><textarea rows="2" value={form.notes} onChange={e=>set({ notes:e.target.value })} /></div>
         </Drawer>
       )}
 
       <style>{`
+        .people-drawer .pd-f input[type=file] { font:inherit; font-size:12.5px; color:var(--muted); max-width:100%; border:0; padding:0; }
+        .people-drawer .pd-f input[type=file]::file-selector-button {
+          font:inherit; font-size:12px; font-weight:500; padding:6px 12px; margin-right:10px;
+          border:1px solid var(--line); border-radius:8px; background:var(--surface);
+          color:var(--ink); cursor:pointer;
+        }
+        .people-drawer .pd-f input[type=file]::file-selector-button:hover { background:var(--bg-2); border-color:var(--accent); }
         .tp-board { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; align-items:start; }
         .tp-col { background:var(--bg); border:1px solid var(--line-2); border-radius:var(--o-radius,14px); overflow:hidden; }
         .tp-col-h { display:flex; align-items:center; gap:7px; padding:10px 12px; border-bottom:1px solid var(--line-2); }
