@@ -109,8 +109,12 @@ Deno.serve(async (req) => {
     if (!empMap.has(s)) empMap.set(s, [...ids][0])
   }
   const locs = [...new Set(rows.map(r => r.loc).filter(Boolean))] as string[]
+  // '__default__' is always fetched: the Kaveri device posts an EMPTY location, so those
+  // punches have nothing to look up and would land with office_id null. The sentinel row
+  // (sql/essl_default_location_kaveri.sql) points them at FC Kaveri, and can be repointed
+  // or deactivated from the database without touching this function.
   const { data: lmap } = await sb.from('essl_location_map').select('essl_location, office_id, active')
-    .in('essl_location', locs.length ? locs : ['__none__'])
+    .in('essl_location', [...(locs.length ? locs : ['__none__']), '__default__'])
   const locMap = new Map((lmap ?? []).filter((l: any) => l.active).map((l: any) => [l.essl_location, l.office_id]))
 
   // chronological → derive in/out per employee+day when the device didn't say
@@ -123,7 +127,10 @@ Deno.serve(async (req) => {
     const empId = empMap.get(r.code) ?? empMap.get(strip(r.code))
     if (!empId) { unmatched.add(r.code); continue }
     if (r.loc && !locMap.has(r.loc)) unmapped.add(r.loc)
-    const officeId = r.loc ? (locMap.get(r.loc) ?? null) : null
+    // A location we do not recognise, or none at all, falls back to the default office.
+    // Note this still records the punch either way — only an unmatched EMPLOYEE CODE is
+    // ever dropped. The office is used for geofence reporting, not for presence.
+    const officeId = (r.loc ? locMap.get(r.loc) : null) ?? locMap.get('__default__') ?? null
 
     let dir = r.dir
     if (!dir) {
