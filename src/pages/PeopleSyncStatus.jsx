@@ -82,7 +82,12 @@ export default function PeopleSyncStatus() {
     if (age > 30 * 24 * 3600 * 1000) return 'unused'      // silent for a month = not in service
     return 'offline'                                       // was recently alive, now is not
   }
-  const DEV_LABEL = { online: 'Online', offline: 'Offline', unused: 'Not in use' }
+  const DEV_LABEL = { online: 'Online', offline: 'Offline' }
+  // eSSL's device table also lists virtual readers ("Manual Entry(Attendance)",
+  // "Manual Entry(Canteen)", "Mobile") and sites long out of service. They are not
+  // readers anyone can walk up to, so listing them says nothing about whether
+  // attendance is working — it just buries the three that matter. Hidden entirely.
+  const liveDevices = devices.filter(d => devState(d) !== 'unused')
 
   return (
     <Layout pageKey="people" pageTitle="Sync status">
@@ -141,13 +146,13 @@ export default function PeopleSyncStatus() {
         <div className="card">
           <div className="card-head">
             <div><div className="card-eyebrow">Biometric readers</div><div className="card-title">Devices</div></div>
-            <span className="trend-pill mono">{devices.length}</span>
+            <span className="trend-pill mono">{liveDevices.length}</span>
           </div>
-          {devices.length === 0 ? (
+          {liveDevices.length === 0 ? (
             <div style={{ fontSize: 13.5, color: 'var(--muted)' }}>
               No device information yet. The connector reports this on its next run.
             </div>
-          ) : devices.map(d => (
+          ) : liveDevices.map(d => (
             <div key={d.device_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                             gap: 12, padding: '10px 0', borderTop: '1px solid var(--line-2)' }}>
               <div style={{ minWidth: 0 }}>
