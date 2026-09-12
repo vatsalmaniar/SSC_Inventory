@@ -43,7 +43,9 @@
 .crm-app * { box-sizing: border-box; }
 
 /* Prevent kanban width from pushing the whole page sideways */
-.ly-content:has(.crm-app), .ly-main:has(.crm-app) { overflow-x: hidden; min-width: 0; }
+/* clip, not hidden — see orders-redesign.css: hidden creates a scroll container and
+   breaks the sticky topbar. */
+.ly-content:has(.crm-app), .ly-main:has(.crm-app) { overflow-x: hidden; overflow-x: clip; min-width: 0; }
 .crm-app .mono { font-family: 'Geist Mono', monospace; }
 
 /* Page header */

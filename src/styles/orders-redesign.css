@@ -31,7 +31,13 @@
 .orders-app * { box-sizing: border-box; }
 .orders-app .mono { font-family: var(--mono); }
 
-.ly-content:has(.orders-app), .ly-main:has(.orders-app) { overflow-x: hidden; min-width: 0; }
+/* `clip`, NOT `hidden`. CSS computes the other axis to `auto` whenever one axis is
+   `hidden`, which turns .ly-main into a scroll container — and a scroll container is
+   what `position: sticky` sticks to. The topbar (a child of .ly-main) then anchored to
+   .ly-main's scrollport instead of the viewport and scrolled away with the page on every
+   orders-app screen. `clip` stops the horizontal overflow without creating a scrollport,
+   so the topbar stays put. Same fix in people.css and crm-redesign.css. */
+.ly-content:has(.orders-app), .ly-main:has(.orders-app) { overflow-x: hidden; overflow-x: clip; min-width: 0; }
 
 /* Page head */
 .orders-app .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }

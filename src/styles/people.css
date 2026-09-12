@@ -375,7 +375,9 @@
 .people-org-inspect .oi-actions .neu{background:#fff;color:#1D2D3E;border-color:#E4E7EC;}
 
 /* Confine horizontal overflow to inner scrollers — never scroll the whole page */
-.ly-content:has(.people-app), .ly-main:has(.people-app){ overflow-x:hidden; min-width:0; }
+/* clip, not hidden — overflow-x:hidden makes .ly-main a scroll container and the
+   sticky topbar then anchors to it instead of the viewport. See orders-redesign.css. */
+.ly-content:has(.people-app), .ly-main:has(.people-app){ overflow-x: hidden; overflow-x: clip; min-width:0; }
 .people-app{ min-width:0; overflow-x:hidden; }
 .people-app .org-canvas{ max-width:100%; }
 .people-app .tbl-wrap{ max-width:100%; }
