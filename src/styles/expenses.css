@@ -479,3 +479,107 @@
 /* The header had `padding: 0 12px 9px` — no top padding — so the labels sat flush
    against the card's divider above them. */
 .kpi-app .exp-table th { padding-top: 12px; }
+
+/* A scanned bill chip carries a tag, and says so on hover when the original was kept. */
+.exp-file-scan { border-color: #cfe0fb; background: #F2F7FF; }
+.exp-file-tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+  background: #E8F0FE; color: #1a73e8; font-size: 10.5px; letter-spacing: .02em; }
+
+/* ── Attached bills, before submitting ────────────────────────────────────────
+   Thumbnails rather than filenames: a scan has to be checked before it is attached
+   to a claim, and "invoice-scan.jpg" says nothing about whether the threshold ate
+   the total. Not scoped — the Add Expense drawer portals to <body>. */
+.exp-att { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.exp-att-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px;
+  border: 1px solid #E8EBF0; border-radius: 10px; background: #FBFBFD; }
+.exp-att-thumb { width: 54px; height: 68px; flex: 0 0 auto; padding: 0; overflow: hidden;
+  border: 1px solid #E3E8EF; border-radius: 7px; background: #fff; cursor: zoom-in; }
+.exp-att-thumb:disabled { cursor: default; }
+.exp-att-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.exp-att-pdf { display: grid; place-items: center; height: 100%; font-size: 11px;
+  color: #8a94a6; letter-spacing: .04em; }
+.exp-att-meta { flex: 1; min-width: 0; }
+.exp-att-name { font-size: 13px; color: #1D2D3E; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.exp-att-sub { font-size: 11.5px; color: #8a94a6; margin-top: 1px; }
+.exp-att-orig { margin-top: 4px; padding: 0; border: 0; background: none; cursor: pointer;
+  font-size: 11.5px; color: #1a73e8; text-decoration: underline; font-family: inherit; }
+.exp-att-risk { margin-top: 4px; font-size: 11.5px; color: #BA7D14; line-height: 1.45; }
+.exp-att-x { flex: 0 0 auto; width: 24px; height: 24px; border: 0; border-radius: 50%;
+  background: #F1F4F8; color: #5B6878; font-size: 15px; line-height: 1; cursor: pointer; }
+/* The kept original sits beside its scan, dashed so the two are never confused. */
+.exp-bill-orig { border-style: dashed !important; opacity: .9; }
+.exp-bill-scan { color: #1a73e8; }
+
+/* ── Document scanner (expense bills) ─────────────────────────────────────────
+   Lives in expenses.css because that is what PeopleExpenses.jsx imports. It was first
+   written into people.css — which that page does NOT import — so not one rule loaded
+   and the scanner rendered as a raw full-size image dumped into the document. Unscoped
+   on purpose too: the dialog portals to <body>, where a .people-app selector never
+   matches. Both halves of the same trap crm.css documented. */
+.ds-card { display: flex; flex-direction: column; background: #fff;
+  font-family: 'Geist', sans-serif; }
+.ds-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 15px 18px; border-bottom: 1px solid #EFF1F4; }
+.ds-title { font-size: 15px; font-weight: 600; color: #1D2D3E; }
+.ds-sub { font-size: 12.5px; color: #8a94a6; margin-top: 2px; }
+.ds-x { border: 0; background: #F1F4F8; width: 28px; height: 28px; border-radius: 50%;
+  font-size: 18px; line-height: 1; color: #5B6878; cursor: pointer; flex: 0 0 auto; }
+.ds-body { padding: 14px 18px; overflow-y: auto; }
+.ds-msg { padding: 34px 6px; text-align: center; color: #5B6878; font-size: 13.5px; line-height: 1.6; }
+.ds-view { position: relative; background: #0A2540; border-radius: 10px; overflow: hidden;
+  touch-action: none; user-select: none; }
+/* No max-height and no object-fit on the ADJUST image. The corner handles and the SVG
+   overlay are positioned as a percentage of this box, so the moment object-fit
+   letterboxes the photo the box stops matching the pixels and every handle sits in the
+   wrong place. The card body scrolls instead. */
+.ds-view img { display: block; width: 100%; height: auto; }
+.ds-preview img { max-height: 58vh; width: auto; max-width: 100%; margin: 0 auto; }
+.ds-preview { background: #F1F4F8; }
+/* Everything outside the quad is dimmed, so the crop is obvious at a glance. */
+.ds-edges .ds-dim { fill: rgba(10,37,64,.55); }
+.ds-edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ds-edges polygon { fill: none; stroke: #1a73e8; stroke-width: 3; vector-effect: non-scaling-stroke; }
+/* 13px dot, 44px touch target — a finger is not a mouse pointer. */
+.ds-handle { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; padding: 0;
+  border: 0; background: transparent; cursor: grab; touch-action: none; }
+.ds-handle::after { content: ''; position: absolute; left: 50%; top: 50%;
+  width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
+  background: #fff; border: 3px solid #1a73e8; box-shadow: 0 2px 6px rgba(10,37,64,.35); }
+.ds-handle:active { cursor: grabbing; }
+.ds-note { margin-top: 10px; font-size: 12.5px; color: #BA7D14; line-height: 1.5; }
+.ds-modes { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.ds-mode { padding: 7px 14px; border-radius: 999px; border: 1px solid #E3E8EF; background: #fff;
+  color: #5B6878; font-size: 13px; font-family: inherit; cursor: pointer; }
+.ds-mode.on { border-color: #1a73e8; color: #1a73e8; background: #E8F0FE; }
+.ds-hint { margin-top: 7px; font-size: 12.5px; color: #8a94a6; }
+.ds-risk { margin-top: 11px; padding: 10px 12px; border-radius: 9px; background: #FDF3E2;
+  color: #BA7D14; font-size: 12.5px; line-height: 1.55; }
+.ds-risk b { color: #8a5a08; }
+.ds-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 13px 18px;
+  border-top: 1px solid #EFF1F4; }
+.ds-btn { padding: 9px 16px; border-radius: 9px; border: 1px solid #E3E8EF; background: #fff;
+  color: #1D2D3E; font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; }
+.ds-btn:disabled { opacity: .55; cursor: default; }
+.ds-go { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+.ds-head { padding-left: 0; padding-right: 0; }
+.ds-body { padding-left: 0; padding-right: 0; }
+.ds-foot { padding-left: 0; padding-right: 0; }
+@media (max-width: 560px) {
+  .ds-foot { flex-wrap: wrap; }
+  .ds-foot .ds-go { flex: 1; }
+}
+
+/* View a bill without leaving the app. NOT window.open — the manifest is
+   display:standalone, so in the installed PWA a new window throws the person out to the
+   browser (losing the drawer and everything typed) or is blocked and looks like a dead
+   button. Same reason printDoc.js exists. */
+.exp-lb { position: fixed; inset: 0; z-index: 400; background: rgba(10,37,64,.88);
+  display: grid; place-items: center; padding: 24px; overflow: auto; }
+.exp-lb img { max-width: 100%; max-height: 86vh; border-radius: 6px; background: #fff;
+  box-shadow: 0 18px 48px rgba(0,0,0,.4); cursor: default; }
+.exp-lb-cap { position: fixed; left: 0; right: 0; bottom: 14px; text-align: center;
+  color: #E3E8EF; font-size: 12.5px; padding: 0 20px; }
+.exp-lb-x { position: fixed; top: 14px; right: 16px; width: 36px; height: 36px;
+  border: 0; border-radius: 50%; background: rgba(255,255,255,.16); color: #fff;
+  font-size: 21px; line-height: 1; cursor: pointer; }

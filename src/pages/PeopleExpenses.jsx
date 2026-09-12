@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import Stat from '../components/StatTile'
@@ -8,6 +9,7 @@ import { friendlyError } from '../lib/errorMsg'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
 import ExpenseIcon from '../components/ExpenseIcon'
+import DocScanner from '../components/DocScanner'
 import { fmt, fmtMoney } from '../lib/fmt'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import * as EX from '../lib/expense'
@@ -75,6 +77,7 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
   const [vendor, setVendor] = useState('')
   const [notes, setNotes] = useState('')
   const [files, setFiles] = useState([])
+  const [scanQueue, setScanQueue] = useState([])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState({})
   const guard = useRef(false)
@@ -85,11 +88,33 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
   const vendorOpts = cat?.vendor_options || []
   useEffect(() => { setVendor('') }, [categoryId])
 
+  // Photographed bills go through the scanner one at a time; PDFs and anything that is
+  // not an image go straight in. `files` holds { file, original, scanMode, scanRisk } so
+  // the upload step knows whether a second copy needs keeping.
   function pickFiles(e) {
     const chosen = Array.from(e.target.files || [])
     for (const f of chosen) { const v = EX.validateBillFile(f); if (v) { toast(v, 'error'); e.target.value = ''; return } }
     if (files.length + chosen.length > EX.MAX_BILLS) toast(`Up to ${EX.MAX_BILLS} bills per claim.`, 'warning')
-    setFiles([...files, ...chosen].slice(0, EX.MAX_BILLS)); e.target.value = ''
+    const room = EX.MAX_BILLS - files.length
+    const take = chosen.slice(0, Math.max(0, room))
+    e.target.value = ''
+    if (!take.length) return
+
+    const scannable = take.filter(f => f.type.startsWith('image/'))
+    const asIs = take.filter(f => !f.type.startsWith('image/'))
+    if (asIs.length) setFiles(fs => [...fs, ...asIs.map(f => ({ file: f }))])
+    if (scannable.length) setScanQueue(q => [...q, ...scannable])
+  }
+
+  // One scanner at a time, over the queue. Skip and Cancel both mean "attach the photo
+  // exactly as it is" — a screenshot of a UPI payment is not a document, and refusing to
+  // attach it because the scanner could not find four corners would be absurd.
+  function scanDone(res) {
+    const src = scanQueue[0]
+    setFiles(fs => [...fs, res?.scan
+      ? { file: res.scan, original: res.original, scanMode: res.mode, scanRisk: res.risk }
+      : { file: src }])
+    setScanQueue(q => q.slice(1))
   }
   function validate() {
     const er = {}
@@ -110,7 +135,10 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
     guard.current = true; setSaving(true)
     let expId = null; const uploaded = []
     try {
-      const hashes = await Promise.all(files.map(EX.hashFile))
+      // Hash the ORIGINAL photo, never the scan. Two photos of the same bill will never
+      // produce byte-identical scans, so hashing the processed file would quietly kill
+      // the duplicate-receipt warning that already exists.
+      const hashes = await Promise.all(files.map(b => EX.hashFile(b.original || b.file)))
       const { data: dups } = await sb.from('expense_bills').select('id').eq('profile_id', me.id).in('file_hash', hashes).limit(1)
       if (dups?.length) toast('Heads up — one of these bills matches a receipt from an earlier claim.', 'warning')
 
@@ -122,14 +150,26 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
       expId = exp.id
 
       for (let i = 0; i < files.length; i++) {
-        const f = files[i]
-        const path = `${me.id}/${crypto.randomUUID()}_${EX.safeName(f.name)}`
-        const { error: ue } = await sb.storage.from('expense-bills').upload(path, f, { upsert: false, contentType: f.type })
-        if (ue) throw ue
-        uploaded.push(path)
+        const b = files[i]
+        const f = b.file
+        const put = async file => {
+          const p = `${me.id}/${crypto.randomUUID()}_${EX.safeName(file.name)}`
+          const { error } = await sb.storage.from('expense-bills')
+            .upload(p, file, { upsert: false, contentType: file.type })
+          if (error) throw error
+          uploaded.push(p)
+          return p
+        }
+        const path = await put(f)
+        // The untouched photo is kept only when the scan looked risky — a faint thermal
+        // receipt, a coloured stamp, a hand-adjusted crop. A bill is a financial document
+        // and "the threshold ate the total" is not something you discover in time.
+        const originalPath = b.original ? await put(b.original) : null
+
         const { error: be } = await sb.from('expense_bills').insert({
           expense_id: expId, profile_id: me.id, file_path: path, filename: f.name,
           mime_type: f.type, size_bytes: f.size, file_hash: hashes[i], uploaded_by: me.id,
+          original_path: originalPath, scan_mode: b.scanMode || null, scan_risk: b.scanRisk || null,
         })
         if (be) throw be
       }
@@ -154,7 +194,14 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
           <button className="od-drawer-close" onClick={onClose}>×</button>
         </div>
         <div className="od-drawer-body">
-          <div style={{ display: 'grid', gap: 15 }}>
+          {/* The scanner takes over the drawer body while there is anything to scan. It
+              is a STEP in adding a bill, not a dialog on top of one — the form is still
+              mounted behind it, so nothing typed is lost. */}
+          {scanQueue.length > 0 ? (
+            <DocScanner key={scanQueue.length} file={scanQueue[0]}
+                        onCancel={() => scanDone(null)} onDone={scanDone} />
+          ) : null}
+          <div style={{ display: scanQueue.length > 0 ? 'none' : 'grid', gap: 15 }}>
             <div className="exp-field">
               <label className="exp-label">Category<span className="req">*</span></label>
               <select className={'exp-input' + (err.category ? ' err' : '')} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
@@ -220,14 +267,7 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
                 </label>
               </div>
               {files.length > 0 && (
-                <div className="exp-files">
-                  {files.map((f, i) => (
-                    <span key={i} className="exp-file">
-                      {f.name.length > 26 ? f.name.slice(0, 24) + '…' : f.name}
-                      <button className="exp-file-x" onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</button>
-                    </span>
-                  ))}
-                </div>
+                <AttachedBills files={files} onRemove={i => setFiles(files.filter((_, j) => j !== i))} />
               )}
               {err.files && <div className="exp-err">{err.files}</div>}
             </div>
@@ -248,11 +288,102 @@ function AddExpenseDrawer({ me, categories, testMode, onClose, onDone }) {
 }
 
 /* Bill previews — receipts are photos, so show them, don't list filenames. */
+/* View a bill without leaving the app.
+ *
+ * NOT window.open. The manifest declares display:standalone, so in the installed PWA a
+ * new window either throws the person out into Safari/Chrome — losing the drawer and
+ * everything typed into it — or is blocked outright and looks like a dead button. This is
+ * the same trap printDoc.js was written to solve for printed documents.
+ */
+function BillLightbox({ src, caption, onClose }) {
+  useEffect(() => {
+    const esc = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [onClose])
+  if (!src) return null
+  return createPortal(
+    <div className="exp-lb" onClick={onClose}>
+      <button className="exp-lb-x" onClick={onClose} aria-label="Close">×</button>
+      <img src={src} alt={caption || 'Bill'} onClick={e => e.stopPropagation()} />
+      {caption && <div className="exp-lb-cap">{caption}</div>}
+    </div>,
+    document.body,
+  )
+}
+
+/* Bills attached but not yet submitted.
+ *
+ * Thumbnails, not filenames. The whole point of scanning is that the result should be
+ * checked before it is attached to a claim, and "invoice-scan.jpg" tells you nothing
+ * about whether the threshold ate the total. Click to open it full size.
+ */
+function AttachedBills({ files, onRemove }) {
+  const [urls, setUrls] = useState([])
+  const [lb, setLb] = useState(null)
+  useEffect(() => {
+    // Every entry must be the { file, … } wrapper. A bare File slipping in would throw on
+    // `b.file.name` during render, React would unmount the whole drawer, and the symptom
+    // would be "nothing happens when I attach a bill" with no error anywhere.
+    const made = files.map(b => b?.file ? ({
+      main: b.file.type.startsWith('image/') ? URL.createObjectURL(b.file) : null,
+      orig: b.original ? URL.createObjectURL(b.original) : null,
+    }) : {})
+    setUrls(made)
+    // Object URLs are a leak if they are not released — this drawer can be opened and
+    // closed all day while someone files a month of expenses.
+    return () => made.forEach(u => { if (u.main) URL.revokeObjectURL(u.main); if (u.orig) URL.revokeObjectURL(u.orig) })
+  }, [files])
+
+  return (
+    <>
+    <BillLightbox src={lb?.src} caption={lb?.cap} onClose={() => setLb(null)} />
+    <div className="exp-att">
+      {files.filter(b => b?.file).map((b, i) => {
+        const u = urls[i] || {}
+        return (
+          <div className="exp-att-item" key={i}>
+            <button type="button" className="exp-att-thumb" disabled={!u.main}
+                    title={u.main ? 'Open full size' : b.file.name}
+                    onClick={() => u.main && setLb({ src: u.main, cap: b.file.name })}>
+              {u.main
+                ? <img src={u.main} alt={b.file.name} />
+                : <span className="exp-att-pdf">PDF</span>}
+            </button>
+            <div className="exp-att-meta">
+              <div className="exp-att-name" title={b.file.name}>{b.file.name}</div>
+              <div className="exp-att-sub">
+                {b.scanMode ? MODE_WORD[b.scanMode] || 'Scanned' : 'As uploaded'}
+                {' · '}{Math.max(1, Math.round(b.file.size / 1024))} KB
+              </div>
+              {b.original && (
+                <button type="button" className="exp-att-orig"
+                        onClick={() => u.orig && setLb({ src: u.orig, cap: 'Original photo — ' + b.file.name })}>
+                  View original photo
+                </button>
+              )}
+              {b.scanRisk && <div className="exp-att-risk">Original kept — {b.scanRisk}.</div>}
+            </div>
+            <button type="button" className="exp-att-x" onClick={() => onRemove(i)} aria-label="Remove">×</button>
+          </div>
+        )
+      })}
+    </div>
+    </>
+  )
+}
+
+const MODE_WORD = { xerox: 'Scanned · xerox', grey: 'Scanned · greyscale', plain: 'Scanned · colour' }
+
 function BillGrid({ bills }) {
   const [urls, setUrls] = useState({})
+  const [lb, setLb] = useState(null)
   useEffect(() => {
     let alive = true
-    const paths = (bills || []).map(b => b.file_path)
+    // Sign the originals as well. Keeping the untouched photo is pointless if there is
+    // no way to open it — and it is the copy that matters when someone disputes a total.
+    const paths = [...(bills || []).map(b => b.file_path),
+                   ...(bills || []).map(b => b.original_path).filter(Boolean)]
     if (!paths.length) return
     sb.storage.from('expense-bills').createSignedUrls(paths, 3600).then(({ data }) => {
       if (!alive || !data) return
@@ -263,13 +394,38 @@ function BillGrid({ bills }) {
 
   if (!(bills || []).length) return <div className="exp-cfg-ph">No bill attached.</div>
   return (
+    <>
+    <BillLightbox src={lb?.src} caption={lb?.cap} onClose={() => setLb(null)} />
     <div className="exp-bill-grid">
-      {bills.map((b, i) => {
-        const url = urls[b.file_path]
-        const isImg = !/pdf$/i.test(b.mime_type || b.filename || '')
-        return (
+      {bills.flatMap((b, i) => [
+        // Where the untouched photo was kept, it gets its OWN tile. Hiding it behind a
+        // shift-click or a tooltip means nobody finds it, and the whole reason it exists
+        // is for the moment somebody disputes a figure on the scan.
+        ...(b.original_path ? [(
+          <button key={b.id + '-orig'} className="exp-bill-thumb exp-bill-orig"
+                  title={`The photo as taken — kept because ${b.scan_risk || 'the scan looked risky'}.`}
+                  onClick={() => urls[b.original_path] && setLb({ src: urls[b.original_path], cap: 'Original photo of bill ' + (i + 1) })}
+                  disabled={!urls[b.original_path]}>
+            {urls[b.original_path]
+              ? <img src={urls[b.original_path]} alt={`Original of bill ${i + 1}`} />
+              : <div className="exp-bill-file"><span>…</span></div>}
+            <span className="exp-bill-cap">Original {i + 1}</span>
+          </button>
+        )] : []),
+        billTile(b, i, urls, setLb),
+      ])}
+    </div>
+    </>
+  )
+}
+
+function billTile(b, i, urls, setLb) {
+  const url = urls[b.file_path]
+  const isImg = !/pdf$/i.test(b.mime_type || b.filename || '')
+  return (
           <button key={b.id} className="exp-bill-thumb" title={b.filename}
-            onClick={() => url && window.open(url, '_blank')} disabled={!url}>
+            onClick={() => { if (!url) return; if (isImg) setLb({ src: url, cap: b.filename || ('Bill ' + (i + 1)) }); else window.open(url, '_blank') }}
+            disabled={!url}>
             {isImg && url
               ? <img src={url} alt={b.filename || `Bill ${i + 1}`} />
               : <div className="exp-bill-file">
@@ -278,11 +434,11 @@ function BillGrid({ bills }) {
                   </svg>
                   <span>PDF</span>
                 </div>}
-            <span className="exp-bill-cap">Bill {i + 1}</span>
+            <span className="exp-bill-cap">
+              Bill {i + 1}
+              {b.scan_mode && <span className="exp-bill-scan"> · scan</span>}
+            </span>
           </button>
-        )
-      })}
-    </div>
   )
 }
 
@@ -548,7 +704,7 @@ export default function PeopleExpenses() {
 
       const { data, error } = await fetchAll((from, to) => sb
         .from('expenses')
-        .select('*, expense_categories(name,color,is_budgeted,gl_code), expense_bills(id,file_path,filename)')
+        .select('*, expense_categories(name,color,is_budgeted,gl_code), expense_bills(id,file_path,filename,mime_type,original_path,scan_mode,scan_risk)')
         .eq('month_start', month).eq('is_test', testMode)
         .order('expense_date', { ascending: false }).order('id', { ascending: false })
         .range(from, to))

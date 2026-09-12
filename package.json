@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test:offer": "node scripts/test-offer-annexure.mjs",
+    "test:leave": "node scripts/test-leave-ledger.mjs",
+    "test:docscan": "node scripts/test-docscan.mjs"
   },
   "dependencies": {
     "@hcaptcha/react-hcaptcha": "^2.0.2",

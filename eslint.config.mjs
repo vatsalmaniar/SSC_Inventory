@@ -33,7 +33,7 @@ import noUnpagedSelect from './eslint-rules/no-unpaged-select.js'
 
 const BROWSER = ['window','document','localStorage','sessionStorage','navigator','console',
   'setTimeout','clearTimeout','setInterval','clearInterval','fetch','alert','confirm','prompt',
-  'Date','URL','Blob','btoa','atob','FileReader','FormData','Image','requestAnimationFrame',
+  'Date','URL','Blob','File','ImageData','btoa','atob','FileReader','FormData','Image','requestAnimationFrame',
   'cancelAnimationFrame','crypto','performance','location','history','open','Intl','TextEncoder',
   'AbortController','structuredClone','ResizeObserver','IntersectionObserver','MutationObserver',
   'CustomEvent','Event','matchMedia','getComputedStyle','screen','XMLHttpRequest','WebSocket',
