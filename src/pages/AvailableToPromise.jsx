@@ -10,10 +10,10 @@ import { useState, useEffect } from 'react'
 import { codeIncludes } from '../lib/itemSearch'
 import { useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
-import { fmt, fmtTs, FY_START } from '../lib/fmt'
+import { fmt, fmtTs, fmtMoney, fmtMoneyShort, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import { TERMINAL_STATUSES } from '../lib/orderStatus'
-import { buildStockMap, allocateFifo, deriveOrderBucket, computeCounts, ORDER_BUCKET, BUCKET } from '../lib/dispatchability'
+import { buildStockMap, allocateFifo, deriveOrderBucket, computeCounts, isOrderDispatchable, isOrderDue, todayISO, ORDER_BUCKET, BUCKET } from '../lib/dispatchability'
 import { toast } from '../lib/toast'
 import { xlsFinish, xlsDownload } from '../lib/xlsExport'
 import Layout from '../components/Layout'
@@ -57,12 +57,18 @@ const CHIPS = [
   { key: ORDER_BUCKET.BLOCKED_PARTIAL, label: 'Partials OFF', tone: 'warn' },
   { key: ORDER_BUCKET.NO_STOCK, label: 'No Stock' },
   { key: ORDER_BUCKET.NOT_IN_SHEET, label: 'Not in Sheet' },
+  { key: 'scheduled', label: 'Scheduled' },
   { key: 'all', label: 'All' },
 ]
-const isDispatchable = (r) => r.bucket === ORDER_BUCKET.FULL || r.bucket === ORDER_BUCKET.PARTIAL
-function matchChip(r, chip) {
+// Every chip except Scheduled shows DUE orders only; Scheduled holds the rest. `all` stays
+// unfiltered — the two halves must reconcile to it exactly, so nothing can go missing.
+// isOrderDue lives in lib/dispatchability.js because the Orders dashboard asks the same
+// question and the two must never answer it differently.
+function matchChip(r, chip, today) {
   if (chip === 'all') return true
-  if (chip === 'dispatchable') return isDispatchable(r)
+  if (chip === 'scheduled') return !isOrderDue(r, today)
+  if (!isOrderDue(r, today)) return false
+  if (chip === 'dispatchable') return isOrderDispatchable(r)
   return r.bucket === chip
 }
 
@@ -179,7 +185,7 @@ export default function AvailableToPromise() {
   function fetchOrders(testMode) {
     return fetchAll((from, to) =>
       sb.from('orders')
-        .select('id,order_number,customer_name,account_owner,engineer_name,order_date,order_type,status,partial_deliveries_allowed,hold_party,hold_reason,fulfilment_center,order_items(id,sr_no,item_code,qty,dispatched_qty,cancelled_qty,line_status,unit_price_after_disc)')
+        .select('id,order_number,customer_name,account_owner,engineer_name,order_date,order_type,status,partial_deliveries_allowed,hold_party,hold_reason,fulfilment_center,order_items(id,sr_no,item_code,qty,dispatched_qty,cancelled_qty,line_status,unit_price_after_disc,dispatch_date)')
         .gte('created_at', FY_START).eq('is_test', testMode)
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
@@ -315,12 +321,27 @@ export default function AvailableToPromise() {
   const tabRows = rows.filter(r => r.order_type === tab)
   const owners = [...new Set(rows.map(r => r.owner).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   const ownerRows = tabRows.filter(r => ownerFilter === 'all' || r.owner === ownerFilter)
-  const chipCounts = CHIPS.reduce((acc, { key }) => { acc[key] = ownerRows.filter(r => matchChip(r, key)).length; return acc }, {})
+  const today = todayISO()
+  const chipCounts = CHIPS.reduce((acc, { key }) => { acc[key] = ownerRows.filter(r => matchChip(r, key, today)).length; return acc }, {})
+  // Everything the headline and the count tiles report is DUE-only, so the page can never say
+  // 187 over a chip that says 134. Scheduled orders are reached through their own chip.
   const q = search.trim().toLowerCase()
   const filtered = ownerRows
-    .filter(r => matchChip(r, chip))
+    .filter(r => matchChip(r, chip, today))
     .filter(r => !q || r.customer_name?.toLowerCase().includes(q) || codeIncludes(r.order_number, q)
       || r.owner?.toLowerCase().includes(q) || r.lines.some(l => codeIncludes(l.item_code, q)))
+
+  // What the orders IN VIEW are worth. alloc_value comes straight from the allocation (qty
+  // actually allocatable x the line's price) — the value of goods standing in the godown
+  // against these orders, NOT the value of the orders, which is larger and includes what
+  // still has to be bought.
+  //
+  // It follows `filtered`, so it answers whatever the list is currently showing: pick Partial
+  // and it reports the partials, pick Scheduled and it reports what is not due yet. A tile
+  // that stayed at one number while the list beneath it changed would be read as the total
+  // for what is on screen, and be wrong every time a chip is clicked.
+  const shownValue = filtered.reduce((s, r) => s + (Number(r.alloc_value) || 0), 0)
+  const chipLabel = CHIPS.find(c => c.key === chip)?.label || ''
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -390,7 +411,16 @@ export default function AvailableToPromise() {
     } catch (e) { toast('Failed to generate Excel: ' + (e.message || e), 'error'); console.error(e) }
   }
 
-  const counts = result?.counts
+  // computeCounts() (server and browser alike) counts every order regardless of when it was
+  // promised — it is the allocation's own tally and the parity harness compares it, so it is
+  // left alone. The page reports the DUE half of it, matching the chips underneath.
+  const counts = result?.counts && (() => {
+    const n = (t, f) => rows.filter(r => (r.order_type || 'SO') === t && isOrderDue(r, today) && f(r)).length
+    return {
+      so: n('SO', isOrderDispatchable), soTotal: n('SO', () => true),
+      co: n('CO', isOrderDispatchable), coTotal: n('CO', () => true),
+    }
+  })()
 
   return (
     <Layout pageTitle="Available to Promise" pageKey="orders">
@@ -401,11 +431,11 @@ export default function AvailableToPromise() {
             <div className="o-summary">
               {counts ? (
                 <>
-                  <span><b>{counts.so}</b> of {counts.soTotal} SOs dispatchable</span>
+                  <span><b>{counts.so}</b> of {counts.soTotal} due SOs dispatchable</span>
                   <span className="o-sep">·</span>
-                  <span><b>{counts.co}</b> of {counts.coTotal} COs dispatchable</span>
+                  <span><b>{counts.co}</b> of {counts.coTotal} due COs dispatchable</span>
                   <span className="o-sep">·</span>
-                  <span style={{color:'var(--o-muted)'}}>oldest order first · stock never counted twice</span>
+                  <span style={{color:'var(--o-muted)'}}>promised today or earlier · oldest first · stock never counted twice</span>
                 </>
               ) : <span>—</span>}
             </div>
@@ -484,10 +514,13 @@ export default function AvailableToPromise() {
         {counts && (
           <div className="ph-bento o-bento-flat">
             <Stat label="Dispatchable SOs" value={counts.so}
-              foot={<>of <b>{counts.soTotal}</b> sales orders</>}
+              foot={<>of <b>{counts.soTotal}</b> due sales orders</>}
               onClick={() => { setChip('dispatchable'); setPage(1) }} />
             <Stat label="Dispatchable COs" value={counts.co}
-              foot={<>of <b>{counts.coTotal}</b> customer orders</>}
+              foot={<>of <b>{counts.coTotal}</b> due customer orders</>}
+              onClick={() => { setChip('dispatchable'); setPage(1) }} />
+            <Stat label="Stock value in view" value={fmtMoneyShort(shownValue)}
+              foot={<>{chipLabel.toLowerCase()} · <b>{filtered.length}</b> orders</>}
               onClick={() => { setChip('dispatchable'); setPage(1) }} />
             <Stat label="Full Stock" value={chipCounts[ORDER_BUCKET.FULL] || 0}
               foot="every line coverable"
@@ -583,6 +616,7 @@ export default function AvailableToPromise() {
               <div className="num">Lines</div>
               <div className="num">Qty (alloc/pend)</div>
               <div>Stock In</div>
+              <div className="num">Value</div>
               <div className="num">Coverage</div>
             </div>
             {filtered.length === 0 ? (
@@ -612,6 +646,7 @@ export default function AvailableToPromise() {
                         <div className="ol-cell num">{r.covered_lines}/{r.line_count}</div>
                         <div className="ol-cell num">{r.alloc_qty.toLocaleString('en-IN')} / {r.pend_qty.toLocaleString('en-IN')}</div>
                         <div className="ol-cell">{r.stock_loc}</div>
+                        <div className="ol-cell num">{r.alloc_value > 0 ? fmtMoney(r.alloc_value) : '—'}</div>
                         <div className="ol-cell ol-status-cell">
                           <span className="ol-status-pill" style={{ '--stage-color': cov.color }}>
                             <span className="ol-status-dot"/>{cov.label}
@@ -629,6 +664,7 @@ export default function AvailableToPromise() {
                               {l.near_miss && <span className="atp-nearmiss">≈ near-miss code</span>}
                             </div>
                             <div className="ol-cell"/>
+                            <div className="ol-cell"/>
                             <div className="ol-cell num">{l.alloc.toLocaleString('en-IN')} / {l.pend.toLocaleString('en-IN')}</div>
                             <div className="ol-cell atp-line-src">
                               {l.from_kaveri > 0 && `K ${l.from_kaveri.toLocaleString('en-IN')}`}
@@ -636,6 +672,7 @@ export default function AvailableToPromise() {
                               {l.from_godawari > 0 && `G ${l.from_godawari.toLocaleString('en-IN')}`}
                               {l.alloc === 0 && '—'}
                             </div>
+                            <div className="ol-cell"/>
                             <div className="ol-cell ol-status-cell">
                               <span className="ol-status-pill" style={{ '--stage-color': lc.color }}>
                                 <span className="ol-status-dot"/>{lc.label}

@@ -172,8 +172,25 @@
    (7 columns against the parent's 8), so a line never sat under the column it
    belonged to. One template here, shared by header, order row and line row. */
 .orders-app .ol-row.atp-row {
-  grid-template-columns: 130px 86px minmax(0, 1.3fr) minmax(0, 1fr) 60px 110px 100px 120px;
+  grid-template-columns: 130px 86px minmax(0, 1.3fr) minmax(0, 1fr) 60px 110px 95px 115px 120px;
 }
+
+/* `.num` is right-aligned in .ol-head only (orders-redesign.css). The DATA cells carrying
+   the same class had no rule, so every numeric column was headed right and filled left —
+   "VALUE" at one edge of the column, the rupee figure at the other. Scoped to this table
+   rather than .ol-data globally: the other list pages share the class and would shift. */
+.orders-app .ol-row.atp-row .ol-cell.num { text-align: right; }
+
+/* ── Ready to Dispatch (Orders dashboard) ───────────────────────────────────
+   The narrow half of an .o-mid row. Reuses the anchor's number scale and the
+   .ph-as-* stat pair from people-home.css rather than inventing a third size —
+   it sits two rows under the bento and must read as the same system. */
+.orders-app .o-ready { cursor: pointer; transition: border-color .12s, box-shadow .12s; }
+.orders-app .o-ready:hover { border-color: var(--ssc-blue); box-shadow: 0 2px 10px rgba(26,115,232,0.10); }
+.orders-app .o-ready-v { font-size: var(--fs-3xl); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-tight); line-height: 1; color: var(--o-ink); margin-top: 2px; }
+.orders-app .o-ready-sub { font-size: 12.5px; color: var(--o-muted); margin-top: 6px; }
+.orders-app .o-ready-split { display: flex; gap: 28px; margin-top: 14px; }
+.orders-app .o-ready-foot { font-size: 11.5px; color: var(--o-muted-2); margin-top: 14px; line-height: 1.5; }
 
 /* Expanded lines: same columns, tinted and not clickable. */
 .orders-app .ol-row.atp-line {

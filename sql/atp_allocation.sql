@@ -79,7 +79,11 @@ BEGIN
   CREATE TEMP TABLE IF NOT EXISTS _atp_alloc
     (order_id uuid, sr_no int, item_code text, pend numeric, alloc numeric,
      from_kaveri numeric, from_godawari numeric, bucket text, near_miss boolean,
-     unit_price numeric) ON COMMIT DROP;
+     unit_price numeric,
+     -- The PROMISED delivery date of this line (order_items.dispatch_date). Carried
+     -- so the page can separate orders that are due from orders merely scheduled;
+     -- like unit_price it is aggregated here and not sent per line.
+     due_date date) ON COMMIT DROP;
   -- `known` and `norm_index` are built ONCE here, exactly as buildStockMap does.
   -- Querying `inventory` per line instead measured 3,162 ms vs 100 ms.
   CREATE TEMP TABLE IF NOT EXISTS _atp_known (code text PRIMARY KEY) ON COMMIT DROP;
@@ -112,7 +116,8 @@ BEGIN
            CASE WHEN o.fulfilment_center IN ('Kaveri','Godawari')
                 THEN o.fulfilment_center ELSE 'Kaveri' END AS pref,
            greatest(0, oi.qty - coalesce(oi.dispatched_qty,0) - coalesce(oi.cancelled_qty,0)) AS pend,
-           coalesce(oi.unit_price_after_disc,0) AS unit_price
+           coalesce(oi.unit_price_after_disc,0) AS unit_price,
+           oi.dispatch_date AS due_date
       FROM orders o
       JOIN order_items oi ON oi.order_id = o.id
      WHERE o.is_test = p_test
@@ -131,13 +136,19 @@ BEGIN
 
     IF NOT EXISTS (SELECT 1 FROM _atp_pool WHERE code = l.item_code) THEN
       -- No qty>0 row anywhere: the JS `if (!avail)` branch.
-      INSERT INTO _atp_alloc VALUES (
+      -- Columns are named, not positional: this INSERT and the one below must stay in
+      -- step with the temp table, and a positional list silently shifts every value
+      -- when a column is added.
+      INSERT INTO _atp_alloc
+        (order_id, sr_no, item_code, pend, alloc, from_kaveri, from_godawari,
+         bucket, near_miss, unit_price, due_date)
+      VALUES (
         l.order_id, coalesce(l.sr_no,0), l.item_code, l.pend, 0, 0, 0,
         CASE WHEN EXISTS (SELECT 1 FROM _atp_known k WHERE k.code = l.item_code)
              THEN 'no_stock' ELSE 'not_in_sheet' END,
         NOT EXISTS (SELECT 1 FROM _atp_known k WHERE k.code = l.item_code)
           AND EXISTS (SELECT 1 FROM _atp_norm n WHERE n.norm = atp_norm_code(l.item_code)),
-        l.unit_price);
+        l.unit_price, l.due_date);
       CONTINUE;
     END IF;
 
@@ -149,14 +160,17 @@ BEGIN
     UPDATE _atp_pool SET q = q - v_take_pref WHERE code = l.item_code AND loc = l.pref;
     UPDATE _atp_pool SET q = q - v_take_oth  WHERE code = l.item_code AND loc = v_other;
 
-    INSERT INTO _atp_alloc VALUES (
+    INSERT INTO _atp_alloc
+      (order_id, sr_no, item_code, pend, alloc, from_kaveri, from_godawari,
+       bucket, near_miss, unit_price, due_date)
+    VALUES (
       l.order_id, coalesce(l.sr_no,0), l.item_code, l.pend, v_take_pref + v_take_oth,
       CASE WHEN l.pref = 'Kaveri' THEN v_take_pref ELSE v_take_oth END,
       CASE WHEN l.pref = 'Godawari' THEN v_take_pref ELSE v_take_oth END,
       CASE WHEN v_take_pref + v_take_oth = 0 THEN 'no_stock'
            WHEN v_take_pref + v_take_oth < l.pend THEN 'partial'
            ELSE 'full' END,
-      false, l.unit_price);
+      false, l.unit_price, l.due_date);
   END LOOP;
 
   -- ── Order rollup + deriveOrderBucket ──────────────────────────────────
@@ -180,6 +194,11 @@ BEGIN
            count(*) FILTER (WHERE a.bucket = 'full')::int AS covered_lines,
            sum(a.pend) AS pend_qty, sum(a.alloc) AS alloc_qty,
            sum(a.alloc * a.unit_price) AS alloc_value,
+           -- EARLIEST promised date across the still-pending lines. An order with one
+           -- line overdue and another promised months out is DUE on the strength of the
+           -- overdue one — calling it "scheduled" would hide work already late. NULL
+           -- only when no pending line carries a date, and the page reads that as due.
+           min(a.due_date) AS due_date,
            sum(a.from_kaveri) AS from_kaveri, sum(a.from_godawari) AS from_godawari,
            CASE WHEN sum(a.from_kaveri) > 0 AND sum(a.from_godawari) > 0 THEN 'Both'
                 WHEN sum(a.from_kaveri) > 0 THEN 'Kaveri'

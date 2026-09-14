@@ -232,8 +232,16 @@
 
 /* Date mode segmented (Order / Delivery / Delivered) */
 .orders-app .o-datemode { display: flex; gap: 2px; background: var(--o-bg-2); border: 1px solid var(--o-line); border-radius: 8px; padding: 3px; }
-.orders-app .o-datemode button { background: transparent; border: 0; padding: 5px 10px; font: inherit; font-size: 11.5px; color: var(--o-muted); cursor: pointer; border-radius: 5px; font-weight: 500; white-space: nowrap; }
-.orders-app .o-datemode button.on { background: var(--o-surface); color: var(--o-ink); box-shadow: 0 1px 2px rgba(11,27,48,0.06); }
+/* Segmented toggle (SO/CO, date modes, list views — 5 pages share it).
+   It used to read as two words rather than a control: the unselected side was plain grey
+   text with NO hover, and the selected side only a white pill on near-white grey. People
+   did not know it could be clicked. Dark mode already filled the selected segment with the
+   accent and was never confusing — this brings light mode up to the same clarity.
+   Selected = accent text, semibold, lifted pill. Unselected = tints on hover, so the thing
+   announces itself as clickable before anyone has to guess. */
+.orders-app .o-datemode button { background: transparent; border: 0; padding: 5px 10px; font: inherit; font-size: 11.5px; color: var(--o-muted); cursor: pointer; border-radius: 5px; font-weight: 500; white-space: nowrap; transition: background .12s, color .12s; }
+.orders-app .o-datemode button:hover:not(.on) { background: rgba(11,27,48,0.06); color: var(--o-ink); }
+.orders-app .o-datemode button.on { background: var(--o-surface); color: var(--ssc-blue); font-weight: 600; box-shadow: 0 1px 3px rgba(11,27,48,0.14); }
 
 /* Filter chips row */
 .orders-app .o-filter-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }

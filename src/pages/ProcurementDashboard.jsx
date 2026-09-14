@@ -5,6 +5,7 @@ import { FY_START } from '../lib/fmt'
 import { fetchActivePoCoveredQty, lineIsHandled, poSlaState, SLA_APPROVE_HOURS, SLA_PLACE_HOURS } from '../lib/coverage'
 import { fetchAll } from '../lib/fetchAll'
 import Layout from '../components/Layout'
+import SlaRow from '../components/SlaRow'
 import Stat from '../components/StatTile'
 import TrendChart from '../components/TrendChart'
 import '../styles/orders-redesign.css'
@@ -518,37 +519,6 @@ export default function ProcurementDashboard() {
   )
 }
 
-
-// One SLA line: how we did this month, how that compares with last month, and
-// how many are breaching RIGHT NOW. The open count is the actionable half —
-// a percentage tells you the past, a breach count tells you what to chase.
-function SlaRow({ label, owner, pct, prev, n, openBreaches, last }) {
-  const good = pct != null && pct >= 90
-  const delta = (pct != null && prev != null) ? pct - prev : null
-  return (
-    <div style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 0',
-                  borderBottom: last ? 'none' : '1px solid var(--gray-100)' }}>
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, color:'var(--gray-800)', fontWeight:500 }}>{label}</div>
-        <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>
-          {owner}{n ? ` · ${n} this month` : ' · none yet this month'}
-          {openBreaches > 0 && <span style={{ color:'#B91C1C', fontWeight:600 }}> · {openBreaches} open past SLA</span>}
-        </div>
-      </div>
-      <div style={{ textAlign:'right', flexShrink:0 }}>
-        <div className="mono" style={{ fontSize:19, fontWeight:600,
-             color: pct == null ? 'var(--gray-400)' : good ? '#15803d' : '#B45309' }}>
-          {pct == null ? '—' : pct + '%'}
-        </div>
-        {delta != null && delta !== 0 && (
-          <div style={{ fontSize:10.5, color: delta > 0 ? '#15803d' : '#B91C1C' }}>
-            {delta > 0 ? '▲' : '▼'} {Math.abs(delta)} pts vs last month
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 function ListCard({ title, eyebrow, badge, badgeColor, items, emptyText, renderItem, onClick }) {
   return (

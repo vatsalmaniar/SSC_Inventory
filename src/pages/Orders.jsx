@@ -4,9 +4,11 @@ import { sb } from '../lib/supabase'
 import { MO, FY_START } from '../lib/fmt'
 import { fetchAll } from '../lib/fetchAll'
 import { ordersTotalValue, ordersDispatchedValue, orderNetValue, lineNetValue } from '../lib/orderValue'
+import { isOrderDispatchable, isOrderDue, todayISO } from '../lib/dispatchability'
 import Layout from '../components/Layout'
 import Stat from '../components/StatTile'
 import TrendChart from '../components/TrendChart'
+import SlaRow from '../components/SlaRow'
 import '../styles/orders-redesign.css'
 // people-home.css owns .ph-bento / .ph-stat — the shared tile the People pages and the
 // main dashboard use. Orders now draws from the same well instead of its own KpiTile.
@@ -94,6 +96,8 @@ export default function Orders() {
   // Order ids that already have a sample_return GRN against them — the ONLY record
   // that a sample has physically come back. See sql/sample_return_tracking.sql.
   const [sampleReturned, setSampleReturned] = useState(() => new Set())
+  // atp_allocation()'s order rows, or null when the role may not see them / it failed.
+  const [atpOrders, setAtpOrders] = useState(null)
   const [loading, setLoading] = useState(true)
   const [successMsg, setSuccessMsg] = useState('')
 
@@ -122,12 +126,19 @@ export default function Orders() {
     setLoading(true)
     // Page past PostgREST's 1000-row cap — otherwise this dashboard's
     // Total Order Value under-reported (showed ~6.8 Cr of the true 9.2 Cr).
-    const [ordersData, repsRes, retRes] = await Promise.all([
+    // Ready to Dispatch reads the SAME allocation the ATP page does, so the dashboard and
+    // /orders/atp can never quote different figures. Only for the roles that may open ATP —
+    // it returns every order's allocation, and sales see only their own orders here.
+    const canSeeAtp = ['ops', 'admin', 'management'].includes(role)
+    const [ordersData, repsRes, retRes, atpRes] = await Promise.all([
       fetchAll((from, to) => {
         let q = sb.from('orders')
           // sample_returnable added for the Sample Orders "to return" figure. One extra
           // column on the same query — no new request, no filter change.
-          .select('id,order_number,customer_name,status,order_type,sample_returnable,created_at,created_by,order_items(qty,dispatched_qty,posted_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
+          // stock_status added for the 48h fulfilment KPI — it records whether the line was
+          // in stock when the order was raised, which is the only history we keep of that.
+          // One extra column on the same query; no new request.
+          .select('id,order_number,customer_name,status,order_type,sample_returnable,created_at,created_by,order_items(qty,dispatched_qty,posted_qty,total_price,unit_price_after_disc,dispatch_date,cancelled_qty,line_status,stock_status),order_dispatches(id,created_at,dispatched_items,status,delivered_at)')
           .gte('created_at', FY_START).eq('is_test', role === 'demo')
           .order('created_at', { ascending: false })
           .order('id', { ascending: false })
@@ -138,13 +149,17 @@ export default function Orders() {
       // Paged: 18 rows today, but the cap is a silent truncation, not an error.
       fetchAll((from, to) => sb.from('grn').select('order_id')
         .eq('grn_type', 'sample_return').eq('is_test', false).order('id').range(from, to)),
+      canSeeAtp ? sb.rpc('atp_allocation', { p_test: role === 'demo' }) : Promise.resolve({ data: null }),
     ])
     if (ordersData.error) console.error('Orders load error:', ordersData.error)
     if (ordersData.truncated) console.warn('Orders: hit fetch ceiling — consider server-side pagination.')
     if (retRes.error) console.error('sample returns load error:', retRes.error)
+    // A failed allocation must not blank the dashboard — the tile just goes quiet.
+    if (atpRes?.error) console.error('ATP allocation load error:', atpRes.error)
     setOrders(ordersData.data || [])
     setReps(repsRes.data || [])
     setSampleReturned(new Set((retRes.data || []).map(g => g.order_id).filter(Boolean)))
+    setAtpOrders(Array.isArray(atpRes?.data?.orders) ? atpRes.data.orders : null)
     setLoading(false)
   }
 
@@ -257,6 +272,58 @@ export default function Orders() {
   const fyDelivered = monthlyData.reduce((s,m) => s + m.delivered, 0)
   const fillRate = fyOrdered > 0 ? Math.round((fyDelivered / fyOrdered) * 100) : 0
   const fyCancelled = orders.filter(o => o.status === 'cancelled').length
+
+  // ── Ready to Dispatch — the ATP summary ────────────────────────────────────
+  // Straight off atp_allocation(), the same call /orders/atp makes, so the two pages cannot
+  // quote different numbers. DUE only (promised today or earlier): stock held against an
+  // order not wanted until November is not "ready to dispatch", it is inventory.
+  const readyToDispatch = atpOrders && (() => {
+    const today = todayISO()
+    const due = atpOrders.filter(r => isOrderDue(r, today) && isOrderDispatchable(r))
+    return {
+      value: due.reduce((s, r) => s + (Number(r.alloc_value) || 0), 0),
+      so: due.filter(r => (r.order_type || 'SO') === 'SO').length,
+      co: due.filter(r => r.order_type === 'CO').length,
+      count: due.length,
+    }
+  })()
+
+  // ── Fulfilment SLA: delivered within 48h when the stock was there ──────────
+  // The question is how fast we move when nothing is blocking us, so the denominator is
+  // orders whose every line was marked in_stock AT ORDER TIME (order_items.stock_status —
+  // the only record we keep of that) and which have since been delivered. Orders carrying a
+  // line with no stock_status are excluded rather than assumed: ~1,100 lines predate the
+  // field and guessing either way would move the score.
+  //
+  // ⚠️ ONE CLOCK, not two. Procurement splits approve (24h, approver) from place (48h,
+  // buyer) because a PO carries submitted_at and approved_at. Orders have neither, so a slow
+  // approval and a slow godown are indistinguishable here. Read it as end-to-end, not as the
+  // warehouse's score.
+  //
+  // ⚠️ THE CURRENT MONTH FLATTERS. Orders raised this month and not yet delivered are not in
+  // the denominator, so the figure can only fall as they land. The PO SLA card has the same
+  // bias; the label says "so far" for the same reason.
+  const SLA_DELIVER_HOURS = 48
+  const fulfilSla = (() => {
+    const monthKey = (d) => { const x = new Date(d); return x.getFullYear() * 12 + x.getMonth() }
+    const nowKey = monthKey(new Date())
+    const bucket = (offset) => {
+      let n = 0, hit = 0
+      for (const o of orders) {
+        if (monthKey(o.created_at) !== nowKey - offset) continue
+        const live = (o.order_items || []).filter(i => i.line_status !== 'cancelled')
+        if (!live.length || !live.every(i => i.stock_status === 'in_stock')) continue
+        const done = (o.order_dispatches || [])
+          .filter(b => ['dispatched_fc', 'closed'].includes(b.status))
+          .map(b => new Date(b.delivered_at || b.created_at).getTime())
+        if (!done.length) continue
+        n++
+        if ((Math.max(...done) - new Date(o.created_at).getTime()) / 3600000 <= SLA_DELIVER_HOURS) hit++
+      }
+      return { n, pct: n ? Math.round(hit / n * 100) : null }
+    }
+    return { now: bucket(0), prev: bucket(1) }
+  })()
 
   const greeting = (() => {
     const h = new Date().getHours()
@@ -392,6 +459,54 @@ export default function Orders() {
                 </div>
               </div>
             </div>
+
+            {/* Ready to Dispatch + the 48h fulfilment score. Deliberately BELOW the bento
+                (user, 14 Sep): the top row's six slots are taken by the five tiles and the
+                tall Top Customers column, and both of these carry more than a single number.
+                .o-mid gives the narrow-panel + wide-card split the page already uses. */}
+            {(readyToDispatch || fulfilSla.now.pct !== null) && (
+              <div className="o-mid">
+                {readyToDispatch ? (
+                  <div className="card o-ready" onClick={() => navigate('/orders/atp')}
+                       role="button" tabIndex={0}
+                       onKeyDown={e => { if (e.key === 'Enter') navigate('/orders/atp') }}>
+                    <div className="card-head">
+                      <div>
+                        <div className="card-eyebrow">Stock in hand · due now</div>
+                        <div className="card-title">Ready to Dispatch</div>
+                      </div>
+                    </div>
+                    <div className="o-ready-v">{fmtCr(readyToDispatch.value)}</div>
+                    <div className="o-ready-sub">
+                      <b>{readyToDispatch.count}</b> order{readyToDispatch.count === 1 ? '' : 's'} can ship today
+                    </div>
+                    <div className="o-ready-split">
+                      <div><div className="ph-as-l">CO</div><div className="ph-as-v">{readyToDispatch.co}</div></div>
+                      <div><div className="ph-as-l">SO</div><div className="ph-as-v">{readyToDispatch.so}</div></div>
+                    </div>
+                    <div className="o-ready-foot">Promised today or earlier · opens Available to Promise</div>
+                  </div>
+                ) : <div />}
+
+                <div className="card">
+                  <div className="card-head">
+                    <div>
+                      <div className="card-eyebrow">When the stock was there · order to delivery</div>
+                      <div className="card-title">Delivered within {SLA_DELIVER_HOURS}h</div>
+                    </div>
+                  </div>
+                  <div className="proc-sla">
+                    <SlaRow label="This month so far" pct={fulfilSla.now.pct} n={fulfilSla.now.n}
+                      prev={fulfilSla.prev.pct} />
+                    <SlaRow label="Last month" pct={fulfilSla.prev.pct} n={fulfilSla.prev.n} last />
+                  </div>
+                  <div className="o-ready-foot">
+                    Orders whose every line was in stock when raised. One clock, order to delivery —
+                    approval time is included. This month can only fall as slow orders land.
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Reps keep their panel; Order Pipeline takes the wide half beside it.
                 o-mid-orders is what scopes the height rules below to THIS page: .o-mid and

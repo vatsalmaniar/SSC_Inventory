@@ -51,8 +51,13 @@ export default function TrendChart({ points = [], refValue = null, refLabel = ''
     // 490-660, and an 18% pad put the floor at -26.42, so the axis read
     // "-26.42 orders - 747.42 orders". There is no such thing as minus 26 orders.
     // Series that genuinely go negative (none today) keep the padded floor.
-    const lo = lo0 >= 0 ? Math.max(0, lo0 - pad) : lo0 - pad
-    const hi = hi0 + pad
+    // Round the padded bounds to whole units. The pad is a fraction of the span, so it
+    // produced ends like 21.960000000000008 and the axis read "21.960000000000008 orders –
+    // 740.04 orders" — float noise quoted back at the reader. Rounding the SCALE rather than
+    // just the label keeps the axis and the plotted line describing the same range. Whole
+    // rupees and whole counts are both below anything a 96px chart can show.
+    const lo = Math.floor(lo0 >= 0 ? Math.max(0, lo0 - pad) : lo0 - pad)
+    const hi = Math.ceil(hi0 + pad)
     const span = Math.max(1, hi - lo)
     const x = i => PAD_X + (i / (n - 1)) * (w - PAD_X * 2)
     const y = v => PAD_T + (1 - (v - lo) / span) * (H - PAD_T - PAD_B)

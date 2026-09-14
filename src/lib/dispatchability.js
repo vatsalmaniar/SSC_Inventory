@@ -106,6 +106,19 @@ export function deriveOrderBucket(ls, partialsAllowed) {
 
 export const isOrderDispatchable = (r) => r.bucket === ORDER_BUCKET.FULL || r.bucket === ORDER_BUCKET.PARTIAL
 
+// DUE vs SCHEDULED — the promised delivery date, not the stock position.
+//
+// `due_date` is the EARLIEST still-pending line's promised date, rolled up identically by
+// allocateFifo() below and by min(a.due_date) in sql/atp_allocation.sql. An order part
+// overdue and part future counts as DUE: calling it scheduled would bury work already late.
+// An order with no date at all is DUE — never park an order out of sight because a field
+// was left blank.
+//
+// Lives here, not on a page: the ATP list and the Orders dashboard both ask this question
+// and must never answer it differently.
+export const todayISO = () => new Date().toISOString().slice(0, 10)
+export const isOrderDue = (r, today = todayISO()) => !r.due_date || r.due_date <= today
+
 // SO/CO headline counts for a set of order rows (exported for cached views)
 export function computeCounts(orderRows) {
   return {
@@ -144,6 +157,9 @@ export function allocateFifo(orders, stockMapResult) {
         sr_no: it.sr_no || 0,
         item_code: it.item_code,
         unit_price: it.unit_price_after_disc || 0,
+        // The PROMISED delivery date of this line. Rolled up per order below and used
+        // only to tell an order that is DUE from one merely scheduled for later.
+        due_date: it.dispatch_date || null,
         pend,
       })
     }
@@ -203,6 +219,11 @@ export function allocateFifo(orders, stockMapResult) {
       pend_qty: ls.reduce((s, l) => s + l.pend, 0),
       alloc_qty: ls.reduce((s, l) => s + l.alloc, 0),
       alloc_value: ls.reduce((s, l) => s + l.alloc * l.unit_price, 0),
+      // EARLIEST promised date across the pending lines — mirrors min(a.due_date) in
+      // sql/atp_allocation.sql. An order with one line overdue and another promised
+      // months out counts as DUE on the strength of the overdue one. Null when no
+      // pending line carries a date; the page reads that as due, never as scheduled.
+      due_date: ls.map(l => l.due_date).filter(Boolean).sort()[0] || null,
       from_kaveri: fromK,
       from_godawari: fromG,
       stock_loc: fromK > 0 && fromG > 0 ? 'Both' : fromK > 0 ? 'Kaveri' : fromG > 0 ? 'Godawari' : '—',
