@@ -24,7 +24,14 @@ export const isLapsed = o =>
 
 export const effectiveOfferStatus = o => (isLapsed(o) ? 'lapsed' : o?.status)
 
-export const canAcceptOffer = o => o?.status === 'sent' && !isLapsed(o)
+// A sent offer can always be ACCEPTED — a candidate answering two days after
+// the validity date is normal, and the system has to be able to record what
+// happened. isLapsed() still drives the warning and forces the acceptance to
+// be a deliberate act (see acceptNeedsOverride), it just no longer makes the
+// truth unrecordable.
+export const canAcceptOffer = o => o?.status === 'sent'
+// True when accepting requires an explicit override, because the date passed.
+export const acceptNeedsOverride = o => o?.status === 'sent' && isLapsed(o)
 
 // Days until an offer lapses — negative once it has. null when open-ended.
 export function daysToLapse(o) {

@@ -15,7 +15,8 @@ import SalaryStructurePanel, { computePanel, EMPTY_SALARY } from '../components/
 import {
   // aliased: the page has its own addComment() handler, and an unaliased import
   // would be shadowed by it — the handler would call itself forever.
-  canSeeTalent, addComment as postComment, moveStage, effectiveOfferStatus, canAcceptOffer, daysToLapse, todayYmd, loadOrgOptions,
+  canSeeTalent, addComment as postComment, moveStage, effectiveOfferStatus, canAcceptOffer,
+  acceptNeedsOverride, daysToLapse, todayYmd, loadOrgOptions,
 } from '../lib/talent'
 import { allowedNext, stageLabel, stageColor, needsReason, isTerminal } from '../lib/talentStage'
 import Layout from '../components/Layout'
@@ -99,6 +100,7 @@ export default function TalentCandidateDetail() {
   const [offerForm, setOfferForm] = useState(null)
   const [reviseForm, setReviseForm] = useState(null)
   const [joinForm, setJoinForm] = useState(null)
+  const [extendTo, setExtendTo] = useState(null)   // new validity date being set
   const [creds, setCreds] = useState(null)
   const [comment, setComment] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -356,14 +358,32 @@ export default function TalentCandidateDetail() {
     writeDoc(w, buildOfferLetterHtml(offer, v || currentVersion, cand, { letterDate: offer?.sent_at || todayYmd() }))
   }
 
-  async function setOfferStatus(status, reason = null) {
+  // Moving the deadline is the everyday path — a candidate asks for the
+  // weekend. The change is recorded on the timeline so the original date and
+  // the reason for moving it both survive.
+  async function saveExtend() {
+    if (guard.current || !offer) return
+    guard.current = true
+    try {
+      const { error } = await sb.rpc('extend_offer_validity', {
+        p_id: offer.id, p_valid_till: extendTo, p_reason: null,
+      })
+      if (error) throw error
+      toast(`Offer now valid to ${fmtDate(extendTo)}.`, 'success')
+      setExtendTo(null)
+      await load()
+    } catch (e) { toast(e?.message || friendlyError(e), 'error') }
+    finally { guard.current = false }
+  }
+
+  async function setOfferStatus(status, reason = null, overrideLapse = false) {
     if (guard.current || !offer) return
     guard.current = true
     try {
       // The server re-checks the lapse rule here too: an offer past its
       // validity date cannot be accepted, whatever this page believes.
       const { error } = await sb.rpc('set_offer_status', {
-        p_id: offer.id, p_status: status, p_reason: reason,
+        p_id: offer.id, p_status: status, p_reason: reason, p_override_lapse: overrideLapse,
       })
       if (error) throw error
       toast(`Offer marked ${status}.`, 'success')
@@ -737,7 +757,21 @@ export default function TalentCandidateDetail() {
                         })}>Revise</button>
                       )}
                       {offer.status === 'draft' && <button className="btn-primary o-btn-sm" onClick={()=>setOfferStatus('sent')}>Mark sent</button>}
-                      {canAcceptOffer(offer) && <button className="btn-primary o-btn-sm" onClick={()=>setOfferStatus('accepted')}>Accepted</button>}
+                      {canAcceptOffer(offer) && (
+                        acceptNeedsOverride(offer)
+                          ? <button className="btn-primary o-btn-sm" onClick={()=>{
+                              const on = fmtDate(offer.valid_till)
+                              if (window.confirm(`This offer lapsed on ${on}.\n\nRecord the acceptance anyway? The timeline will show it was accepted after the offer had lapsed.`)) {
+                                setOfferStatus('accepted', null, true)
+                              }
+                            }}>Accept anyway</button>
+                          : <button className="btn-primary o-btn-sm" onClick={()=>setOfferStatus('accepted')}>Accepted</button>
+                      )}
+                      {['draft','sent'].includes(offer.status) && (
+                        <button className="btn-ghost o-btn-sm" onClick={()=>setExtendTo(offer.valid_till || todayYmd())}>
+                          {acceptNeedsOverride(offer) ? 'Extend validity' : 'Change validity'}
+                        </button>
+                      )}
                       {offer.status === 'sent' && (
                         <button className="btn-ghost o-btn-sm" onClick={()=>{
                           const why = window.prompt('Why did they decline?') || ''
@@ -945,6 +979,26 @@ export default function TalentCandidateDetail() {
             <div className="pd-f"><label>Revised compensation</label>
               <SalaryStructurePanel compact value={reviseForm.sal} onChange={sal=>setReviseForm(f=>({...f,sal}))} /></div>
           )}
+        </Drawer>
+      )}
+
+      {extendTo !== null && (
+        <Drawer title="Offer validity"
+          sub={offer?.offer_no}
+          onClose={()=>setExtendTo(null)}
+          footer={<>
+            <button className="btn btn-neutral" onClick={()=>setExtendTo(null)}>Cancel</button>
+            <button className="btn btn-primary" onClick={saveExtend}>Save date</button>
+          </>}>
+          <div className="pd-f"><label>Valid till</label>
+            <input type="date" value={extendTo} min={todayYmd()} onChange={e=>setExtendTo(e.target.value)} />
+            <div className="pd-hint">
+              {offer?.valid_till
+                ? `Currently ${fmtDate(offer.valid_till)}${daysToLapse(offer) < 0 ? ` — lapsed ${Math.abs(daysToLapse(offer))} day${Math.abs(daysToLapse(offer)) === 1 ? '' : 's'} ago` : ''}.`
+                : 'No validity date set.'}
+              {' '}The change is recorded on the timeline.
+            </div>
+          </div>
         </Drawer>
       )}
 
