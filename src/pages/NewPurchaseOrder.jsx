@@ -2,11 +2,13 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import { FY_START } from '../lib/fmt'
+import { FY_START, fmtMoneyFull, fmtShort } from '../lib/fmt'
 import Typeahead from '../components/Typeahead'
 import PriceSourceNote from '../components/PriceSourceNote'
 import Layout from '../components/Layout'
 import '../styles/neworder.css'
+// .np-lastpaid lives here, alongside the rest of the three-way-match chrome.
+import '../styles/three-way-match.css'
 import { friendlyError } from '../lib/errorMsg'
 import { fetchActivePoCoveredQty, lineNeedsProcurement, lineToProcureQty, UNPLACED_PO_STATUSES, unplacedPoLabel } from '../lib/coverage'
 import { resolvePurchasePrice, resolvePurchasePrices, priceLineFields, unitPriceFor } from '../lib/itemPricing'
@@ -32,7 +34,9 @@ let RID = 0
 const nextRid = () => ++RID
 
 function emptyItem() {
-  return { _rid: nextRid(), item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', stock_qty: '0', co_remaining: 0, co_id: null, co_number: '', _customer_id: null, _priceLabel: '', _priceShort: '', _priceSource: '', _priceState: '', _moq: null, _autoPriced: false, _fixedUnit: null, _uom: null, _spaNo: null, _priceRecordId: null, _listPriceAtEntry: null, _priceResolvedAt: null }
+  return { _rid: nextRid(), item_code: '', description: '', qty: '', lp_unit_price: '', discount_pct: '0', unit_price_after_disc: '', total_price: '', delivery_date: '', order_item_id: null, item_type: '', stock_qty: '0', co_remaining: 0, co_id: null, co_number: '', _customer_id: null, _priceLabel: '', _priceShort: '', _priceSource: '', _priceState: '', _moq: null, _autoPriced: false, _fixedUnit: null, _uom: null, _spaNo: null, _priceRecordId: null, _listPriceAtEntry: null, _priceResolvedAt: null,
+    // What this part ACTUALLY cost last time, off a matched vendor bill.
+    _lastPaid: null }
 }
 
 export default function NewPurchaseOrder() {
@@ -401,6 +405,37 @@ export default function NewPurchaseOrder() {
     // Purchase price, description and MOQ come off the item — see lib/itemPricing.js
     // for the precedence. Everything it fills stays editable.
     applyPricing(rid, { itemCode: item.item_code, qty: 1, customerId: coCustomerId, vendorId, asOfDate: poDate })
+    loadLastPaid(rid, item.item_code)
+  }
+
+  // What we ACTUALLY paid for this part last time, taken from a matched vendor
+  // bill rather than from the price book.
+  //
+  // This is the prevention half of the three-way match. Everything else in that
+  // work DETECTS a wrong price after the money is committed; this shows the real
+  // number before the buyer types one. PCO0816 was raised at 26% off when
+  // Connectwell's terms were nearer 40% — typed from memory, with no
+  // price_record_id, no list_price_at_entry and no price_resolved_at, because
+  // CP4/4(E)D1 had no purchase price on file. Across the book only 92 of 5,268
+  // PO lines were priced from it and 551 were typed by hand.
+  //
+  // Never auto-fills. A past invoice is evidence, not a rate card — quantities,
+  // dates and terms differ — so it is shown and the buyer decides.
+  async function loadLastPaid(rid, itemCode) {
+    if (!rid || !itemCode) return
+    const { data, error } = await sb.rpc('pi_last_paid', { p_item_code: itemCode })
+    // A role without purchase-pricing access is refused by design; that is not
+    // an error worth surfacing, the hint simply does not appear.
+    if (error) return
+    const row = Array.isArray(data) ? data[0] : data
+    if (!row?.inv_unit_price) return
+    setItems(prev => {
+      const i = prev.findIndex(l => l._rid === rid)
+      if (i < 0 || prev[i].item_code !== itemCode) return prev   // row changed while we waited
+      const next = [...prev]
+      next[i] = { ...next[i], _lastPaid: row }
+      return next
+    })
   }
 
   // Fills list price, purchase discount, description (only when the line has
@@ -1090,6 +1125,27 @@ export default function NewPurchaseOrder() {
                           </span>
                         )}
                       </div>
+                      {/* What this part actually cost last time, off a matched
+                          vendor bill. Shown, never auto-filled: a past invoice is
+                          evidence, not a rate card. This is the prevention half of
+                          the three-way match — everything else catches a wrong
+                          price after the money is committed. */}
+                      {item._lastPaid && (
+                        <div className="np-lastpaid" title={`${item._lastPaid.vendor_name || ''} · invoice ${item._lastPaid.invoice_number || '—'}`}>
+                          Last paid <strong>{fmtMoneyFull(item._lastPaid.inv_unit_price)}</strong>
+                          {item._lastPaid.grn_number ? ` · ${item._lastPaid.grn_number.replace(/^SSC\//,'').replace(/\/\d{2}-\d{2}$/,'')}` : ''}
+                          {item._lastPaid.paid_on ? ` · ${fmtShort(item._lastPaid.paid_on)}` : ''}
+                          {(() => {
+                            const now = Number(item.unit_price_after_disc) || 0
+                            const was = Number(item._lastPaid.inv_unit_price) || 0
+                            if (!now || !was || Math.abs(now - was) < 0.005) return null
+                            const pct = Math.round(1000 * (now - was) / was) / 10
+                            return <span className={'np-lastpaid-diff' + (now > was ? ' up' : '')}>
+                              {now > was ? ' ▲ ' : ' ▼ '}{Math.abs(pct)}% vs this PO
+                            </span>
+                          })()}
+                        </div>
+                      )}
                     </td>
                     <td className="col-qty">
                       <input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', e.target.value)} placeholder="0" min="0" disabled={stocked} />

@@ -17,7 +17,7 @@ const INTERNAL_BCC = ['purchase@ssccontrol.com', 'purchase.brd@ssccontrol.com',
                       'ankit.dave@ssccontrol.com', 'hiral.patel@ssccontrol.com']
 import { SLA_APPROVE_HOURS, SLA_PLACE_HOURS } from '../lib/coverage'
 
-import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
+import { fmtShort, fmtDateTime, esc, fmtMoneyFull } from '../lib/fmt'
 import { toast } from '../lib/toast'
 import { poLinePendingQty, poUnitPrice } from '../lib/poValue'
 import Typeahead from '../components/Typeahead'
@@ -74,6 +74,7 @@ export default function PurchaseOrderDetail() {
   const [coStockClosedItems, setCoStockClosedItems] = useState([])  // CO lines (CI or SI) closed from stock (not on this PO)
   const [vendorCode, setVendorCode] = useState('')
   const [items, setItems]         = useState([])
+  const [invoicedByPoItem, setInvoicedByPoItem] = useState({})
   const [grns, setGrns] = useState([])
   const [grnItemsByPOItem, setGrnItemsByPOItem] = useState({})
   const [purchaseInvoices, setPurchaseInvoices] = useState([])
@@ -219,6 +220,19 @@ export default function PurchaseOrderDetail() {
     await loadPO()
   }
 
+  // What each PO line was ACTUALLY billed at, once a bill has been matched
+  // against it. The PO keeps its own price — it is the commitment record — so
+  // these sit beside it rather than replacing it.
+  async function loadInvoicedRates(poItemIds) {
+    if (!poItemIds.length) { setInvoicedByPoItem({}); return }
+    const { data } = await sb.from('purchase_invoice_items')
+      .select('po_item_id, inv_unit_price, price_decision, invoice_id')
+      .in('po_item_id', poItemIds).not('inv_unit_price', 'is', null)
+    const map = {}
+    for (const r of (data || [])) map[r.po_item_id] = r   // last match wins
+    setInvoicedByPoItem(map)
+  }
+
   async function loadPO(silent) {
     if (!silent) setLoading(true)
     const poRes = await sb.from('purchase_orders').select('*').eq('id', id).single()
@@ -265,6 +279,7 @@ export default function PurchaseOrderDetail() {
       sb.from('po_comments').select('*').eq('po_id', id).order('created_at').then(r => r).catch(() => ({ data: [] })),
     ])
     setItems(itemsRes.data || [])
+    await loadInvoicedRates((itemsRes.data || []).map(i => i.id))
     setDeliveryDates(datesRes.data || [])
     setComments(commentsRes.data || [])
 
@@ -1473,6 +1488,16 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
     </Layout>
   )
 
+  // Shown ONLY where the vendor's price turned out to be the right one — i.e.
+  // this PO was raised at the wrong rate. That is the one fact a buyer can act
+  // on here, and it is what stops the next PO repeating it.
+  //
+  // Where we decided OUR price was right, nothing is shown: the PO was correct,
+  // the vendor over-billed, and it has been claimed back on the bill. Flagging
+  // it here would say "your PO is wrong" about a PO that is not.
+  const wrongOnPo = id2 => invoicedByPoItem[id2]?.price_decision === 'invoice_correct'
+  const anyInvoiced = items.some(i => wrongOnPo(i.id))
+
   const pipeIdx = PIPELINE.indexOf(po.status)
   const isCancelled = po.status === 'cancelled'
   const isDone = po.status === 'material_received'
@@ -2086,6 +2111,8 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                     <th>LP Price</th>
                     <th>Disc %</th>
                     <th>Unit Price</th>
+                    {anyInvoiced && <th>Actually costs</th>}
+                    {anyInvoiced && <th>PO was out by</th>}
                     <th>Delivery Date</th>
                     <th className="right" style={{ paddingRight: 20 }}>Total</th>
                   </tr>
@@ -2101,7 +2128,29 @@ ${po.notes ? `<div class="notes-box"><strong>Notes for Vendor:</strong> ${esc(po
                       <td style={{ textAlign: 'center' }}>{item.qty}</td>
                       <td>{item.lp_unit_price ? '₹' + item.lp_unit_price : '—'}</td>
                       <td>{item.discount_pct ? item.discount_pct + '%' : '—'}</td>
-                      <td>{item.unit_price_after_disc ? '₹' + item.unit_price_after_disc : '—'}</td>
+                      {/* poUnitPrice, not unit_price_after_disc: that column is
+                          0.00 on every row in this database, so reading it
+                          directly rendered "—" for every line. */}
+                      <td>{poUnitPrice(item) ? fmtMoneyFull(poUnitPrice(item)) : '—'}</td>
+                      {anyInvoiced && (() => {
+                        // Only the lines where the vendor's rate was accepted as
+                        // correct. Everything else stays blank here — including a
+                        // line the vendor over-billed, because that is the bill's
+                        // problem, not the PO's.
+                        const iv = wrongOnPo(item.id) ? invoicedByPoItem[item.id] : null
+                        const rate = iv ? Number(iv.inv_unit_price) : null
+                        const diff = rate == null ? null : rate - poUnitPrice(item)
+                        return (
+                          <>
+                            <td className="mono">{rate == null ? '—' : fmtMoneyFull(rate)}</td>
+                            <td className="mono" style={{
+                              color: diff == null ? 'var(--gray-400)' : '#b45309',
+                              fontWeight: diff == null ? 400 : 600 }}>
+                              {diff == null ? '—' : (diff > 0 ? '+' : '') + fmtMoneyFull(diff)}
+                            </td>
+                          </>
+                        )
+                      })()}
                       <td style={{ fontSize: 12 }}>{item.delivery_date ? fmt(item.delivery_date) : '—'}</td>
                       <td className="right" style={{ paddingRight: 20 }}>₹{(Number(item.total_price) || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
                     </tr>

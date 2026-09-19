@@ -33,7 +33,12 @@ const FILTERS = [
   { key:'three_way_check',  label:'3-Way Check',     tone:'warn' },
   { key:'invoice_pending',  label:'Invoice Pending' },
   { key:'inward_complete',  label:'Inward Complete' },
+  // CUSTOMER side — a credit note we owe someone for goods they returned to us.
   { key:'credit_notes',     label:'Credit / Dr Notes', tone:'warn' },
+  // VENDOR side — money a supplier owes US, for over-charging or for billing
+  // goods the store never accepted. A different direction entirely, and it had
+  // no queue at all: the claim showed only inside the bill, so nobody raised it.
+  { key:'debit_notes',      label:'Vendor Debit Notes', tone:'warn' },
 ]
 
 const CN_TYPE_LABELS = { customer_rejection: 'Customer Rejection', cancellation_return: 'Cancellation Return' }
@@ -45,6 +50,10 @@ export default function PurchaseInvoiceList() {
   const [cnGrns, setCnGrns] = useState([])   // rejection/cancellation GRNs → Tally credit/Dr-note worklist
   const [grnNumById, setGrnNumById] = useState({}) // invoice grn_id → GRN number (GRN/Inv # column)
   const [loading, setLoading] = useState(true)
+  // Test Mode — the standing rule for every module, and these two pages never
+  // got it. Without it, demo and training data is either invisible here or has
+  // to be created as live data, which then pollutes real totals.
+  const [showTest, setShowTest] = useState(false)
   const [filter, setFilter] = useState('three_way_check')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -65,12 +74,12 @@ export default function PurchaseInvoiceList() {
     await loadInvoices()
   }
 
-  async function loadInvoices() {
+  async function loadInvoices(testMode = showTest) {
     setLoading(true)
     // Page past PostgREST's 1000-row cap
     const { data, error } = await fetchAll((from, to) => sb.from('purchase_invoices')
-      .select('id, invoice_number, vendor_name, invoice_date, invoice_amount, gst_amount, total_amount, status, po_id, grn_id, created_at')
-      .eq('is_test', false).gte('created_at', FY_START)
+      .select('id, invoice_number, vendor_name, invoice_date, invoice_amount, gst_amount, total_amount, status, po_id, grn_id, created_at, match_status, payment_block, debit_note_required, debit_note_amount, debit_note_uploaded_at')
+      .eq('is_test', testMode).gte('created_at', FY_START)
       .order('created_at', { ascending: false }).order('id', { ascending: false })
       .range(from, to))
     if (error) console.error('Purchase invoices load error:', error)
@@ -93,7 +102,7 @@ export default function PurchaseInvoiceList() {
       .select('id, grn_number, grn_type, status, received_at, created_at, order_id, credit_note_number, credit_note_url, credit_note_uploaded_by, credit_note_uploaded_at')
       .in('grn_type', ['customer_rejection', 'cancellation_return'])
       .in('status', ['confirmed', 'invoice_matched', 'inward_posted'])
-      .eq('is_test', false)
+      .eq('is_test', testMode)
       .order('created_at', { ascending: false })
       .limit(500)
     if (cnErr) console.error('Credit-note GRNs load error:', cnErr)
@@ -115,6 +124,7 @@ export default function PurchaseInvoiceList() {
     if (filter === 'invoice_pending') return s === 'invoice_pending'
     if (filter === 'inward_complete') return s === 'inward_complete'
     if (filter === 'all') return true
+    if (filter === 'debit_notes') return inv.debit_note_required && !inv.debit_note_uploaded_at
     return s === filter
   }
 
@@ -127,6 +137,9 @@ export default function PurchaseInvoiceList() {
     inward_complete: timelineInvoices.filter(i => i.status === 'inward_complete').length,
     all: timelineInvoices.length + cnTimeline.length, // All = invoices + credit/Dr notes
     credit_notes: cnGrns.filter(g => !g.credit_note_url).length, // pending notes only
+    // Only the ones still to raise — a count that includes finished work is a
+    // count nobody acts on.
+    debit_notes: timelineInvoices.filter(i => i.debit_note_required && !i.debit_note_uploaded_at).length,
   }
   const q = search.trim().toLowerCase()
   const filtered = timelineInvoices.filter(matchFilter).filter(inv =>
@@ -287,6 +300,12 @@ export default function PurchaseInvoiceList() {
                 Detailed
               </button>
             </div>
+            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:'#B45309',cursor:'pointer',whiteSpace:'nowrap'}}>
+              <input type="checkbox" checked={showTest}
+                     onChange={e => { setShowTest(e.target.checked); loadInvoices(e.target.checked) }}
+                     style={{accentColor:'#B45309',width:13,height:13}} />
+              Test Mode
+            </label>
             <button className="btn-ghost" onClick={() => navigate('/billing')}>Dashboard</button>
           </div>
         </div>
@@ -457,6 +476,19 @@ export default function PurchaseInvoiceList() {
                           </div>
                         )}
                         <div className="ol-date-sub">{inv.invoice_number && grnNo ? `${grnNo} · ` : ''}{fmt(inv.created_at)}</div>
+                        {/* Chaseable from the list. A debit note that only shows
+                            inside the bill is one nobody raises — same reason the
+                            GRN flags goods that have not gone back. */}
+                        {inv.debit_note_required && !inv.debit_note_uploaded_at && (
+                          <div className="ol-sample-tag" style={{ background:'rgba(245,158,11,0.12)', color:'#B45309', marginTop:3, display:'inline-block' }}>
+                            Debit note to raise · {fmtINR(inv.debit_note_amount)}
+                          </div>
+                        )}
+                        {inv.payment_block && !inv.debit_note_required && (
+                          <div className="ol-sample-tag" style={{ background:'rgba(245,158,11,0.12)', color:'#B45309', marginTop:3, display:'inline-block' }}>
+                            Do not pay in full
+                          </div>
+                        )}
                       </div>
                       <div className="ol-cell ol-cust" title={inv.vendor_name}>{inv.vendor_name || '—'}</div>
                       <div className="ol-cell ol-date">{inv.invoice_date ? fmt(inv.invoice_date) : '—'}</div>

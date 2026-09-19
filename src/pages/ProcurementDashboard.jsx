@@ -49,6 +49,11 @@ export default function ProcurementDashboard() {
   // is a three-table join done once in the database rather than in the browser.
   const [receivedByMonth, setReceivedByMonth] = useState([])
   const [loading, setLoading] = useState(true)
+  // Inward SLA — the second half of the purchase clock. The PO SLA measures
+  // getting an order OUT; this measures getting the goods and the bill IN, which
+  // is where the time actually goes: 60% of bills miss 48h, median three days.
+  const [inwardSla, setInwardSla]   = useState([])
+  const [inwardOpen, setInwardOpen] = useState([])
 
   useEffect(() => { init() }, [])
 
@@ -59,6 +64,11 @@ export default function ProcurementDashboard() {
     const role = profile?.role || 'ops'
     if (!['ops','admin','management','demo'].includes(role)) { navigate('/dashboard'); return }
     setUser({ name: profile?.name || '', role })
+
+    // Refused for any role without purchase-pricing access — not an error, the
+    // card simply does not render.
+    sb.rpc('inward_sla_scorecard').then(({ data }) => setInwardSla(data || []))
+    sb.rpc('inward_sla_open').then(({ data }) => setInwardOpen(data || []))
 
     const [posRes, grnCountRes, inwardCountRes] = await Promise.all([
       // PAGED. This was a plain select against PostgREST's 1000-row cap while the FY
@@ -372,6 +382,68 @@ export default function ProcurementDashboard() {
                     openBreaches={slaScore.open.placement} last />
                 </div>
               </div>
+
+              {/* ── Inward SLA ──────────────────────────────────────────────
+                  Same card and the same SlaRow as the PO clock above, on purpose:
+                  two scorecards that look different drift, and one ends up with a
+                  colour threshold the other never gets.
+
+                  The PERCENTAGE measures forward from inward_sla_config.sla_from,
+                  so the opening backlog — 190 bills already past 48h, 105 of them
+                  over a month old — does not read as this month's performance.
+                  The BREACH COUNT beside it includes everything, because a
+                  worklist that hides its oldest items is useless. */}
+              {inwardSla.length > 0 && (
+                <div className="card">
+                  <div className="card-head">
+                    <div>
+                      <div className="card-eyebrow">Goods in · bill in</div>
+                      <div className="card-title">Inward Turnaround SLA</div>
+                    </div>
+                    {inwardOpen.filter(o => o.breached).length > 0 && (
+                      <span className="trend-pill mono is-bad">
+                        {inwardOpen.filter(o => o.breached).length} past SLA
+                      </span>
+                    )}
+                  </div>
+                  <div className="proc-sla">
+                    {inwardSla.map((r, i) => (
+                      <SlaRow key={r.step}
+                        label={(r.step.startsWith('grn') ? 'GRN confirmed' : 'Bill matched')
+                               + ` within ${Number(r.sla_hours)}h`
+                               + (r.step.includes('· ') ? ' · ' + r.step.split('· ')[1] : '')}
+                        owner={r.owner_name}
+                        pct={r.pct_within == null ? null : Number(r.pct_within)}
+                        n={Number(r.measured)}
+                        openBreaches={inwardOpen.filter(o => o.breached &&
+                          o.kind === (r.step.startsWith('grn') ? 'GRN to confirm' : 'Bill to match')).length}
+                        last={i === inwardSla.length - 1} />
+                    ))}
+                  </div>
+
+                  {/* The queue by kind — the actionable half. "Debit note to
+                      raise" is the one that goes quiet on its own: the bill
+                      completes, everyone moves on, and the claim just sits. */}
+                  {inwardOpen.length > 0 && (
+                    <div style={{ padding:'10px 16px 14px', borderTop:'1px solid var(--gray-100)' }}>
+                      {[...new Set(inwardOpen.map(o => o.kind))].map(kind => {
+                        const rows = inwardOpen.filter(o => o.kind === kind)
+                        const bad  = rows.filter(o => o.breached).length
+                        return (
+                          <div key={kind} style={{ display:'flex', justifyContent:'space-between',
+                                                   alignItems:'baseline', padding:'4px 0', fontSize:12.5 }}>
+                            <span style={{ color:'var(--gray-600)' }}>{kind}</span>
+                            <span className="mono" style={{ fontWeight:600,
+                                  color: bad ? '#B45309' : 'var(--gray-500)' }}>
+                              {rows.length}{bad > 0 && <span style={{ color:'#B91C1C' }}> · {bad} late</span>}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* PCO vs PO — filled the gap under the SLA card rather than sitting on top
                   of the pipeline, which pushed the stage bars down. */}

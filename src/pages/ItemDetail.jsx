@@ -132,6 +132,10 @@ export default function ItemDetail() {
   const [auditNames, setAuditNames] = useState({})
   const [loading, setLoading]   = useState(true)
   const [tab, setTab]           = useState('summary')
+  // What this part was actually BILLED at, per matched bill. The PO tab shows
+  // what it was ORDERED at; until now nothing showed what we paid, so "is our
+  // price drifting?" could not be answered from the app.
+  const [rateHistory, setRateHistory] = useState([])
   const [orders, setOrders]     = useState([])
   const [pos, setPos]           = useState([])
   const [grns, setGrns]         = useState([])
@@ -224,6 +228,11 @@ export default function ItemDetail() {
 
     setOrders(ordRows)
     setPos(poRows)
+
+    // What the part was actually BILLED at. Refused for any role without
+    // purchase-pricing access, which is not an error — the tab simply stays empty.
+    const { data: rh } = await sb.rpc('item_rate_history', { p_item_code: itemData.item_code, p_limit: 24 })
+    setRateHistory(rh || [])
     setGrns(grnRows)
 
     const deliveredStatuses = ['dispatched_fc', 'goods_issued', 'invoice_generated']
@@ -542,6 +551,7 @@ export default function ItemDetail() {
     // PO History carries vendor unit prices — what we PAY. Sales sees the item,
     // the orders and the stock, but not our buying price.
     ...(canSeePurchase ? [{ key: 'pos', label: `PO History (${kpi.totalPos})` }] : []),
+    ...(canSeePurchase && rateHistory.length ? [{ key: 'rates', label: `Rates Paid (${rateHistory.length})` }] : []),
     { key: 'grns',     label: `GRNs (${kpi.totalGrns})` },
     { key: 'transfers', label: `Internal Transfers (${transfers.length})` },
   ]
@@ -913,6 +923,61 @@ export default function ItemDetail() {
           })()}
 
           {/* ── PO History Tab ── */}
+          {/* What we ACTUALLY paid, per matched bill. The PO tab above shows what
+              the part was ORDERED at; these two disagreeing is the whole point —
+              a run of "their price stood" on one part is a price book that needs
+              fixing, not a vendor overcharging. */}
+          {tab === 'rates' && canSeePurchase && (
+            <div className="c360-card">
+              {rateHistory.length === 0 ? (
+                <div className="c360-hempty">No matched vendor bills for this item yet.</div>
+              ) : (
+                <table className="od-items-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 110 }}>Date</th>
+                      <th>Vendor</th>
+                      <th style={{ width: 130 }}>PO / GRN</th>
+                      <th style={{ width: 70, textAlign: 'right' }}>Qty</th>
+                      <th style={{ width: 100, textAlign: 'right' }}>PO rate</th>
+                      <th style={{ width: 100, textAlign: 'right' }}>Billed</th>
+                      <th style={{ width: 100, textAlign: 'right' }}>Difference</th>
+                      <th style={{ width: 130 }}>Which stood</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rateHistory.map((r, i) => {
+                      const d = Number(r.difference) || 0
+                      return (
+                        <tr key={i}>
+                          <td style={{ fontSize: 12 }}>{r.paid_on ? fmt(r.paid_on) : '—'}</td>
+                          <td style={{ fontSize: 12 }}>{r.vendor_name || '—'}</td>
+                          <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>
+                            {(r.po_number || '').replace(/^SSC\//, '') || '—'}
+                            <div style={{ color: 'var(--gray-400)' }}>{(r.grn_number || '').replace(/^SSC\//, '')}</div>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>{r.qty}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--gray-500)' }}>
+                            {fmtMoneyFull(r.po_rate)}
+                          </td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 600 }}>
+                            {fmtMoneyFull(r.billed_rate)}
+                          </td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)',
+                                       color: Math.abs(d) < 0.005 ? 'var(--gray-400)' : '#b45309',
+                                       fontWeight: Math.abs(d) < 0.005 ? 400 : 600 }}>
+                            {Math.abs(d) < 0.005 ? 'same' : (d > 0 ? '+' : '') + fmtMoneyFull(d)}
+                          </td>
+                          <td style={{ fontSize: 11, color: 'var(--gray-500)' }}>{r.whose_price || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
           {tab === 'pos' && canSeePurchase && (
             // Cancelled POs stay hidden here (poRows already excludes them), per earlier ask.
             <div className="c360-card">

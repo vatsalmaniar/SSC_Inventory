@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { writeDoc } from '../lib/printDoc'
+import { buildReturnChallanHtml } from '../lib/returnChallanHtml'
 import { friendlyError } from '../lib/errorMsg'
 
 import { fmtShort, fmtDateTime, esc } from '../lib/fmt'
@@ -11,6 +12,9 @@ import Layout from '../components/Layout'
 import Loading from '../components/Loading'
 import { usePeopleDir } from '../components/PeopleAvatar'
 import '../styles/orderdetail.css'
+// .grnq-* live here. Used by this page for the return card and the action hints;
+// without it those render unstyled. Adds no .od-* rules, so nothing else moves.
+import '../styles/three-way-match.css'
 
 const GRN_TYPE_LABELS = {
   po_inward:'PO Inward', customer_rejection:'Customer Rejection',
@@ -72,6 +76,26 @@ export default function GRNDetail() {
   const [userName, setUserName] = useState('')
 
   // Credit / Dr note upload (returns & rejections — prepared in Tally)
+  // Sending rejected goods back. A FLAG, not a gate: the GRN confirms and the
+  // bill is created regardless. This only records the fact when it happens, so
+  // the open item stops being invisible.
+  // The bill for this GRN, so the return card can show whether the debit note
+  // exists yet — in practice the note travels WITH the goods.
+  const [bill, setBill]       = useState(null)
+  // Comments. The GRN was the only document in the inward chain without a
+  // thread — and it is where the quantity arguments happen.
+  const [comments, setComments]         = useState([])
+  const [commentText, setCommentText]   = useState('')
+  const [posting, setPosting]           = useState(false)
+  const [allUsers, setAllUsers]         = useState([])
+  const [mentionQuery, setMentionQuery] = useState(null)
+  const [mentionSug, setMentionSug]     = useState([])
+  const [mentionPos, setMentionPos]     = useState({ top: 0, left: 0, width: 240 })
+  const commentRef = useRef(null)
+
+  const [rtMode, setRtMode]   = useState('')
+  const [rtRef, setRtRef]     = useState('')
+  const [rtNote, setRtNote]   = useState('')
   const [cnNumber, setCnNumber] = useState('')
   const [cnFileName, setCnFileName] = useState('')
   const [cnUploading, setCnUploading] = useState(false)
@@ -127,12 +151,79 @@ export default function GRNDetail() {
     let { data: { session } } = await sb.auth.getSession()
     if (!session) { const { data } = await sb.auth.refreshSession(); if (!data?.session) { navigate('/login'); return }; session = data.session }
     const { data: profile } = await sb.from('profiles').select('name,role').eq('id', session.user.id).single()
-    if (!['ops','admin','management','fc_kaveri','fc_godawari','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
+    // 'accounts' belongs here: the Credit / Dr Note card further down this page
+    // is gated to ['accounts','admin','ops','management'] and the Inward Billing
+    // list sends them here to do it — but this gate bounced them to /dashboard,
+    // so the upload they were told to do was unreachable. They can now open a
+    // GRN and attach documents; the QUANTITY actions below stay closed to them.
+    if (!['ops','admin','management','accounts','fc_kaveri','fc_godawari','demo'].includes(profile?.role)) { navigate('/dashboard'); return }
     setUserRole(profile?.role || '')
     setUserName(profile?.name || '')
     await loadGRN()
   }
 
+
+  // The bill for this GRN, so the return card can say whether the debit note
+  // exists yet — in practice the note travels back WITH the goods.
+  async function loadComments() {
+    const [{ data: cs }, { data: us }] = await Promise.all([
+      sb.from('grn_comments').select('*').eq('grn_id', id).order('created_at'),
+      sb.from('profiles').select('id,name,username')
+        .in('role', ['admin','management','ops','accounts','fc_kaveri','fc_godawari']).order('name'),
+    ])
+    setComments(cs || []); setAllUsers(us || [])
+  }
+
+  function handleCommentInput(e) {
+    const v = e.target.value
+    setCommentText(v)
+    const at = v.slice(0, e.target.selectionStart).match(/@([\w.]*)$/)
+    if (at) {
+      const q = at[1].toLowerCase()
+      const rect = e.target.getBoundingClientRect()
+      setMentionQuery(q)
+      setMentionSug(allUsers.filter(u =>
+        u.name.toLowerCase().includes(q) || (u.username || '').toLowerCase().includes(q)).slice(0, 5))
+      setMentionPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+    } else { setMentionQuery(null); setMentionSug([]) }
+  }
+
+  function insertMention(name) {
+    const cursor = commentRef.current?.selectionStart || commentText.length
+    const before = commentText.slice(0, cursor).replace(/@[\w.]*$/, '@' + name.replace(/\s+/g, '_') + ' ')
+    setCommentText(before + commentText.slice(cursor))
+    setMentionQuery(null); setMentionSug([])
+    setTimeout(() => commentRef.current?.focus(), 0)
+  }
+
+  function renderMessage(msg) {
+    if (!msg) return msg
+    return msg.split(/(@[\w.]+)/g).map((part, i) =>
+      part.startsWith('@')
+        ? <span key={i} style={{ color:'var(--blue-800)', fontWeight:600 }}>{part.replace(/_/g, ' ')}</span>
+        : part)
+  }
+
+  async function submitComment() {
+    if (!commentText.trim() || posting) return
+    setPosting(true)
+    const text = commentText.trim()
+    const tagged = [...text.matchAll(/@([\w.]+)/g)].map(m => m[1].replace(/_/g, ' '))
+    const { error } = await sb.from('grn_comments').insert({
+      grn_id: id, author_name: userName, message: text,
+      tagged_users: tagged.length ? tagged : null, is_activity: false,
+    })
+    setPosting(false)
+    if (error) { toast(friendlyError(error), 'error'); return }
+    setCommentText(''); await loadComments()
+  }
+
+  async function loadBill(grnId) {
+    const { data } = await sb.from('purchase_invoices')
+      .select('id, invoice_number, debit_note_required, debit_note_amount, debit_note_number, debit_note_uploaded_at')
+      .eq('grn_id', grnId).maybeSingle()
+    setBill(data || null)
+  }
 
   async function loadGRN(silent) {
     if (!silent) setLoading(true)
@@ -143,6 +234,8 @@ export default function GRNDetail() {
     if (grnRes.error || !grnRes.data) { setGrn(null); setLoading(false); return }
     setGrn(grnRes.data)
     setGrnItems(itemsRes.data || [])
+    await loadBill(id)
+    await loadComments()
 
     // Collect unique po_ids from grn_items (+ grn-level po_id if set)
     const poIdSet = new Set()
@@ -249,6 +342,8 @@ export default function GRNDetail() {
 
   // ── Status transitions ──
   async function handleMoveToChecking() {
+    // Same reason as Confirm: moving a receipt along is the warehouse's call.
+    if (userRole === 'accounts') { toast('The warehouse moves the GRN along.', 'error'); return }
     setSaving(true)
     const { error } = await sb.from('grn').update({ status: 'checking' }).eq('id', id)
     if (error) { toast(friendlyError(error)); setSaving(false); return }
@@ -270,6 +365,20 @@ export default function GRNDetail() {
     if (error) { toast(friendlyError(error, 'Could not void this GRN.'), 'error'); return }
     toast('GRN voided', 'warning')
     setShowVoid(false); setVoidReason('')
+    await loadGRN()
+  }
+
+  async function handleConfirmReturn() {
+    if (!rtMode) { toast('Say how the goods went back'); return }
+    setSaving(true)
+    const { error } = await sb.rpc('grn_confirm_return', {
+      p_grn_id: id, p_mode: rtMode,
+      p_ref: rtRef.trim() || null, p_note: rtNote.trim() || null,
+    })
+    setSaving(false)
+    if (error) { toast(friendlyError(error), 'error'); return }
+    toast('Recorded as sent back', 'success')
+    setRtMode(''); setRtRef(''); setRtNote('')
     await loadGRN()
   }
 
@@ -295,14 +404,21 @@ export default function GRNDetail() {
       const poItemIds = grnItems.map(i => i.po_item_id).filter(Boolean)
       if (poItemIds.length) {
         const { data: live, error: liveErr } = await sb.from('po_items')
-          .select('id,item_code,qty,received_qty').in('id', poItemIds)
+          .select('id,item_code,qty,received_qty,over_delivery_tol_pct,over_delivery_unlimited')
+          .in('id', poItemIds)
         if (liveErr) { toast(friendlyError(liveErr, 'Could not re-check the PO. Please retry.')); setSaving(false); return }
         const byId = Object.fromEntries((live || []).map(r => [r.id, r]))
         const clashes = grnItems.map(gi => {
           const pl = byId[gi.po_item_id]
           if (!pl) return null
           const mine = Number(gi.accepted_qty ?? gi.received_qty ?? 0)
-          const pending = Number(pl.qty) - Number(pl.received_qty || 0)
+          // Must honour the SAME ceiling confirm_grn uses. Comparing against
+          // plain pending refused every line where an overage had been
+          // authorised — blocking it here, before the RPC was even called, so
+          // fixing the database alone did nothing.
+          if (pl.over_delivery_unlimited) return null
+          const cap = Number(pl.qty) * (1 + (Number(pl.over_delivery_tol_pct) || 0) / 100)
+          const pending = Math.max(0, cap - Number(pl.received_qty || 0))
           return mine > pending ? { code: pl.item_code, mine, pending } : null
         }).filter(Boolean)
 
@@ -335,8 +451,14 @@ export default function GRNDetail() {
           vendor_name: grn.vendor_name || null,
           vendor_id: grn.vendor_id || null,
           status: 'three_way_check',
-          is_test: false,
+          is_test: !!grn.is_test,   // a bill for a test GRN is test data too
           created_at: new Date().toISOString(),
+          // Carry the invoice photographed at the gate through to the bill, so
+          // whoever matches the rates has the document on screen. Accounts never
+          // had it before: 29 of 1,551 bills.
+          vendor_invoice_url: grn.vendor_invoice_url || null,
+          invoice_number: grn.invoice_number || null,
+          invoice_date: grn.invoice_date || null,
         })
         if (invErr) toast(friendlyError(invErr, "GRN confirmed but purchase invoice auto-create failed. Please try again."))
       }
@@ -493,6 +615,14 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
 </body></html>`
   }
 
+  // The paper that travels with the goods. A delivery document, not a financial
+  // one — the money is the debit note, raised separately against the bill.
+  function printReturnChallan() {
+    const w = window.open('', '_blank')
+    if (!w) { toast('Allow pop-ups to print the challan', 'error'); return }
+    writeDoc(w, buildReturnChallanHtml(grn, grnItems))
+  }
+
   function viewGrnDoc() {
     const html = buildGrnHtmlShared(grn, grnItems)
     const w = window.open('', '_blank')
@@ -506,12 +636,34 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
     </Layout>
   )
 
+  // "GRN not found" on its own leaves the reader stuck: is it deleted, is it a
+  // bad link, or can they simply not see it? The last is the common case — a
+  // GRN is visible to procurement roles only, and test GRNs need Test Mode on
+  // the list. Say what it might be and give a way out.
   if (!grn) return (
     <Layout pageTitle="GRN" pageKey="fc">
       <div className="od-page"><div className="od-body">
-        <div style={{ textAlign:'center', padding:60, color:'var(--gray-400)' }}>
-          <div style={{ fontSize:16, fontWeight:600, marginBottom:8 }}>GRN not found</div>
-          <button className="od-btn" onClick={() => navigate('/fc/grn')}>← Back to GRNs</button>
+        <div className="od-empty">
+          <div className="twm-empty-icon">
+            <svg fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+              <rect x="9" y="3" width="6" height="4" rx="1"/>
+              <line x1="9" y1="12" x2="15" y2="12"/>
+            </svg>
+          </div>
+          <div className="twm-empty-title">This GRN isn’t here</div>
+          <div className="twm-empty-sub">
+            It may have been voided or removed, or the link may be out of date.
+            A test GRN only shows with <strong>Test Mode</strong> switched on in the list.
+          </div>
+          <div className="twm-empty-actions">
+            <button className="od-btn od-btn-approve" onClick={() => navigate('/fc/grn')}>
+              Go to all GRNs
+            </button>
+            <button className="od-btn" onClick={() => navigate('/fc/grn/new')}>
+              Create a GRN
+            </button>
+          </div>
         </div>
       </div></div>
     </Layout>
@@ -709,15 +861,123 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
               )}
 
               {/* Invoice Details */}
-              {grn.grn_type === 'po_inward' && (grn.invoice_number || grn.invoice_date || grn.invoice_amount) && (
+              {grn.grn_type === 'po_inward' && (grn.invoice_number || grn.invoice_date || grn.invoice_amount || grn.vendor_invoice_url) && (
                 <div className="od-card">
                   <div className="od-card-header"><div className="od-card-title">Vendor Invoice</div></div>
                   <div className="od-card-body">
                     <div className="od-detail-grid">
                       {grn.invoice_number && <div className="od-detail-field"><label>Invoice Number</label><div className="val" style={{fontFamily:'var(--mono)'}}>{grn.invoice_number}</div></div>}
                       {grn.invoice_date && <div className="od-detail-field"><label>Invoice Date</label><div className="val">{fmt(grn.invoice_date)}</div></div>}
+                      {/* invoice_amount is shown for the GRNs that still carry it.
+                          It is no longer captured here: it was the GROSS whole-invoice
+                          figure and often spanned several GRNs, so it could never be a
+                          match basis. Accounts enters the taxable amount at the bill,
+                          beside the PO rate. The column and its history stay. */}
                       {grn.invoice_amount && <div className="od-detail-field"><label>Invoice Amount</label><div className="val" style={{fontWeight:700}}>{fmtINR(grn.invoice_amount)}</div></div>}
                     </div>
+                    {grn.vendor_invoice_url && (
+                      <div style={{marginTop:12}}>
+                        <label style={{fontSize:'var(--fs-eyebrow)',fontWeight:'var(--fw-semibold)',color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'var(--tracking-eyebrow)',display:'block',marginBottom:6}}>
+                          Scanned at receipt
+                        </label>
+                        <a href={grn.vendor_invoice_url} target="_blank" rel="noopener noreferrer">
+                          {/\.pdf($|\?)/i.test(grn.vendor_invoice_url)
+                            ? <span style={{fontSize:'var(--fs-sm)',color:'var(--blue-800)',fontWeight:'var(--fw-semibold)'}}>Open the invoice PDF ↗</span>
+                            : <img src={grn.vendor_invoice_url} alt="Vendor invoice"
+                                   style={{maxWidth:280,border:'1px solid var(--gray-200)',borderRadius:'var(--radius-xs)',display:'block'}} />}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+
+              {/* ── Rejected goods: did they go back? ─────────────────────────
+                  A FLAG, NOT A GATE. The GRN is already confirmed and the bill
+                  already exists — this records a physical fact that happens
+                  later, sometimes days later. Before this, "10 are going back"
+                  was written down and then forgotten, and because stock comes
+                  from the warehouse XLS those 10 quietly reappeared as sellable
+                  stock. */}
+              {grn.grn_type === 'po_inward' && totalRejected > 0 && (
+                <div className="od-card" style={!grn.returned_at ? { borderColor:'#fde68a', background:'#fffbeb' } : {}}>
+                  <div className="od-card-header">
+                    <div className="od-card-title">Going back to {grn.vendor_name || 'the vendor'}</div>
+                    {!grn.returned_at
+                      ? <span style={{ fontSize:11, fontWeight:700, color:'#b45309', background:'#fef3c7', border:'1px solid #fde68a', padding:'2px 10px', borderRadius:12 }}>NOT SENT YET</span>
+                      : <span style={{ fontSize:11, fontWeight:700, color:'#15803d', background:'#f0fdf4', border:'1px solid #bbf7d0', padding:'2px 10px', borderRadius:12 }}>SENT</span>}
+                  </div>
+                  <div className="od-card-body">
+                    <div style={{ marginBottom:12, fontSize:'var(--fs-sm)', color:'var(--gray-700)' }}>
+                      <strong>{totalRejected}</strong> {totalRejected === 1 ? 'piece' : 'pieces'} rejected on this receipt.
+                      {' '}{grn.returned_at
+                        ? <>Sent back by {grn.returned_by}, {fmt(grn.returned_at)}.</>
+                        : <>They are still here until someone confirms they have gone.</>}
+                    </div>
+
+                    {grn.returned_at ? (
+                      <div className="od-detail-grid">
+                        <div className="od-detail-field"><label>How</label><div className="val">
+                          {({vendor_driver:"Vendor's driver took it", courier:'By courier',
+                             vendor_collected:'Vendor collected it', not_returned:'Not returned — kept or scrapped',
+                             other:'Other'})[grn.return_mode] || grn.return_mode}
+                        </div></div>
+                        <div className="od-detail-field"><label>Reference</label><div className="val" style={{fontFamily:'var(--mono)'}}>{grn.return_ref || '—'}</div></div>
+                        {grn.return_note && <div className="od-detail-field"><label>Note</label><div className="val">{grn.return_note}</div></div>}
+                        <div className="od-detail-field">
+                          <label>Challan</label>
+                          <div className="val">
+                            <button className="od-btn" onClick={printReturnChallan}>Print again</button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : ['accounts','admin','ops','management','fc_kaveri','fc_godawari'].includes(userRole) ? (
+                      <div style={{ display:'flex', gap:10, alignItems:'flex-end', flexWrap:'wrap' }}>
+                        <div className="no-field" style={{ minWidth:210 }}>
+                          <label style={{ fontSize:11, color:'var(--gray-500)' }}>How did they go back? <span className="req">*</span></label>
+                          <select value={rtMode} onChange={e => setRtMode(e.target.value)}>
+                            <option value="">Choose…</option>
+                            <option value="vendor_driver">Vendor's driver took it</option>
+                            <option value="courier">Sent by courier</option>
+                            <option value="vendor_collected">Vendor collected separately</option>
+                            <option value="not_returned">Not returned — kept or scrapped</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                        <div className="no-field" style={{ minWidth:180 }}>
+                          <label style={{ fontSize:11, color:'var(--gray-500)' }}>Docket / LR / who took it</label>
+                          <input value={rtRef} onChange={e => setRtRef(e.target.value)} placeholder="optional" />
+                        </div>
+                        <button className="od-btn" onClick={printReturnChallan}>
+                          Print challan
+                        </button>
+                        <button className="od-btn od-btn-approve" onClick={handleConfirmReturn} disabled={saving || !rtMode}>
+                          {saving ? 'Saving…' : 'Confirm sent back'}
+                        </button>
+                        {/* In practice the note travels WITH the goods, so the
+                            usual order is: raise the debit note, then send them
+                            back against it. Shown, not enforced — if the driver is
+                            at the gate you record it now and the note follows. */}
+                        <div className="grnq-hint" style={{ flex:'1 1 100%' }}>
+                          {bill?.debit_note_required && !bill?.debit_note_uploaded_at ? (
+                            <>Debit note for {fmtINR(bill.debit_note_amount)} is <strong>not raised yet</strong>.
+                              These usually go back against it —{' '}
+                              <a onClick={() => navigate('/procurement/invoices/' + bill.id)}
+                                 style={{ color:'var(--blue-800)', fontWeight:600, cursor:'pointer' }}>
+                                raise it on the bill</a>, then come back and confirm.
+                              {' '}You can still confirm now if they are leaving today.</>
+                          ) : bill?.debit_note_uploaded_at ? (
+                            <>Debit note <strong>{bill.debit_note_number}</strong> is raised — send these back
+                              against it, then confirm here.</>
+                          ) : (
+                            <>Nothing to recover on the bill, so these just need to go back.</>
+                          )}
+                          {' '}Confirming holds nothing up: the GRN is already confirmed and the bill is
+                          already with accounts.
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -869,9 +1129,18 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                             Void GRN
                           </button>
                         )}
-                        <button className="od-btn od-btn-approve" onClick={() => setShowDeliveryForm(true)} disabled={saving}>
-                          Confirm GRN
-                        </button>
+                        {/* Quantity is decided at the GRN by the people who
+                            handled the goods. Accounts can read it and attach
+                            documents, but must not advance a receipt. */}
+                        {userRole === 'accounts' ? (
+                          <div style={{fontSize:'var(--fs-sm)',color:'var(--gray-600)'}}>
+                            The warehouse confirms the goods. You can attach documents here.
+                          </div>
+                        ) : (
+                          <button className="od-btn od-btn-approve" onClick={() => setShowDeliveryForm(true)} disabled={saving}>
+                            Confirm GRN
+                          </button>
+                        )}
                       </div>
                     )}
 
@@ -950,6 +1219,16 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
                           </button>
                           <button className="od-btn" onClick={() => setShowDeliveryForm(false)}>Cancel</button>
                         </div>
+                        {/* Confirming is the point of no return: the PO is updated
+                            and a bill appears for accounts. Say so before, not
+                            after — a confirmed GRN cannot be edited. */}
+                        <div className="grnq-hint">
+                          {grn.grn_type === 'po_inward'
+                            ? <>Counts the accepted quantity against the PO and creates the bill for
+                                accounts, with the invoice you scanned attached.
+                                <strong> The GRN cannot be edited after this.</strong></>
+                            : <>Marks the return as received. <strong>The GRN cannot be edited after this.</strong></>}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -989,39 +1268,103 @@ ${grn.notes ? `<div class="notes-box"><strong>Notes:</strong> ${esc(grn.notes)}<
               </div>
 
               {/* Timeline */}
+              {/* ── Timeline ────────────────────────────────────────────────
+                  Events and comments in ONE thread, ordered by time, with the
+                  box at the foot — the same shape as Orders, POs and the bill.
+                  The GRN was the only document in the chain you could not talk
+                  on, and it is where the quantity arguments happen: "they say
+                  they sent 110", "damaged in transit, not by us". */}
               <div className="od-side-card od-activity-card" style={{ marginTop:12 }}>
                 <div className="od-side-card-title">Timeline</div>
                 <div className="od-activity-list">
-                  <div className="od-tl-item">
-                    <div className="od-tl-dot created"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
-                    <div className="od-tl-content">
-                      <div className="od-tl-header">
-                        <div className="od-tl-title">GRN Created</div>
-                        <div className="od-tl-time">{fmtTs(grn.created_at)}</div>
-                      </div>
-                      <div className="od-tl-sub">{grn.received_by || '—'}</div>
-                    </div>
-                  </div>
-                  {(grn.status === 'checking' || isConfirmed) && (
-                    <div className="od-tl-item">
-                      <div className="od-tl-dot edited"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
-                      <div className="od-tl-content">
-                        <div className="od-tl-title">Checking Goods</div>
-                        <div className="od-tl-sub">Goods being inspected</div>
-                      </div>
-                    </div>
-                  )}
-                  {isConfirmed && (
-                    <div className="od-tl-item">
-                      <div className="od-tl-dot success"><svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
-                      <div className="od-tl-content">
-                        <div className="od-tl-header">
-                          <div className="od-tl-title">GRN Confirmed</div>
-                          <div className="od-tl-time">{fmtTs(grn.received_at || grn.created_at)}</div>
+                  {(() => {
+                    const ev = []
+                    ev.push({ at: grn.created_at, type: 'created', title: 'GRN Created', by: grn.received_by })
+                    if (grn.status === 'checking' || isConfirmed)
+                      ev.push({ at: grn.updated_at || grn.created_at, type: 'edited', title: 'Checking Goods', sub: 'Goods being inspected' })
+                    if (isConfirmed)
+                      ev.push({ at: grn.confirmed_at || grn.received_at || grn.created_at, type: 'success', title: 'GRN Confirmed' })
+                    if (grn.returned_at)
+                      ev.push({ at: grn.returned_at, type: 'success', title: `${totalRejected} sent back to the vendor`, by: grn.returned_by })
+                    if (grn.credit_note_uploaded_at)
+                      ev.push({ at: grn.credit_note_uploaded_at, type: 'success', title: 'Credit / Dr note recorded — ' + (grn.credit_note_number || ''), by: grn.credit_note_uploaded_by })
+
+                    const icon = t => ({
+                      created: <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
+                      edited:  <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+                      success: <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>,
+                    }[t])
+
+                    const merged = [
+                      ...ev.map(e => ({ ts: new Date(e.at).getTime(), kind: 'e', e })),
+                      ...comments.map(c => ({ ts: new Date(c.created_at).getTime(), kind: 'c', c })),
+                    ].sort((a, b) => a.ts - b.ts)
+
+                    return merged.map((m, i) => m.kind === 'e' ? (
+                      <div key={'e' + i} className="od-tl-item">
+                        <div className={'od-tl-dot ' + m.e.type}>{icon(m.e.type)}</div>
+                        <div className="od-tl-content">
+                          <div className="od-tl-header">
+                            <div className="od-tl-title">{m.e.title}</div>
+                            <div className="od-tl-time">{fmtTs(m.e.at)}</div>
+                          </div>
+                          {(m.e.by || m.e.sub) && <div className="od-tl-sub">{m.e.by || m.e.sub}</div>}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div key={'c' + m.c.id} className="od-tl-item od-tl-comment">
+                        <div className="od-tl-dot comment">
+                          <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                            <path d="M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z"/>
+                          </svg>
+                        </div>
+                        <div className="od-tl-content">
+                          <div className="od-tl-header">
+                            <div className="od-tl-comment-author">
+                              {m.c.author_name}
+                              {m.c.tagged_users?.length > 0 && (
+                                <span className="od-tl-comment-tagged">
+                                  tagged {m.c.tagged_users.map(u => '@' + u).join(', ')}
+                                </span>
+                              )}
+                            </div>
+                            <div className="od-tl-time">{fmtTs(m.c.created_at)}</div>
+                          </div>
+                          <div className="od-tl-comment-text">{renderMessage(m.c.message)}</div>
+                        </div>
+                      </div>
+                    ))
+                  })()}
+                </div>
+
+                <div className="od-comment-box">
+                  <div className="od-comment-input-wrap">
+                    <textarea ref={commentRef} className="od-comment-input" value={commentText}
+                              onChange={handleCommentInput}
+                              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }}
+                              placeholder="Add a note… use @ to tag someone" rows={2} />
+                    {mentionQuery !== null && mentionSug.length > 0 && (
+                      <div className="od-mention-dropdown"
+                           style={{ top: mentionPos.top, left: mentionPos.left, width: mentionPos.width }}>
+                        {mentionSug.map(p => (
+                          <div key={p.id} className="od-mention-item"
+                               onMouseDown={e => { e.preventDefault(); insertMention(p.name) }}>
+                            <div className="od-mention-avatar">
+                              {p.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                            </div>
+                            <div>
+                              <div className="od-mention-name">{p.name}</div>
+                              {p.username && <div className="od-mention-uname">@{p.username}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button className="od-comment-btn" onClick={submitComment}
+                          disabled={posting || !commentText.trim()}>
+                    {posting ? '...' : 'Post'}
+                  </button>
                 </div>
               </div>
 

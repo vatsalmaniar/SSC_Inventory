@@ -1,0 +1,542 @@
+/* Three-way match — inward billing.
+ *
+ * Tokens only, and only tokens that actually EXIST in global.css :root — no
+ * hardcoded font-family, font-size, font-weight or colour. Borders are derived
+ * from their text token with color-mix() rather than pinned to a hex, so
+ * retuning a palette colour retunes its border too (the older rgba() literals
+ * in .meta-pill.live do not). Every color-mix has a plain token fallback on the
+ * line above it, so an engine without support still gets a sane border.
+ *
+ * Spacing is literal px: this codebase has no spacing scale, and inventing one
+ * here would be a fifth convention.
+ */
+
+/* ── The rate grid ─────────────────────────────────────────────────────── */
+.twm-grid {
+  border: 1px solid var(--gray-100);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+/* ONE template, shared by the header and every row. Never repeat this in a
+ * style={{ gridTemplateColumns }}: it drifts (ATP shipped an 8-column header
+ * over 7-column rows) and its 1,0,0,0 specificity silently beats the restack. */
+.twm-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.6fr) 84px 96px 96px 96px 152px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+}
+.twm-row + .twm-row { border-top: 1px solid var(--gray-100); }
+
+.twm-head {
+  background: var(--gray-50);
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+}
+
+.twm-cell   { font-size: var(--fs-label); color: var(--gray-700); min-width: 0; }
+.twm-cell.r { text-align: right; }
+.twm-code   { font-family: var(--mono); font-weight: var(--fw-semibold); color: var(--gray-800);
+              overflow-wrap: anywhere; }
+.twm-num    { font-family: var(--mono); text-align: right; }
+/* Inherited from the GRN and the PO, read-only here by design: quantity is
+ * decided at the GRN, price at Inward Billing. Greyed so it reads as given. */
+.twm-fixed  { color: var(--gray-500); }
+
+.twm-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xs);
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  text-align: right;
+  background: #fff;
+  color: var(--gray-800);
+}
+.twm-input:focus { outline: none; border-color: var(--blue-800); }
+.twm-input.twm-flag {
+  background: var(--amber-bg);
+  border-color: var(--gray-300);
+  border-color: color-mix(in srgb, var(--amber-text) 35%, transparent);
+}
+
+/* ── Variance ─────────────────────────────────────────────────────────── */
+.twm-var      { font-family: var(--mono); font-size: var(--fs-label); text-align: right;
+                font-weight: var(--fw-medium); }
+.twm-var.ok   { color: var(--gray-400); }
+.twm-var.warn { color: var(--amber-text); font-weight: var(--fw-semibold); }
+.twm-var.none { color: var(--gray-300); }
+
+.twm-pill {
+  display: inline-block;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-semibold);
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+}
+.twm-pill.ok   { background: var(--green-bg); color: var(--green-text); }
+.twm-pill.warn { background: var(--amber-bg); color: var(--amber-text); }
+
+/* ── Totals strip ─────────────────────────────────────────────────────── */
+.twm-totals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.twm-total {
+  padding: 12px;
+  border: 1px solid var(--gray-100);
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
+}
+.twm-total-label {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  margin-bottom: 4px;
+}
+.twm-total-value {
+  font-family: var(--mono);
+  font-size: var(--fs-card);
+  font-weight: var(--fw-semibold);   /* the app never goes above 600 for numbers */
+  color: var(--gray-800);
+}
+.twm-total.flag {
+  background: var(--amber-bg);
+  border-color: var(--gray-200);
+  border-color: color-mix(in srgb, var(--amber-text) 30%, transparent);
+}
+.twm-total.flag .twm-total-value { color: var(--amber-text); }
+
+/* ── Verdict banner ───────────────────────────────────────────────────── */
+.twm-verdict {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  margin-top: 12px;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+.twm-verdict.ok {
+  background: var(--green-bg);
+  color: var(--green-text);
+  border: 1px solid var(--gray-200);
+  border-color: color-mix(in srgb, var(--green-text) 25%, transparent);
+}
+.twm-verdict.warn {
+  background: var(--amber-bg);
+  color: var(--amber-text);
+  border: 1px solid var(--gray-200);
+  border-color: color-mix(in srgb, var(--amber-text) 25%, transparent);
+}
+.twm-verdict-title { font-weight: var(--fw-semibold); margin-bottom: 4px; }
+
+/* ── The invoice document, beside the grid ────────────────────────────── */
+/* Measured: only 29 of 1,551 bills have the vendor invoice attached, and the
+ * upload panel does not render until AFTER the check — so the person doing the
+ * match has never had the document on screen. That is the root cause, not a
+ * side issue, and it belongs here. */
+/* The document sits ABOVE the grid as a compact strip, not beside it. This card
+ * already lives inside .od-layout's 1fr/320px split, so .od-main is roughly
+ * 950px on a laptop — taking another 300px for a sidebar left ~620px for a grid
+ * that needs 720px, which squeezed the columns and put a scrollbar inside the
+ * card. The rates are the work; the document is a reference. */
+.twm-split { display: block; }
+
+.twm-doc {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--gray-100);
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.twm-doc img {
+  height: 56px;
+  width: auto;
+  max-width: 96px;
+  object-fit: cover;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xs);
+  display: block;
+}
+.twm-doc-main  { flex: 1 1 auto; min-width: 0; }
+.twm-doc-empty { font-size: var(--fs-label); color: var(--gray-500); }
+
+/* The invoice fields: wrap on their own rather than borrowing .od-detail-grid,
+ * which is a fixed two columns and left five fields as an awkward 2-2-1. */
+.twm-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* ── Release / override ───────────────────────────────────────────────── */
+.twm-release { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-100); }
+.twm-field { margin-bottom: 10px; }
+.twm-field label {
+  display: block;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-600);
+  margin-bottom: 4px;
+}
+.twm-field select, .twm-field textarea, .twm-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: var(--fs-sm);
+  color: var(--gray-800);
+  background: #fff;
+}
+.twm-field textarea { min-height: 64px; resize: vertical; line-height: var(--lh-base); }
+
+/* ── Mobile ───────────────────────────────────────────────────────────── */
+/* Fixed side-by-side columns are released below 1000px, per the standing rule:
+ * they are for side-by-side layouts only, or a phone gets a nested scroll
+ * region inside a page that should simply scroll. */
+@media (max-width: 1000px) {
+  .twm-split { grid-template-columns: 1fr; }
+  .twm-doc   { position: static; }
+}
+
+@media (max-width: 820px) {
+  .twm-totals { grid-template-columns: repeat(2, 1fr); }
+  /* The table is the one thing allowed to scroll sideways, in its own
+   * container. The page body must never scroll horizontally. */
+  .twm-scroll { overflow-x: auto; }
+  .twm-scroll .twm-grid { min-width: 700px; }
+}
+
+@media (max-width: 560px) {
+  .twm-totals { grid-template-columns: 1fr; }
+  /* Restack to label/value pairs — verified at 390px. */
+  .twm-row {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 6px;
+    padding: 12px;
+  }
+  .twm-head { display: none; }
+  .twm-scroll { overflow-x: visible; }
+  .twm-scroll .twm-grid { min-width: 0; }
+  .twm-row .twm-cell.r, .twm-row .twm-num, .twm-row .twm-var { text-align: left; }
+  .twm-code { grid-column: 1 / -1; }
+  /* Each value carries its own label once the header is hidden. */
+  .twm-row .twm-cell[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: var(--fs-eyebrow);
+    font-weight: var(--fw-semibold);
+    color: var(--gray-400);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-eyebrow);
+    margin-bottom: 2px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * The GRN gate — FC staff. NO prices, NO percentages, NO rupees anywhere in
+ * this block. They count boxes; the price decision is accounts', at the bill.
+ * ════════════════════════════════════════════════════════════════════════ */
+.grnq-cell { padding: 0 !important; background: var(--gray-50); }
+
+.grnq {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  font-size: var(--fs-sm);
+  border-left: 3px solid var(--gray-300);
+}
+.grnq.over  { border-left-color: var(--amber-text); background: var(--amber-bg); color: var(--amber-text); }
+.grnq.short { border-left-color: var(--orange-text); background: var(--orange-bg); color: var(--orange-text); }
+
+.grnq-say  { flex: 1 1 220px; line-height: var(--lh-base); }
+.grnq-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.grnq-note { flex: 1 1 100%; font-size: var(--fs-label); opacity: 0.85; }
+
+/* Labelled buttons, never a bare glyph — the standing rule. */
+.grnq-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-xs);
+  background: #fff;
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-700);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.grnq-btn:hover { border-color: var(--blue-800); color: var(--blue-800); }
+
+.grnq-qty {
+  width: 70px;
+  padding: 6px 8px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-xs);
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  text-align: right;
+  background: #fff;
+  color: var(--gray-800);
+}
+.grnq-why {
+  padding: 6px 8px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-xs);
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  background: #fff;
+  color: var(--gray-800);
+}
+
+/* The photographed invoice, once scanned. */
+.grnq-doc { display: flex; gap: 10px; align-items: flex-start; }
+.grnq-doc img {
+  max-width: 120px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xs);
+  display: block;
+}
+.grnq-doc-name { font-size: var(--fs-label); color: var(--gray-600); overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .grnq { flex-direction: column; align-items: stretch; }
+  .grnq-acts { justify-content: flex-start; }
+  .grnq-btn  { flex: 1 1 auto; }
+}
+
+/* Damage is the uncommon case: a quiet link under the quantity, not a control
+ * competing for attention with the count itself. */
+.grnq-link {
+  display: block;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font);
+  font-size: var(--fs-eyebrow);
+  color: var(--gray-500);
+  text-decoration: underline;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.grnq-link:hover { color: var(--blue-800); }
+
+/* ── Say what the button does ─────────────────────────────────────────────
+ * Every action that changes state carries one line underneath explaining what
+ * happens next. "Create GRN" / "Match against PO" told the user nothing about
+ * the consequence, and the consequence is the whole question. */
+.twm-hint, .grnq-hint {
+  margin-top: 8px;
+  font-size: var(--fs-label);
+  color: var(--gray-500);
+  line-height: var(--lh-base);
+  max-width: 62ch;
+}
+.twm-hint strong, .grnq-hint strong { color: var(--gray-700); font-weight: var(--fw-semibold); }
+.grnq-hint { margin-bottom: 8px; margin-top: 0; }
+
+/* One choice per line, readable as a sentence rather than a form. */
+.twm-choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  line-height: var(--lh-base);
+}
+.twm-choice:hover      { border-color: var(--blue-800); }
+.twm-choice input      { margin: 3px 0 0; width: 16px; height: 16px; accent-color: var(--blue-800);
+                         flex: 0 0 auto; cursor: pointer; }
+.twm-choice input:checked ~ span strong { color: var(--blue-900); }
+.twm-choice span       { min-width: 0; }
+
+/* "we took in N" under a billed quantity that disagrees with the receipt. */
+.twm-sub { font-size: var(--fs-eyebrow); color: var(--amber-text); margin-top: 3px; text-align: right; }
+
+/* The per-line decision. A select, not a pair of radios: on a five-line bill
+ * ten radios is a wall, and the question is the same each time. */
+.twm-why {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 6px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xs);
+  font-family: var(--font);
+  font-size: var(--fs-eyebrow);
+  background: #fff;
+  color: var(--gray-800);
+}
+.twm-why.twm-flag { background: var(--amber-bg); border-color: var(--gray-300); }
+
+/* Two buttons instead of a select. In the width this column gets, a dropdown
+ * truncated to "Our PO — recover the dif", which reads as nothing at all. */
+.twm-seg {
+  display: inline-flex;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  background: #fff;
+}
+.twm-seg.undecided { border-color: var(--amber-text); }
+.twm-seg button {
+  padding: 5px 12px;
+  border: 0;
+  background: #fff;
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-500);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.twm-seg button + button { border-left: 1px solid var(--gray-200); }
+.twm-seg button:hover    { color: var(--gray-800); background: var(--gray-50); }
+.twm-seg button.on       { background: var(--blue-800); color: #fff; }
+
+/* A real button instead of the browser's raw file input. */
+.twm-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px dashed var(--gray-300);
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
+  font-family: var(--font);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-700);
+  cursor: pointer;
+}
+.twm-upload:hover  { border-color: var(--blue-800); color: var(--blue-800); }
+.twm-upload input  { display: none; }
+.twm-upload.has    { border-style: solid; border-color: var(--green-text); color: var(--green-text);
+                     background: var(--green-bg); }
+
+/* The decided-lines recap on an already-matched bill: four columns, not seven. */
+.twm-row.twm-row-d { grid-template-columns: minmax(120px, 1.4fr) 96px 110px minmax(180px, 1.6fr); }
+@media (max-width: 560px) { .twm-row.twm-row-d { grid-template-columns: 1fr 1fr; } }
+
+/* ── Debit note grounds ───────────────────────────────────────────────────
+ * PRICE and QUANTITY are different claims, disputed differently by a vendor,
+ * so the note has to name which. A single "recover ₹2,000" is not something
+ * you can raise a Tally note against. */
+.dn-grounds { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.dn-ground {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+.dn-tag {
+  grid-row: 1;
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+}
+.dn-tag.price { background: var(--amber-bg);  color: var(--amber-text); }
+.dn-tag.qty   { background: var(--orange-bg); color: var(--orange-text); }
+.dn-amt {
+  grid-row: 1;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-800);
+}
+.dn-why {
+  grid-column: 1 / -1;
+  font-size: var(--fs-label);
+  color: var(--gray-500);
+  line-height: var(--lh-base);
+}
+.dn-note {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--gray-200);
+  font-size: var(--fs-label);
+  color: var(--gray-600);
+  line-height: var(--lh-base);
+}
+
+/* Numbered steps inside the one exception tile. */
+.dn-step { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--gray-200); }
+.dn-step-h {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-700);
+  margin-bottom: 8px;
+}
+.dn-step-h.done { color: var(--green-text); }
+
+/* ── "Last paid" on a new PO line ─────────────────────────────────────────
+ * The prevention half of the three-way match: what this part actually cost,
+ * off a matched vendor bill, shown before the buyer types a rate. Quiet by
+ * design — it is evidence, not an instruction, and it never auto-fills. */
+.np-lastpaid {
+  margin-top: 3px;
+  font-size: var(--fs-eyebrow);
+  color: var(--gray-500);
+  line-height: var(--lh-base);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-lastpaid strong { color: var(--gray-700); font-weight: var(--fw-semibold); font-family: var(--mono); }
+/* Paying MORE than last time is the direction worth noticing. */
+.np-lastpaid-diff        { color: var(--green-text); font-weight: var(--fw-semibold); }
+.np-lastpaid-diff.up     { color: var(--amber-text); }
+
+/* ── Empty / not-found state ──────────────────────────────────────────────
+ * .od-empty is the shared container and stays untouched — orderdetail.css is
+ * imported by 23 files. These children are prefixed and live here instead. */
+.twm-empty-icon {
+  width: 44px; height: 44px;
+  margin: 0 auto 14px;
+  color: var(--gray-300);
+}
+.twm-empty-icon svg { width: 100%; height: 100%; }
+.twm-empty-title {
+  font-size: var(--fs-card);
+  font-weight: var(--fw-semibold);
+  color: var(--gray-700);
+  margin-bottom: 6px;
+}
+.twm-empty-sub {
+  font-size: var(--fs-sm);
+  color: var(--gray-500);
+  line-height: var(--lh-base);
+  max-width: 44ch;
+  margin: 0 auto 18px;
+}
+.twm-empty-sub strong { color: var(--gray-700); font-weight: var(--fw-semibold); }
+.twm-empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }

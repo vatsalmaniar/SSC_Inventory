@@ -47,3 +47,12 @@ Schnider BOM/
 # three-day outage went unnoticed. Only its local runtime state is ignored.
 connector/essl_state.json
 connector/*.log
+
+# Parity-script data dumps. These hold PURCHASE PRICING — PO unit prices for
+# every GRN line — which sales must never see and which must never enter git
+# history. Regenerate them from the Management API when running a parity check;
+# see the usage header in each script.
+tw_lines.json
+tw_tol.json
+pv_pos.json
+ov_orders.json

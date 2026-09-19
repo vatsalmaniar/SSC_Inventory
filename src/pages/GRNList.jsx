@@ -65,6 +65,10 @@ export default function GRNList() {
   const [userRole, setUserRole] = useState('')
   const [grns, setGrns] = useState([])
   const [loading, setLoading] = useState(true)
+  // Test Mode — the standing rule for every module, and these two pages never
+  // got it. Without it, demo and training data is either invisible here or has
+  // to be created as live data, which then pollutes real totals.
+  const [showTest, setShowTest] = useState(false)
   const [filter, setFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [timeline, setTimeline] = useState('all')
@@ -90,11 +94,11 @@ export default function GRNList() {
     await loadGrns()
   }
 
-  async function loadGrns() {
+  async function loadGrns(testMode = showTest) {
     setLoading(true)
     // Page past PostgREST's 1000-row cap
     const { data, error } = await fetchAll((from, to) =>
-      sb.from('grn').select('*').eq('is_test', false).gte('created_at', FY_START)
+      sb.from('grn').select('*').eq('is_test', testMode).gte('created_at', FY_START)
         .order('received_at', { ascending: false }).order('id', { ascending: false })
         .range(from, to))
     if (error) console.error('GRN list load error:', error)
@@ -109,7 +113,7 @@ export default function GRNList() {
     if (yearsLoaded.has(y)) return
     setYearLoading(true)
     const { data, error } = await fetchAll((from, to) =>
-      sb.from('grn').select('*').eq('is_test', false)
+      sb.from('grn').select('*').eq('is_test', showTest)
         .gte('created_at', `${y}-01-01`).lt('created_at', `${y + 1}-01-01`)
         .order('received_at', { ascending: false }).order('id', { ascending: false })
         .range(from, to))
@@ -373,6 +377,12 @@ export default function GRNList() {
                 Detailed
               </button>
             </div>
+            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:'#B45309',cursor:'pointer',whiteSpace:'nowrap'}}>
+              <input type="checkbox" checked={showTest}
+                     onChange={e => { setShowTest(e.target.checked); loadGrns(e.target.checked) }}
+                     style={{accentColor:'#B45309',width:13,height:13}} />
+              Test Mode
+            </label>
             <button className="btn-primary" onClick={() => navigate('/fc/grn/new')}>
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3 V13 M3 8 H13"/></svg>
               New GRN

@@ -1,10 +1,22 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sb } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import Layout from '../components/Layout'
 import Typeahead from '../components/Typeahead'
+// The SAME scanner the expense module uses — corners detected, perspective
+// flattened, xerox / greyscale / original colour, and the untouched original kept
+// when the scan looks risky. A vendor invoice photographed at the gate on a phone
+// is exactly the case it was built for; there is no reason for a second one.
+import DocScanner from '../components/DocScanner'
 import '../styles/neworder.css'
+import '../styles/three-way-match.css'
+// DocScanner's own chrome (.ds-*) lives in expenses.css, which is where it was
+// first built. Imported rather than extracted: every selector in that file is
+// class-scoped so nothing leaks, and carving up a stylesheet with three
+// consumers is how /change-password shipped broken. Worth extracting to its own
+// file later, as a deliberate change with all three pages walked.
+import '../styles/expenses.css'
 import { friendlyError } from '../lib/errorMsg'
 
 const GRN_TYPES = [
@@ -15,8 +27,31 @@ const GRN_TYPES = [
 ]
 const FC_OPTIONS = ['Kaveri', 'Godawari']
 
+// Why a GRN line carries a rejected quantity AND a reason from the moment it is
+// created: the person opening the carton is the only one who can see that 10 of
+// the 110 are damaged, or that 10 more arrived than were ordered. Until now
+// rejected_qty could only be entered later, by an admin, in an edit screen — so
+// the storekeeper had nowhere to write down what they were looking at, and any
+// physical excess simply vanished from the record.
+const REJECT_REASONS = [
+  { key: 'more_than_ordered', label: 'More than ordered' },
+  { key: 'damaged',           label: 'Damaged' },
+  { key: 'wrong_item',        label: 'Wrong item' },
+  { key: 'quality_issue',     label: 'Quality issue' },
+  { key: 'other',             label: 'Other' },
+]
+
 function emptyItem() {
-  return { _poText: '', _poId: '', _poNumber: '', _poItems: [], item_code: '', po_item_id: '', ordered_qty: 0, pending_qty: 0, received_qty: '' }
+  return {
+    _poText: '', _poId: '', _poNumber: '', _poItems: [],
+    item_code: '', po_item_id: '', ordered_qty: 0, pending_qty: 0,
+    received_qty: '',
+    // Split of what arrived. accepted is DERIVED (received - rejected) so the
+    // two can never disagree.
+    rejected_qty: '', rejection_reason: '',
+    // Whether this PO line permits keeping an overage at all. Set from the PO.
+    _tolPct: 0, _unlimited: false,
+  }
 }
 
 export default function NewGRN() {
@@ -37,7 +72,15 @@ export default function NewGRN() {
   const [vendorName, setVendorName] = useState('')
   const [invoiceNum, setInvoiceNum] = useState('')
   const [invoiceDate, setInvoiceDate] = useState('')
-  const [invoiceAmt, setInvoiceAmt] = useState('')
+  // grn.invoice_amount is no longer typed here. It was the GROSS whole-invoice
+  // figure and often covered several GRNs, so it could never be a match basis —
+  // and entering the amount twice, by two people, meant the two never agreed.
+  // The COLUMN and all its history stay; FC simply stops writing it. Accounts
+  // enters the taxable amount at the match, beside the PO rate.
+  // The scanned result: { blob, url, ... } from DocScanner, or a raw PDF the user
+  // picked instead (a PDF is already a document — nothing to flatten).
+  const [invoiceDoc, setInvoiceDoc]   = useState(null)
+  const [scanQueue, setScanQueue]     = useState([])
   const [notes, setNotes]       = useState('')
 
   // PO Inward items — each row: pick PO → pick item from that PO
@@ -77,7 +120,7 @@ export default function NewGRN() {
 
   async function prefillFromPO(poId) {
     const { data: po } = await sb.from('purchase_orders')
-      .select('id,po_number,vendor_id,vendor_name,fulfilment_center')
+      .select('id,po_number,vendor_id,vendor_name,fulfilment_center,is_test')
       .eq('id', poId).single()
     if (!po) return
     if (po.fulfilment_center) setFc(po.fulfilment_center)
@@ -96,14 +139,18 @@ export default function NewGRN() {
     }
 
     // Load pending items for this PO
-    const { data: poItems } = await sb.from('po_items').select('id,item_code,qty,received_qty,sr_no').eq('po_id', poId).order('sr_no')
+    const { data: poItems } = await sb.from('po_items')
+      .select('id,item_code,qty,received_qty,sr_no,over_delivery_tol_pct,over_delivery_unlimited')
+      .eq('po_id', poId).order('sr_no')
     const pending = (poItems || []).filter(pi => pi.qty > (pi.received_qty || 0)).map(pi => ({
       po_item_id: pi.id,
       item_code: pi.item_code,
       sr_no: pi.sr_no,
       ordered_qty: pi.qty,
       received_qty_so_far: pi.received_qty || 0,
-      pending_qty: pi.qty - (pi.received_qty || 0),
+      pending_qty: Math.max(0, pi.qty - (pi.received_qty || 0)),
+      tol_pct: Number(pi.over_delivery_tol_pct) || 0,
+      unlimited: !!pi.over_delivery_unlimited,
     }))
     // Pre-fill rows with all pending items
     setItems(pending.map(pi => ({
@@ -111,6 +158,11 @@ export default function NewGRN() {
       _poId: po.id,
       _poNumber: po.po_number,
       _poItems: pending,
+      _poIsTest: !!po.is_test,
+      _poVendorId: po.vendor_id || '',
+      _poVendorName: po.vendor_name || '',
+      _tolPct: pi.tol_pct,
+      _unlimited: pi.unlimited,
       item_code: pi.item_code,
       po_item_id: pi.po_item_id,
       ordered_qty: pi.ordered_qty,
@@ -144,10 +196,19 @@ export default function NewGRN() {
   }
 
   // ── PO search for a row ──
+  // Scoped to the selected vendor. Without this the list offered every open PO in
+  // the company, so a receipt could be pegged to another vendor's PO while the
+  // header named a different one — the same mis-pegging family as the clubbed-PO
+  // bug, and confusing even when the receiver gets it right. No existing GRN has
+  // ever done it (0 of 3,714 lines checked), so this closes a hole rather than
+  // fixing damage.
   async function fetchPOs(q) {
-    const { data } = await sb.from('purchase_orders')
-      .select('id,po_number,vendor_name,status')
+    let sel = sb.from('purchase_orders')
+      .select('id,po_number,vendor_name,vendor_id,status,is_test')
       .in('status', ['placed', 'acknowledged', 'delivery_confirmation', 'partially_received'])
+    if (vendorId)        sel = sel.eq('vendor_id', vendorId)
+    else if (vendorName) sel = sel.eq('vendor_name', vendorName)
+    const { data } = await sel
       .or(`po_number.ilike.%${q}%,vendor_name.ilike.%${q}%`)
       .order('created_at', { ascending: false }).limit(20)
     return data || []
@@ -155,7 +216,11 @@ export default function NewGRN() {
 
   async function selectPOForRow(idx, po) {
     // Load pending items for this PO
-    const { data: poItems } = await sb.from('po_items').select('id,item_code,qty,received_qty,sr_no,order_item_id').eq('po_id', po.id).order('sr_no')
+    // over_delivery_* decide whether keeping an overage is even offered on this
+    // line. Both default to refuse, which is what the system has always done.
+    const { data: poItems } = await sb.from('po_items')
+      .select('id,item_code,qty,received_qty,sr_no,order_item_id,over_delivery_tol_pct,over_delivery_unlimited')
+      .eq('po_id', po.id).order('sr_no')
 
     // Which customer each PO line belongs to. On a clubbed PO the same item can
     // appear for two customers — without this the receiver picks blind and the
@@ -179,7 +244,9 @@ export default function NewGRN() {
       sr_no: pi.sr_no,
       ordered_qty: pi.qty,
       received_qty_so_far: pi.received_qty || 0,
-      pending_qty: pi.qty - (pi.received_qty || 0),
+      pending_qty: Math.max(0, pi.qty - (pi.received_qty || 0)),
+      tol_pct: Number(pi.over_delivery_tol_pct) || 0,
+      unlimited: !!pi.over_delivery_unlimited,
       customer_name: custByOi[pi.order_item_id]?.customer_name || '',
       co_number: custByOi[pi.order_item_id]?.order_number || '',
     }))
@@ -192,6 +259,9 @@ export default function NewGRN() {
         _poText: po.po_number,
         _poId: po.id,
         _poNumber: po.po_number,
+        _poVendorId: po.vendor_id || '',
+        _poVendorName: po.vendor_name || '',
+        _poIsTest: !!po.is_test,
         _poItems: pending,
         _multiCust: multiCust,
         item_code: '',
@@ -203,10 +273,13 @@ export default function NewGRN() {
       return next
     })
 
-    // Auto-fill vendor from PO if not set
+    // Auto-fill vendor from PO if not set. vendor_id is carried too — it was
+    // being left null on the PO-first path, so those GRNs stored a vendor NAME
+    // and no id, and anything joining on vendor_id could not see them.
     if (!vendorName && po.vendor_name) {
       setVendorText(po.vendor_name)
       setVendorName(po.vendor_name)
+      if (po.vendor_id) setVendorId(po.vendor_id)
     }
   }
 
@@ -220,22 +293,86 @@ export default function NewGRN() {
         ordered_qty: poItem.ordered_qty,
         pending_qty: poItem.pending_qty,
         received_qty: String(poItem.pending_qty),
+        rejected_qty: '',
+        rejection_reason: '',
+        _tolPct: poItem.tol_pct,
+        _unlimited: poItem.unlimited,
       }
       return next
     })
   }
 
-  function updateRecvQty(idx, val) {
-    setItems(prev => {
-      const next = [...prev]
-      const max = next[idx].pending_qty
-      const num = parseFloat(val)
-      // Clamp to pending qty
-      if (!isNaN(num) && num > max) val = String(max)
-      next[idx] = { ...next[idx], received_qty: val }
-      return next
-    })
+  // How much of a line may be KEPT against the PO. Beyond this the overage has to
+  // go back, and the difference is recorded as rejected rather than disappearing.
+  function keepableQty(it) {
+    if (it._unlimited) return Infinity
+    return (Number(it.pending_qty) || 0) * (1 + (Number(it._tolPct) || 0) / 100)
   }
+  function excessOf(it) {
+    const rec = parseFloat(it.received_qty)
+    if (isNaN(rec)) return 0
+    return Math.max(0, rec - keepableQty(it))
+  }
+  function acceptedOf(it) {
+    const rec = parseFloat(it.received_qty) || 0
+    const rej = parseFloat(it.rejected_qty) || 0
+    return Math.max(0, rec - rej)
+  }
+
+  // No longer clamps. Typing 110 against a PO of 100 used to be silently
+  // rewritten to 100, which meant the extra 10 sat in the godown and nowhere in
+  // the system. Now it is recorded, and the screen asks one plain question about
+  // what to do with it.
+  function updateRecvQty(idx, val) {
+    setItems(prev => prev.map((it, i) => {
+      if (i !== idx) return it
+      const next = { ...it, received_qty: val }
+      // Default the overage straight into "send it back" with the obvious
+      // reason. One tap changes it; doing nothing does the safe thing.
+      const ex = excessOf(next)
+      if (ex > 0 && (!next.rejected_qty || Number(next.rejected_qty) !== ex)) {
+        next.rejected_qty = String(ex)
+        if (!next.rejection_reason) next.rejection_reason = 'more_than_ordered'
+      }
+      if (ex === 0 && next.rejection_reason === 'more_than_ordered') {
+        next.rejected_qty = ''
+        next.rejection_reason = ''
+      }
+      return next
+    }))
+  }
+
+  function updateLineField(idx, field, val) {
+    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: val } : it))
+  }
+
+  // Keeping material nobody ordered commits money to stock, so it is a purchase
+  // decision — ops/management/admin only, with a reason, recorded on the PO line
+  // and posted to the PO's timeline. The RPC enforces the role regardless of who
+  // can see this button. FC staff never see it and send the extra back.
+  async function allowOverage(idx) {
+    const it = items[idx]
+    if (!it?.po_item_id) return
+    const why = window.prompt(
+      `Keep all ${it.received_qty} of ${it.item_code} instead of returning the extra?\n\n` +
+      `Say why — it is recorded on the PO.`)
+    if (why === null) return
+    if (why.trim().length < 5) { toast('Give a short reason.', 'error'); return }
+
+    setSaving(true)
+    const { error } = await sb.rpc('po_allow_overage', {
+      p_po_item_id: it.po_item_id, p_reason: why.trim(),
+    })
+    setSaving(false)
+    if (error) { toast(friendlyError(error), 'error'); return }
+
+    // Unlock the line locally and drop the auto-return, so the row immediately
+    // reads "keeping all N" without a reload.
+    setItems(prev => prev.map((r, i) => i === idx
+      ? { ...r, _unlimited: true, rejected_qty: '', rejection_reason: '' } : r))
+    toast(`Keeping all ${it.received_qty}. Recorded on the PO.`, 'success')
+  }
+
 
   function addRow() { setItems(prev => [...prev, emptyItem()]) }
   function removeRow(idx) { setItems(prev => prev.filter((_, i) => i !== idx)) }
@@ -345,11 +482,61 @@ export default function NewGRN() {
       if (!vendorName) { toast('Please select a vendor'); return }
       const validItems = items.filter(i => i.item_code && i._poId && parseFloat(i.received_qty) > 0)
       if (!validItems.length) { toast('Add at least one item with received qty'); return }
+      // The rule is no longer "you may not type more than was ordered" — that
+// only hid physical excess. It is: whatever arrived is recorded, and anything
+// above what this PO line may keep must be accounted for as going back.
+// confirm_grn adds only the ACCEPTED quantity to the PO, so the PO can never be
+// over-received by this path. (The database enforces the same thing; these
+// messages exist so the storekeeper is told in plain words, not by an error.)
       for (const item of validItems) {
-        if (parseFloat(item.received_qty) > item.pending_qty) {
-          toast(`${item.item_code}: received qty exceeds pending (${item.pending_qty})`); return
+        const rec = parseFloat(item.received_qty) || 0
+        const rej = parseFloat(item.rejected_qty) || 0
+        if (rej > rec) {
+          toast(`${item.item_code}: you cannot send back more than arrived (${rec}).`, 'error'); return
+        }
+        if (rej > 0 && !item.rejection_reason) {
+          toast(`${item.item_code}: say why ${rej} is going back.`, 'error'); return
+        }
+        const keepable = keepableQty(item)
+        if (acceptedOf(item) > keepable) {
+          const extra = acceptedOf(item) - keepable
+          toast(`${item.item_code}: ${rec} arrived but only ${item.pending_qty} was ordered. ` +
+                `Send the extra ${extra} back, or ask purchase to allow an overage on this PO line.`, 'error')
+          return
+        }
+        if (acceptedOf(item) <= 0) {
+          toast(`${item.item_code}: nothing is being accepted — send-back-only receipts are not a GRN.`, 'error'); return
         }
       }
+      // Guard: every PO on this GRN must belong to the vendor on the header.
+      // One GRN is one delivery from one vendor; pegging a line to another
+      // vendor's PO credits their receipt against the wrong order and hands the
+      // bill the wrong price basis. It has already happened three times —
+      // GRN0271 booked a Mitsubishi delivery to AXELON and completed the bill at
+      // ₹90,504.
+      //
+      // ⚠️ COMPARED BY vendor_id, NOT BY NAME. purchase_orders.vendor_name is a
+      // denormalised snapshot and goes stale on a rename: 144 POs still read
+      // "HCE DYNAMICS PRIVATE LIMITED" for what is now
+      // "HICOOL ELECTRONIC INDUSTRIES PRIVATE LIMITED" — the same vendor record,
+      // V00001. A name check would have blocked 12 perfectly good GRNs. Measured
+      // before writing this: by id, 0 of 722 comparable lines mismatch.
+      for (const item of validItems) {
+        if (vendorId && item._poVendorId && item._poVendorId !== vendorId) {
+          toast(`${item._poNumber} belongs to ${item._poVendorName}, not ${vendorName}. ` +
+                `One GRN covers one vendor — raise a separate GRN for that delivery.`, 'error')
+          return
+        }
+      }
+      // Where an id is missing on either side we cannot be certain, so ask rather
+      // than block — a stale name is far more likely than a mis-peg.
+      const nameOdd = validItems.filter(i =>
+        (!vendorId || !i._poVendorId) && i._poVendorName && vendorName &&
+        i._poVendorName.trim().toUpperCase() !== vendorName.trim().toUpperCase())
+      if (nameOdd.length && !window.confirm(
+        `${nameOdd[0]._poNumber} is recorded against "${nameOdd[0]._poVendorName}" but this GRN ` +
+        `says "${vendorName}". That is normal if the vendor was renamed. Carry on?`)) return
+
       // Guard: no two rows may point at the same PO line (would over-receive one
       // line and orphan its sibling — the dup-link bug that stalls confirm_grn).
       const seenPoItems = new Set()
@@ -380,6 +567,10 @@ export default function NewGRN() {
         received_at: receivedDate,
         status: 'draft',
         notes: notes.trim() || null,
+        // Inherited from the PO. A receipt against a demo PO is demo data, and
+        // flagging it here is what keeps training runs out of real lists,
+        // real received-value totals and the SLA breach list.
+        is_test: items.some(i => i._poIsTest),
       }
 
       if (isPOInward) {
@@ -387,7 +578,7 @@ export default function NewGRN() {
         grnRow.vendor_id = vendorId || null
         grnRow.invoice_number = invoiceNum.trim() || null
         grnRow.invoice_date = invoiceDate || null
-        grnRow.invoice_amount = invoiceAmt ? parseFloat(invoiceAmt) : null
+        // invoice_amount deliberately NOT written — see the note on invoiceFile.
       } else if (isSample) {
         grnRow.order_id = selectedSR.id
       } else {
@@ -396,6 +587,25 @@ export default function NewGRN() {
 
       const { data: grn, error: insertErr } = await sb.from('grn').insert(grnRow).select('id').single()
       if (insertErr) { toast(friendlyError(insertErr)); saveGuard.current = false; setSaving(false); return }
+
+      // The vendor invoice, attached at the gate. A failure here must NOT lose the
+      // GRN — the goods are physically in; the document can be added on the detail
+      // page. So it warns and carries on rather than aborting.
+      if (isPOInward && invoiceDoc?.blob) {
+        // vendor-docs, NOT po-documents: that bucket caps at 200 KB and even a
+        // flattened, compressed invoice scan does not fit.
+        const ext  = invoiceDoc.isPdf ? 'pdf' : 'jpg'
+        const path = `grn-vendor-invoices/${grn.id}/invoice-${Date.now()}.${ext}`
+        const type = invoiceDoc.isPdf ? 'application/pdf' : 'image/jpeg'
+        const { error: upErr } = await sb.storage.from('vendor-docs')
+          .upload(path, invoiceDoc.blob, { upsert: true, contentType: type })
+        if (upErr) {
+          toast(friendlyError(upErr, 'GRN saved, but the invoice did not upload. Add it from the GRN page.'), 'error')
+        } else {
+          const url = sb.storage.from('vendor-docs').getPublicUrl(path).data.publicUrl
+          await sb.from('grn').update({ vendor_invoice_url: url }).eq('id', grn.id)
+        }
+      }
 
       if (isPOInward) {
         const validItems = items.filter(i => i.item_code && i._poId && parseFloat(i.received_qty) > 0)
@@ -406,7 +616,14 @@ export default function NewGRN() {
           item_code: i.item_code,
           ordered_qty: i.ordered_qty || 0,
           received_qty: parseFloat(i.received_qty) || 0,
-          accepted_qty: parseFloat(i.received_qty) || 0,
+          // accepted is DERIVED so it can never disagree with the split, and it
+          // is the ONLY figure confirm_grn adds to the PO — you do not owe money
+          // for goods you sent back, and the PO is not satisfied by them either.
+          accepted_qty: acceptedOf(i),
+          rejected_qty: parseFloat(i.rejected_qty) || 0,
+          rejection_reason: (parseFloat(i.rejected_qty) || 0) > 0
+            ? (REJECT_REASONS.find(r => r.key === i.rejection_reason)?.label || i.rejection_reason)
+            : null,
         }))
         const { error: itemsErr } = await sb.from('grn_items').insert(itemRows)
         if (itemsErr) { toast(friendlyError(itemsErr, "GRN created but items failed. Please try again.")); navigate('/fc/grn/' + grn.id); return }
@@ -448,7 +665,22 @@ export default function NewGRN() {
   return (
     <Layout pageTitle="New GRN" pageKey="fc">
     <div className="no-page">
-      <div className="no-body">
+      {/* The scanner takes over the screen while it is open, exactly as it does in
+          the expense module — the form stays mounted behind it so nothing typed
+          is lost. onDone(null) means the user skipped, which attaches the
+          untouched photo; DocScanner handles that decision itself. */}
+      {scanQueue.length > 0 && (
+        <DocScanner
+          key={scanQueue.length}
+          file={scanQueue[0]}
+          onCancel={() => setScanQueue([])}
+          onDone={res => {
+            if (res?.blob) setInvoiceDoc({ ...res, isPdf: false })
+            setScanQueue([])
+          }}
+        />
+      )}
+      <div className="no-body" style={{ display: scanQueue.length > 0 ? 'none' : undefined }}>
         <div className="no-page-title">New Goods Receipt Note</div>
         <div className="no-page-sub">Fill in the details below to create a new GRN.</div>
 
@@ -525,8 +757,41 @@ export default function NewGRN() {
                   <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
                 </div>
                 <div className="no-field">
-                  <label>Invoice Amount (₹)</label>
-                  <input type="number" value={invoiceAmt} onChange={e => setInvoiceAmt(e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                  <label>Photograph the invoice</label>
+                  {/* The invoice arrives with the truck, so the person at the gate
+                      is holding it first. Measured: only 29 of 1,551 bills ever had
+                      it attached, because chasing paper in a Godawari drawer was
+                      accounts' job. capture="environment" opens the rear camera
+                      straight away on a phone; on a desktop it is a normal picker. */}
+                  {invoiceDoc ? (
+                    <div className="grnq-doc">
+                      {invoiceDoc.isPdf
+                        ? <span className="grnq-doc-name">{invoiceDoc.name}</span>
+                        : <img src={invoiceDoc.url} alt="Vendor invoice" />}
+                      <button type="button" className="grnq-btn"
+                              onClick={() => setInvoiceDoc(null)}>Retake</button>
+                    </div>
+                  ) : (
+                    <>
+                      <label className="twm-upload">
+                      <input type="file" accept="image/*,application/pdf" capture="environment"
+                             onChange={e => {
+                               const f = e.target.files?.[0]; if (!f) return
+                               if (f.type === 'application/pdf') {
+                                 // Already a document — straight through, no scan.
+                                 setInvoiceDoc({ blob: f, url: URL.createObjectURL(f), isPdf: true, name: f.name })
+                               } else {
+                                 setScanQueue([f])   // hand it to the scanner
+                               }
+                               e.target.value = ''   // so re-picking the same file fires again
+                             }} />
+                        📷 Take a photo, or choose a file
+                      </label>
+                      <div style={{ fontSize: 11, color: 'var(--gray-500)', marginTop: 4 }}>
+                        Accounts reads the rates off this — no need to type any amounts.
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </>
@@ -627,7 +892,8 @@ export default function NewGRN() {
                 </thead>
                 <tbody>
                   {items.map((item, idx) => (
-                    <tr key={idx} className={item.item_code && item._poId ? 'row-filled' : ''}>
+                    <Fragment key={idx}>
+                    <tr className={item.item_code && item._poId ? 'row-filled' : ''}>
                       <td className="col-sr">{idx + 1}</td>
                       <td>
                         <Typeahead
@@ -689,14 +955,27 @@ export default function NewGRN() {
                         {item.pending_qty || '—'}
                       </td>
                       <td className="col-qty">
+                        {/* No max: type what actually turned up. Clamping this to
+                            the ordered quantity is what made physical excess
+                            invisible. */}
                         <input
                           type="number"
                           value={item.received_qty}
                           onChange={e => updateRecvQty(idx, e.target.value)}
                           placeholder="0"
                           min="0"
-                          max={item.pending_qty || undefined}
                         />
+                        {/* Damage is the uncommon case, so it stays out of the way
+                            until someone needs it — but it has to be reachable by
+                            the person holding the carton, who until now could not
+                            record it at all (it was admin-only, on a later screen). */}
+                        {item.item_code && parseFloat(item.received_qty) > 0
+                          && !item._problem && !(parseFloat(item.rejected_qty) > 0) && (
+                          <button type="button" className="grnq-link"
+                                  onClick={() => updateLineField(idx, '_problem', true)}>
+                            Something is damaged
+                          </button>
+                        )}
                       </td>
                       <td className="col-del">
                         {items.length > 1 && (
@@ -710,6 +989,83 @@ export default function NewGRN() {
                         )}
                       </td>
                     </tr>
+
+                    {/* ── One plain question, and only when the count is off ──
+                        No prices, no percentages, no rupees: the person at the
+                        gate counts boxes. Deciding whether to KEEP an overage is
+                        a commercial call made on the PO, so "Keep all" only
+                        appears when that PO line already permits it. */}
+                    {/* ── What the storekeeper sees when the count is off ──────
+                        Written for someone counting boxes at a gate, not for an
+                        accountant. ONE plain sentence. No checkbox, no dropdown,
+                        no paragraph — the safe outcome is chosen automatically
+                        and simply stated, because sending unordered stock back is
+                        what happens unless someone with authority says otherwise.
+                        Keeping it is a purchase decision, so that button exists
+                        only for ops/management/admin and FC never sees it. */}
+                    {item.item_code && (() => {
+                      const rec  = parseFloat(item.received_qty)
+                      if (isNaN(rec) || rec <= 0) return null
+                      const pend = Number(item.pending_qty) || 0
+                      const rej  = parseFloat(item.rejected_qty) || 0
+                      const over = rec - pend
+                      const mayKeep = item._unlimited || Number(item._tolPct) > 0
+                      const short = over < 0
+                      const problem = item._problem
+                      if (over === 0 && rej === 0 && !problem) return null
+
+                      return (
+                        <tr>
+                          <td colSpan={7} className="grnq-cell">
+                            <div className={'grnq' + (over > 0 && !mayKeep ? ' over' : short ? ' short' : '')}>
+                              <div className="grnq-say">
+                                {/* "still due", never "ordered": pend is what is
+                                    OUTSTANDING on the line, not the order quantity.
+                                    On a PO of 100 with 90 already received it is
+                                    10 — and "10 was ordered" is simply false. */}
+                                {over > 0 && !mayKeep && (
+                                  <><strong>{rec} arrived, {pend} {pend === 1 ? 'was' : 'were'} still due.</strong><br />
+                                    {over} {over === 1 ? 'goes' : 'go'} back to the vendor. You are keeping {acceptedOf(item)}.</>
+                                )}
+                                {over > 0 && mayKeep && (
+                                  <><strong>{rec} arrived, {pend} {pend === 1 ? 'was' : 'were'} still due.</strong><br />
+                                    Keeping all {rec}.</>
+                                )}
+                                {short && <><strong>{rec} arrived of the {pend} still due.</strong><br />
+                                  {Math.abs(over)} yet to come.</>}
+                                {over === 0 && (problem || rej > 0) && <strong>Report a problem</strong>}
+                              </div>
+
+                              <div className="grnq-acts">
+                                {/* Ops can keep it, there and then. FC cannot, and
+                                    is not shown a button that would be refused. */}
+                                {over > 0 && !mayKeep && ['admin','management','ops'].includes(userRole) && (
+                                  <button type="button" className="grnq-btn" disabled={saving}
+                                          onClick={() => allowOverage(idx)}>
+                                    Keep all {rec} instead
+                                  </button>
+                                )}
+                                {(problem || (over === 0 && rej > 0)) && (
+                                  <>
+                                    <input className="grnq-qty" type="number" min="0" max={rec}
+                                           value={item.rejected_qty} placeholder="how many"
+                                           onChange={e => updateLineField(idx, 'rejected_qty', e.target.value)}
+                                           aria-label="How many are damaged or wrong" />
+                                    <select className="grnq-why" value={item.rejection_reason}
+                                            onChange={e => updateLineField(idx, 'rejection_reason', e.target.value)}>
+                                      <option value="">What is wrong?</option>
+                                      {REJECT_REASONS.filter(r => r.key !== 'more_than_ordered')
+                                        .map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+                                    </select>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })()}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -824,6 +1180,12 @@ export default function NewGRN() {
           <div className="no-totals-row" style={{ justifyContent: 'flex-end' }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="no-cancel-btn" onClick={() => navigate('/fc/grn')}>Cancel</button>
+              {/* Say what the button does. "Create GRN" does not tell a
+                  storekeeper that nothing has been counted against the PO yet. */}
+              <div className="grnq-hint">
+                This records what arrived. Nothing is counted against the PO until
+                you check the goods and confirm the GRN on the next screen.
+              </div>
               <button className="no-submit-btn" onClick={handleSave} disabled={saving || (grnType !== 'po_inward' && srcDelivered === false)}>
                 {saving ? 'Saving...' : 'Create GRN'}
               </button>
